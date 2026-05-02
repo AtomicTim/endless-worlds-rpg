@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Default: Fantasy genre — amber/green palette */
+    --color-primary: 43 96% 56%;    /* amber-400 */
+    --color-accent: 160 84% 39%;    /* emerald-600 */
+    --color-bg: 240 10% 4%;         /* near-black */
+
+    --background: 240 10% 4%;
+    --foreground: 43 10% 88%;
+
+    --card: 240 10% 6%;
+    --card-foreground: 43 10% 88%;
+
+    --popover: 240 10% 6%;
+    --popover-foreground: 43 10% 88%;
+
+    --primary: 43 96% 56%;
+    --primary-foreground: 240 10% 4%;
+
+    --secondary: 240 8% 10%;
+    --secondary-foreground: 43 10% 88%;
+
+    --muted: 240 8% 12%;
+    --muted-foreground: 240 5% 55%;
+
+    --accent: 43 96% 56%;
+    --accent-foreground: 240 10% 4%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 8% 14%;
+    --input: 240 8% 14%;
+    --ring: 43 96% 56%;
+
+    --radius: 0.5rem;
+  }
+
+  /* Cyberpunk genre override */
+  [data-genre="cyberpunk"] {
+    --color-primary: 199 89% 60%;   /* neon blue */
+    --color-accent: 292 84% 74%;    /* magenta */
+    --color-bg: 240 15% 3%;
+    --primary: 199 89% 60%;
+    --accent: 292 84% 74%;
+    --ring: 199 89% 60%;
+  }
+
+  /* Noir genre override */
+  [data-genre="noir"] {
+    --color-primary: 43 74% 40%;    /* sepia */
+    --color-accent: 0 0% 65%;       /* grey */
+    --color-bg: 0 0% 5%;
+    --primary: 43 74% 40%;
+    --accent: 0 0% 65%;
+    --ring: 43 74% 40%;
+  }
+
+  /* Space Opera genre override */
+  [data-genre="space-opera"] {
+    --color-primary: 271 81% 66%;   /* purple */
+    --color-accent: 213 27% 84%;    /* silver */
+    --color-bg: 250 20% 3%;
+    --primary: 271 81% 66%;
+    --accent: 213 27% 84%;
+    --ring: 271 81% 66%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Monospace base for terminal/ASCII feel */
+  .font-terminal {
+    font-family: "Courier New", Courier, monospace;
+    font-variant-ligatures: none;
+  }
+}
+
+@layer utilities {
+  /* ASCII art rendering — prevent collapse of whitespace */
+  .ascii-art {
+    @apply font-mono whitespace-pre leading-tight;
+    font-size: clamp(0.5rem, 1.5vw, 0.875rem);
+  }
+
+  /* Scanline overlay effect for terminal aesthetic */
+  .scanlines::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.05) 2px,
+      rgba(0, 0, 0, 0.05) 4px
+    );
+    pointer-events: none;
+  }
+
+  /* Amber text glow */
+  .text-glow-amber {
+    text-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+  }
+
+  /* Neon text glow for cyberpunk */
+  .text-glow-neon {
+    text-shadow: 0 0 8px rgba(56, 189, 248, 0.7), 0 0 20px rgba(56, 189, 248, 0.3);
+  }
+}

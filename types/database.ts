@@ -365,6 +365,7 @@ export interface Database {
 
     Views: Record<string, never>;
     Functions: Record<string, never>;
+    CompositeTypes: Record<string, never>;
 
     Enums: {
       subscription_tier: "free" | "adventurer" | "legend";

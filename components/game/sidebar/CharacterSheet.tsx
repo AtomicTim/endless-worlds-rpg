@@ -26,10 +26,11 @@ const ATTRIBUTES = [
 ] as const;
 
 const CURRENCY_LABELS: Partial<Record<Genre, string>> & { default: string } = {
-  [Genre.FANTASY]:     "Gold",
-  [Genre.CYBERPUNK]:   "Credits",
-  [Genre.SPACE_OPERA]: "Stellars",
-  default:             "Currency",
+  [Genre.FANTASY]:          "Gold",
+  [Genre.CYBERPUNK]:        "Credits",
+  [Genre.SPACE_OPERA]:      "Stellar Units",
+  [Genre.POST_APOCALYPTIC]: "Caps",
+  default:                  "Currency",
 };
 
 /* ── Helper components ─────────────────────────────────────────── */
@@ -104,7 +105,7 @@ export function CharacterSheet({ genre = Genre.FANTASY }: CharacterSheetProps) {
   const { name, hp, maxHp, sanity, maxSanity, level, xp, maxXp, currency } =
     PLACEHOLDER;
 
-  const isHorror = (genre as string) === "horror";
+  const isHorror = genre === Genre.HORROR_LOVECRAFTIAN;
   const currencyLabel = CURRENCY_LABELS[genre] ?? CURRENCY_LABELS.default;
   const hpPct = (hp / maxHp) * 100;
 

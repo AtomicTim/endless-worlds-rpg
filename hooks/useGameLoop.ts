@@ -5,7 +5,7 @@ import { useGameStore, makeMessage, type StoryMessage } from "@/lib/stores/game-
 import { parseIntent, IntentParserError } from "@/lib/game/intent-parser";
 import { resolveAction } from "@/lib/game/logic-resolver";
 import { narrateAction } from "@/lib/game/narrator";
-import { applyStateDelta, addLogEntry } from "@/lib/game/state-utils";
+import { applyStateDelta, addLogEntry, addToInventory } from "@/lib/game/state-utils";
 import { LogEntryType } from "@/types/game";
 import type { MasterState, ResolutionResult } from "@/types/game";
 
@@ -168,6 +168,19 @@ export function useGameLoop() {
       }
 
       // ── 8. Merge new NPCs into registry ────────────────────────────────────
+      // 8b. Add any items the narrator granted to the inventory.
+      if (narratorResponse.items_acquired && narratorResponse.items_acquired.length > 0) {
+        for (const item of narratorResponse.items_acquired) {
+          updatedState = addToInventory(updatedState, item);
+          store.addMessage(
+            makeMessage(
+              "SYSTEM",
+              `[ ${item.rarity} item added to pack: ${item.name} ]`
+            )
+          );
+        }
+      }
+
       if (narratorResponse.new_npcs.length > 0) {
         const merged = { ...updatedState.npc_registry };
         for (const npc of narratorResponse.new_npcs) {

@@ -1,4 +1,5 @@
-import type { MasterState, NarratorResponse, NPCMemory, ResolutionResult } from "@/types/game";
+import type { Item, MasterState, NarratorResponse, NPCMemory, ResolutionResult } from "@/types/game";
+import { ItemType, ItemRarity } from "@/types/game";
 
 // ── Error type ────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,62 @@ function stripJsonFences(raw: string): string {
     .replace(/^```(?:json)?\n?/i, "")
     .replace(/\n?```$/i, "")
     .trim();
+}
+
+/**
+ * Convert the narrator's simplified effect string ("heal_20", "buff_strength_2",
+ * "sanity_10") to the Record shape the Item interface expects.
+ */
+function parseEffectString(raw: string): Record<string, number | string> | undefined {
+  if (!raw || typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+
+  const result: Record<string, number | string> = {};
+  for (const part of trimmed.split("|").map((s) => s.trim()).filter(Boolean)) {
+    // heal_20, sanity_10 → { heal: 20 }, { sanity: 10 }
+    const simple = part.match(/^(heal|sanity)_(-?\d+)$/);
+    if (simple) {
+      result[simple[1]] = parseInt(simple[2], 10);
+      continue;
+    }
+    // buff_strength_2 → { buff_strength_2: 1 }
+    const buff = part.match(/^buff_[a-z_]+_\d+$/);
+    if (buff) {
+      result[part] = 1;
+      continue;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function normalizeNarratorItem(raw: unknown): Item | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+
+  const id   = typeof o.id   === "string" ? o.id   : `item_${Date.now()}`;
+  const name = typeof o.name === "string" ? o.name : null;
+  if (!name) return null;
+
+  const typeRaw   = typeof o.type   === "string" ? o.type.toUpperCase()   : "";
+  const rarityRaw = typeof o.rarity === "string" ? o.rarity.toUpperCase() : "";
+
+  const type   = Object.values(ItemType).includes(typeRaw as ItemType)     ? (typeRaw as ItemType)     : ItemType.LORE;
+  const rarity = Object.values(ItemRarity).includes(rarityRaw as ItemRarity) ? (rarityRaw as ItemRarity) : ItemRarity.COMMON;
+
+  const effect = parseEffectString(typeof o.effect === "string" ? o.effect : "");
+
+  return {
+    id,
+    name,
+    type,
+    rarity,
+    description: typeof o.description === "string" ? o.description : "",
+    ...(effect ? { effect } : {}),
+    quantity:  typeof o.quantity  === "number" ? o.quantity  : 1,
+    stackable: typeof o.stackable === "boolean" ? o.stackable : type === ItemType.CONSUMABLE,
+    weight:    typeof o.weight    === "number"  ? o.weight    : 1,
+  };
 }
 
 function isNPCMemory(v: unknown): v is NPCMemory {
@@ -56,11 +113,16 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
       ? parsed.new_npcs.filter(isNPCMemory)
       : [];
 
+    const items_acquired = Array.isArray(parsed.items_acquired)
+      ? (parsed.items_acquired.map(normalizeNarratorItem).filter(Boolean) as Item[])
+      : [];
+
     return {
       narrative_text,
       ascii_art: typeof parsed.ascii_art === "string" ? parsed.ascii_art : undefined,
       sound_id:  typeof parsed.sound_id === "string"  ? parsed.sound_id  : undefined,
       new_npcs,
+      items_acquired,
     };
   } catch {
     return {

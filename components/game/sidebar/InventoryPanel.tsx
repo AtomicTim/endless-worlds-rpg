@@ -45,6 +45,7 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
   const [selectedId,  setSelectedId]  = useState<string | null>(null);
   const [draggingId,  setDraggingId]  = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const [rejectedSlot, setRejectedSlot] = useState<string | null>(null);
 
   const equippedWeapon    = inventory.find((i) => i.equipped && i.type === ItemType.WEAPON)    ?? null;
   const equippedArmor     = inventory.find((i) => i.equipped && i.type === ItemType.ARMOR)     ?? null;
@@ -64,6 +65,8 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
 
   // ── Drag handlers ────────────────────────────────────────────────────────────
 
+  const DRAGGABLE_TYPES: ItemType[] = [ItemType.WEAPON, ItemType.ARMOR];
+
   function handleDragStart(e: React.DragEvent, item: Item) {
     e.dataTransfer.setData("text/plain", item.id);
     setDraggingId(item.id);
@@ -72,6 +75,11 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
   function handleDragEnd() {
     setDraggingId(null);
     setDragOverKey(null);
+  }
+
+  function flashRejected(slotKey: string) {
+    setRejectedSlot(slotKey);
+    setTimeout(() => setRejectedSlot(null), 700);
   }
 
   function handleDropOnEquipSlot(
@@ -83,8 +91,11 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
     setDragOverKey(null);
     const itemId = e.dataTransfer.getData("text/plain");
     const item   = inventory.find((i) => i.id === itemId);
-    if (!item || !onSubmit) return;
-    if (!(accepts as ItemType[]).includes(item.type)) return;
+    if (!item) return;
+    // Accessory slot always rejects — no drag-equip for that slot.
+    if (slotKey === "accessory") { flashRejected(slotKey); return; }
+    if (!(accepts as ItemType[]).includes(item.type)) { flashRejected(slotKey); return; }
+    if (!onSubmit) return;
     onSubmit(`use ${item.name}`);
   }
 
@@ -128,30 +139,35 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
           {EQUIP_SLOTS.map(({ key, icon, label, accepts }) => {
             const item         = equippedBySlot[key];
             const isOver       = dragOverKey === key;
+            const isRejected   = rejectedSlot === key;
             const isSelected   = item ? selectedId === item.id : false;
             return (
               <button
                 key={key}
-                draggable={!!item}
+                draggable={!!item && DRAGGABLE_TYPES.includes(item.type)}
                 className="flex aspect-square flex-col items-center justify-center gap-0.5 rounded-sm text-xs transition-all"
                 style={{
-                  border: item
-                    ? `1px solid ${isOver ? "var(--color-primary)" : "var(--color-accent)"}`
-                    : `1px dashed ${isOver ? "var(--color-primary)" : "var(--color-border)"}`,
-                  backgroundColor: item
-                    ? isSelected
-                      ? "color-mix(in srgb, var(--color-accent) 18%, transparent)"
-                      : "color-mix(in srgb, var(--color-accent) 8%, transparent)"
-                    : isOver
-                      ? "color-mix(in srgb, var(--color-primary) 8%, transparent)"
-                      : "transparent",
-                  boxShadow: item
+                  border: isRejected
+                    ? "1px solid #ef4444"
+                    : item
+                      ? `1px solid ${isOver ? "var(--color-primary)" : "var(--color-accent)"}`
+                      : `1px dashed ${isOver ? "var(--color-primary)" : "var(--color-border)"}`,
+                  backgroundColor: isRejected
+                    ? "color-mix(in srgb, #ef4444 15%, transparent)"
+                    : item
+                      ? isSelected
+                        ? "color-mix(in srgb, var(--color-accent) 18%, transparent)"
+                        : "color-mix(in srgb, var(--color-accent) 8%, transparent)"
+                      : isOver
+                        ? "color-mix(in srgb, var(--color-primary) 8%, transparent)"
+                        : "transparent",
+                  boxShadow: item && !isRejected
                     ? "0 0 6px color-mix(in srgb, var(--color-accent) 35%, transparent)"
                     : "none",
                   cursor: item ? "pointer" : "default",
                 }}
                 onClick={() => item && setSelectedId(item.id === selectedId ? null : item.id)}
-                onDragStart={item ? (e) => handleDragStart(e, item) : undefined}
+                onDragStart={item && DRAGGABLE_TYPES.includes(item.type) ? (e) => handleDragStart(e, item) : undefined}
                 onDragEnd={handleDragEnd}
                 onDragOver={(e) => { e.preventDefault(); setDragOverKey(key); }}
                 onDragLeave={() => setDragOverKey(null)}
@@ -200,7 +216,7 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
           {packSlots.map((item, i) => (
             <button
               key={i}
-              draggable={!!item}
+              draggable={!!item && DRAGGABLE_TYPES.includes(item.type)}
               className="flex aspect-square items-center justify-center rounded-sm text-sm transition-colors"
               style={{
                 border: item
@@ -217,7 +233,7 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
                 if (!item) return;
                 setSelectedId(item.id === selectedId ? null : item.id);
               }}
-              onDragStart={item ? (e) => handleDragStart(e, item) : undefined}
+              onDragStart={item && DRAGGABLE_TYPES.includes(item.type) ? (e) => handleDragStart(e, item) : undefined}
               onDragEnd={handleDragEnd}
               onMouseEnter={(e) => { if (!item) e.currentTarget.style.borderColor = "var(--color-muted)"; }}
               onMouseLeave={(e) => { if (!item) e.currentTarget.style.borderColor = "var(--color-border)"; }}
@@ -279,53 +295,73 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
           )}
 
           {/* Action buttons */}
-          <div className="flex gap-1 pt-0.5">
-            {(selectedItem.type === ItemType.WEAPON || selectedItem.type === ItemType.ARMOR) &&
-              onSubmit && (
+          {selectedItem.type === ItemType.KEY ? (
+            <p className="pt-0.5 text-[9px] italic" style={{ color: "var(--color-muted)" }}>
+              Used automatically when needed
+            </p>
+          ) : (
+            <div className="flex gap-1 pt-0.5">
+              {(selectedItem.type === ItemType.WEAPON || selectedItem.type === ItemType.ARMOR) &&
+                onSubmit && (
+                  <button
+                    className="flex-1 rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-opacity disabled:opacity-40"
+                    style={{ backgroundColor: "var(--color-accent)", color: "#000" }}
+                    disabled={isProcessing}
+                    onClick={() => {
+                      onSubmit(`use ${selectedItem.name}`);
+                      setSelectedId(null);
+                    }}
+                  >
+                    {selectedItem.equipped ? "Unequip" : "Equip"}
+                  </button>
+                )}
+
+              {selectedItem.type === ItemType.CONSUMABLE && onSubmit && (
                 <button
                   className="flex-1 rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-opacity disabled:opacity-40"
-                  style={{ backgroundColor: "var(--color-accent)", color: "#000" }}
+                  style={{ backgroundColor: "var(--color-primary)", color: "#000" }}
                   disabled={isProcessing}
                   onClick={() => {
                     onSubmit(`use ${selectedItem.name}`);
                     setSelectedId(null);
                   }}
                 >
-                  {selectedItem.equipped ? "Unequip" : "Equip"}
+                  Use
                 </button>
               )}
 
-            {selectedItem.type === ItemType.CONSUMABLE && onSubmit && (
-              <button
-                className="flex-1 rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-opacity disabled:opacity-40"
-                style={{ backgroundColor: "var(--color-primary)", color: "#000" }}
-                disabled={isProcessing}
-                onClick={() => {
-                  onSubmit(`use ${selectedItem.name}`);
-                  setSelectedId(null);
-                }}
-              >
-                Use
-              </button>
-            )}
+              {selectedItem.type === ItemType.LORE && onSubmit && (
+                <button
+                  className="flex-1 rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-opacity disabled:opacity-40"
+                  style={{ backgroundColor: "var(--color-primary)", color: "#000" }}
+                  disabled={isProcessing}
+                  onClick={() => {
+                    onSubmit(`read ${selectedItem.name}`);
+                    setSelectedId(null);
+                  }}
+                >
+                  Read
+                </button>
+              )}
 
-            {onSubmit && (
-              <button
-                className="rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-opacity disabled:opacity-40"
-                style={{
-                  border: "1px solid var(--color-muted)",
-                  color:  "var(--color-muted)",
-                }}
-                disabled={isProcessing}
-                onClick={() => {
-                  onSubmit(`drop ${selectedItem.name}`);
-                  setSelectedId(null);
-                }}
-              >
-                Drop
-              </button>
-            )}
-          </div>
+              {onSubmit && (
+                <button
+                  className="rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-opacity disabled:opacity-40"
+                  style={{
+                    border: "1px solid var(--color-muted)",
+                    color:  "var(--color-muted)",
+                  }}
+                  disabled={isProcessing}
+                  onClick={() => {
+                    onSubmit(`drop ${selectedItem.name}`);
+                    setSelectedId(null);
+                  }}
+                >
+                  Drop
+                </button>
+              )}
+            </div>
+          )}
         </div>
       ) : inventory.length === 0 ? (
         <p

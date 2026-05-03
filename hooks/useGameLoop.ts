@@ -188,6 +188,7 @@ export function useGameLoop() {
       let parsedAction: ParsedAction;
 
       if (directAction) {
+        // Direct actions (equip/unequip/drop/read) — zero AI calls, zero delay.
         parsedAction = directAction;
       } else {
         store.setProcessing(true, "Parsing intent...");
@@ -206,10 +207,10 @@ export function useGameLoop() {
           }
           throw err;
         }
+        store.setProcessing(true, "The world responds...");
       }
 
       // ── 3. Resolve action ──────────────────────────────────────────────────
-      store.setProcessing(true, "The world responds...");
       const resolution = resolveAction(parsedAction, state);
 
       // ── 3b. Roll feedback ──────────────────────────────────────────────────
@@ -242,9 +243,10 @@ export function useGameLoop() {
 
       // ── 5. Narrate ─────────────────────────────────────────────────────────
       store.setProcessing(true, "Narrating...");
+      const lastNarrative = useGameStore.getState().lastNarrativeText;
       let narratorResponse;
       try {
-        narratorResponse = await narrateAction(resolution, updatedState);
+        narratorResponse = await narrateAction(resolution, updatedState, lastNarrative);
       } catch {
         // Narrator failed — still save the resolved state so the action sticks.
         store.addMessage(
@@ -271,6 +273,7 @@ export function useGameLoop() {
           sound_id:     narratorResponse.sound_id,
         })
       );
+      store.setLastNarrativeText(narratorResponse.narrative_text);
 
       // ── 7. ASCII art (separate message + store for top-of-feed display) ───
       if (narratorResponse.ascii_art) {

@@ -104,7 +104,7 @@ export default function GamePage() {
               {currentAscii}
             </pre>
           )}
-          <StoryFeed messages={messages} isLoading={isProcessing} />
+          <StoryFeed messages={messages} isLoading={isProcessing && !!processingStep} />
           <InputBar
             onSubmit={(input) => {
               void submitAction(input);

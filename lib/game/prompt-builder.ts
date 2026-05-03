@@ -152,6 +152,8 @@ CRITICAL RULES:
 - NEVER contradict the success/failure outcome from the resolution result.
 - Do not invent stats, damage numbers, or mechanical results — those are already decided.
 
+WORLD CONTINUITY: You must maintain strict consistency with what has already been established in this session. If a previous narrative described specific locations, NPCs, objects, or events — those are now facts of this world. Never contradict or ignore previously established world details. Build on them.
+
 CRITICAL — ORIGINAL CONTENT ONLY:
 You must never reference, allude to, or draw inspiration from existing copyrighted fictional universes, franchises, characters, or intellectual property. This includes but is not limited to: Star Wars, Star Trek, Marvel, DC, Lord of the Rings, Harry Potter, Dune, Mass Effect, or any other recognizable IP. All worlds, characters, factions, locations, and lore must be entirely original and invented for this game session. If the player's character name or background resembles a known fictional character, treat it as coincidence and build an entirely original world around it. Genre conventions (space opera, fantasy, etc.) are acceptable — specific IP references are not.
 
@@ -213,13 +215,14 @@ const LOW_SANITY_THRESHOLD = 30;
  */
 export function buildNarratorUserPrompt(
   result: ResolutionResult,
-  state: MasterState
+  state: MasterState,
+  lastNarrativeText?: string | null
 ): string {
   const { metadata, player_state, world_state, log_book } = state;
   const { name, background, attributes, health, max_health, sanity, max_sanity } = player_state;
 
   const recentLog = log_book.entries
-    .slice(-3)
+    .slice(-5)
     .map((e) => `  [${e.type}] ${e.content}`)
     .join("\n");
 
@@ -263,6 +266,15 @@ export function buildNarratorUserPrompt(
     "RECENT LOG:",
     recentLog || "  (no recent entries)",
   ];
+
+  if (lastNarrativeText) {
+    lines.push(
+      "",
+      "PREVIOUS NARRATIVE (what just happened):",
+      lastNarrativeText,
+      "The new narrative must be consistent with and follow on from this. If the player just established they are at a specific location or saw specific things, honor that."
+    );
+  }
 
   let prompt = lines.join("\n");
 

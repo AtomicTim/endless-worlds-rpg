@@ -189,7 +189,8 @@ items_acquired is an array of Item objects for items the player successfully obt
   "stackable": false,
   "weight": 1
 }
-If no items are acquired in this beat, return an empty array.`;
+If no items are acquired in this beat, return an empty array.
+CRITICAL: Never populate items_acquired if the action involves reading a lore item, equipping/unequipping gear, or dropping items. items_acquired is ONLY for genuine world discoveries: looting, searching, receiving from NPCs, finding hidden objects. Reading a lore item produces knowledge, not new items.`;
 }
 
 const SUMMARISE_FLAG = (key: string, value: boolean | number | string) => `${key}=${value}`;

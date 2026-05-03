@@ -106,6 +106,32 @@ function MessageEntry({ message }: { message: StoryMessage }) {
         </pre>
       );
 
+    case "LORE": {
+      const itemName =
+        typeof metadata?.item_name === "string" ? metadata.item_name : undefined;
+      return (
+        <div
+          className="message-enter border-l-2 pl-3"
+          style={{ borderColor: "color-mix(in srgb, var(--color-primary) 50%, transparent)" }}
+        >
+          {itemName && (
+            <span
+              className="block text-[10px] font-bold uppercase tracking-widest"
+              style={{ color: "var(--color-primary)" }}
+            >
+              {itemName}
+            </span>
+          )}
+          <p
+            className="font-mono text-sm italic leading-relaxed"
+            style={{ color: "color-mix(in srgb, var(--color-text) 80%, transparent)" }}
+          >
+            {content}
+          </p>
+        </div>
+      );
+    }
+
     default:
       return null;
   }

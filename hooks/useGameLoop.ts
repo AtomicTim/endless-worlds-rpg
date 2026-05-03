@@ -5,9 +5,10 @@ import { useGameStore, makeMessage, type StoryMessage } from "@/lib/stores/game-
 import { parseIntent, IntentParserError } from "@/lib/game/intent-parser";
 import { resolveAction } from "@/lib/game/logic-resolver";
 import { narrateAction } from "@/lib/game/narrator";
-import { applyStateDelta, addLogEntry, addToInventory } from "@/lib/game/state-utils";
-import { LogEntryType } from "@/types/game";
-import type { MasterState, ResolutionResult } from "@/types/game";
+import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory } from "@/lib/game/state-utils";
+import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
+import { ActionType, ItemType, LogEntryType } from "@/types/game";
+import type { MasterState, ParsedAction, ResolutionResult } from "@/types/game";
 
 const MAX_INPUT_LENGTH = 500;
 
@@ -67,6 +68,62 @@ async function persistState(
       makeMessage("SYSTEM", "Your progress could not be saved. Check your connection.")
     );
   }
+}
+
+// ── Fast-path handler ─────────────────────────────────────────────────────────
+
+type GameStore = ReturnType<typeof import("@/lib/stores/game-store").useGameStore.getState>;
+
+async function handleFastPath(
+  action: ParsedAction,
+  resolution: ResolutionResult,
+  state: MasterState,
+  store: GameStore,
+  originalState: MasterState
+): Promise<MasterState> {
+  let updated = state;
+
+  if (
+    resolution.outcome_type === "USE_ITEM_EQUIPPED" ||
+    resolution.outcome_type === "USE_ITEM_UNEQUIPPED"
+  ) {
+    const itemName =
+      typeof resolution.narrative_context.item_name === "string"
+        ? resolution.narrative_context.item_name
+        : (action.item_used ?? action.primary_target ?? "item");
+    const verb = resolution.outcome_type === "USE_ITEM_EQUIPPED" ? "Equipped" : "Unequipped";
+    store.addMessage(makeMessage("SYSTEM", `[ ${verb}: ${itemName} ]`));
+    return updated;
+  }
+
+  const lookup = (action.item_used ?? action.primary_target ?? "").trim().toLowerCase();
+  const item = originalState.player_state.inventory.find(
+    (i) => i.id === lookup || i.name.toLowerCase() === lookup
+  );
+
+  if (isDropIntent(action.inferred_intent)) {
+    if (item) {
+      updated = removeFromInventory(updated, item.id, 1);
+      store.addMessage(makeMessage("SYSTEM", `[ Dropped: ${item.name} ]`));
+    }
+    return updated;
+  }
+
+  if (isReadIntent(action.inferred_intent)) {
+    if (item) {
+      store.addMessage(
+        makeMessage("LORE", item.description, { item_name: item.name, item_rarity: item.rarity })
+      );
+      updated = addLogEntry(
+        updated,
+        LogEntryType.DISCOVERY,
+        `Read: ${item.name} — ${item.description}`
+      );
+    }
+    return updated;
+  }
+
+  return updated;
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -129,6 +186,25 @@ export function useGameLoop() {
       // ── 4. Apply state_delta ───────────────────────────────────────────────
       let updatedState = applyStateDelta(state, resolution.state_delta);
 
+      // ── 4b. Fast path — inventory management actions skip the Narrator ─────
+      if (!isNarrativeAction(parsedAction, state)) {
+        updatedState = await handleFastPath(
+          parsedAction,
+          resolution,
+          updatedState,
+          store,
+          state
+        );
+        updatedState = {
+          ...updatedState,
+          metadata: { ...updatedState.metadata, last_played: new Date().toISOString() },
+        };
+        store.setMasterState(updatedState);
+        await persistState(updatedState, store.addMessage);
+        store.setProcessing(false);
+        return;
+      }
+
       // ── 5. Narrate ─────────────────────────────────────────────────────────
       store.setProcessing(true, "Narrating...");
       let narratorResponse;
@@ -168,8 +244,24 @@ export function useGameLoop() {
       }
 
       // ── 8. Merge new NPCs into registry ────────────────────────────────────
-      // 8b. Add any items the narrator granted to the inventory.
-      if (narratorResponse.items_acquired && narratorResponse.items_acquired.length > 0) {
+      // 8b. Add any items the narrator granted — guarded against management actions.
+      const isLoreAction =
+        parsedAction.action_type === ActionType.USE_ITEM &&
+        (() => {
+          const lookup = (parsedAction.item_used ?? parsedAction.primary_target ?? "").trim().toLowerCase();
+          const item = updatedState.player_state.inventory.find(
+            (i) => i.id === lookup || i.name.toLowerCase() === lookup
+          );
+          return item?.type === ItemType.LORE;
+        })();
+      const isMgmtIntent = /\b(equip|unequip|drop|read)\b/i.test(parsedAction.inferred_intent);
+
+      if (
+        !isLoreAction &&
+        !isMgmtIntent &&
+        narratorResponse.items_acquired &&
+        narratorResponse.items_acquired.length > 0
+      ) {
         for (const item of narratorResponse.items_acquired) {
           updatedState = addToInventory(updatedState, item);
           store.addMessage(

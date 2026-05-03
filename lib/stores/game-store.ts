@@ -8,7 +8,8 @@ export type MessageType =
   | "SYSTEM"
   | "COMBAT"
   | "DIALOGUE"
-  | "ASCII_ART";
+  | "ASCII_ART"
+  | "LORE";
 
 export interface StoryMessage {
   id: string;

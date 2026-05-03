@@ -152,6 +152,9 @@ CRITICAL RULES:
 - NEVER contradict the success/failure outcome from the resolution result.
 - Do not invent stats, damage numbers, or mechanical results — those are already decided.
 
+CRITICAL — ORIGINAL CONTENT ONLY:
+You must never reference, allude to, or draw inspiration from existing copyrighted fictional universes, franchises, characters, or intellectual property. This includes but is not limited to: Star Wars, Star Trek, Marvel, DC, Lord of the Rings, Harry Potter, Dune, Mass Effect, or any other recognizable IP. All worlds, characters, factions, locations, and lore must be entirely original and invented for this game session. If the player's character name or background resembles a known fictional character, treat it as coincidence and build an entirely original world around it. Genre conventions (space opera, fantasy, etc.) are acceptable — specific IP references are not.
+
 GENRE: ${genre}
 TONE: ${tone}
 GENRE LOOT REFERENCE (use as examples when granting items): ${lootRef}

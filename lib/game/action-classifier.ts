@@ -29,6 +29,9 @@ export function isNarrativeAction(action: ParsedAction, state: MasterState): boo
   }
 
   if (action.action_type === ActionType.USE_ITEM) {
+    // Direct "read X" actions arrive as USE_ITEM — never send to Narrator.
+    if (isReadIntent(action.inferred_intent)) return false;
+
     const lookup = (action.item_used ?? action.primary_target ?? "").trim().toLowerCase();
     if (lookup) {
       const item = state.player_state.inventory.find(

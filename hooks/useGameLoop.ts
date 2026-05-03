@@ -70,6 +70,35 @@ async function persistState(
   }
 }
 
+// ── Direct-action parser (no AI call) ────────────────────────────────────────
+
+/**
+ * Converts well-known prefixed commands into a ParsedAction without any AI
+ * call. Returns null for everything else so the normal parseIntent path runs.
+ */
+function getDirectAction(input: string, _state: MasterState): ParsedAction | null {
+  const lower = input.toLowerCase();
+
+  if (lower.startsWith("equip ")) {
+    const target = input.slice(6).trim();
+    return { action_type: ActionType.USE_ITEM, primary_target: target, item_used: target, inferred_intent: "equip", confidence: 1 };
+  }
+  if (lower.startsWith("unequip ")) {
+    const target = input.slice(8).trim();
+    return { action_type: ActionType.USE_ITEM, primary_target: target, item_used: target, inferred_intent: "unequip", confidence: 1 };
+  }
+  if (lower.startsWith("drop ")) {
+    const target = input.slice(5).trim();
+    return { action_type: ActionType.CUSTOM, primary_target: target, inferred_intent: "drop", confidence: 1 };
+  }
+  if (lower.startsWith("read ")) {
+    const target = input.slice(5).trim();
+    return { action_type: ActionType.USE_ITEM, primary_target: target, item_used: target, inferred_intent: "read", confidence: 1 };
+  }
+
+  return null;
+}
+
 // ── Fast-path handler ─────────────────────────────────────────────────────────
 
 type GameStore = ReturnType<typeof import("@/lib/stores/game-store").useGameStore.getState>;
@@ -154,23 +183,29 @@ export function useGameLoop() {
     store.addMessage(makeMessage("SYSTEM", `> ${trimmed}`));
 
     try {
-      // ── 2. Parse intent ────────────────────────────────────────────────────
-      store.setProcessing(true, "Parsing intent...");
-      let parsedAction;
-      try {
-        parsedAction = await parseIntent(trimmed, state);
-      } catch (err) {
-        if (err instanceof IntentParserError) {
-          store.addMessage(
-            makeMessage(
-              "SYSTEM",
-              "The winds of fate are unclear. Try rephrasing your action."
-            )
-          );
-          store.setProcessing(false);
-          return;
+      // ── 2. Parse intent (fast-path skips AI call entirely) ────────────────
+      const directAction = getDirectAction(trimmed, state);
+      let parsedAction: ParsedAction;
+
+      if (directAction) {
+        parsedAction = directAction;
+      } else {
+        store.setProcessing(true, "Parsing intent...");
+        try {
+          parsedAction = await parseIntent(trimmed, state);
+        } catch (err) {
+          if (err instanceof IntentParserError) {
+            store.addMessage(
+              makeMessage(
+                "SYSTEM",
+                "The winds of fate are unclear. Try rephrasing your action."
+              )
+            );
+            store.setProcessing(false);
+            return;
+          }
+          throw err;
         }
-        throw err;
       }
 
       // ── 3. Resolve action ──────────────────────────────────────────────────

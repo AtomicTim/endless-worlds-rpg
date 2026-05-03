@@ -1,29 +1,20 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { User } from "lucide-react";
 import { Genre } from "@/types/game";
+import { getAttributeModifier } from "@/lib/game/dice";
+import { useGameStore } from "@/lib/stores/game-store";
 import { SidebarPanel } from "./SidebarPanel";
 
-/* ── Placeholder data (wired to live state in Day 11) ──────────── */
-const PLACEHOLDER = {
-  name: "Aria Stormveil",
-  hp: 75,
-  maxHp: 100,
-  sanity: 60,
-  maxSanity: 100,
-  level: 3,
-  xp: 340,
-  maxXp: 500,
-  currency: 250,
-};
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-const ATTRIBUTES = [
-  { key: "str", label: "STR", value: 14 },
-  { key: "agi", label: "AGI", value: 11 },
-  { key: "cha", label: "CHA", value: 16 },
-  { key: "int", label: "INT", value: 12 },
-  { key: "per", label: "PER", value: 13 },
-] as const;
+const CURRENCY_KEYS: Partial<Record<Genre, string>> = {
+  [Genre.FANTASY]:          "gold",
+  [Genre.CYBERPUNK]:        "credits",
+  [Genre.SPACE_OPERA]:      "stellar_units",
+  [Genre.POST_APOCALYPTIC]: "caps",
+};
 
 const CURRENCY_LABELS: Partial<Record<Genre, string>> & { default: string } = {
   [Genre.FANTASY]:          "Gold",
@@ -33,7 +24,24 @@ const CURRENCY_LABELS: Partial<Record<Genre, string>> & { default: string } = {
   default:                  "Currency",
 };
 
-/* ── Helper components ─────────────────────────────────────────── */
+const ATTR_KEYS = [
+  "strength",
+  "agility",
+  "charisma",
+  "intelligence",
+  "perception",
+] as const;
+
+const ATTR_LABELS: Record<string, string> = {
+  strength:     "STR",
+  agility:      "AGI",
+  charisma:     "CHA",
+  intelligence: "INT",
+  perception:   "PER",
+};
+
+// ── Helper components ─────────────────────────────────────────────────────────
+
 function StatBar({
   value,
   max,
@@ -63,10 +71,90 @@ function hpColor(pct: number): string {
   return "#ef4444";
 }
 
-function AttributeRow({ label, value }: { label: string; value: number }) {
-  const pips = Math.min(5, Math.round(value / 4));
+function HPBar({ hp, maxHp }: { hp: number; maxHp: number }) {
+  const [flashing, setFlashing] = useState(false);
+  const prevRef = useRef(hp);
+  useEffect(() => {
+    if (prevRef.current !== hp) {
+      prevRef.current = hp;
+      setFlashing(true);
+      const t = setTimeout(() => setFlashing(false), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [hp]);
+
+  const pct = (hp / maxHp) * 100;
   return (
-    <div className="flex items-center gap-2">
+    <div className="mb-2 space-y-1">
+      <div className="flex justify-between text-[10px]">
+        <span style={{ color: "var(--color-muted)" }}>HP</span>
+        <span
+          className="font-mono transition-colors duration-300"
+          style={{ color: flashing ? hpColor(pct) : "var(--color-text)" }}
+        >
+          {hp}/{maxHp}
+        </span>
+      </div>
+      <StatBar value={hp} max={maxHp} color={hpColor(pct)} />
+    </div>
+  );
+}
+
+function SanityBar({ sanity, maxSanity }: { sanity: number; maxSanity: number }) {
+  const [flashing, setFlashing] = useState(false);
+  const prevRef = useRef(sanity);
+  useEffect(() => {
+    if (prevRef.current !== sanity) {
+      prevRef.current = sanity;
+      setFlashing(true);
+      const t = setTimeout(() => setFlashing(false), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [sanity]);
+
+  const pct    = sanity / maxSanity;
+  const color  = pct > 0.5 ? "#a855f7" : "#7c3aed";
+  return (
+    <div className="mb-2 space-y-1">
+      <div className="flex justify-between text-[10px]">
+        <span style={{ color: "var(--color-muted)" }}>Sanity</span>
+        <span
+          className="font-mono transition-colors duration-300"
+          style={{ color: flashing ? color : "var(--color-text)" }}
+        >
+          {sanity}/{maxSanity}
+        </span>
+      </div>
+      <StatBar value={sanity} max={maxSanity} color={color} />
+    </div>
+  );
+}
+
+function AttributeRow({ label, value }: { label: string; value: number }) {
+  const [flashing, setFlashing] = useState(false);
+  const prevRef = useRef(value);
+  useEffect(() => {
+    if (prevRef.current !== value) {
+      prevRef.current = value;
+      setFlashing(true);
+      const t = setTimeout(() => setFlashing(false), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [value]);
+
+  const mod    = getAttributeModifier(value);
+  const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
+  const pips   = Math.min(5, Math.round(value / 4));
+
+  return (
+    <div
+      className="flex items-center gap-2 rounded-sm px-0.5 transition-colors duration-300"
+      style={
+        flashing
+          ? { backgroundColor: "color-mix(in srgb, var(--color-primary) 15%, transparent)" }
+          : undefined
+      }
+    >
       <span
         className="w-7 text-[10px] font-bold"
         style={{ color: "var(--color-muted)" }}
@@ -87,27 +175,57 @@ function AttributeRow({ label, value }: { label: string; value: number }) {
         ))}
       </div>
       <span
-        className="ml-auto text-[10px]"
+        className="text-[10px]"
         style={{ color: "var(--color-muted)" }}
       >
         {value}
+      </span>
+      <span
+        className="ml-auto font-mono text-[10px]"
+        style={{ color: "var(--color-accent)" }}
+      >
+        {modStr}
       </span>
     </div>
   );
 }
 
-/* ── CharacterSheet ────────────────────────────────────────────── */
-interface CharacterSheetProps {
-  genre?: Genre;
-}
+// ── CharacterSheet ─────────────────────────────────────────────────────────────
 
-export function CharacterSheet({ genre = Genre.FANTASY }: CharacterSheetProps) {
-  const { name, hp, maxHp, sanity, maxSanity, level, xp, maxXp, currency } =
-    PLACEHOLDER;
+export function CharacterSheet() {
+  const masterState = useGameStore((s) => s.masterState);
 
-  const isHorror = genre === Genre.HORROR_LOVECRAFTIAN;
+  if (!masterState) {
+    return (
+      <SidebarPanel
+        id="character-sheet"
+        title="Character"
+        icon={<User className="size-3" />}
+      >
+        <p
+          className="text-center text-[10px] italic"
+          style={{ color: "var(--color-muted)" }}
+        >
+          No character loaded
+        </p>
+      </SidebarPanel>
+    );
+  }
+
+  const { player_state, metadata } = masterState;
+  const genre = metadata.genre;
+  const { name, health, max_health, sanity, max_sanity, attributes, resources, level, xp } =
+    player_state;
+
+  const isHorror      = genre === Genre.HORROR_LOVECRAFTIAN;
   const currencyLabel = CURRENCY_LABELS[genre] ?? CURRENCY_LABELS.default;
-  const hpPct = (hp / maxHp) * 100;
+  const currencyKey   = CURRENCY_KEYS[genre];
+  const primaryCurrency = currencyKey !== undefined ? (resources[currencyKey] ?? 0) : null;
+  const maxXp           = level * 500;
+
+  const extraResources = Object.entries(resources).filter(
+    ([k, v]) => k !== currencyKey && typeof v === "number" && (v as number) > 0
+  );
 
   return (
     <SidebarPanel
@@ -146,50 +264,50 @@ export function CharacterSheet({ genre = Genre.FANTASY }: CharacterSheetProps) {
       </div>
 
       {/* HP */}
-      <div className="mb-2 space-y-1">
-        <div className="flex justify-between text-[10px]">
-          <span style={{ color: "var(--color-muted)" }}>HP</span>
-          <span style={{ color: "var(--color-text)" }}>
-            {hp}/{maxHp}
-          </span>
-        </div>
-        <StatBar value={hp} max={maxHp} color={hpColor(hpPct)} />
-      </div>
+      <HPBar hp={health} maxHp={max_health} />
 
-      {/* Sanity — horror genre only */}
-      {isHorror && (
-        <div className="mb-2 space-y-1">
-          <div className="flex justify-between text-[10px]">
-            <span style={{ color: "var(--color-muted)" }}>Sanity</span>
-            <span style={{ color: "var(--color-text)" }}>
-              {sanity}/{maxSanity}
-            </span>
-          </div>
-          <StatBar
-            value={sanity}
-            max={maxSanity}
-            color={(sanity / maxSanity) > 0.5 ? "#a855f7" : "#7c3aed"}
-          />
-        </div>
+      {/* Sanity — horror only */}
+      {isHorror && sanity !== undefined && max_sanity !== undefined && (
+        <SanityBar sanity={sanity} maxSanity={max_sanity} />
       )}
 
       {/* Attributes */}
       <div className="mt-3 space-y-1.5">
-        {ATTRIBUTES.map((attr) => (
-          <AttributeRow key={attr.key} label={attr.label} value={attr.value} />
+        {ATTR_KEYS.map((key) => (
+          <AttributeRow
+            key={key}
+            label={ATTR_LABELS[key]}
+            value={attributes[key]}
+          />
         ))}
       </div>
 
-      {/* Currency */}
-      <div
-        className="mt-3 flex justify-between pt-2 text-[10px]"
-        style={{ borderTop: "1px solid var(--color-border)" }}
-      >
-        <span style={{ color: "var(--color-muted)" }}>{currencyLabel}</span>
-        <span className="font-bold" style={{ color: "var(--color-text)" }}>
-          {currency.toLocaleString()}
-        </span>
-      </div>
+      {/* Primary currency */}
+      {primaryCurrency !== null && (
+        <div
+          className="mt-3 flex justify-between pt-2 text-[10px]"
+          style={{ borderTop: "1px solid var(--color-border)" }}
+        >
+          <span style={{ color: "var(--color-muted)" }}>{currencyLabel}</span>
+          <span className="font-bold" style={{ color: "var(--color-text)" }}>
+            {primaryCurrency.toLocaleString()}
+          </span>
+        </div>
+      )}
+
+      {/* Extra resources (e.g. Post-Apoc ammo/food/water) */}
+      {extraResources.length > 0 && (
+        <div className="mt-1 space-y-0.5">
+          {extraResources.map(([key, val]) => (
+            <div key={key} className="flex justify-between text-[10px]">
+              <span className="capitalize" style={{ color: "var(--color-muted)" }}>
+                {key}
+              </span>
+              <span style={{ color: "var(--color-text)" }}>{val as number}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </SidebarPanel>
   );
 }

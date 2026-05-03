@@ -7,11 +7,35 @@ import { resolveAction } from "@/lib/game/logic-resolver";
 import { narrateAction } from "@/lib/game/narrator";
 import { applyStateDelta, addLogEntry } from "@/lib/game/state-utils";
 import { LogEntryType } from "@/types/game";
-import type { MasterState } from "@/types/game";
+import type { MasterState, ResolutionResult } from "@/types/game";
 
 const MAX_INPUT_LENGTH = 500;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function buildRollFeedback(resolution: ResolutionResult): string | null {
+  const ctx  = resolution.narrative_context;
+  const roll = typeof ctx.roll === "number" ? ctx.roll : null;
+  if (roll === null) return null;
+
+  const modifier   = typeof ctx.modifier   === "number" ? ctx.modifier   : 0;
+  const total      = typeof ctx.total      === "number" ? ctx.total      : roll + modifier;
+  const difficulty = typeof ctx.difficulty === "number" ? ctx.difficulty : null;
+
+  const sign    = modifier >= 0 ? `+${modifier}` : `${modifier}`;
+  const diffStr = difficulty !== null ? ` vs difficulty ${difficulty}` : "";
+
+  if (resolution.outcome_type.startsWith("ATTACK")) {
+    const label =
+      ctx.critical_hit  ? "Critical Hit!"  :
+      ctx.critical_miss ? "Critical Miss!" :
+      resolution.success ? "Hit!"          :
+                           "Miss!";
+    return `⚔ Attack roll: ${roll} ${sign} (STR) = ${total}${diffStr} — ${label}`;
+  }
+
+  return `🎲 Roll: ${roll} ${sign} = ${total}${diffStr}`;
+}
 
 function outcomeToLogType(outcomeType: string): LogEntryType {
   if (outcomeType.startsWith("ATTACK"))   return LogEntryType.COMBAT;
@@ -95,6 +119,12 @@ export function useGameLoop() {
       // ── 3. Resolve action ──────────────────────────────────────────────────
       store.setProcessing(true, "The world responds...");
       const resolution = resolveAction(parsedAction, state);
+
+      // ── 3b. Roll feedback ──────────────────────────────────────────────────
+      const rollMsg = buildRollFeedback(resolution);
+      if (rollMsg) {
+        store.addMessage(makeMessage("SYSTEM", rollMsg));
+      }
 
       // ── 4. Apply state_delta ───────────────────────────────────────────────
       let updatedState = applyStateDelta(state, resolution.state_delta);

@@ -175,7 +175,7 @@ Only include new_npcs if you actually introduce a named character in the narrati
 const SUMMARISE_FLAG = (key: string, value: boolean | number | string) => `${key}=${value}`;
 
 const ASCII_ART_INSTRUCTION = `
-Also generate an ascii_art field: an 8-line × 40-character ASCII art scene for the new location using block elements (█▓▒░) and box-drawing characters. Style it to match the genre palette. The art should suggest the environment without being literal — use negative space and density variation to create depth. Include it in your JSON response.`;
+Generate an ascii_art field: an 8-line × 40-character ASCII scene using ONLY block elements (█▓▒░), box-drawing characters (┌┐└┘│─), and punctuation symbols. STRICT RULES: NO words, labels, or letters inside the art whatsoever. NO named objects or icons that represent specific things. Use ONLY the density and distribution of block characters (█▓▒░) to convey depth, light, and shadow — dense blocks (█) for foreground and solid surfaces, lighter blocks (░) for atmosphere and distance. The art must be purely abstract and atmospheric, evoking the location through texture and form alone.`;
 
 const LOW_SANITY_INSTRUCTION = `
 The character's sanity is critically low. Make the narrative increasingly unreliable and fractured. Time may slip. Reality may bend. Sentences may begin one way and end another. The narrator's clinical detachment cracks. Do not explain — only describe what the character experiences, even if it is impossible.`;

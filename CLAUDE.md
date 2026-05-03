@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 1.9
+**Version:** 2.0
 **Status:** Active Development
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Day:** Day 7 — Intent Parser
+**Current Day:** Day 8 — Logic Resolution Engine
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -21,8 +21,8 @@
 | 4 | Core Layout & UI Shell | ✅ Complete |
 | 5 | Master State JSON Architecture | ✅ Complete |
 | 6 | Character Creation Flow | ✅ Complete |
-| 7 | Intent Parser | 🔄 In Progress |
-| 8 | Logic Resolution Engine | ⏳ Pending |
+| 7 | Intent Parser | ✅ Complete |
+| 8 | Logic Resolution Engine | 🔄 In Progress |
 | 9 | The Narrator | ⏳ Pending |
 | 10 | Full Game Loop | ⏳ Pending |
 
@@ -31,10 +31,13 @@
 
 ### Key Deliverables Per Day (confirmed on main)
 - **Day 5:** types/game.ts, state-factory, state-utils, genre-config, state-persistence, app/api/game/state/route.ts
-- **Day 6:** app/game/new/page.tsx (4-step wizard, all 5 genres, saves to Supabase), app/game/page.tsx (redirects to /game/new if no active session). Bug fixed: stable attribute card height on hover.
+- **Day 6:** app/game/new/page.tsx (4-step wizard, all 5 genres, saves to Supabase), app/game/page.tsx (session redirect). Bug fixed: stable attribute card height on hover.
+- **Day 7:** app/api/game/parse-intent/route.ts, lib/game/intent-parser.ts, lib/game/prompt-builder.ts, lib/game/__tests__/intent-parser.test.ts. Confirmed: 401 on unauthenticated requests. Note: @anthropic-ai/sdk must be installed (npm install @anthropic-ai/sdk).
 
-### Important Local Dev Note
-After Claude Code pushes to GitHub, always run `git pull` locally then restart the dev server to pick up changes.
+### Important Local Dev Notes
+- After Claude Code pushes to GitHub, always run `git pull` locally then restart the dev server
+- @anthropic-ai/sdk is required — run `npm install @anthropic-ai/sdk` if missing
+- Windows PowerShell users: use `Invoke-WebRequest` instead of `curl -X`
 
 ### Branch Policy
 Always work on main. Do not create feature branches. Commit and push directly to main at end of each day.
@@ -204,4 +207,4 @@ Always work directly on main. Do not create feature branches. Commit and push to
 
 ---
 
-*Last updated: Session 10 — Day 6 fully verified, git pull workflow noted, Day 7 starting*
+*Last updated: Session 11 — Day 7 complete and verified (401 confirmed), Day 8 starting*

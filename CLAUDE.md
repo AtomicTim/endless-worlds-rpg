@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 2.7
+**Version:** 2.8
 **Status:** Active Development — MVP Core Loop Complete
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -42,36 +42,48 @@
 - **Day 10:** lib/stores/game-store.ts, hooks/useGameLoop.ts — full loop wired and playable
 - **Day 11:** Live CharacterSheet, roll feedback in feed, ASCII art prompt tightened
 - **Day 12:** Full inventory system — equip/unequip, drag-drop, per-type buttons, item acquisition pipeline
-- **Pre-Day 13 fixes:** Fast-path system (action-classifier.ts), getDirectAction() bypasses Intent Parser entirely for equip/unequip/drop/read. READ never calls Narrator — shows item.description directly. Original content only instruction added to all narrator prompts.
+- **Pre-Day 13 fixes:**
+  - Fast-path system (action-classifier.ts) — equip/unequip/drop/read bypass Narrator entirely
+  - getDirectAction() bypasses Intent Parser for instant actions
+  - Narrative context continuity: lastNarrativeText in game store, passed to every Narrator call via prompt-builder. 5 log entries (up from 3). WORLD CONTINUITY + PREVIOUS NARRATIVE blocks in system/user prompts
+  - Spinner double-gated: isProcessing && !!processingStep — fast-path never triggers loading UI
+  - Original content only policy in all narrator prompts
+
+### Narrative Continuity Architecture
+The AI holds NO state between calls. Continuity is maintained by:
+- `log_book.entries` (last 5 passed to every Narrator call) — stored in Supabase
+- `world_state.flags` — every meaningful world change — stored in Supabase
+- `world_state.current_location_id` + `visited_locations` — stored in Supabase
+- `npc_registry` — NPC memory snippets — stored in Supabase
+- `lastNarrativeText` — most recent narrative text — stored in Zustand game store
+- Day 28 adds session summary compression for long-running games
 
 ### Action Classification Policy
-- **FAST PATH** (zero AI calls, instant): equip, unequip, drop, read lore
-  - getDirectAction() intercepts before parseIntent — no API call at all
-  - isNarrativeAction() closes fallthrough gap for USE_ITEM+read
+- **FAST PATH** (zero AI calls, instant, no loading indicator): equip, unequip, drop, read lore
 - **NARRATIVE PATH** (full AI): MOVE, ATTACK, INTERACT, EXAMINE, DIALOGUE, USE_ITEM(CONSUMABLE)
 
 ### Original Content Policy
-Narrator prompt explicitly prohibits references to: Star Wars, Star Trek, Marvel, DC, LotR, Harry Potter, Dune, Mass Effect, and all other recognizable IP. All worlds must be entirely original.
+Narrator prompt prohibits: Star Wars, Star Trek, Marvel, DC, LotR, Harry Potter, Dune, Mass Effect, and all recognizable IP.
 
 ### ASCII Art Policy
-Words allowed as in-world content (signs, labels). Words NOT allowed as substitutes for block-character visuals.
+Words allowed as in-world content (signs, labels). NOT allowed as substitutes for block-character visuals.
 
-### ⚠️ Important Dev Environment Notes
+### ⚠️ Dev Environment Notes
 - Claude Code shells export ANTHROPIC_API_KEY="" — always start dev server from your own terminal
-- After Claude Code pushes, run `git pull` locally then restart YOUR dev server
-- Windows PowerShell: use `Invoke-WebRequest` instead of `curl -X`
-- `npx tsc --noEmit` blank output = pass
+- After Claude Code pushes, run `git pull` + restart YOUR dev server
+- Windows PowerShell: use `Invoke-WebRequest` not `curl -X`
+- `npx tsc --noEmit` blank = pass
 
 ### Branch Policy
-Always work on main. Do not create feature branches. Commit and push directly to main at end of each day.
+Always work on main. No feature branches. Push directly to main.
 
 ---
 
 ## 1. Core Philosophy
 
 - **The Hybrid Authority Model:** The Code is the "Source of Truth." The AI is the "Narrator."
-- **Zero-Image Visuals:** ASCII/ANSI art only, optimized for mobile and web.
-- **Endless Versatility:** Genre Wrappers swap the world skin. Launch genres: Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic.
+- **Zero-Image Visuals:** ASCII/ANSI art only.
+- **Endless Versatility:** Genre Wrappers. Launch genres: Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic.
 
 ---
 
@@ -111,8 +123,8 @@ Always work on main. Do not create feature branches. Commit and push directly to
 
 ## 4. ASCII Visual Strategy
 
-- Block Elements (█▓▒░) for depth, CSS-based ANSI coloring
-- Visual Seed per location — Day 25 caches art in Supabase
+- Block Elements (█▓▒░) for depth, CSS ANSI coloring
+- Visual Seed per location — Day 25 caches in Supabase
 - Palettes: Fantasy (amber/green), Cyberpunk (cyan/magenta), Horror (sickly green/purple), Space Opera (purple/silver), Post-Apocalyptic (rust/ash)
 
 ---
@@ -154,14 +166,14 @@ Always work on main. Do not create feature branches. Commit and push directly to
 | **Space Opera** | Grand, operatic | Purple/silver | Stellar Units | Hull Integrity |
 | **Post-Apocalyptic** | Bleak, dark humor | Rust/ash | Caps | HP |
 
-**Horror:** Dual HP+Sanity system. 0 Sanity = game over.
+**Horror:** Dual HP+Sanity. 0 Sanity = game over.
 **Post-Apoc:** Ammo/food/water tracked alongside HP.
 **Future genres:** Western, Pirate, Superhero, Dark Fantasy, Steampunk
 
 ---
 
 ## 8. Platform: PWA Only
-Final decision. No Electron, no Steam. PWA manifest Day 35.
+Final. No Electron, no Steam. PWA manifest Day 35.
 
 ---
 
@@ -171,11 +183,11 @@ Final decision. No Electron, no Steam. PWA manifest Day 35.
 
 | Tool | Role |
 | --- | --- |
-| Claude Code | Coding, commits, push to GitHub |
+| Claude Code | Coding, commits, push |
 | Cursor | Review, minor edits |
 | Claude.ai | Strategy, prompts, CLAUDE.md |
 
-Workflow: Claude Code pushes → `git pull` + restart own dev server → report to Claude.ai → checklist → confirm → next prompt.
+Workflow: Claude Code pushes → `git pull` + restart own server → report to Claude.ai → checklist → confirm → next prompt.
 
 ---
 
@@ -187,4 +199,4 @@ Workflow: Claude Code pushes → `git pull` + restart own dev server → report 
 
 ---
 
-*Last updated: Session 18 — All pre-Day 13 fixes complete. Instant fast-path, READ fixed, original content policy added. Day 13 starting.*
+*Last updated: Session 19 — Narrative continuity fix complete (lastNarrativeText, 5 log entries, WORLD CONTINUITY prompt). Spinner double-gated. Day 13 prompt ready.*

@@ -1,28 +1,48 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { StoryMessage } from "@/lib/stores/game-store";
+import type { PointOfInterest } from "@/types/game";
+import { InteractionPopover } from "./InteractionPopover";
+import { POI_COLORS } from "./poi-colors";
 
 // Re-export so existing import sites keep working.
 export type { StoryMessage } from "@/lib/stores/game-store";
 export type MessageType = StoryMessage["type"];
 
 interface StoryFeedProps {
-  messages: StoryMessage[];
+  messages:  StoryMessage[];
   isLoading?: boolean;
+  onSubmit?: (input: string) => void;
 }
 
-export function StoryFeed({ messages, isLoading = false }: StoryFeedProps) {
+interface PopoverState {
+  point:    PointOfInterest;
+  position: { x: number; y: number };
+}
+
+export function StoryFeed({ messages, isLoading = false, onSubmit }: StoryFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [popover, setPopover] = useState<PopoverState | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
+  const openPopover = (point: PointOfInterest, e: React.MouseEvent) => {
+    setPopover({ point, position: { x: e.clientX, y: e.clientY } });
+  };
+
+  const closePopover = () => setPopover(null);
+
+  const submitFromPopover = (input: string) => {
+    onSubmit?.(input);
+  };
+
   return (
     <div className="scrollbar-thin flex-1 space-y-3 overflow-y-auto px-4 py-4">
       {messages.map((msg) => (
-        <MessageEntry key={msg.id} message={msg} />
+        <MessageEntry key={msg.id} message={msg} onPoiClick={openPopover} />
       ))}
 
       {isLoading && (
@@ -35,14 +55,32 @@ export function StoryFeed({ messages, isLoading = false }: StoryFeedProps) {
       )}
 
       <div ref={bottomRef} />
+
+      {popover && (
+        <InteractionPopover
+          point={popover.point}
+          position={popover.position}
+          onAction={submitFromPopover}
+          onClose={closePopover}
+        />
+      )}
     </div>
   );
 }
 
-function MessageEntry({ message }: { message: StoryMessage }) {
+interface MessageEntryProps {
+  message:    StoryMessage;
+  onPoiClick: (point: PointOfInterest, e: React.MouseEvent) => void;
+}
+
+function MessageEntry({ message, onPoiClick }: MessageEntryProps) {
   const { type, content, metadata } = message;
   const npcName =
     typeof metadata?.npcName === "string" ? metadata.npcName : undefined;
+  const points =
+    Array.isArray(metadata?.points_of_interest)
+      ? (metadata!.points_of_interest as PointOfInterest[])
+      : [];
 
   switch (type) {
     case "NARRATIVE":
@@ -51,7 +89,7 @@ function MessageEntry({ message }: { message: StoryMessage }) {
           className="message-enter font-mono text-sm leading-relaxed"
           style={{ color: "var(--color-text)" }}
         >
-          {content}
+          {renderNarrativeText(content, points, onPoiClick)}
         </p>
       );
 
@@ -135,4 +173,77 @@ function MessageEntry({ message }: { message: StoryMessage }) {
     default:
       return null;
   }
+}
+
+// ── POI rendering ─────────────────────────────────────────────────────────────
+
+interface PoiMatch {
+  start: number;
+  end:   number;
+  point: PointOfInterest;
+}
+
+function findPoiMatches(text: string, points: PointOfInterest[]): PoiMatch[] {
+  if (points.length === 0) return [];
+  const lower = text.toLowerCase();
+  const raw: PoiMatch[] = [];
+  for (const point of points) {
+    const label = point.label?.trim();
+    if (!label) continue;
+    const idx = lower.indexOf(label.toLowerCase());
+    if (idx >= 0) raw.push({ start: idx, end: idx + label.length, point });
+  }
+  // Sort by start ascending; on tie prefer the longer label.
+  raw.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+  // Drop overlapping matches — first one wins.
+  const out: PoiMatch[] = [];
+  let lastEnd = -1;
+  for (const m of raw) {
+    if (m.start >= lastEnd) {
+      out.push(m);
+      lastEnd = m.end;
+    }
+  }
+  return out;
+}
+
+function renderNarrativeText(
+  text: string,
+  points: PointOfInterest[],
+  onPoiClick: (point: PointOfInterest, e: React.MouseEvent) => void
+): React.ReactNode {
+  const matches = findPoiMatches(text, points);
+  if (matches.length === 0) return text;
+
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  matches.forEach((m, i) => {
+    if (m.start > cursor) nodes.push(text.slice(cursor, m.start));
+    const accent = POI_COLORS[m.point.type];
+    nodes.push(
+      <span
+        key={`poi-${i}-${m.start}`}
+        role="button"
+        tabIndex={0}
+        onClick={(e) => onPoiClick(m.point, e)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            const target = e.currentTarget.getBoundingClientRect();
+            onPoiClick(m.point, {
+              clientX: target.left,
+              clientY: target.bottom,
+            } as React.MouseEvent);
+          }
+        }}
+        className="cursor-pointer underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-80"
+        style={{ color: accent, textDecorationColor: accent }}
+      >
+        {text.slice(m.start, m.end)}
+      </span>
+    );
+    cursor = m.end;
+  });
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return nodes;
 }

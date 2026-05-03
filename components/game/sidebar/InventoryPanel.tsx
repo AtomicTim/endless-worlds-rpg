@@ -96,7 +96,7 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
     if (slotKey === "accessory") { flashRejected(slotKey); return; }
     if (!(accepts as ItemType[]).includes(item.type)) { flashRejected(slotKey); return; }
     if (!onSubmit) return;
-    onSubmit(`use ${item.name}`);
+    onSubmit(`equip ${item.name}`);
   }
 
   function handleDropOnPack(e: React.DragEvent) {
@@ -105,7 +105,7 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
     const itemId = e.dataTransfer.getData("text/plain");
     const item   = inventory.find((i) => i.id === itemId);
     if (!item?.equipped || !onSubmit) return;
-    onSubmit(`use ${item.name}`); // toggle unequip
+    onSubmit(`unequip ${item.name}`);
   }
 
   // ── Stat bonus string ────────────────────────────────────────────────────────
@@ -308,7 +308,8 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
                     style={{ backgroundColor: "var(--color-accent)", color: "#000" }}
                     disabled={isProcessing}
                     onClick={() => {
-                      onSubmit(`use ${selectedItem.name}`);
+                      const verb = selectedItem.equipped ? "unequip" : "equip";
+                      onSubmit(`${verb} ${selectedItem.name}`);
                       setSelectedId(null);
                     }}
                   >

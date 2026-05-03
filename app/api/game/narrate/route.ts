@@ -5,11 +5,15 @@ import {
   buildNarratorSystemPrompt,
   buildNarratorUserPrompt,
 } from "@/lib/game/prompt-builder";
-import type { MasterState, NarratorResponse, ResolutionResult } from "@/types/game";
+import type { MasterState, NarratorResponse, ParsedAction, ResolutionResult } from "@/types/game";
 
 const FALLBACK_RESPONSE: NarratorResponse = {
-  narrative_text: "The narrator falls silent for a moment, then continues. The moment passes without ceremony.",
-  new_npcs: [],
+  response_tier:      2,
+  narrative_text:     "The narrator falls silent for a moment, then continues. The moment passes without ceremony.",
+  ascii_art:          null,
+  new_npcs:           [],
+  points_of_interest: [],
+  codex_entries:      [],
 };
 
 export async function POST(request: NextRequest) {
@@ -23,14 +27,19 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Body validation ────────────────────────────────────────────────────────
-  let body: { resolutionResult?: ResolutionResult; masterState?: MasterState; lastNarrativeText?: string };
+  let body: {
+    resolutionResult?:  ResolutionResult;
+    masterState?:       MasterState;
+    lastNarrativeText?: string;
+    action?:            ParsedAction;
+  };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { resolutionResult, masterState, lastNarrativeText } = body;
+  const { resolutionResult, masterState, lastNarrativeText, action } = body;
   if (!resolutionResult || !masterState) {
     return NextResponse.json(
       { error: "Missing resolutionResult or masterState" },
@@ -45,7 +54,7 @@ export async function POST(request: NextRequest) {
   }
 
   const systemPrompt = buildNarratorSystemPrompt(masterState);
-  const userPrompt   = buildNarratorUserPrompt(resolutionResult, masterState, lastNarrativeText);
+  const userPrompt   = buildNarratorUserPrompt(resolutionResult, masterState, lastNarrativeText, action);
 
   // Instantiate per-request so the apiKey is read from process.env at call time
   // (avoids stale module-level binding across Next.js dev HMR cycles).

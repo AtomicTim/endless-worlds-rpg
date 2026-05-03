@@ -555,16 +555,20 @@ export default function NewGamePage() {
                     onMouseEnter={() => setHoveredAttr(key)}
                     onMouseLeave={() => setHoveredAttr(null)}
                   >
-                    {/* Label + tooltip */}
+                    {/* Label + description (always rendered; opacity hides when not hovered) */}
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-bold" style={{ color: "var(--color-text)" }}>
                         {label}
                       </div>
-                      {hoveredAttr === key && (
-                        <div className="text-xs mt-0.5" style={{ color: "var(--color-muted)" }}>
-                          {description}
-                        </div>
-                      )}
+                      <div
+                        className="text-xs mt-0.5 transition-opacity duration-150"
+                        style={{
+                          color: "var(--color-muted)",
+                          opacity: hoveredAttr === key ? 1 : 0,
+                        }}
+                      >
+                        {description}
+                      </div>
                     </div>
 
                     {/* Pip bar */}

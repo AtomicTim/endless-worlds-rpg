@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 2.6
+**Version:** 2.7
 **Status:** Active Development — MVP Core Loop Complete
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -41,17 +41,20 @@
 - **Day 9:** app/api/game/narrate/route.ts (streaming), lib/game/narrator.ts, narrator prompts
 - **Day 10:** lib/stores/game-store.ts, hooks/useGameLoop.ts — full loop wired and playable
 - **Day 11:** Live CharacterSheet, roll feedback in feed, ASCII art prompt tightened
-- **Day 12:** Full inventory system — equip/unequip, drag-drop (WEAPON/ARMOR only), per-type button logic, item acquisition pipeline with normalizeNarratorItem validator
-- **Pre-Day 13 fixes:** Fast-path system (lib/game/action-classifier.ts) — equip/unequip/drop/read bypass Narrator entirely with instant SYSTEM messages. New LORE message type in StoryFeed. Belt-and-suspenders guard on items_acquired for non-world actions.
+- **Day 12:** Full inventory system — equip/unequip, drag-drop, per-type buttons, item acquisition pipeline
+- **Pre-Day 13 fixes:** Fast-path system (action-classifier.ts), getDirectAction() bypasses Intent Parser entirely for equip/unequip/drop/read. READ never calls Narrator — shows item.description directly. Original content only instruction added to all narrator prompts.
 
-### Action Classification Policy (established pre-Day 13)
-Two paths through useGameLoop:
-- **FAST PATH** (no AI call): equip, unequip, drop, read lore — instant SYSTEM/LORE message only
-- **NARRATIVE PATH** (full AI call): MOVE, ATTACK, INTERACT, EXAMINE, DIALOGUE, USE_ITEM(CONSUMABLE), all other CUSTOM actions
-The Narrator should NEVER generate items_acquired for fast-path actions.
+### Action Classification Policy
+- **FAST PATH** (zero AI calls, instant): equip, unequip, drop, read lore
+  - getDirectAction() intercepts before parseIntent — no API call at all
+  - isNarrativeAction() closes fallthrough gap for USE_ITEM+read
+- **NARRATIVE PATH** (full AI): MOVE, ATTACK, INTERACT, EXAMINE, DIALOGUE, USE_ITEM(CONSUMABLE)
+
+### Original Content Policy
+Narrator prompt explicitly prohibits references to: Star Wars, Star Trek, Marvel, DC, LotR, Harry Potter, Dune, Mass Effect, and all other recognizable IP. All worlds must be entirely original.
 
 ### ASCII Art Policy
-Words allowed as in-world content (signs, labels, position markers). Words NOT allowed as substitutes for visual elements.
+Words allowed as in-world content (signs, labels). Words NOT allowed as substitutes for block-character visuals.
 
 ### ⚠️ Important Dev Environment Notes
 - Claude Code shells export ANTHROPIC_API_KEY="" — always start dev server from your own terminal
@@ -66,9 +69,9 @@ Always work on main. Do not create feature branches. Commit and push directly to
 
 ## 1. Core Philosophy
 
-- **The Hybrid Authority Model:** The Code (Game Logic) is the "Source of Truth" for stats, inventory, and world flags. The AI is the "Narrator" and "Visualizer" that interprets intent and provides flavor.
-- **Zero-Image Visuals:** All environmental and character representation is handled via advanced ASCII/ANSI art, optimized for mobile and web views.
-- **Endless Versatility:** Launch genres: Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic.
+- **The Hybrid Authority Model:** The Code is the "Source of Truth." The AI is the "Narrator."
+- **Zero-Image Visuals:** ASCII/ANSI art only, optimized for mobile and web.
+- **Endless Versatility:** Genre Wrappers swap the world skin. Launch genres: Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic.
 
 ---
 
@@ -78,54 +81,52 @@ Always work on main. Do not create feature branches. Commit and push directly to
 
 | Module | Responsibility |
 | --- | --- |
-| **Metadata** | Stores genre, tone, and difficulty levels. |
-| **Player State** | Hard numbers for Health, Resources, Attributes, and Inventory. |
-| **World State** | Boolean flags (e.g., has_key_01: true) and current location IDs. |
-| **Log Book** | A chronological array of major story beats and discovered lore. |
-| **NPC Registry** | Per-NPC memory snippets, trust scores, and relationship history. |
+| **Metadata** | Genre, tone, difficulty |
+| **Player State** | HP, resources, attributes, inventory |
+| **World State** | Flags and location IDs |
+| **Log Book** | Story beats and discovered lore |
+| **NPC Registry** | Per-NPC memory, trust scores |
 
 ### B. The Two-Pass AI Loop
-
-- **The Intent Parser:** Translates player text into a structured JSON action.
-- **Logic Resolution:** The code checks stats and updates the Master State.
-- **The Narrator:** Writes story + ASCII art + items_acquired (world actions only).
+1. **Intent Parser** → structured ParsedAction JSON
+2. **Logic Resolver** → deterministic ResolutionResult (no AI)
+3. **Narrator** → story text + ASCII art + items_acquired
 
 ---
 
 ## 3. Tech Stack
 
-| Layer | Tool | Why |
-| --- | --- | --- |
-| Frontend | Next.js 14 (App Router) | SSR, API routes, great DX |
-| Styling | Tailwind CSS + shadcn/ui | Fast, consistent, dark-mode ready |
-| Database | Supabase | Auth + Postgres + Realtime in one |
-| AI Engine | Claude API (claude-sonnet-4-20250514) | Best narrative quality, JSON reliability |
-| Payments | Stripe | Industry standard, great docs |
-| Deployment | Vercel | Native Next.js, zero-config |
-| Audio | Howler.js | Lightweight, cross-browser ambient audio |
-| State (client) | Zustand | Simple, no boilerplate |
+| Layer | Tool |
+| --- | --- |
+| Frontend | Next.js 14 (App Router) |
+| Styling | Tailwind CSS + shadcn/ui |
+| Database | Supabase |
+| AI Engine | Claude API (claude-sonnet-4-20250514) |
+| Payments | Stripe |
+| Deployment | Vercel |
+| Audio | Howler.js |
+| State | Zustand |
 
 ---
 
 ## 4. ASCII Visual Strategy
 
-- Use **Block Elements** (█, ▓, ▒, ░) for depth and shading.
-- Implement **CSS-based ANSI coloring** to make the "text-only" world vibrant.
-- **The Visual Seed:** Unique seed per location — Day 25 caches art in Supabase.
-- Genre palettes: Fantasy (amber/green), Cyberpunk (neon blue/magenta), Horror (sickly green/deep purple), Space Opera (purple/silver), Post-Apocalyptic (rust orange/ash grey).
+- Block Elements (█▓▒░) for depth, CSS-based ANSI coloring
+- Visual Seed per location — Day 25 caches art in Supabase
+- Palettes: Fantasy (amber/green), Cyberpunk (cyan/magenta), Horror (sickly green/purple), Space Opera (purple/silver), Post-Apocalyptic (rust/ash)
 
 ---
 
-## 5. Implementation Roadmap (Summary)
+## 5. Implementation Roadmap
 
 | Phase | Days | Goal |
 | --- | --- | --- |
-| **0 — Foundation** | 1–4 | Project scaffold, accounts, environment |
-| **1 — MVP Core Loop** | 5–14 | Playable AI-driven game with basic mechanics |
-| **2 — Logic Engine** | 15–24 | Full stat system, combat, inventory, NPC memory |
+| **0 — Foundation** | 1–4 | Scaffold |
+| **1 — MVP Core Loop** | 5–14 | Playable game |
+| **2 — Logic Engine** | 15–24 | Combat, skills, NPCs |
 | **3 — World & Visuals** | 25–34 | ASCII art, genre wrappers, sound |
-| **4 — Monetization** | 35–42 | Stripe, subscription tiers, token system |
-| **5 — Polish & Launch** | 43–45 | UX, security, analytics, beta, production |
+| **4 — Monetization** | 35–42 | Stripe, tiers |
+| **5 — Polish & Launch** | 43–45 | Security, analytics, deploy |
 
 ---
 
@@ -133,67 +134,52 @@ Always work on main. Do not create feature branches. Commit and push directly to
 
 | Feature | Free | Adventurer ($6.99/mo) | Legend ($14.99/mo) |
 | --- | --- | --- | --- |
-| Genres | Fantasy only | All 5 genres | All 5 + future genres |
+| Genres | Fantasy only | All 5 | All 5 + future |
 | Save Slots | 1 | 3 | Unlimited |
 | AI Actions/Day | 50 | Unlimited | Unlimited |
 | ASCII Art | Basic | Enhanced | Enhanced + Custom |
-| Community Templates | Browse only | Browse + Play | Create + Share |
+| Community Templates | Browse | Browse + Play | Create + Share |
 | Export Log Book | ❌ | ✅ | ✅ |
 | Priority AI Speed | ❌ | ❌ | ✅ |
 
 ---
 
-## 7. Strategic Features
+## 7. Genre Definitions (Final — No Noir)
 
-- **Stat-Based Dialogue:** Charisma/Intelligence gate AI-generated dialogue options.
-- **NPC Memory:** Per-NPC context snippets tracking trust and past interactions.
-- **Ambient Soundscapes:** Audio engine triggered by sound_id from Narrator.
-- **The Wildcard Mechanic:** Random world events every 5 player actions.
-- **Community Templates:** Users share Master Context world files.
+| Genre | Tone | Palette | Currency | HP Label |
+| --- | --- | --- | --- | --- |
+| **Fantasy** | Epic, mythic | Amber/green | Gold | HP |
+| **Cyberpunk** | Terse, neon-soaked | Cyan/magenta | Credits | Integrity |
+| **Horror/Lovecraftian** | Cosmic dread | Sickly green/purple | None | Sanity+HP |
+| **Space Opera** | Grand, operatic | Purple/silver | Stellar Units | Hull Integrity |
+| **Post-Apocalyptic** | Bleak, dark humor | Rust/ash | Caps | HP |
 
----
-
-## 8. Genre Definitions (Launch Roster — Final)
-
-**⚠️ Noir has been removed. The 5 launch genres are:**
-
-| Genre | Tone | Color Palette | Currency | HP Label | Key Influences |
-| --- | --- | --- | --- | --- | --- |
-| **Fantasy** | Epic, mythic, high adventure | Amber / Forest green | Gold | HP | D&D, Elder Scrolls |
-| **Cyberpunk** | Terse, gritty, neon-soaked | Neon cyan / Magenta | Credits | Integrity | Neuromancer, Blade Runner |
-| **Horror/Lovecraftian** | Dread, cosmic horror, sanity-eroding | Sickly green / Deep purple | None | Sanity + HP | Lovecraft, Darkest Dungeon |
-| **Space Opera** | Pulpy, grand-scale, operatic | Purple / Silver | Stellar Units | Hull Integrity | Mass Effect, Dune |
-| **Post-Apocalyptic** | Bleak, dark-humored, survival | Rust orange / Ash grey | Caps | HP | Fallout, The Road |
-
-### Genre-Specific Mechanics
-**Horror/Lovecraftian:** Dual HP+Sanity. 0 Sanity = game over.
-**Post-Apocalyptic:** Ammo/food/water tracked alongside HP and Caps.
-**Future genres:** Western, Pirate/Age of Sail, Superhero, Dark Fantasy, Steampunk
+**Horror:** Dual HP+Sanity system. 0 Sanity = game over.
+**Post-Apoc:** Ammo/food/water tracked alongside HP.
+**Future genres:** Western, Pirate, Superhero, Dark Fantasy, Steampunk
 
 ---
 
-## 9. Platform Decision
-
-**PWA only. Final.** No Electron, no Steam. PWA manifest on Day 35.
+## 8. Platform: PWA Only
+Final decision. No Electron, no Steam. PWA manifest Day 35.
 
 ---
 
-## 10. Development Workflow
-
-| Tool | Role |
-| --- | --- |
-| **Claude Code** | All coding, file writing, git commits |
-| **Cursor** | Code review, minor manual edits |
-| **Claude.ai** | Strategy, prompts, CLAUDE.md updates |
+## 9. Development Workflow
 
 **Claude.ai owns all CLAUDE.md updates. Claude Code must not modify CLAUDE.md.**
 
-Workflow: Claude Code pushes → git pull locally → restart own dev server → report to Claude.ai → get checklist → confirm → get next prompt.
+| Tool | Role |
+| --- | --- |
+| Claude Code | Coding, commits, push to GitHub |
+| Cursor | Review, minor edits |
+| Claude.ai | Strategy, prompts, CLAUDE.md |
+
+Workflow: Claude Code pushes → `git pull` + restart own dev server → report to Claude.ai → checklist → confirm → next prompt.
 
 ---
 
-## 11. Reference Links
-
+## 10. Reference Links
 - Supabase: https://supabase.com/dashboard
 - Anthropic Console: https://console.anthropic.com
 - Vercel: https://vercel.com/dashboard
@@ -201,4 +187,4 @@ Workflow: Claude Code pushes → git pull locally → restart own dev server →
 
 ---
 
-*Last updated: Session 17 — Fast-path system and items_acquired guards complete. Day 13 starting.*
+*Last updated: Session 18 — All pre-Day 13 fixes complete. Instant fast-path, READ fixed, original content policy added. Day 13 starting.*

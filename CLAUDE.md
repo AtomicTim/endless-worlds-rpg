@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 1.6
+**Version:** 1.7
 **Status:** Active Development
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Day:** Day 5 — Master State JSON Architecture
+**Current Day:** Day 6 — Character Creation Flow
 **Local Dev Port:** 3001
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -19,20 +19,30 @@
 | 2 | Supabase Schema & Database | ✅ Complete |
 | 3 | Authentication System | ✅ Complete |
 | 4 | Core Layout & UI Shell | ✅ Complete |
-| 5 | Master State JSON Architecture | 🔄 In Progress |
-| 6 | Character Creation Flow | ⏳ Pending |
+| 5 | Master State JSON Architecture | ✅ Complete |
+| 6 | Character Creation Flow | 🔄 In Progress |
+| 7 | Intent Parser | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
+
+### Day 5 Deliverables (confirmed on main)
+- `types/game.ts` — full MasterState types, all 5 correct genres, no Noir
+- `lib/game/state-factory.ts` — createNewMasterState() factory
+- `lib/game/state-utils.ts` — all state utility functions
+- `lib/game/genre-config.ts` — GenreConfig type + GENRE_CONFIGS for all 5 genres
+- `lib/game/state-persistence.ts` — saveMasterState, loadMasterState, getActiveSessions
+- `app/api/game/state/route.ts` — GET/POST API route with auth
+
+### Branch Policy
+Always work on main. Do not create feature branches. Commit and push directly to main at end of each day.
 
 ---
 
 ## 1. Core Philosophy
 
 - **The Hybrid Authority Model:** The Code (Game Logic) is the "Source of Truth" for stats, inventory, and world flags. The AI is the "Narrator" and "Visualizer" that interprets intent and provides flavor.
-
 - **Zero-Image Visuals:** All environmental and character representation is handled via advanced ASCII/ANSI art, optimized for mobile and web views.
-
 - **Endless Versatility:** The engine must support multiple genres by swapping a metadata "Genre Wrapper." Launch genres: Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic.
 
 ---
@@ -40,8 +50,6 @@
 ## 2. Technical Architecture
 
 ### A. The Master State (JSON)
-
-The persistent state of the game, stored in Supabase and passed to the AI to maintain context.
 
 | Module | Responsibility |
 | --- | --- |
@@ -93,8 +101,6 @@ The persistent state of the game, stored in Supabase and passed to the AI to mai
 | **3 — World & Visuals** | 25–34 | ASCII art, genre wrappers, sound |
 | **4 — Monetization** | 35–42 | Stripe, subscription tiers, token system |
 | **5 — Polish & Launch** | 43–45 | UX, security, analytics, beta, production |
-
-The full day-by-day plan is in the companion document: **Endless_Worlds_RPG_Master_Dev_Plan.md**
 
 ---
 
@@ -185,20 +191,8 @@ The full day-by-day plan is in the companion document: **Endless_Worlds_RPG_Mast
 ### Important: Claude.ai owns all CLAUDE.md updates
 Claude Code should NOT update CLAUDE.md. All updates to this file are made by Claude.ai after each day is confirmed complete.
 
-### GitHub Workflow
-
-- Commit at the end of every working day
-- Branch naming: `day-01-foundation`, `day-05-master-state`, etc.
-- Main branch always holds the last stable, tested state
-- Never push directly to main mid-session
-
-### Claude Code Install
-
-```bash
-npm install -g @anthropic-ai/claude-code
-cd your-project-folder
-claude
-```
+### Branch Policy
+Always work directly on main. Do not create feature branches. Commit and push to main at the end of each session.
 
 ---
 
@@ -212,4 +206,4 @@ claude
 
 ---
 
-*Last updated: Session 7 — Day 5 in progress, workflow note added: Claude.ai owns CLAUDE.md updates*
+*Last updated: Session 8 — Day 5 verified complete on main, branch policy added, Day 6 starting*

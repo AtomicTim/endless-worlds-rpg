@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 1.4
+**Version:** 1.5
 **Status:** Active Development
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Day:** Day 4 — Core Layout & UI Shell
+**Current Day:** Day 5 — Master State JSON Architecture
 **Local Dev Port:** 3001
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -18,7 +18,8 @@
 | 1 | Project Scaffold | ✅ Complete |
 | 2 | Supabase Schema & Database | ✅ Complete |
 | 3 | Authentication System | ✅ Complete |
-| 4 | Core Layout & UI Shell | 🔄 Up Next |
+| 4 | Core Layout & UI Shell | ✅ Complete — testing in progress |
+| 5 | Master State JSON Architecture | 🔄 Up Next |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
@@ -174,13 +175,11 @@ The full day-by-day plan is in the companion document: **Endless_Worlds_RPG_Mast
 
 ### Day-to-Day Workflow
 
-1. Come to **Claude.ai** — report previous day done, get next day's prompt
-2. Claude.ai reads CLAUDE.md from GitHub for full context, updates it with any new decisions
-3. Open **Claude Code** in terminal inside project folder (`claude` command)
-4. Paste the day's prompt into Claude Code — it builds everything and pushes to GitHub
-5. Open **Cursor** to review the output
-6. Test the day's milestone checklist
-7. Return to Claude.ai to confirm done and get next prompt
+1. Claude Code completes the day's work and pushes to GitHub
+2. Come to **Claude.ai** and say "Day X is done"
+3. Claude.ai reads CLAUDE.md from GitHub, updates the progress log, gives the test checklist
+4. You test and confirm — Claude.ai updates CLAUDE.md and gives the next day's prompt
+5. Paste prompt into Claude Code and repeat
 
 ### GitHub Workflow
 
@@ -209,4 +208,4 @@ claude
 
 ---
 
-*Last updated: Session 5 — V1.4: Genres finalized, progress log added, Claude.ai now reads/writes this file directly via GitHub MCP*
+*Last updated: Session 6 — Day 4 complete, workflow confirmed: Claude.ai owns CLAUDE.md updates*

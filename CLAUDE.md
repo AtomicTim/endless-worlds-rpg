@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 2.4
+**Version:** 2.5
 **Status:** Active Development — MVP Core Loop Complete
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Day:** Day 12 — Inventory System
+**Current Day:** Day 13 — Log Book & Save System
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -26,8 +26,8 @@
 | 9 | The Narrator | ✅ Complete |
 | 10 | Full Game Loop | ✅ Complete — GAME IS PLAYABLE |
 | 11 | Character Sheet UI (Live) | ✅ Complete |
-| 12 | Inventory System | 🔄 In Progress |
-| 13 | Log Book & Save System | ⏳ Pending |
+| 12 | Inventory System | ✅ Complete |
+| 13 | Log Book & Save System | 🔄 In Progress |
 | 14 | MVP Playtest & Bug Fix | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
@@ -40,13 +40,14 @@
 - **Day 8:** lib/game/logic-resolver.ts, lib/game/dice.ts — 51/51 tests passing
 - **Day 9:** app/api/game/narrate/route.ts (streaming), lib/game/narrator.ts, narrator prompts
 - **Day 10:** lib/stores/game-store.ts, hooks/useGameLoop.ts — full loop wired and playable
-- **Day 11:** Live CharacterSheet (real stats, animated health bar, genre-adaptive resources, attribute modifiers), live InventoryPanel (items from background, click tooltip, use button), roll feedback line in StoryFeed, ASCII art prompt tightened (no lazy word substitutes — scene-content words like signs/labels OK)
+- **Day 11:** Live CharacterSheet, roll feedback in feed, ASCII art prompt tightened
+- **Day 12 + fixes:** Full inventory system with equip/unequip, drag-drop (WEAPON/ARMOR only), per-type button logic (WEAPON/ARMOR=Equip+Drop, CONSUMABLE=Use+Drop, LORE=Read+Drop, KEY=Drop+hint). Item acquisition pipeline: NarratorResponse.items_acquired, normalizeNarratorItem validator, SYSTEM message per item acquired. ACCESSORY slot rejects all drops. Self-declared loot blocked by narrator prompt guard.
 
-### ASCII Art Policy (established Day 11)
-Words ARE allowed in ASCII art when they represent in-world content (signs, building labels, character position markers). Words are NOT allowed as substitutes for visual elements that should be drawn with block characters. The prompt in prompt-builder.ts reflects this.
+### ASCII Art Policy
+Words allowed as in-world content (signs, labels, position markers). Words NOT allowed as substitutes for visual elements that should be block characters.
 
 ### ⚠️ Important Dev Environment Notes
-- Claude Code shells export ANTHROPIC_API_KEY="" to child processes — always start dev server from your own terminal, not from Claude Code
+- Claude Code shells export ANTHROPIC_API_KEY="" — always start dev server from your own terminal
 - After Claude Code pushes, run `git pull` locally then restart YOUR dev server
 - Windows PowerShell: use `Invoke-WebRequest` instead of `curl -X`
 - `npx tsc --noEmit` blank output = pass
@@ -60,7 +61,7 @@ Always work on main. Do not create feature branches. Commit and push directly to
 
 - **The Hybrid Authority Model:** The Code (Game Logic) is the "Source of Truth" for stats, inventory, and world flags. The AI is the "Narrator" and "Visualizer" that interprets intent and provides flavor.
 - **Zero-Image Visuals:** All environmental and character representation is handled via advanced ASCII/ANSI art, optimized for mobile and web views.
-- **Endless Versatility:** The engine must support multiple genres by swapping a metadata "Genre Wrapper." Launch genres: Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic.
+- **Endless Versatility:** Launch genres: Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic.
 
 ---
 
@@ -80,7 +81,7 @@ Always work on main. Do not create feature branches. Commit and push directly to
 
 - **The Intent Parser:** Translates player text into a structured JSON action.
 - **Logic Resolution:** The code checks stats and updates the Master State.
-- **The Narrator:** The AI receives the "Success/Failure" result and writes the story and ASCII art.
+- **The Narrator:** The AI receives the result and writes story + ASCII art + items_acquired.
 
 ---
 
@@ -103,8 +104,8 @@ Always work on main. Do not create feature branches. Commit and push directly to
 
 - Use **Block Elements** (█, ▓, ▒, ░) for depth and shading.
 - Implement **CSS-based ANSI coloring** to make the "text-only" world vibrant.
-- **The Visual Seed:** Store a unique seed per location — Day 25 will cache generated art in Supabase so revisited locations always show the same art.
-- Genre-specific color palettes: Fantasy (amber/green), Cyberpunk (neon blue/magenta), Horror/Lovecraftian (sickly green/deep purple), Space Opera (purple/silver), Post-Apocalyptic (rust orange/ash grey).
+- **The Visual Seed:** Unique seed per location — Day 25 caches art in Supabase for consistency.
+- Genre palettes: Fantasy (amber/green), Cyberpunk (neon blue/magenta), Horror (sickly green/deep purple), Space Opera (purple/silver), Post-Apocalyptic (rust orange/ash grey).
 
 ---
 
@@ -157,9 +158,8 @@ Always work on main. Do not create feature branches. Commit and push directly to
 | **Space Opera** | Pulpy, grand-scale, operatic | Purple / Silver | Stellar Units | Hull Integrity | Mass Effect, Dune |
 | **Post-Apocalyptic** | Bleak, dark-humored, survival | Rust orange / Ash grey | Caps | HP | Fallout, The Road |
 
-### Genre-Specific Mechanics Notes
-
-**Horror/Lovecraftian:** Dual HP+Sanity system. 0 Sanity = game over condition.
+### Genre-Specific Mechanics
+**Horror/Lovecraftian:** Dual HP+Sanity. 0 Sanity = game over.
 **Post-Apocalyptic:** Ammo/food/water tracked alongside HP and Caps.
 **Future genres:** Western, Pirate/Age of Sail, Superhero, Dark Fantasy, Steampunk
 
@@ -167,7 +167,7 @@ Always work on main. Do not create feature branches. Commit and push directly to
 
 ## 9. Platform Decision
 
-**PWA only. Final decision.** No Electron, no Steam, no Tauri. PWA manifest on Day 35.
+**PWA only. Final.** No Electron, no Steam. PWA manifest on Day 35.
 
 ---
 
@@ -181,7 +181,7 @@ Always work on main. Do not create feature branches. Commit and push directly to
 
 **Claude.ai owns all CLAUDE.md updates. Claude Code must not modify CLAUDE.md.**
 
-Workflow: Claude Code pushes → git pull locally → restart own dev server → report to Claude.ai → get test checklist → confirm → get next prompt.
+Workflow: Claude Code pushes → git pull locally → restart own dev server → report to Claude.ai → get checklist → confirm → get next prompt.
 
 ---
 
@@ -194,4 +194,4 @@ Workflow: Claude Code pushes → git pull locally → restart own dev server →
 
 ---
 
-*Last updated: Session 15 — Day 11 complete. ASCII art policy clarified. Day 12 starting.*
+*Last updated: Session 16 — Day 12 + inventory fixes complete. Item acquisition pipeline, drag-drop filters, per-type button logic all shipped. Day 13 starting.*

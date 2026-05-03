@@ -1,15 +1,15 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 2.2
-**Status:** Active Development
+**Version:** 2.3
+**Status:** Active Development — MVP Core Loop Complete
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Day:** Day 10 — Full Game Loop
-**Local Dev Port:** 3000
+**Current Day:** Day 11 — Character Sheet UI (Live)
+**Local Dev Port:** 3000 (note: Claude Code sessions may start on 3002 due to env conflict — see dev notes)
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
 
@@ -24,8 +24,8 @@
 | 7 | Intent Parser | ✅ Complete |
 | 8 | Logic Resolution Engine | ✅ Complete |
 | 9 | The Narrator | ✅ Complete |
-| 10 | Full Game Loop | 🔄 In Progress |
-| 11 | Character Sheet UI (Live) | ⏳ Pending |
+| 10 | Full Game Loop | ✅ Complete — GAME IS PLAYABLE |
+| 11 | Character Sheet UI (Live) | 🔄 In Progress |
 | 12 | Inventory System | ⏳ Pending |
 | 13 | Log Book & Save System | ⏳ Pending |
 | 14 | MVP Playtest & Bug Fix | ⏳ Pending |
@@ -38,13 +38,15 @@
 - **Day 6:** app/game/new/page.tsx (4-step wizard), app/game/page.tsx (session redirect)
 - **Day 7:** app/api/game/parse-intent/route.ts, lib/game/intent-parser.ts, lib/game/prompt-builder.ts
 - **Day 8:** lib/game/logic-resolver.ts, lib/game/dice.ts — 51/51 tests passing
-- **Day 9:** app/api/game/narrate/route.ts (streaming), lib/game/narrator.ts, prompt-builder updated with narrator prompts and sound IDs. Both API routes return 401 unauthenticated. tsc clean.
+- **Day 9:** app/api/game/narrate/route.ts (streaming), lib/game/narrator.ts, prompt-builder narrator prompts
+- **Day 10:** lib/stores/game-store.ts (Zustand), hooks/useGameLoop.ts, app/game/page.tsx (full loop wired). Smoke test passed — real Claude narrative + ASCII art + state persistence confirmed. 42/42 tests passing.
 
-### Important Local Dev Notes
-- After Claude Code pushes to GitHub, always run `git pull` locally then restart the dev server
-- @anthropic-ai/sdk is required — run `npm install @anthropic-ai/sdk` if not present
+### ⚠️ Important Dev Environment Notes
+- **ANTHROPIC_API_KEY must be rotated** — was exposed in Claude Code console during Day 10 env diagnosis. Rotate at console.anthropic.com immediately.
+- Claude Code shells export ANTHROPIC_API_KEY="" to child processes. Next.js env precedence means .env.local cannot override an already-set empty var. If Claude Code starts a dev server it may have blank API keys. Always start your own dev server outside of Claude Code sessions.
+- After Claude Code pushes to GitHub, always run `git pull` locally then restart YOUR dev server
 - Windows PowerShell: use `Invoke-WebRequest` instead of `curl -X`
-- `npx tsc --noEmit` with blank output = pass (no errors)
+- `npx tsc --noEmit` with blank output = pass
 
 ### Branch Policy
 Always work on main. Do not create feature branches. Commit and push directly to main at end of each day.
@@ -190,7 +192,7 @@ Always work on main. Do not create feature branches. Commit and push directly to
 ### Day-to-Day Workflow
 
 1. Claude Code completes the day's work and pushes to GitHub
-2. Run `git pull` locally then restart the dev server
+2. Run `git pull` locally then restart YOUR OWN dev server (not from Claude Code shell)
 3. Come to **Claude.ai** and say "Day X is done"
 4. Claude.ai reads repo, updates CLAUDE.md, gives test checklist
 5. You test and confirm — Claude.ai gives the next day's prompt
@@ -214,4 +216,4 @@ Always work directly on main. Do not create feature branches. Commit and push to
 
 ---
 
-*Last updated: Session 13 — Day 9 complete (streaming narrator, 401 verified, tsc clean), Day 10 starting*
+*Last updated: Session 14 — Day 10 complete. MVP core loop playable. API key rotation required. Day 11 starting.*

@@ -1,6 +1,6 @@
 "use client";
 
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const MAX_LENGTH = 500;
@@ -9,15 +9,31 @@ const MAX_HISTORY = 20;
 interface InputBarProps {
   onSubmit: (input: string) => void;
   disabled?: boolean;
+  processingStep?: string | null;
 }
 
-export function InputBar({ onSubmit, disabled = false }: InputBarProps) {
+export function InputBar({
+  onSubmit,
+  disabled = false,
+  processingStep = null,
+}: InputBarProps) {
   const [value, setValue] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [draft, setDraft] = useState("");
 
+  const inputRef = useRef<HTMLInputElement>(null);
+  const wasDisabled = useRef(false);
+
   const remaining = MAX_LENGTH - value.length;
+
+  // Re-focus the input when transitioning from disabled (processing) → enabled.
+  useEffect(() => {
+    if (wasDisabled.current && !disabled) {
+      inputRef.current?.focus();
+    }
+    wasDisabled.current = disabled;
+  }, [disabled]);
 
   function handleSubmit() {
     const trimmed = value.trim();
@@ -25,6 +41,7 @@ export function InputBar({ onSubmit, disabled = false }: InputBarProps) {
 
     onSubmit(trimmed);
     setHistory((prev) => [trimmed, ...prev].slice(0, MAX_HISTORY));
+    // Clear immediately on submit so the field is empty during processing.
     setValue("");
     setHistoryIndex(-1);
     setDraft("");
@@ -72,8 +89,24 @@ export function InputBar({ onSubmit, disabled = false }: InputBarProps) {
       className="shrink-0 p-3"
       style={{ borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-bg)" }}
     >
+      {/* Processing step indicator — reserved height so layout doesn't shift */}
+      <div className="mb-1.5 h-4 px-1">
+        {disabled && processingStep && (
+          <span
+            className="font-mono text-[11px] italic"
+            style={{ color: "var(--color-muted)" }}
+          >
+            <span className="cursor-blink mr-1.5" style={{ color: "var(--color-primary)" }}>
+              ▍
+            </span>
+            {processingStep}
+          </span>
+        )}
+      </div>
+
       <div className="flex gap-2">
         <input
+          ref={inputRef}
           type="text"
           value={value}
           onChange={(e) => setValue(e.target.value)}

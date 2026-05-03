@@ -7,8 +7,6 @@ import {
 } from "@/lib/game/prompt-builder";
 import type { MasterState, NarratorResponse, ResolutionResult } from "@/types/game";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
 const FALLBACK_RESPONSE: NarratorResponse = {
   narrative_text: "The narrator falls silent for a moment, then continues. The moment passes without ceremony.",
   new_npcs: [],
@@ -48,6 +46,10 @@ export async function POST(request: NextRequest) {
 
   const systemPrompt = buildNarratorSystemPrompt(masterState);
   const userPrompt   = buildNarratorUserPrompt(resolutionResult, masterState);
+
+  // Instantiate per-request so the apiKey is read from process.env at call time
+  // (avoids stale module-level binding across Next.js dev HMR cycles).
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   // ── Streamed body ──────────────────────────────────────────────────────────
   const encoder = new TextEncoder();

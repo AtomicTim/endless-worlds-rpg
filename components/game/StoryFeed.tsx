@@ -1,20 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { StoryMessage } from "@/lib/stores/game-store";
 
-export type MessageType =
-  | "NARRATIVE"
-  | "SYSTEM"
-  | "COMBAT"
-  | "DIALOGUE"
-  | "ASCII_ART";
-
-export interface StoryMessage {
-  id: string;
-  type: MessageType;
-  content: string;
-  npcName?: string;
-}
+// Re-export so existing import sites keep working.
+export type { StoryMessage } from "@/lib/stores/game-store";
+export type MessageType = StoryMessage["type"];
 
 interface StoryFeedProps {
   messages: StoryMessage[];
@@ -49,7 +40,9 @@ export function StoryFeed({ messages, isLoading = false }: StoryFeedProps) {
 }
 
 function MessageEntry({ message }: { message: StoryMessage }) {
-  const { type, content, npcName } = message;
+  const { type, content, metadata } = message;
+  const npcName =
+    typeof metadata?.npcName === "string" ? metadata.npcName : undefined;
 
   switch (type) {
     case "NARRATIVE":

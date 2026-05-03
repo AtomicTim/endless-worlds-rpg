@@ -1,0 +1,184 @@
+"use client";
+
+import { useCallback } from "react";
+import { useGameStore, makeMessage, type StoryMessage } from "@/lib/stores/game-store";
+import { parseIntent, IntentParserError } from "@/lib/game/intent-parser";
+import { resolveAction } from "@/lib/game/logic-resolver";
+import { narrateAction } from "@/lib/game/narrator";
+import { applyStateDelta, addLogEntry } from "@/lib/game/state-utils";
+import { LogEntryType } from "@/types/game";
+import type { MasterState } from "@/types/game";
+
+const MAX_INPUT_LENGTH = 500;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function outcomeToLogType(outcomeType: string): LogEntryType {
+  if (outcomeType.startsWith("ATTACK"))   return LogEntryType.COMBAT;
+  if (outcomeType.startsWith("DIALOGUE")) return LogEntryType.DIALOGUE;
+  if (outcomeType.startsWith("EXAMINE") || outcomeType.startsWith("INTERACT")) {
+    return LogEntryType.DISCOVERY;
+  }
+  return LogEntryType.STORY;
+}
+
+async function persistState(
+  state: MasterState,
+  addMessage: (m: StoryMessage) => void
+): Promise<void> {
+  try {
+    const response = await fetch("/api/game/state", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ sessionId: state.metadata.session_id, state }),
+    });
+
+    if (!response.ok) {
+      addMessage(
+        makeMessage("SYSTEM", "Your progress could not be saved. Check your connection.")
+      );
+    }
+  } catch {
+    addMessage(
+      makeMessage("SYSTEM", "Your progress could not be saved. Check your connection.")
+    );
+  }
+}
+
+// ── Hook ──────────────────────────────────────────────────────────────────────
+
+export function useGameLoop() {
+  // Reactive subscriptions — re-render when these change.
+  const masterState    = useGameStore((s) => s.masterState);
+  const messages       = useGameStore((s) => s.messages);
+  const isProcessing   = useGameStore((s) => s.isProcessing);
+  const processingStep = useGameStore((s) => s.processingStep);
+
+  const submitAction = useCallback(async (input: string) => {
+    const store = useGameStore.getState();
+
+    // ── 1. Validate input ────────────────────────────────────────────────────
+    const trimmed = input.trim();
+    if (!trimmed || trimmed.length > MAX_INPUT_LENGTH) return;
+
+    const state = store.masterState;
+    if (!state) {
+      store.addMessage(
+        makeMessage("SYSTEM", "No active game session. Please start a new game.")
+      );
+      return;
+    }
+
+    // Echo the player's command into the feed.
+    store.addMessage(makeMessage("SYSTEM", `> ${trimmed}`));
+
+    try {
+      // ── 2. Parse intent ────────────────────────────────────────────────────
+      store.setProcessing(true, "Parsing intent...");
+      let parsedAction;
+      try {
+        parsedAction = await parseIntent(trimmed, state);
+      } catch (err) {
+        if (err instanceof IntentParserError) {
+          store.addMessage(
+            makeMessage(
+              "SYSTEM",
+              "The winds of fate are unclear. Try rephrasing your action."
+            )
+          );
+          store.setProcessing(false);
+          return;
+        }
+        throw err;
+      }
+
+      // ── 3. Resolve action ──────────────────────────────────────────────────
+      store.setProcessing(true, "The world responds...");
+      const resolution = resolveAction(parsedAction, state);
+
+      // ── 4. Apply state_delta ───────────────────────────────────────────────
+      let updatedState = applyStateDelta(state, resolution.state_delta);
+
+      // ── 5. Narrate ─────────────────────────────────────────────────────────
+      store.setProcessing(true, "Narrating...");
+      let narratorResponse;
+      try {
+        narratorResponse = await narrateAction(resolution, updatedState);
+      } catch {
+        // Narrator failed — still save the resolved state so the action sticks.
+        store.addMessage(
+          makeMessage(
+            "SYSTEM",
+            "The oracle falls silent momentarily. Your action occurred but the story pauses."
+          )
+        );
+        updatedState = addLogEntry(
+          updatedState,
+          LogEntryType.SYSTEM,
+          `Action ${resolution.outcome_type} occurred (no narrative).`
+        );
+        store.setMasterState(updatedState);
+        await persistState(updatedState, store.addMessage);
+        store.setProcessing(false);
+        return;
+      }
+
+      // ── 6. Add narrative message ───────────────────────────────────────────
+      store.addMessage(
+        makeMessage("NARRATIVE", narratorResponse.narrative_text, {
+          outcome_type: resolution.outcome_type,
+          sound_id:     narratorResponse.sound_id,
+        })
+      );
+
+      // ── 7. ASCII art (separate message + store for top-of-feed display) ───
+      if (narratorResponse.ascii_art) {
+        store.addMessage(makeMessage("ASCII_ART", narratorResponse.ascii_art));
+        store.setAsciiArt(narratorResponse.ascii_art);
+      }
+
+      // ── 8. Merge new NPCs into registry ────────────────────────────────────
+      if (narratorResponse.new_npcs.length > 0) {
+        const merged = { ...updatedState.npc_registry };
+        for (const npc of narratorResponse.new_npcs) {
+          merged[npc.npc_key] = npc;
+        }
+        updatedState = { ...updatedState, npc_registry: merged };
+      }
+
+      // ── 9. Append a log entry summarising this beat ────────────────────────
+      const logSummary = narratorResponse.narrative_text.slice(0, 200);
+      updatedState = addLogEntry(
+        updatedState,
+        outcomeToLogType(resolution.outcome_type),
+        logSummary
+      );
+
+      // Bump last_played so the session sorts correctly on reload.
+      updatedState = {
+        ...updatedState,
+        metadata: { ...updatedState.metadata, last_played: new Date().toISOString() },
+      };
+
+      // ── 10. Commit local state, then persist ───────────────────────────────
+      store.setMasterState(updatedState);
+      await persistState(updatedState, store.addMessage);
+    } catch (err) {
+      // Catch-all for unexpected errors — never crash the UI.
+      console.error("Game loop error:", err);
+      store.addMessage(
+        makeMessage("SYSTEM", "Something went wrong. Please try again.")
+      );
+    } finally {
+      store.setProcessing(false);
+    }
+  }, []);
+
+  return {
+    submitAction,
+    isProcessing,
+    processingStep,
+    messages,
+    masterState,
+  };
+}

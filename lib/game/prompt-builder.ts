@@ -1,5 +1,6 @@
 import { Genre } from "@/types/game";
 import type { MasterState, ResolutionResult } from "@/types/game";
+import { getEquippedLoadout } from "@/lib/game/state-utils";
 
 // ── Intent Parser ─────────────────────────────────────────────────────────────
 
@@ -210,6 +211,12 @@ export function buildNarratorUserPrompt(
       ? `\n- Sanity: ${sanity}/${max_sanity}`
       : "";
 
+  const loadout    = getEquippedLoadout(state);
+  const weaponLine = loadout.weapon
+    ? `${loadout.weapon.name}${loadout.weapon.stat_bonus ? ` (${Object.entries(loadout.weapon.stat_bonus).map(([k, v]) => `+${v as number} ${k}`).join(", ")})` : ""}`
+    : "None";
+  const armorLine  = loadout.armor ? loadout.armor.name : "None";
+
   const lines: string[] = [
     "RESOLUTION RESULT:",
     `- Outcome: ${result.outcome_type}`,
@@ -221,6 +228,10 @@ export function buildNarratorUserPrompt(
     `- Background: ${background}`,
     `- HP: ${health}/${max_health}${sanityLine}`,
     `- Attributes: STR ${attributes.strength}, AGI ${attributes.agility}, CHA ${attributes.charisma}, INT ${attributes.intelligence}, PER ${attributes.perception}`,
+    "",
+    "EQUIPPED LOADOUT:",
+    `- Weapon: ${weaponLine}`,
+    `- Armor: ${armorLine}`,
     "",
     `LOCATION: ${world_state.current_location_id}`,
     "",

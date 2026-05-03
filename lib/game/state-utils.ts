@@ -1,4 +1,13 @@
-import { Genre, LogEntryType, type Item, type MasterState, type NPCMemory } from "@/types/game";
+import {
+  Genre,
+  ItemType,
+  LogEntryType,
+  type Attributes,
+  type EquippedLoadout,
+  type Item,
+  type MasterState,
+  type NPCMemory,
+} from "@/types/game";
 
 export function updateHealth(state: MasterState, delta: number): MasterState {
   const health = Math.max(0, Math.min(state.player_state.max_health, state.player_state.health + delta));
@@ -108,6 +117,74 @@ export function applyStateDelta(state: MasterState, delta: Partial<MasterState>)
     log_book:     delta.log_book     ? { ...state.log_book,     ...delta.log_book }     : state.log_book,
     npc_registry: delta.npc_registry ? { ...state.npc_registry, ...delta.npc_registry } : state.npc_registry,
   };
+}
+
+// ── Equip / unequip ───────────────────────────────────────────────────────────
+
+function applyBonus(attrs: Attributes, bonus: Partial<Attributes>, sign: 1 | -1): Attributes {
+  const result = { ...attrs };
+  for (const [stat, val] of Object.entries(bonus)) {
+    if (typeof val === "number") {
+      result[stat as keyof Attributes] = (result[stat as keyof Attributes] ?? 0) + sign * val;
+    }
+  }
+  return result;
+}
+
+export function equipItem(state: MasterState, itemId: string): MasterState {
+  const item = state.player_state.inventory.find((i) => i.id === itemId);
+  if (!item) return state;
+  if (item.type !== ItemType.WEAPON && item.type !== ItemType.ARMOR) return state;
+
+  const slotType = item.type;
+
+  // Find previously equipped item in the same slot (to revert its bonus)
+  const prev = state.player_state.inventory.find(
+    (i) => i.type === slotType && i.equipped && i.id !== itemId
+  );
+
+  const inventory = state.player_state.inventory.map((i) => {
+    if (i.id === itemId)              return { ...i, equipped: true };
+    if (i.type === slotType && i.equipped) return { ...i, equipped: false };
+    return i;
+  });
+
+  let attributes = { ...state.player_state.attributes };
+  if (prev?.stat_bonus) attributes = applyBonus(attributes, prev.stat_bonus, -1);
+  if (item.stat_bonus)  attributes = applyBonus(attributes, item.stat_bonus,  1);
+
+  return { ...state, player_state: { ...state.player_state, inventory, attributes } };
+}
+
+export function unequipItem(state: MasterState, itemId: string): MasterState {
+  const item = state.player_state.inventory.find((i) => i.id === itemId);
+  if (!item || !item.equipped) return state;
+
+  const inventory  = state.player_state.inventory.map((i) =>
+    i.id === itemId ? { ...i, equipped: false } : i
+  );
+  let attributes = { ...state.player_state.attributes };
+  if (item.stat_bonus) attributes = applyBonus(attributes, item.stat_bonus, -1);
+
+  return { ...state, player_state: { ...state.player_state, inventory, attributes } };
+}
+
+export function getEquippedLoadout(state: MasterState): EquippedLoadout {
+  const loadout: EquippedLoadout = {};
+  for (const item of state.player_state.inventory) {
+    if (!item.equipped) continue;
+    if      (item.type === ItemType.WEAPON) loadout.weapon    = item;
+    else if (item.type === ItemType.ARMOR)  loadout.armor     = item;
+    else                                    loadout.accessory = item;
+  }
+  return loadout;
+}
+
+export function getInventoryWeight(state: MasterState): number {
+  return state.player_state.inventory.reduce(
+    (sum, item) => sum + (item.weight ?? 0) * item.quantity,
+    0
+  );
 }
 
 // Re-export NPCMemory so callers can use it via state-utils if needed

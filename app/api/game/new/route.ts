@@ -174,12 +174,13 @@ export async function POST(request: NextRequest) {
     state.player_state.attributes[attr] = Math.min(10, state.player_state.attributes[attr] + 2);
 
     const startingItem: Item = {
-      id: crypto.randomUUID(),
-      name: bgConfig.startingItemName,
-      type: bgConfig.startingItemType,
-      rarity: ItemRarity.COMMON,
+      id:          crypto.randomUUID(),
+      name:        bgConfig.startingItemName,
+      type:        bgConfig.startingItemType,
+      rarity:      ItemRarity.COMMON,
       description: bgConfig.startingItemDescription,
-      quantity: 1,
+      quantity:    1,
+      stackable:   bgConfig.startingItemType === ItemType.CONSUMABLE,
     };
     state.player_state.inventory.push(startingItem);
   }

@@ -60,6 +60,9 @@ function makeItem(overrides: Partial<Item> & { name: string; type: ItemType }): 
     description: overrides.description ?? "",
     effect:      overrides.effect,
     quantity:    overrides.quantity ?? 1,
+    stackable:   overrides.stackable ?? (overrides.type === ItemType.CONSUMABLE),
+    equipped:    overrides.equipped,
+    stat_bonus:  overrides.stat_bonus,
   };
 }
 

@@ -1,6 +1,7 @@
 import { ActionType, ItemType } from "@/types/game";
-import type { MasterState, ParsedAction, ResolutionResult } from "@/types/game";
+import type { ActiveBuff, Attributes, MasterState, ParsedAction, ResolutionResult } from "@/types/game";
 import { rollD20, rollD6, getAttributeModifier } from "./dice";
+import { equipItem, unequipItem, updateHealth, updateSanity } from "./state-utils";
 
 // ── Tunables ──────────────────────────────────────────────────────────────────
 
@@ -265,6 +266,7 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
     };
   }
 
+  // ── CONSUMABLE ───────────────────────────────────────────────────────────────
   if (item.type === ItemType.CONSUMABLE) {
     const newQty    = item.quantity - 1;
     const inventory = newQty > 0
@@ -273,56 +275,138 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
         )
       : state.player_state.inventory.filter((i) => i.id !== item.id);
 
+    let updated: MasterState = { ...state, player_state: { ...state.player_state, inventory } };
+    const effectsApplied: string[] = [];
+
+    if (item.effect) {
+      // heal
+      if (typeof item.effect.heal === "number") {
+        updated = updateHealth(updated, item.effect.heal);
+        effectsApplied.push(`heal ${item.effect.heal}`);
+      }
+      // sanity
+      if (typeof item.effect.sanity === "number") {
+        const sanityResult = updateSanity(updated, item.effect.sanity);
+        if (sanityResult) {
+          updated = sanityResult;
+          effectsApplied.push(`sanity ${item.effect.sanity}`);
+        }
+      }
+      // buff_[stat]_[amount]
+      for (const [key] of Object.entries(item.effect)) {
+        const m = key.match(/^buff_([a-z_]+)_(\d+)$/);
+        if (!m) continue;
+        const stat   = m[1] as keyof Attributes;
+        const amount = parseInt(m[2], 10);
+        if (!isNaN(amount) && stat in updated.player_state.attributes) {
+          const buff: ActiveBuff = {
+            id:         crypto.randomUUID(),
+            stat,
+            amount,
+            source:     item.name,
+            expires_at: null,
+          };
+          const buffs = [...(updated.player_state.buffs ?? []), buff];
+          updated = {
+            ...updated,
+            player_state: {
+              ...updated.player_state,
+              buffs,
+              attributes: {
+                ...updated.player_state.attributes,
+                [stat]: updated.player_state.attributes[stat] + amount,
+              },
+            },
+          };
+          effectsApplied.push(`buff ${stat} +${amount}`);
+        }
+      }
+    }
+
     return {
       success: true,
       outcome_type: "USE_ITEM_CONSUMED",
-      state_delta: {
-        player_state: { ...state.player_state, inventory },
-      },
+      state_delta: { player_state: updated.player_state },
       narrative_context: {
         item_id:            item.id,
         item_name:          item.name,
         item_type:          item.type,
         effect:             item.effect ?? null,
+        effects_applied:    effectsApplied,
         remaining_quantity: newQty,
       },
     };
   }
 
+  // ── WEAPON / ARMOR — toggle equip/unequip ────────────────────────────────────
+  if (item.type === ItemType.WEAPON || item.type === ItemType.ARMOR) {
+    const nextState = item.equipped
+      ? unequipItem(state, item.id)
+      : equipItem(state,   item.id);
+    return {
+      success:      true,
+      outcome_type: item.equipped ? "USE_ITEM_UNEQUIPPED" : "USE_ITEM_EQUIPPED",
+      state_delta:  { player_state: nextState.player_state },
+      narrative_context: {
+        item_id:    item.id,
+        item_name:  item.name,
+        item_type:  item.type,
+        equipped:   !item.equipped,
+        stat_bonus: item.stat_bonus ?? null,
+      },
+    };
+  }
+
+  // ── KEY ──────────────────────────────────────────────────────────────────────
   if (item.type === ItemType.KEY) {
     const requiredKeyFlag = `requires_${normalizeKey(item.name)}`;
     const expectedAtHere  = state.world_state.flags[requiredKeyFlag];
     const matches         = expectedAtHere === state.world_state.current_location_id;
 
-    return {
-      success: matches,
-      outcome_type: matches ? "USE_ITEM_UNLOCKED" : "USE_ITEM_KEY_MISMATCH",
-      state_delta: matches
-        ? {
-            world_state: {
-              ...state.world_state,
-              flags: {
-                ...state.world_state.flags,
-                [`unlocked_${state.world_state.current_location_id}`]: true,
-              },
+    if (matches) {
+      const inventory = state.player_state.inventory.filter((i) => i.id !== item.id);
+      return {
+        success:      true,
+        outcome_type: "USE_ITEM_UNLOCKED",
+        state_delta: {
+          player_state: { ...state.player_state, inventory },
+          world_state: {
+            ...state.world_state,
+            flags: {
+              ...state.world_state.flags,
+              [`unlocked_${state.world_state.current_location_id}`]: true,
             },
-          }
-        : {},
+          },
+        },
+        narrative_context: {
+          item_id:   item.id,
+          item_name: item.name,
+          item_type: item.type,
+          location:  state.world_state.current_location_id,
+          unlocked:  true,
+        },
+      };
+    }
+
+    return {
+      success:      false,
+      outcome_type: "USE_ITEM_KEY_MISMATCH",
+      state_delta:  {},
       narrative_context: {
-        item_id:    item.id,
-        item_name:  item.name,
-        item_type:  item.type,
-        location:   state.world_state.current_location_id,
-        unlocked:   matches,
+        item_id:   item.id,
+        item_name: item.name,
+        item_type: item.type,
+        location:  state.world_state.current_location_id,
+        unlocked:  false,
       },
     };
   }
 
-  // Other types (weapon, armor, lore) — no state change, just context.
+  // ── LORE / other — read only ──────────────────────────────────────────────────
   return {
-    success: true,
+    success:      true,
     outcome_type: "USE_ITEM_GENERIC",
-    state_delta: {},
+    state_delta:  {},
     narrative_context: {
       item_id:   item.id,
       item_name: item.name,

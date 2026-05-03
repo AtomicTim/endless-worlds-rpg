@@ -71,6 +71,25 @@ export interface Item {
   effect?:     Record<string, number | string>;
   quantity:    number;
   genre_skin?: string;
+  weight?:     number;
+  stackable:   boolean;
+  max_stack?:  number;
+  equipped?:   boolean;
+  stat_bonus?: Partial<Attributes>;
+}
+
+export interface EquippedLoadout {
+  weapon?:    Item;
+  armor?:     Item;
+  accessory?: Item;
+}
+
+export interface ActiveBuff {
+  id:         string;
+  stat:       keyof Attributes;
+  amount:     number;
+  source:     string;
+  expires_at: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +116,7 @@ export interface PlayerState {
   inventory:   Item[];
   level:       number;
   xp:          number;
+  buffs?:      ActiveBuff[];
 }
 
 // ---------------------------------------------------------------------------

@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { GameLayout } from "@/components/layout/GameLayout";
 import { StoryFeed, type StoryMessage } from "@/components/game/StoryFeed";
 import { InputBar } from "@/components/game/InputBar";
 import { CharacterSheet } from "@/components/game/sidebar/CharacterSheet";
 import { InventoryPanel } from "@/components/game/sidebar/InventoryPanel";
 import { Genre } from "@/types/game";
+import { createClient } from "@/lib/supabase/client";
 
 const INITIAL_MESSAGES: StoryMessage[] = [
   {
@@ -46,8 +48,41 @@ const INITIAL_MESSAGES: StoryMessage[] = [
 const GENRE = Genre.FANTASY;
 
 export default function GamePage() {
+  const router = useRouter();
   const [messages, setMessages] = useState<StoryMessage[]>(INITIAL_MESSAGES);
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
+
+  // Redirect to /game/new if user has no active sessions
+  useEffect(() => {
+    async function checkSession() {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: sessions } = await (supabase.from("game_sessions") as any)
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .limit(1) as { data: { id: string }[] | null };
+
+      if (!sessions || sessions.length === 0) {
+        router.push("/game/new");
+        return;
+      }
+
+      setSessionChecked(true);
+    }
+
+    void checkSession();
+  }, [router]);
 
   function handleSubmit(input: string) {
     const echoMsg: StoryMessage = {
@@ -58,7 +93,7 @@ export default function GamePage() {
     setMessages((prev) => [...prev, echoMsg]);
     setIsLoading(true);
 
-    // Placeholder response — Day 5 wires this to the AI engine
+    // Placeholder response — AI engine wired in a later day
     setTimeout(() => {
       setMessages((prev) => [
         ...prev,
@@ -66,12 +101,15 @@ export default function GamePage() {
           id: crypto.randomUUID(),
           type: "NARRATIVE",
           content:
-            "The forest watches you in silence. The AI engine will respond here once Day 5 is complete.",
+            "The forest watches you in silence. The AI engine will respond here once wired up.",
         },
       ]);
       setIsLoading(false);
     }, 1200);
   }
+
+  // Don't render until session check completes (avoids flash)
+  if (!sessionChecked) return null;
 
   return (
     <GameLayout

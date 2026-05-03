@@ -1,4 +1,13 @@
-import type { Item, MasterState, NarratorResponse, NPCMemory, ResolutionResult } from "@/types/game";
+import type {
+  CodexEntry,
+  Item,
+  MasterState,
+  NarratorResponse,
+  NPCMemory,
+  ParsedAction,
+  PointOfInterest,
+  ResolutionResult,
+} from "@/types/game";
 import { ItemType, ItemRarity } from "@/types/game";
 
 // ── Error type ────────────────────────────────────────────────────────────────
@@ -79,6 +88,41 @@ function normalizeNarratorItem(raw: unknown): Item | null {
   };
 }
 
+const POI_TYPES = new Set(["LOCATION", "NPC", "CONTAINER", "ITEM", "HAZARD"]);
+const CODEX_CATEGORIES = new Set(["LOCATION", "CHARACTER", "FACTION", "ITEM", "LORE", "BESTIARY"]);
+const CODEX_SIGNIFICANCE = new Set(["MINOR", "NOTABLE", "MAJOR"]);
+
+function normalizePOI(raw: unknown): PointOfInterest | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.label !== "string" || !o.label.trim()) return null;
+  const t = typeof o.type === "string" ? o.type.toUpperCase() : "";
+  if (!POI_TYPES.has(t)) return null;
+  return {
+    label:       o.label,
+    type:        t as PointOfInterest["type"],
+    description: typeof o.description === "string" ? o.description : "",
+  };
+}
+
+function normalizeCodex(raw: unknown): CodexEntry | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.name !== "string" || !o.name.trim()) return null;
+  const cat = typeof o.category === "string" ? o.category.toUpperCase() : "";
+  if (!CODEX_CATEGORIES.has(cat)) return null;
+  const sig = typeof o.significance === "string" ? o.significance.toUpperCase() : "NOTABLE";
+  if (!CODEX_SIGNIFICANCE.has(sig)) return null;
+  return {
+    id:                  typeof o.id === "string" && o.id.trim() ? o.id : `codex_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    category:            cat as CodexEntry["category"],
+    name:                o.name,
+    description:         typeof o.description === "string" ? o.description : "",
+    first_seen_location: typeof o.first_seen_location === "string" ? o.first_seen_location : "",
+    significance:        sig as CodexEntry["significance"],
+  };
+}
+
 function isNPCMemory(v: unknown): v is NPCMemory {
   if (!v || typeof v !== "object") return false;
   const o = v as Record<string, unknown>;
@@ -117,17 +161,35 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
       ? (parsed.items_acquired.map(normalizeNarratorItem).filter(Boolean) as Item[])
       : [];
 
+    const points_of_interest = Array.isArray(parsed.points_of_interest)
+      ? (parsed.points_of_interest.map(normalizePOI).filter(Boolean) as PointOfInterest[])
+      : [];
+
+    const codex_entries = Array.isArray(parsed.codex_entries)
+      ? (parsed.codex_entries.map(normalizeCodex).filter(Boolean) as CodexEntry[])
+      : [];
+
+    const tierRaw = parsed.response_tier;
+    const response_tier: 1 | 2 | 3 =
+      tierRaw === 1 || tierRaw === 2 || tierRaw === 3 ? tierRaw : 2;
+
     return {
+      response_tier,
       narrative_text,
-      ascii_art: typeof parsed.ascii_art === "string" ? parsed.ascii_art : undefined,
-      sound_id:  typeof parsed.sound_id === "string"  ? parsed.sound_id  : undefined,
+      ascii_art:          null,
+      sound_id:           typeof parsed.sound_id === "string" ? parsed.sound_id : null,
       new_npcs,
       items_acquired,
+      points_of_interest,
+      codex_entries,
     };
   } catch {
     return {
-      narrative_text: rawText.trim().slice(0, 1000) || "...",
-      new_npcs: [],
+      response_tier:      2,
+      narrative_text:     rawText.trim().slice(0, 1000) || "...",
+      new_npcs:           [],
+      points_of_interest: [],
+      codex_entries:      [],
     };
   }
 }
@@ -144,7 +206,8 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
 export async function narrateAction(
   result: ResolutionResult,
   state: MasterState,
-  lastNarrativeText?: string | null
+  lastNarrativeText?: string | null,
+  action?: ParsedAction | null
 ): Promise<NarratorResponse> {
   let response: Response;
   try {
@@ -155,6 +218,7 @@ export async function narrateAction(
         resolutionResult: result,
         masterState:      state,
         ...(lastNarrativeText ? { lastNarrativeText } : {}),
+        ...(action ? { action } : {}),
       }),
     });
   } catch (err) {

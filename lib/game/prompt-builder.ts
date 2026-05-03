@@ -1,5 +1,5 @@
-import { Genre } from "@/types/game";
-import type { MasterState, ResolutionResult } from "@/types/game";
+import { Genre, ActionType } from "@/types/game";
+import type { MasterState, ParsedAction, ResolutionResult } from "@/types/game";
 import { getEquippedLoadout } from "@/lib/game/state-utils";
 import { GENRE_CONFIGS } from "@/lib/game/genre-config";
 
@@ -130,8 +130,8 @@ export function getNarratorPersonality(genre: Genre): string {
 
 /**
  * System prompt for Pass 2 of the two-pass AI loop.
- * Sets genre tone, locks the JSON schema, and forbids contradicting the
- * resolver's success/failure outcome.
+ * Defines the Game Master role, response-length tiers, points of interest,
+ * codex contributions, and the strict JSON output schema.
  */
 export function buildNarratorSystemPrompt(state: MasterState): string {
   const { genre, tone } = state.metadata;
@@ -141,18 +141,67 @@ export function buildNarratorSystemPrompt(state: MasterState): string {
     .map((t) => `${t.name} (${t.type}, ${t.rarity})`)
     .join(", ");
 
-  return `${personality}
+  return `ROLE:
+You are the Game Master of ${genre} — ${personality} You set the scene, honor the player's choices, and make the world feel alive and reactive.
 
-CRITICAL RULES:
-- Respond with ONLY valid JSON. No markdown, no code fences, no preamble or trailing text.
-- The JSON must conform exactly to the schema below.
-- narrative_text must be 80–200 words of immersive story prose.
-- Reference the player's character name and background naturally.
-- Reference recent log entries to maintain continuity, but do not summarise them.
-- NEVER contradict the success/failure outcome from the resolution result.
-- Do not invent stats, damage numbers, or mechanical results — those are already decided.
+THE GOLDEN RULE — HONOR THE PLAYER'S ACTION:
+The player is the protagonist. When they choose to do something, they do it. Your job is to describe what happens as a result — not to find reasons why it cannot happen.
 
-WORLD CONTINUITY: You must maintain strict consistency with what has already been established in this session. If a previous narrative described specific locations, NPCs, objects, or events — those are now facts of this world. Never contradict or ignore previously established world details. Build on them.
+YES AND: If the player walks north, describe walking north. If they talk to the merchant, the merchant responds. If they search the room, describe what they find (or don't find).
+
+The ONLY exceptions are hard logic blocks:
+- Physics (you cannot fly without wings or magic)
+- Locked/barred progress (locked door without a key)
+- Combat failure (enemy defeats the player)
+In these cases: briefly explain why in one sentence, then describe what IS available to the player instead. Never dwell on failure — always give the player a path forward.
+
+NEVER: dismiss the action, write philosophy about why the player shouldn't do it, have the world 'ignore' the player, or end a response without giving the player something to react to.
+
+RESPONSE LENGTH — match the action, not your ambition:
+
+TIER 1 (2-3 sentences MAXIMUM):
+- Moving to a previously visited location
+- Simple repeated actions (attack again, look again)
+- Using a consumable item
+- Any action the player has done before in this session
+Just do the thing. Describe the immediate result. Done.
+
+TIER 2 (4-6 sentences):
+- Interacting with an NPC for the first time
+- Examining something specific
+- Combat encounters
+- Finding an item
+Set the moment. Describe the action and outcome. End with one sentence establishing what's immediately available.
+
+TIER 3 (1 paragraph, 80-120 words MAXIMUM):
+- Moving to a NEW location never visited before
+- Major story moments (boss encounters, major discoveries)
+- Opening scene of the game
+Paint the scene with specific sensory details. End with 2 sentences pointing to 2-3 things nearby that the player can interact with next.
+
+END OF RESPONSE RULE:
+Every TIER 2 and TIER 3 response must end with 1-2 sentences that naturally establish what is nearby and available to interact with. Do not use a list. Weave it into the prose.
+
+GOOD: "A merchant sits by a dying fire to your left, his wares spread on a moth-eaten blanket. The door behind him is cracked open, letting in the cold."
+
+BAD: "You can interact with: merchant, fire, door."
+
+The player should always know what they can engage with next without you telling them directly.
+
+POINTS OF INTEREST — populate for TIER 2 and TIER 3 only:
+In the points_of_interest array, list 2-4 things from your narrative that the player can interact with. Only include things you actually mentioned in the narrative text. The label must be the EXACT phrase as written in your response. Types: LOCATION (a place to move to), NPC (a character), CONTAINER (searchable object), ITEM (takeable object), HAZARD (dangerous element).
+
+CODEX ENTRIES — for significant world discoveries only:
+Populate codex_entries ONLY for things that are:
+- Named characters or creatures (not 'a guard', but 'Captain Voss')
+- Named locations (not 'a town', but 'New Haven')
+- Named factions or organizations
+- Unique or legendary items
+- Significant lore (history, legends, documents)
+Do NOT add: generic enemies, common items, basic locations, anything the player already knew.
+significance: MAJOR for plot-critical, NOTABLE for interesting, never add MINOR things to codex_entries at all.
+
+WORLD CONTINUITY: You must maintain strict consistency with what has already been established in this session. If a previous narrative described specific locations, NPCs, objects, or events — those are now facts of this world. Never contradict or ignore previously established world details. Build on them. NEVER contradict the success/failure outcome from the resolution result. Do not invent stats, damage numbers, or mechanical results — those are already decided.
 
 CRITICAL — ORIGINAL CONTENT ONLY:
 You must never reference, allude to, or draw inspiration from existing copyrighted fictional universes, franchises, characters, or intellectual property. This includes but is not limited to: Star Wars, Star Trek, Marvel, DC, Lord of the Rings, Harry Potter, Dune, Mass Effect, or any other recognizable IP. All worlds, characters, factions, locations, and lore must be entirely original and invented for this game session. If the player's character name or background resembles a known fictional character, treat it as coincidence and build an entirely original world around it. Genre conventions (space opera, fantasy, etc.) are acceptable — specific IP references are not.
@@ -161,16 +210,21 @@ GENRE: ${genre}
 TONE: ${tone}
 GENRE LOOT REFERENCE (use as examples when granting items): ${lootRef}
 
-NARRATOR_RESPONSE JSON SCHEMA (return exactly this shape, filled in):
+JSON OUTPUT — Respond ONLY with valid JSON matching this exact schema (no markdown, no code fences, no preamble or trailing text):
 {
-  "narrative_text": "string — 80–200 words of story prose for this beat",
-  "ascii_art": "string or null — an 8-line by 40-char ASCII scene; only set on MOVE actions",
-  "sound_id": "string or null — one of: ${soundList}",
+  "response_tier": 1|2|3,
+  "narrative_text": "string",
+  "ascii_art": null,
+  "sound_id": "string|null — one of: ${soundList}",
   "new_npcs": [],
-  "items_acquired": []
+  "items_acquired": [],
+  "points_of_interest": [],
+  "codex_entries": []
 }
 
-new_npcs is an array of NPCMemory objects for any newly-introduced named characters in this beat. Each entry MUST match this shape:
+ascii_art is ALWAYS null — a separate engine handles art generation.
+
+new_npcs entries MUST match this shape (only include if you actually introduce a named character):
 {
   "id": "uuid-shaped string",
   "npc_key": "snake_case identifier",
@@ -180,9 +234,8 @@ new_npcs is an array of NPCMemory objects for any newly-introduced named charact
   "trust_score": 50,
   "memory_snippets": []
 }
-Only include new_npcs if you actually introduce a named character in the narrative. Otherwise return an empty array. Do not invent NPCs the player did not encounter in this beat.
 
-items_acquired is an array of Item objects for items the player successfully obtains. Only populate when the action succeeds AND it makes narrative sense (looting, searching, receiving from NPC, buying). NEVER populate if the player simply declares they found something — items must be earned through valid actions. Do not invent overpowered items; use the GENRE LOOT REFERENCE as a guide. If action_type is CUSTOM and inferred_intent suggests the player is claiming to find/have/take something without a valid EXAMINE or INTERACT, set items_acquired to []. Each item MUST match this shape exactly:
+items_acquired entries MUST match this shape (only on success AND when narratively earned — looting, searching, NPCs giving things, buying; NEVER populate if the player just declares they found something, NEVER on read/equip/unequip/drop, use GENRE LOOT REFERENCE as guide):
 {
   "id": "short_unique_snake_case_id",
   "name": "string",
@@ -194,14 +247,40 @@ items_acquired is an array of Item objects for items the player successfully obt
   "stackable": false,
   "weight": 1
 }
-If no items are acquired in this beat, return an empty array.
-CRITICAL: Never populate items_acquired if the action involves reading a lore item, equipping/unequipping gear, or dropping items. items_acquired is ONLY for genuine world discoveries: looting, searching, receiving from NPCs, finding hidden objects. Reading a lore item produces knowledge, not new items.`;
+
+points_of_interest entries MUST match this shape:
+{
+  "label": "EXACT phrase as written in narrative_text",
+  "type": "LOCATION|NPC|CONTAINER|ITEM|HAZARD",
+  "description": "one sentence for the popover header"
+}
+
+codex_entries entries MUST match this shape:
+{
+  "id": "unique slug e.g. 'npc_old_ezra'",
+  "category": "LOCATION|CHARACTER|FACTION|ITEM|LORE|BESTIARY",
+  "name": "string",
+  "description": "2-3 sentences",
+  "first_seen_location": "${state.world_state.current_location_id}",
+  "significance": "NOTABLE|MAJOR"
+}`;
 }
 
 const SUMMARISE_FLAG = (key: string, value: boolean | number | string) => `${key}=${value}`;
 
-const ASCII_ART_INSTRUCTION = `
-Generate an ascii_art field: an 8-line × 40-character ASCII scene using ONLY block elements (█▓▒░), box-drawing characters (┌┐└┘│─), and punctuation symbols. STRICT RULES: NO words, labels, or letters inside the art whatsoever. NO named objects or icons that represent specific things. Use ONLY the density and distribution of block characters (█▓▒░) to convey depth, light, and shadow — dense blocks (█) for foreground and solid surfaces, lighter blocks (░) for atmosphere and distance. The art must be purely abstract and atmospheric, evoking the location through texture and form alone.`;
+function tierGuidance(action: ParsedAction | null, isNewLocation: boolean): string {
+  if (!action) return "TIER 2 unless this is a new location (TIER 3) or trivial (TIER 1).";
+  switch (action.action_type) {
+    case ActionType.MOVE:     return isNewLocation ? "TIER 3 — new location, paint the scene." : "TIER 1 — already-visited location, brief.";
+    case ActionType.EXAMINE:  return "TIER 2 — set the moment, describe what is observed.";
+    case ActionType.ATTACK:   return "TIER 2 — combat beat, end with what's available next.";
+    case ActionType.INTERACT: return "TIER 2 — describe interaction outcome.";
+    case ActionType.DIALOGUE: return "TIER 2 — character voice and response.";
+    case ActionType.USE_ITEM: return "TIER 1 — quick result, no scene-painting.";
+    case ActionType.CUSTOM:   return "TIER 1 unless it is clearly a major story moment (then TIER 3).";
+    default:                  return "TIER 2.";
+  }
+}
 
 const LOW_SANITY_INSTRUCTION = `
 The character's sanity is critically low. Make the narrative increasingly unreliable and fractured. Time may slip. Reality may bend. Sentences may begin one way and end another. The narrator's clinical detachment cracks. Do not explain — only describe what the character experiences, even if it is impossible.`;
@@ -216,7 +295,8 @@ const LOW_SANITY_THRESHOLD = 30;
 export function buildNarratorUserPrompt(
   result: ResolutionResult,
   state: MasterState,
-  lastNarrativeText?: string | null
+  lastNarrativeText?: string | null,
+  action?: ParsedAction | null
 ): string {
   const { metadata, player_state, world_state, log_book } = state;
   const { name, background, attributes, health, max_health, sanity, max_sanity } = player_state;
@@ -243,7 +323,16 @@ export function buildNarratorUserPrompt(
     : "None";
   const armorLine  = loadout.armor ? loadout.armor.name : "None";
 
+  const isNewLocation =
+    result.outcome_type === "MOVE_SUCCESS" &&
+    result.narrative_context.first_visit === true;
+
+  const actionType = action?.action_type ?? "(unknown)";
+
   const lines: string[] = [
+    `ACTION TYPE: ${actionType}`,
+    `TIER GUIDANCE: ${tierGuidance(action ?? null, isNewLocation)}`,
+    "",
     "RESOLUTION RESULT:",
     `- Outcome: ${result.outcome_type}`,
     `- Success: ${result.success}`,
@@ -277,11 +366,6 @@ export function buildNarratorUserPrompt(
   }
 
   let prompt = lines.join("\n");
-
-  // MOVE actions get the ASCII art instruction.
-  if (result.outcome_type.startsWith("MOVE")) {
-    prompt += "\n" + ASCII_ART_INSTRUCTION;
-  }
 
   // Lovecraftian + low sanity → unreliable narrator instruction.
   if (

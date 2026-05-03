@@ -206,10 +206,28 @@ export interface ResolutionResult {
   narrative_context:  Record<string, unknown>;
 }
 
+export interface PointOfInterest {
+  label:       string;
+  type:        "LOCATION" | "NPC" | "CONTAINER" | "ITEM" | "HAZARD";
+  description: string;
+}
+
+export interface CodexEntry {
+  id:                  string;
+  category:            "LOCATION" | "CHARACTER" | "FACTION" | "ITEM" | "LORE" | "BESTIARY";
+  name:                string;
+  description:         string;
+  first_seen_location: string;
+  significance:        "MINOR" | "NOTABLE" | "MAJOR";
+}
+
 export interface NarratorResponse {
-  narrative_text:   string;
-  ascii_art?:       string;
-  sound_id?:        string;
-  new_npcs:         NPCMemory[];
-  items_acquired?:  Item[];
+  response_tier:       1 | 2 | 3;
+  narrative_text:      string;
+  ascii_art?:          string | null;
+  sound_id?:           string | null;
+  new_npcs:            NPCMemory[];
+  items_acquired?:     Item[];
+  points_of_interest:  PointOfInterest[];
+  codex_entries:       CodexEntry[];
 }

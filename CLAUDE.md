@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 2.5
+**Version:** 2.6
 **Status:** Active Development — MVP Core Loop Complete
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -41,10 +41,17 @@
 - **Day 9:** app/api/game/narrate/route.ts (streaming), lib/game/narrator.ts, narrator prompts
 - **Day 10:** lib/stores/game-store.ts, hooks/useGameLoop.ts — full loop wired and playable
 - **Day 11:** Live CharacterSheet, roll feedback in feed, ASCII art prompt tightened
-- **Day 12 + fixes:** Full inventory system with equip/unequip, drag-drop (WEAPON/ARMOR only), per-type button logic (WEAPON/ARMOR=Equip+Drop, CONSUMABLE=Use+Drop, LORE=Read+Drop, KEY=Drop+hint). Item acquisition pipeline: NarratorResponse.items_acquired, normalizeNarratorItem validator, SYSTEM message per item acquired. ACCESSORY slot rejects all drops. Self-declared loot blocked by narrator prompt guard.
+- **Day 12:** Full inventory system — equip/unequip, drag-drop (WEAPON/ARMOR only), per-type button logic, item acquisition pipeline with normalizeNarratorItem validator
+- **Pre-Day 13 fixes:** Fast-path system (lib/game/action-classifier.ts) — equip/unequip/drop/read bypass Narrator entirely with instant SYSTEM messages. New LORE message type in StoryFeed. Belt-and-suspenders guard on items_acquired for non-world actions.
+
+### Action Classification Policy (established pre-Day 13)
+Two paths through useGameLoop:
+- **FAST PATH** (no AI call): equip, unequip, drop, read lore — instant SYSTEM/LORE message only
+- **NARRATIVE PATH** (full AI call): MOVE, ATTACK, INTERACT, EXAMINE, DIALOGUE, USE_ITEM(CONSUMABLE), all other CUSTOM actions
+The Narrator should NEVER generate items_acquired for fast-path actions.
 
 ### ASCII Art Policy
-Words allowed as in-world content (signs, labels, position markers). Words NOT allowed as substitutes for visual elements that should be block characters.
+Words allowed as in-world content (signs, labels, position markers). Words NOT allowed as substitutes for visual elements.
 
 ### ⚠️ Important Dev Environment Notes
 - Claude Code shells export ANTHROPIC_API_KEY="" — always start dev server from your own terminal
@@ -81,7 +88,7 @@ Always work on main. Do not create feature branches. Commit and push directly to
 
 - **The Intent Parser:** Translates player text into a structured JSON action.
 - **Logic Resolution:** The code checks stats and updates the Master State.
-- **The Narrator:** The AI receives the result and writes story + ASCII art + items_acquired.
+- **The Narrator:** Writes story + ASCII art + items_acquired (world actions only).
 
 ---
 
@@ -104,7 +111,7 @@ Always work on main. Do not create feature branches. Commit and push directly to
 
 - Use **Block Elements** (█, ▓, ▒, ░) for depth and shading.
 - Implement **CSS-based ANSI coloring** to make the "text-only" world vibrant.
-- **The Visual Seed:** Unique seed per location — Day 25 caches art in Supabase for consistency.
+- **The Visual Seed:** Unique seed per location — Day 25 caches art in Supabase.
 - Genre palettes: Fantasy (amber/green), Cyberpunk (neon blue/magenta), Horror (sickly green/deep purple), Space Opera (purple/silver), Post-Apocalyptic (rust orange/ash grey).
 
 ---
@@ -194,4 +201,4 @@ Workflow: Claude Code pushes → git pull locally → restart own dev server →
 
 ---
 
-*Last updated: Session 16 — Day 12 + inventory fixes complete. Item acquisition pipeline, drag-drop filters, per-type button logic all shipped. Day 13 starting.*
+*Last updated: Session 17 — Fast-path system and items_acquired guards complete. Day 13 starting.*

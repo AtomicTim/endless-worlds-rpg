@@ -116,8 +116,8 @@ export default function GamePage() {
       }
       sidebar={
         <>
-          <CharacterSheet genre={genre} />
-          <InventoryPanel />
+          <CharacterSheet />
+          <InventoryPanel onSubmit={(input) => { void submitAction(input); }} />
         </>
       }
     />

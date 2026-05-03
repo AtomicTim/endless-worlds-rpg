@@ -207,8 +207,9 @@ export interface ResolutionResult {
 }
 
 export interface NarratorResponse {
-  narrative_text: string;
-  ascii_art?:     string;
-  sound_id?:      string;
-  new_npcs:       NPCMemory[];
+  narrative_text:   string;
+  ascii_art?:       string;
+  sound_id?:        string;
+  new_npcs:         NPCMemory[];
+  items_acquired?:  Item[];
 }

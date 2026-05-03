@@ -1,6 +1,7 @@
 import { Genre } from "@/types/game";
 import type { MasterState, ResolutionResult } from "@/types/game";
 import { getEquippedLoadout } from "@/lib/game/state-utils";
+import { GENRE_CONFIGS } from "@/lib/game/genre-config";
 
 // ── Intent Parser ─────────────────────────────────────────────────────────────
 
@@ -135,7 +136,10 @@ export function getNarratorPersonality(genre: Genre): string {
 export function buildNarratorSystemPrompt(state: MasterState): string {
   const { genre, tone } = state.metadata;
   const personality = getNarratorPersonality(genre);
-  const soundList = SOUND_IDS.join(" | ");
+  const soundList   = SOUND_IDS.join(" | ");
+  const lootRef     = GENRE_CONFIGS[genre].itemTemplates
+    .map((t) => `${t.name} (${t.type}, ${t.rarity})`)
+    .join(", ");
 
   return `${personality}
 
@@ -150,13 +154,15 @@ CRITICAL RULES:
 
 GENRE: ${genre}
 TONE: ${tone}
+GENRE LOOT REFERENCE (use as examples when granting items): ${lootRef}
 
 NARRATOR_RESPONSE JSON SCHEMA (return exactly this shape, filled in):
 {
   "narrative_text": "string — 80–200 words of story prose for this beat",
   "ascii_art": "string or null — an 8-line by 40-char ASCII scene; only set on MOVE actions",
   "sound_id": "string or null — one of: ${soundList}",
-  "new_npcs": []
+  "new_npcs": [],
+  "items_acquired": []
 }
 
 new_npcs is an array of NPCMemory objects for any newly-introduced named characters in this beat. Each entry MUST match this shape:
@@ -169,8 +175,21 @@ new_npcs is an array of NPCMemory objects for any newly-introduced named charact
   "trust_score": 50,
   "memory_snippets": []
 }
+Only include new_npcs if you actually introduce a named character in the narrative. Otherwise return an empty array. Do not invent NPCs the player did not encounter in this beat.
 
-Only include new_npcs if you actually introduce a named character in the narrative. Otherwise return an empty array. Do not invent NPCs the player did not encounter in this beat.`;
+items_acquired is an array of Item objects for items the player successfully obtains. Only populate when the action succeeds AND it makes narrative sense (looting, searching, receiving from NPC, buying). NEVER populate if the player simply declares they found something — items must be earned through valid actions. Do not invent overpowered items; use the GENRE LOOT REFERENCE as a guide. If action_type is CUSTOM and inferred_intent suggests the player is claiming to find/have/take something without a valid EXAMINE or INTERACT, set items_acquired to []. Each item MUST match this shape exactly:
+{
+  "id": "short_unique_snake_case_id",
+  "name": "string",
+  "type": "WEAPON|ARMOR|CONSUMABLE|KEY|LORE",
+  "rarity": "COMMON|UNCOMMON|RARE|LEGENDARY",
+  "description": "one sentence",
+  "effect": "heal_20 | buff_strength_2 | sanity_10 | or empty string",
+  "quantity": 1,
+  "stackable": false,
+  "weight": 1
+}
+If no items are acquired in this beat, return an empty array.`;
 }
 
 const SUMMARISE_FLAG = (key: string, value: boolean | number | string) => `${key}=${value}`;

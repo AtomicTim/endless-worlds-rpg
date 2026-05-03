@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 2.1
+**Version:** 2.2
 **Status:** Active Development
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Day:** Day 9 — The Narrator
+**Current Day:** Day 10 — Full Game Loop
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -23,22 +23,28 @@
 | 6 | Character Creation Flow | ✅ Complete |
 | 7 | Intent Parser | ✅ Complete |
 | 8 | Logic Resolution Engine | ✅ Complete |
-| 9 | The Narrator | 🔄 In Progress |
-| 10 | Full Game Loop | ⏳ Pending |
+| 9 | The Narrator | ✅ Complete |
+| 10 | Full Game Loop | 🔄 In Progress |
+| 11 | Character Sheet UI (Live) | ⏳ Pending |
+| 12 | Inventory System | ⏳ Pending |
+| 13 | Log Book & Save System | ⏳ Pending |
+| 14 | MVP Playtest & Bug Fix | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
 ### Key Deliverables Per Day (confirmed on main)
 - **Day 5:** types/game.ts, state-factory, state-utils, genre-config, state-persistence, app/api/game/state/route.ts
-- **Day 6:** app/game/new/page.tsx (4-step wizard), app/game/page.tsx (session redirect). Bug fixed: stable attribute card height on hover.
-- **Day 7:** app/api/game/parse-intent/route.ts, lib/game/intent-parser.ts, lib/game/prompt-builder.ts. Note: @anthropic-ai/sdk must be installed.
-- **Day 8:** lib/game/logic-resolver.ts, lib/game/dice.ts, full test suites. 51/51 tests passing. LCG seeds use spaced values (i * 7919 + 13) not consecutive.
+- **Day 6:** app/game/new/page.tsx (4-step wizard), app/game/page.tsx (session redirect)
+- **Day 7:** app/api/game/parse-intent/route.ts, lib/game/intent-parser.ts, lib/game/prompt-builder.ts
+- **Day 8:** lib/game/logic-resolver.ts, lib/game/dice.ts — 51/51 tests passing
+- **Day 9:** app/api/game/narrate/route.ts (streaming), lib/game/narrator.ts, prompt-builder updated with narrator prompts and sound IDs. Both API routes return 401 unauthenticated. tsc clean.
 
 ### Important Local Dev Notes
 - After Claude Code pushes to GitHub, always run `git pull` locally then restart the dev server
 - @anthropic-ai/sdk is required — run `npm install @anthropic-ai/sdk` if not present
 - Windows PowerShell: use `Invoke-WebRequest` instead of `curl -X`
+- `npx tsc --noEmit` with blank output = pass (no errors)
 
 ### Branch Policy
 Always work on main. Do not create feature branches. Commit and push directly to main at end of each day.
@@ -208,4 +214,4 @@ Always work directly on main. Do not create feature branches. Commit and push to
 
 ---
 
-*Last updated: Session 12 — Day 8 complete (51/51 tests passing), Day 9 starting*
+*Last updated: Session 13 — Day 9 complete (streaming narrator, 401 verified, tsc clean), Day 10 starting*

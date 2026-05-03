@@ -1,82 +1,93 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { UserMenu } from "@/components/layout/UserMenu";
-import { useUser } from "@/hooks/useUser";
-import { createClient } from "@/lib/supabase/client";
-import type { Database } from "@/types/database";
+import { useState } from "react";
+import { GameLayout } from "@/components/layout/GameLayout";
+import { StoryFeed, type StoryMessage } from "@/components/game/StoryFeed";
+import { InputBar } from "@/components/game/InputBar";
+import { CharacterSheet } from "@/components/game/sidebar/CharacterSheet";
+import { InventoryPanel } from "@/components/game/sidebar/InventoryPanel";
+import { Genre } from "@/types/game";
 
-type ProfileDisplayRow = Pick<
-  Database["public"]["Tables"]["profiles"]["Row"],
-  "display_name"
->;
+const INITIAL_MESSAGES: StoryMessage[] = [
+  {
+    id: "1",
+    type: "ASCII_ART",
+    content: `╔════════════════════════════════════════╗
+║      THORNWOOD FOREST — ENTRANCE        ║
+╚════════════════════════════════════════╝`,
+  },
+  {
+    id: "2",
+    type: "NARRATIVE",
+    content:
+      "You stand at the entrance of the Thornwood Forest. Ancient oaks loom overhead, their gnarled branches forming a canopy that blots out the stars. The air smells of pine and something older — something without a name.",
+  },
+  {
+    id: "3",
+    type: "DIALOGUE",
+    npcName: "Old Hermit",
+    content:
+      "They say the forest speaks to those who listen... but most who listen never come back.",
+  },
+  {
+    id: "4",
+    type: "SYSTEM",
+    content:
+      "You notice a worn path leading deeper into the forest. Perception check passed (13 vs DC 10).",
+  },
+  {
+    id: "5",
+    type: "COMBAT",
+    content:
+      "A shadow wolf emerges from the undergrowth! Initiative rolled: 14 vs 11. You act first.",
+  },
+];
+
+const GENRE = Genre.FANTASY;
 
 export default function GamePage() {
-  const { user, loading, signOut } = useUser();
-  const [displayName, setDisplayName] = useState<string | null>(null);
+  const [messages, setMessages] = useState<StoryMessage[]>(INITIAL_MESSAGES);
+  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (!user) return;
-    const userId = user.id;
-    const supabase = createClient();
-
-    let cancelled = false;
-
-    async function loadProfile() {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (cancelled || error) return;
-      const row = data as ProfileDisplayRow | null;
-      setDisplayName(row?.display_name ?? null);
-    }
-
-    void loadProfile();
-    return () => {
-      cancelled = true;
+  function handleSubmit(input: string) {
+    const echoMsg: StoryMessage = {
+      id: crypto.randomUUID(),
+      type: "SYSTEM",
+      content: `> ${input}`,
     };
-  }, [user]);
+    setMessages((prev) => [...prev, echoMsg]);
+    setIsLoading(true);
 
-  const welcomeName =
-    displayName?.trim() ||
-    (user?.email ? user.email.split("@")[0] : null) ||
-    "Traveler";
+    // Placeholder response — Day 5 wires this to the AI engine
+    setTimeout(() => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          type: "NARRATIVE",
+          content:
+            "The forest watches you in silence. The AI engine will respond here once Day 5 is complete.",
+        },
+      ]);
+      setIsLoading(false);
+    }, 1200);
+  }
 
   return (
-    <div className="relative min-h-screen bg-black font-mono text-amber-400">
-      <header className="flex items-center justify-end border-b border-amber-900/30 bg-[#050508] px-4 py-3">
-        <UserMenu />
-      </header>
-      <div className="flex flex-col items-center justify-center px-4 py-24 text-center scanlines">
-        <pre className="ascii-art mb-6 text-glow-amber text-xs text-amber-500 sm:text-sm">
-          {`╔══════════════════════╗
-║   ENDLESS WORLDS RPG  ║
-╚══════════════════════╝`}
-        </pre>
-        {loading ? (
-          <p className="text-muted-foreground">Loading session…</p>
-        ) : (
-          <>
-            <p className="max-w-md text-lg text-amber-300/95">
-              Welcome,{" "}
-              <span className="text-amber-400 text-glow-amber">{welcomeName}</span>
-              . Your adventure begins soon.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-8 border-amber-700/50 bg-transparent font-mono text-amber-400 hover:bg-amber-950/50 hover:text-amber-300"
-              onClick={() => void signOut()}
-            >
-              Sign Out
-            </Button>
-          </>
-        )}
-      </div>
-    </div>
+    <GameLayout
+      genre={GENRE}
+      mainPanel={
+        <>
+          <StoryFeed messages={messages} isLoading={isLoading} />
+          <InputBar onSubmit={handleSubmit} disabled={isLoading} />
+        </>
+      }
+      sidebar={
+        <>
+          <CharacterSheet genre={GENRE} />
+          <InventoryPanel />
+        </>
+      }
+    />
   );
 }

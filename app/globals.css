@@ -4,11 +4,7 @@
 
 @layer base {
   :root {
-    /* Default: Fantasy genre — amber/green palette */
-    --color-primary: 43 96% 56%;    /* amber-400 */
-    --color-accent: 160 84% 39%;    /* emerald-600 */
-    --color-bg: 240 10% 4%;         /* near-black */
-
+    /* ── shadcn HSL tokens (Fantasy defaults) ─────────────────────── */
     --background: 240 10% 4%;
     --foreground: 43 10% 88%;
 
@@ -38,36 +34,71 @@
     --ring: 43 96% 56%;
 
     --radius: 0.5rem;
+
+    /* ── Genre color tokens — used directly by game components ──────── */
+    /* Fantasy (default) */
+    --color-bg:      #0a0a0a;
+    --color-primary: #d97706;
+    --color-accent:  #16a34a;
+    --color-text:    #fef3c7;
+    --color-border:  #292524;
+    --color-muted:   #57534e;
   }
 
-  /* Cyberpunk genre override */
+  /* ── Cyberpunk ──────────────────────────────────────────────────── */
   [data-genre="cyberpunk"] {
-    --color-primary: 199 89% 60%;   /* neon blue */
-    --color-accent: 292 84% 74%;    /* magenta */
-    --color-bg: 240 15% 3%;
-    --primary: 199 89% 60%;
-    --accent: 292 84% 74%;
-    --ring: 199 89% 60%;
+    --color-primary: #06b6d4;
+    --color-accent:  #d946ef;
+    --color-text:    #e0f2fe;
+    --color-border:  #0c1a2e;
+    --color-muted:   #475569;
+
+    --primary: 199 89% 43%;
+    --accent:  292 84% 61%;
+    --ring:    199 89% 43%;
+    --muted-foreground: 215 16% 57%;
   }
 
-  /* Noir genre override */
-  [data-genre="noir"] {
-    --color-primary: 43 74% 40%;    /* sepia */
-    --color-accent: 0 0% 65%;       /* grey */
-    --color-bg: 0 0% 5%;
-    --primary: 43 74% 40%;
-    --accent: 0 0% 65%;
-    --ring: 43 74% 40%;
+  /* ── Horror / Lovecraftian ─────────────────────────────────────── */
+  [data-genre="horror"] {
+    --color-primary: #4ade80;
+    --color-accent:  #7c3aed;
+    --color-text:    #d1fae5;
+    --color-border:  #1a1a2e;
+    --color-muted:   #4b5563;
+
+    --primary: 142 69% 58%;
+    --accent:  262 69% 57%;
+    --ring:    142 69% 58%;
+    --muted-foreground: 220 9% 46%;
   }
 
-  /* Space Opera genre override */
+  /* ── Space Opera ──────────────────────────────────────────────── */
   [data-genre="space-opera"] {
-    --color-primary: 271 81% 66%;   /* purple */
-    --color-accent: 213 27% 84%;    /* silver */
-    --color-bg: 250 20% 3%;
+    --color-primary: #a855f7;
+    --color-accent:  #c0c0c0;
+    --color-text:    #ede9fe;
+    --color-border:  #1e1b4b;
+    --color-muted:   #6b7280;
+
     --primary: 271 81% 66%;
-    --accent: 213 27% 84%;
-    --ring: 271 81% 66%;
+    --accent:  0 0% 75%;
+    --ring:    271 81% 66%;
+    --muted-foreground: 220 9% 46%;
+  }
+
+  /* ── Post-Apocalyptic ──────────────────────────────────────────── */
+  [data-genre="post-apocalyptic"] {
+    --color-primary: #ea580c;
+    --color-accent:  #9ca3af;
+    --color-text:    #fef3c7;
+    --color-border:  #1c1917;
+    --color-muted:   #57534e;
+
+    --primary: 21 90% 48%;
+    --accent:  220 9% 65%;
+    --ring:    21 90% 48%;
+    --muted-foreground: 24 6% 33%;
   }
 }
 
@@ -81,7 +112,6 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
-  /* Monospace base for terminal/ASCII feel */
   .font-terminal {
     font-family: "Courier New", Courier, monospace;
     font-variant-ligatures: none;
@@ -89,13 +119,13 @@
 }
 
 @layer utilities {
-  /* ASCII art rendering — prevent collapse of whitespace */
+  /* ── ASCII art ─────────────────────────────────────────────────── */
   .ascii-art {
     @apply font-mono whitespace-pre leading-tight;
     font-size: clamp(0.5rem, 1.5vw, 0.875rem);
   }
 
-  /* Scanline overlay effect for terminal aesthetic */
+  /* ── Scanline overlay ──────────────────────────────────────────── */
   .scanlines::after {
     content: "";
     position: absolute;
@@ -110,13 +140,53 @@
     pointer-events: none;
   }
 
-  /* Amber text glow */
+  /* ── Text glows ────────────────────────────────────────────────── */
   .text-glow-amber {
     text-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
   }
 
-  /* Neon text glow for cyberpunk */
   .text-glow-neon {
     text-shadow: 0 0 8px rgba(56, 189, 248, 0.7), 0 0 20px rgba(56, 189, 248, 0.3);
   }
+
+  .text-glow {
+    text-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 50%, transparent);
+  }
+
+  /* ── Thin scrollbar (game panels) ─────────────────────────────── */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 2px; }
+}
+
+/* ── Animation keyframes ─────────────────────────────────────────── */
+@keyframes messageIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0);    }
+}
+
+.message-enter {
+  animation: messageIn 0.25s ease-out both;
+}
+
+.cursor-blink {
+  animation: blink 1s step-end infinite;
+}
+
+.sidebar-slide-in {
+  animation: slideInRight 0.25s ease-out both;
 }

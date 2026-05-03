@@ -5,112 +5,108 @@
 // ---------------------------------------------------------------------------
 
 export enum Genre {
-  FANTASY     = "fantasy",
-  CYBERPUNK   = "cyberpunk",
-  NOIR        = "noir",
-  SPACE_OPERA = "space-opera",
+  FANTASY             = "fantasy",
+  CYBERPUNK           = "cyberpunk",
+  HORROR_LOVECRAFTIAN = "horror_lovecraftian",
+  SPACE_OPERA         = "space_opera",
+  POST_APOCALYPTIC    = "post_apocalyptic",
 }
 
 export enum ActionType {
-  MOVE      = "MOVE",
-  ATTACK    = "ATTACK",
-  INTERACT  = "INTERACT",
-  EXAMINE   = "EXAMINE",
-  USE_ITEM  = "USE_ITEM",
-  DIALOGUE  = "DIALOGUE",
-  CUSTOM    = "CUSTOM",
+  MOVE     = "MOVE",
+  ATTACK   = "ATTACK",
+  INTERACT = "INTERACT",
+  EXAMINE  = "EXAMINE",
+  USE_ITEM = "USE_ITEM",
+  DIALOGUE = "DIALOGUE",
+  CUSTOM   = "CUSTOM",
 }
 
 export enum SubscriptionTier {
-  FREE        = "free",
-  ADVENTURER  = "adventurer",
-  LEGEND      = "legend",
+  FREE       = "free",
+  ADVENTURER = "adventurer",
+  LEGEND     = "legend",
 }
 
-export type Difficulty = "easy" | "normal" | "hard" | "nightmare";
-export type Tone       = "heroic" | "gritty" | "comedic" | "horror";
+export enum ItemType {
+  WEAPON     = "WEAPON",
+  ARMOR      = "ARMOR",
+  CONSUMABLE = "CONSUMABLE",
+  KEY        = "KEY",
+  LORE       = "LORE",
+}
+
+export enum ItemRarity {
+  COMMON    = "COMMON",
+  UNCOMMON  = "UNCOMMON",
+  RARE      = "RARE",
+  LEGENDARY = "LEGENDARY",
+}
+
+export enum Difficulty {
+  EASY      = "easy",
+  NORMAL    = "normal",
+  HARD      = "hard",
+  NIGHTMARE = "nightmare",
+}
+
+export enum LogEntryType {
+  STORY     = "STORY",
+  COMBAT    = "COMBAT",
+  DISCOVERY = "DISCOVERY",
+  DIALOGUE  = "DIALOGUE",
+  SYSTEM    = "SYSTEM",
+}
 
 // ---------------------------------------------------------------------------
-// Item types
+// Item
 // ---------------------------------------------------------------------------
 
-interface BaseItem {
-  id: string;
-  name: string;
+export interface Item {
+  id:          string;
+  name:        string;
+  type:        ItemType;
+  rarity:      ItemRarity;
   description: string;
-  quantity: number;
+  effect?:     Record<string, number | string>;
+  quantity:    number;
+  genre_skin?: string;
 }
-
-export interface Weapon extends BaseItem {
-  type: "weapon";
-  damage: number;
-  damageType: "physical" | "energy" | "magic" | "poison";
-  range: "melee" | "ranged";
-  strengthReq?: number;
-}
-
-export interface Armor extends BaseItem {
-  type: "armor";
-  defense: number;
-  slot: "head" | "body" | "hands" | "feet" | "shield";
-  agilityPenalty?: number;
-}
-
-export interface Consumable extends BaseItem {
-  type: "consumable";
-  effect: Record<string, number>;
-  charges: number;
-}
-
-export interface KeyItem extends BaseItem {
-  type: "key";
-  unlocksId: string;
-}
-
-export interface LoreItem extends BaseItem {
-  type: "lore";
-  content: string;
-  locationDiscovered?: string;
-}
-
-export type Item = Weapon | Armor | Consumable | KeyItem | LoreItem;
 
 // ---------------------------------------------------------------------------
 // Player
 // ---------------------------------------------------------------------------
 
-export interface PlayerAttributes {
+export interface Attributes {
   strength:     number;
   agility:      number;
-  intelligence: number;
   charisma:     number;
+  intelligence: number;
   perception:   number;
 }
 
 export interface PlayerState {
-  id:          string;
   name:        string;
   background:  string;
   health:      number;
-  maxHealth:   number;
+  max_health:  number;
+  sanity?:     number;
+  max_sanity?: number;
+  resources:   Record<string, number>;
+  attributes:  Attributes;
+  inventory:   Item[];
   level:       number;
   xp:          number;
-  currency:    number;
-  attributes:  PlayerAttributes;
-  inventory:   Item[];
-  resources:   Record<string, number>;
 }
 
 // ---------------------------------------------------------------------------
 // World
 // ---------------------------------------------------------------------------
 
-export interface WorldStateSnapshot {
-  currentLocationId: string;
-  visitedLocations:  string[];
-  flags:             Record<string, boolean | string | number>;
-  timeOfDay:         "dawn" | "day" | "dusk" | "night";
-  weatherId:         string;
+export interface WorldState {
+  current_location_id: string;
+  visited_locations:   string[];
+  flags:               Record<string, boolean | number | string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,30 +114,32 @@ export interface WorldStateSnapshot {
 // ---------------------------------------------------------------------------
 
 export interface LogEntry {
-  id:         string;
-  timestamp:  string;
-  type:       "story" | "combat" | "discovery" | "npc" | "system";
-  content:    string;
-  locationId?: string;
+  id:        string;
+  timestamp: string;
+  type:      LogEntryType;
+  content:   string;
+}
+
+export interface LogBook {
+  entries:         LogEntry[];
+  session_summary: string | null;
 }
 
 // ---------------------------------------------------------------------------
 // NPC Registry
 // ---------------------------------------------------------------------------
 
-export interface NPCEntry {
+export interface NPCMemory {
   id:                  string;
-  npcKey:              string;
+  npc_key:             string;
   name:                string;
   role:                string;
-  relationshipStatus:  string;
-  trustScore:          number;
-  memorySnippets:      string[];
-  factionId?:          string;
-  lastInteraction?:    string;
+  relationship_status: string;
+  trust_score:         number;
+  memory_snippets:     string[];
+  faction_id?:         string;
+  last_interaction?:   string;
 }
-
-export type NPCRegistry = Record<string, NPCEntry>;
 
 // ---------------------------------------------------------------------------
 // Metadata
@@ -149,11 +147,11 @@ export type NPCRegistry = Record<string, NPCEntry>;
 
 export interface Metadata {
   genre:       Genre;
-  tone:        Tone;
+  tone:        string;
   difficulty:  Difficulty;
-  worldName:   string;
-  createdAt:   string;
-  updatedAt:   string;
+  session_id:  string;
+  created_at:  string;
+  last_played: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,12 +159,11 @@ export interface Metadata {
 // ---------------------------------------------------------------------------
 
 export interface MasterState {
-  sessionId:   string;
-  metadata:    Metadata;
-  player:      PlayerState;
-  world:       WorldStateSnapshot;
-  logBook:     LogEntry[];
-  npcRegistry: NPCRegistry;
+  metadata:     Metadata;
+  player_state: PlayerState;
+  world_state:  WorldState;
+  log_book:     LogBook;
+  npc_registry: Record<string, NPCMemory>;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,32 +171,24 @@ export interface MasterState {
 // ---------------------------------------------------------------------------
 
 export interface ParsedAction {
-  actionType:  ActionType;
-  target?:     string;
-  itemId?:     string;
-  dialogueLine?: string;
-  parameters?: Record<string, unknown>;
-  requiresStatCheck?: {
-    attribute:  keyof PlayerAttributes;
-    difficulty: number;
-  };
+  action_type:      ActionType;
+  primary_target?:  string;
+  secondary_target?: string;
+  item_used?:       string;
+  inferred_intent:  string;
+  confidence:       number;
 }
 
 export interface ResolutionResult {
-  success:          boolean;
-  stateDelta:       Partial<MasterState>;
-  xpGained?:        number;
-  itemsGained?:     Item[];
-  itemsConsumed?:   string[];
-  soundId?:         string;
-  triggerWildcard?: boolean;
-  failureReason?:   string;
+  success:            boolean;
+  outcome_type:       string;
+  state_delta:        Partial<MasterState>;
+  narrative_context:  Record<string, unknown>;
 }
 
 export interface NarratorResponse {
-  narrative:  string;
-  asciiArt?:  string;
-  soundId?:   string;
-  choices?:   string[];
-  locationId?: string;
+  narrative_text: string;
+  ascii_art?:     string;
+  sound_id?:      string;
+  new_npcs:       NPCMemory[];
 }

@@ -7,9 +7,11 @@ import { UserMenu } from "@/components/layout/UserMenu";
 import { Genre } from "@/types/game";
 
 const GENRE_LABELS: Partial<Record<Genre, string>> = {
-  [Genre.FANTASY]:     "Fantasy",
-  [Genre.CYBERPUNK]:   "Cyberpunk",
-  [Genre.SPACE_OPERA]: "Space Opera",
+  [Genre.FANTASY]:             "Fantasy",
+  [Genre.CYBERPUNK]:           "Cyberpunk",
+  [Genre.HORROR_LOVECRAFTIAN]: "Horror / Lovecraftian",
+  [Genre.SPACE_OPERA]:         "Space Opera",
+  [Genre.POST_APOCALYPTIC]:    "Post-Apocalyptic",
 };
 
 interface GameLayoutProps {

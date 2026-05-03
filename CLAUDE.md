@@ -1,8 +1,27 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 1.2
+**Version:** 1.4
 **Status:** Active Development
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
+
+---
+
+## 🔄 Current Status (Read This First)
+
+**Current Day:** Day 4 — Core Layout & UI Shell
+**Local Dev Port:** 3001
+**Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
+**GitHub Repo:** atomictim/endless-worlds-rpg
+
+| Day | Title | Status |
+| --- | --- | --- |
+| 1 | Project Scaffold | ✅ Complete |
+| 2 | Supabase Schema & Database | ✅ Complete |
+| 3 | Authentication System | ✅ Complete |
+| 4 | Core Layout & UI Shell | 🔄 Up Next |
+
+**Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
+**⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
 ---
 
@@ -12,7 +31,7 @@
 
 - **Zero-Image Visuals:** All environmental and character representation is handled via advanced ASCII/ANSI art, optimized for mobile and web views.
 
-- **Endless Versatility:** The engine must support multiple genres (Fantasy, Cyberpunk, Noir, Space Opera) by swapping a metadata "Genre Wrapper."
+- **Endless Versatility:** The engine must support multiple genres by swapping a metadata "Genre Wrapper." Launch genres: Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic.
 
 ---
 
@@ -58,7 +77,7 @@ The persistent state of the game, stored in Supabase and passed to the AI to mai
 - Use **Block Elements** (█, ▓, ▒, ░) for depth and shading.
 - Implement **CSS-based ANSI coloring** to make the "text-only" world vibrant.
 - **The Visual Seed:** Store a unique seed for generated ASCII art per location to ensure consistent visuals on return visits.
-- Genre-specific color palettes: Fantasy (amber/green), Cyberpunk (neon blue/magenta), Noir (sepia/grey), Space Opera (purple/silver).
+- Genre-specific color palettes: Fantasy (amber/green), Cyberpunk (neon blue/magenta), Horror/Lovecraftian (sickly green/deep purple), Space Opera (purple/silver), Post-Apocalyptic (rust orange/ash grey).
 
 ---
 
@@ -81,7 +100,7 @@ The full day-by-day plan is in the companion document: **Endless_Worlds_RPG_Mast
 
 | Feature | Free | Adventurer ($6.99/mo) | Legend ($14.99/mo) |
 | --- | --- | --- | --- |
-| Genres | Fantasy only | All 4 genres | All 4 + future genres |
+| Genres | Fantasy only | All 5 genres | All 5 + future genres |
 | Save Slots | 1 | 3 | Unlimited |
 | AI Actions/Day | 50 | Unlimited | Unlimited |
 | ASCII Art | Basic | Enhanced | Enhanced + Custom |
@@ -101,53 +120,67 @@ The full day-by-day plan is in the companion document: **Endless_Worlds_RPG_Mast
 
 ---
 
-## 8. Development Workflow
+## 8. Genre Definitions (Launch Roster — Final)
 
-### The Ideal Setup
+**⚠️ Noir has been removed. The 5 launch genres are:**
 
-This project uses a three-tool workflow where each tool has a distinct role:
+| Genre | Tone | Color Palette | Currency | HP Label | Key Influences |
+| --- | --- | --- | --- | --- | --- |
+| **Fantasy** | Epic, mythic, high adventure | Amber / Forest green | Gold | HP | D&D, Elder Scrolls |
+| **Cyberpunk** | Terse, gritty, neon-soaked | Neon cyan / Magenta | Credits | Integrity | Neuromancer, Blade Runner |
+| **Horror/Lovecraftian** | Dread, cosmic horror, sanity-eroding | Sickly green / Deep purple | None (survival focused) | Sanity + HP | Lovecraft, Darkest Dungeon |
+| **Space Opera** | Pulpy, grand-scale, operatic | Purple / Silver | Stellar Units | Hull Integrity | Mass Effect, Dune |
+| **Post-Apocalyptic** | Bleak, dark-humored, survival | Rust orange / Ash grey | Caps | HP | Fallout, The Road |
+
+### Genre-Specific Mechanics Notes
+
+**Horror/Lovecraftian:**
+- Dual-resource system: HP (physical) + Sanity (mental)
+- Sanity depletes on encounters with cosmic entities, forbidden knowledge, and certain locations
+- At 0 Sanity: character becomes erratic, dialogue options change, game over condition
+- Narrator tone: slow dread, unreliable perception, cosmic indifference
+
+**Post-Apocalyptic:**
+- Fallout-inspired: dark humor, moral ambiguity, faction politics
+- Resource scarcity: ammo/food/water tracked alongside HP
+- Narrator tone: dry, world-weary, occasionally darkly funny
+
+**Future genres to add post-launch:** Western, Pirate/Age of Sail, Superhero, Dark Fantasy, Steampunk
+
+---
+
+## 9. Platform & Distribution Decision
+
+**Endless Worlds RPG is a PWA (Progressive Web App). This is a final decision.**
+
+- Zero friction distribution — players click a URL and play instantly
+- Core loop requires server calls anyway (Claude API) — no meaningful offline mode
+- PWA install prompt gives native app feel on both mobile and desktop
+- Multiplayer (post-launch) uses Supabase Realtime over websockets
+- No Electron, no Steam, no Tauri — web-only
+- PWA manifest and service worker added on Day 35
+
+---
+
+## 10. Development Workflow
+
+### The Three-Tool Setup
 
 | Tool | Role | When to Use |
 | --- | --- | --- |
-| **Claude Code** (CLI) | Builder — writes files, installs packages, runs commands, pushes to GitHub | All actual coding and execution |
-| **Cursor** | Viewer/Reviewer — see the code, make small manual edits, review Claude Code's output | Reviewing, minor edits, reading the codebase |
-| **Claude.ai (this project)** | Strategist — architecture decisions, planning, debugging logic, generating prompts | Planning sessions, complex problem-solving, updating this document |
+| **Claude Code** (CLI) | Builder — writes files, runs commands, pushes to GitHub | All actual coding and execution |
+| **Cursor** | Viewer/Reviewer — review code, make small manual edits | Reviewing, minor edits, reading the codebase |
+| **Claude.ai (this project)** | Strategist — architecture, planning, generating prompts, updating CLAUDE.md | Planning sessions, decisions, context updates |
 
 ### Day-to-Day Workflow
 
-1. **Open this project in Claude.ai** to review what the current day's goal is (from the Dev Plan)
-2. **Open Claude Code** in your terminal inside the project folder (`claude` command)
-3. **Paste the day's session prompt** (from the Dev Plan) into Claude Code
-4. Claude Code writes all files, runs installs, starts the dev server, and commits to GitHub
-5. **Open Cursor** alongside the terminal to review the generated code
-6. **Test the milestone** described in the Dev Plan before moving to the next day
-7. Claude Code commits and pushes to GitHub at end of session
-
-### Installing Claude Code
-
-```bash
-npm install -g @anthropic-ai/claude-code
-```
-
-Then navigate to your project folder and run:
-
-```bash
-claude
-```
-
-Claude Code will have full access to your files, terminal, and Git.
-
-### Starting a Claude Code Session
-
-Always begin each Claude Code session with this context block so it knows where it is in the project:
-
-```
-I'm building Endless Worlds RPG — an AI-driven genre-agnostic RPG engine.
-Tech stack: Next.js 14, Tailwind, shadcn/ui, Supabase, Claude API, Stripe, Vercel.
-Today is Day [X]: [Day Title from Dev Plan].
-Here is what already exists: [brief summary of completed days].
-[Paste the full day entry from the Dev Plan here]
-```
+1. Come to **Claude.ai** — report previous day done, get next day's prompt
+2. Claude.ai reads CLAUDE.md from GitHub for full context, updates it with any new decisions
+3. Open **Claude Code** in terminal inside project folder (`claude` command)
+4. Paste the day's prompt into Claude Code — it builds everything and pushes to GitHub
+5. Open **Cursor** to review the output
+6. Test the day's milestone checklist
+7. Return to Claude.ai to confirm done and get next prompt
 
 ### GitHub Workflow
 
@@ -156,34 +189,18 @@ Here is what already exists: [brief summary of completed days].
 - Main branch always holds the last stable, tested state
 - Never push directly to main mid-session
 
-### When to Use Claude.ai vs Claude Code
+### Claude Code Install
 
-**Use Claude.ai (this project) when:**
-- Planning the next phase or revising the roadmap
-- Debugging a complex logic or architecture problem
-- Making decisions about monetization, UX, or strategy
-- Updating this project context document
-- Getting a "session prompt" written for Claude Code
-
-**Use Claude Code when:**
-- Writing any actual code
-- Installing packages
-- Running the dev server
-- Committing and pushing to GitHub
-- Fixing bugs identified during testing
-
-### Keeping This Document Updated
-
-After any major architectural decision or strategic change, return to this Claude.ai project and say:
-> "Update the project context to reflect [decision/change]."
-
-Claude will revise this document so it always reflects the current state of the project.
+```bash
+npm install -g @anthropic-ai/claude-code
+cd your-project-folder
+claude
+```
 
 ---
 
-## 9. Reference Links
+## 11. Reference Links
 
-- Dev Plan: **Endless_Worlds_RPG_Master_Dev_Plan.md** (companion document)
 - Supabase Dashboard: https://supabase.com/dashboard
 - Anthropic Console: https://console.anthropic.com
 - Vercel Dashboard: https://vercel.com/dashboard
@@ -192,4 +209,4 @@ Claude will revise this document so it always reflects the current state of the 
 
 ---
 
-*Last updated: Session 2 — Workflow established, V3 context created*
+*Last updated: Session 5 — V1.4: Genres finalized, progress log added, Claude.ai now reads/writes this file directly via GitHub MCP*

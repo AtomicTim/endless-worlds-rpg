@@ -36,30 +36,34 @@ export function makeMessage(
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 interface GameStore {
-  masterState:     MasterState | null;
-  messages:        StoryMessage[];
-  isProcessing:    boolean;
-  processingStep:  string | null;
-  currentAsciiArt: string | null;
+  masterState:       MasterState | null;
+  messages:          StoryMessage[];
+  isProcessing:      boolean;
+  processingStep:    string | null;
+  currentAsciiArt:   string | null;
+  lastNarrativeText: string | null;
 
-  setMasterState:  (state: MasterState) => void;
-  addMessage:      (message: StoryMessage) => void;
-  setProcessing:   (isProcessing: boolean, step?: string) => void;
-  setAsciiArt:     (art: string | null) => void;
-  clearMessages:   () => void;
+  setMasterState:       (state: MasterState) => void;
+  addMessage:           (message: StoryMessage) => void;
+  setProcessing:        (isProcessing: boolean, step?: string) => void;
+  setAsciiArt:          (art: string | null) => void;
+  clearMessages:        () => void;
+  setLastNarrativeText: (text: string) => void;
 }
 
 export const useGameStore = create<GameStore>((set) => ({
-  masterState:     null,
-  messages:        [],
-  isProcessing:    false,
-  processingStep:  null,
-  currentAsciiArt: null,
+  masterState:       null,
+  messages:          [],
+  isProcessing:      false,
+  processingStep:    null,
+  currentAsciiArt:   null,
+  lastNarrativeText: null,
 
-  setMasterState: (state) => set({ masterState: state }),
-  addMessage:     (message) => set((s) => ({ messages: [...s.messages, message] })),
-  setProcessing:  (isProcessing, step) =>
+  setMasterState:       (state) => set({ masterState: state }),
+  addMessage:           (message) => set((s) => ({ messages: [...s.messages, message] })),
+  setProcessing:        (isProcessing, step) =>
     set({ isProcessing, processingStep: isProcessing ? step ?? null : null }),
-  setAsciiArt:    (art) => set({ currentAsciiArt: art }),
-  clearMessages:  () => set({ messages: [] }),
+  setAsciiArt:          (art) => set({ currentAsciiArt: art }),
+  clearMessages:        () => set({ messages: [] }),
+  setLastNarrativeText: (text) => set({ lastNarrativeText: text }),
 }));

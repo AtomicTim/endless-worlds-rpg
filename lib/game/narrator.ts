@@ -143,14 +143,19 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
  */
 export async function narrateAction(
   result: ResolutionResult,
-  state: MasterState
+  state: MasterState,
+  lastNarrativeText?: string | null
 ): Promise<NarratorResponse> {
   let response: Response;
   try {
     response = await fetch("/api/game/narrate", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ resolutionResult: result, masterState: state }),
+      body:    JSON.stringify({
+        resolutionResult: result,
+        masterState:      state,
+        ...(lastNarrativeText ? { lastNarrativeText } : {}),
+      }),
     });
   } catch (err) {
     throw new NarratorError(

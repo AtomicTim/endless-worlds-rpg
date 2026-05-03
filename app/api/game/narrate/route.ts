@@ -23,14 +23,14 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Body validation ────────────────────────────────────────────────────────
-  let body: { resolutionResult?: ResolutionResult; masterState?: MasterState };
+  let body: { resolutionResult?: ResolutionResult; masterState?: MasterState; lastNarrativeText?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { resolutionResult, masterState } = body;
+  const { resolutionResult, masterState, lastNarrativeText } = body;
   if (!resolutionResult || !masterState) {
     return NextResponse.json(
       { error: "Missing resolutionResult or masterState" },
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
   }
 
   const systemPrompt = buildNarratorSystemPrompt(masterState);
-  const userPrompt   = buildNarratorUserPrompt(resolutionResult, masterState);
+  const userPrompt   = buildNarratorUserPrompt(resolutionResult, masterState, lastNarrativeText);
 
   // Instantiate per-request so the apiKey is read from process.env at call time
   // (avoids stale module-level binding across Next.js dev HMR cycles).

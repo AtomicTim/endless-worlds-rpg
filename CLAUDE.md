@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 1.7
+**Version:** 1.8
 **Status:** Active Development
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Day:** Day 6 — Character Creation Flow
+**Current Day:** Day 7 — Intent Parser
 **Local Dev Port:** 3001
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -20,19 +20,18 @@
 | 3 | Authentication System | ✅ Complete |
 | 4 | Core Layout & UI Shell | ✅ Complete |
 | 5 | Master State JSON Architecture | ✅ Complete |
-| 6 | Character Creation Flow | 🔄 In Progress |
-| 7 | Intent Parser | ⏳ Pending |
+| 6 | Character Creation Flow | ✅ Complete |
+| 7 | Intent Parser | 🔄 In Progress |
+| 8 | Logic Resolution Engine | ⏳ Pending |
+| 9 | The Narrator | ⏳ Pending |
+| 10 | Full Game Loop | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Day 5 Deliverables (confirmed on main)
-- `types/game.ts` — full MasterState types, all 5 correct genres, no Noir
-- `lib/game/state-factory.ts` — createNewMasterState() factory
-- `lib/game/state-utils.ts` — all state utility functions
-- `lib/game/genre-config.ts` — GenreConfig type + GENRE_CONFIGS for all 5 genres
-- `lib/game/state-persistence.ts` — saveMasterState, loadMasterState, getActiveSessions
-- `app/api/game/state/route.ts` — GET/POST API route with auth
+### Key Deliverables Per Day (confirmed on main)
+- **Day 5:** types/game.ts, state-factory, state-utils, genre-config, state-persistence, api/game/state/route.ts
+- **Day 6:** app/game/new/page.tsx (4-step wizard), app/game/page.tsx (session redirect to /game/new if no active session)
 
 ### Branch Policy
 Always work on main. Do not create feature branches. Commit and push directly to main at end of each day.
@@ -146,12 +145,10 @@ Always work on main. Do not create feature branches. Commit and push directly to
 - Dual-resource system: HP (physical) + Sanity (mental)
 - Sanity depletes on encounters with cosmic entities, forbidden knowledge, and certain locations
 - At 0 Sanity: character becomes erratic, dialogue options change, game over condition
-- Narrator tone: slow dread, unreliable perception, cosmic indifference
 
 **Post-Apocalyptic:**
-- Fallout-inspired: dark humor, moral ambiguity, faction politics
 - Resource scarcity: ammo/food/water tracked alongside HP
-- Narrator tone: dry, world-weary, occasionally darkly funny
+- Fallout-inspired: dark humor, moral ambiguity, faction politics
 
 **Future genres to add post-launch:** Western, Pirate/Age of Sail, Superhero, Dark Fantasy, Steampunk
 
@@ -162,9 +159,6 @@ Always work on main. Do not create feature branches. Commit and push directly to
 **Endless Worlds RPG is a PWA (Progressive Web App). This is a final decision.**
 
 - Zero friction distribution — players click a URL and play instantly
-- Core loop requires server calls anyway (Claude API) — no meaningful offline mode
-- PWA install prompt gives native app feel on both mobile and desktop
-- Multiplayer (post-launch) uses Supabase Realtime over websockets
 - No Electron, no Steam, no Tauri — web-only
 - PWA manifest and service worker added on Day 35
 
@@ -184,12 +178,12 @@ Always work on main. Do not create feature branches. Commit and push directly to
 
 1. Claude Code completes the day's work and pushes to GitHub
 2. Come to **Claude.ai** and say "Day X is done"
-3. Claude.ai reads CLAUDE.md from GitHub, updates the progress log, gives the test checklist
-4. You test and confirm — Claude.ai updates CLAUDE.md and gives the next day's prompt
+3. Claude.ai reads repo, updates CLAUDE.md, gives test checklist
+4. You test and confirm — Claude.ai gives the next day's prompt
 5. Paste prompt into Claude Code and repeat
 
 ### Important: Claude.ai owns all CLAUDE.md updates
-Claude Code should NOT update CLAUDE.md. All updates to this file are made by Claude.ai after each day is confirmed complete.
+Claude Code should NOT update CLAUDE.md.
 
 ### Branch Policy
 Always work directly on main. Do not create feature branches. Commit and push to main at the end of each session.
@@ -206,4 +200,4 @@ Always work directly on main. Do not create feature branches. Commit and push to
 
 ---
 
-*Last updated: Session 8 — Day 5 verified complete on main, branch policy added, Day 6 starting*
+*Last updated: Session 9 — Day 6 complete, Day 7 starting*

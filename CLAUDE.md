@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 1.8
+**Version:** 1.9
 **Status:** Active Development
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -9,7 +9,7 @@
 ## 🔄 Current Status (Read This First)
 
 **Current Day:** Day 7 — Intent Parser
-**Local Dev Port:** 3001
+**Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
 
@@ -30,8 +30,11 @@
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
 ### Key Deliverables Per Day (confirmed on main)
-- **Day 5:** types/game.ts, state-factory, state-utils, genre-config, state-persistence, api/game/state/route.ts
-- **Day 6:** app/game/new/page.tsx (4-step wizard), app/game/page.tsx (session redirect to /game/new if no active session)
+- **Day 5:** types/game.ts, state-factory, state-utils, genre-config, state-persistence, app/api/game/state/route.ts
+- **Day 6:** app/game/new/page.tsx (4-step wizard, all 5 genres, saves to Supabase), app/game/page.tsx (redirects to /game/new if no active session). Bug fixed: stable attribute card height on hover.
+
+### Important Local Dev Note
+After Claude Code pushes to GitHub, always run `git pull` locally then restart the dev server to pick up changes.
 
 ### Branch Policy
 Always work on main. Do not create feature branches. Commit and push directly to main at end of each day.
@@ -177,10 +180,11 @@ Always work on main. Do not create feature branches. Commit and push directly to
 ### Day-to-Day Workflow
 
 1. Claude Code completes the day's work and pushes to GitHub
-2. Come to **Claude.ai** and say "Day X is done"
-3. Claude.ai reads repo, updates CLAUDE.md, gives test checklist
-4. You test and confirm — Claude.ai gives the next day's prompt
-5. Paste prompt into Claude Code and repeat
+2. Run `git pull` locally then restart the dev server
+3. Come to **Claude.ai** and say "Day X is done"
+4. Claude.ai reads repo, updates CLAUDE.md, gives test checklist
+5. You test and confirm — Claude.ai gives the next day's prompt
+6. Paste prompt into Claude Code and repeat
 
 ### Important: Claude.ai owns all CLAUDE.md updates
 Claude Code should NOT update CLAUDE.md.
@@ -200,4 +204,4 @@ Always work directly on main. Do not create feature branches. Commit and push to
 
 ---
 
-*Last updated: Session 9 — Day 6 complete, Day 7 starting*
+*Last updated: Session 10 — Day 6 fully verified, git pull workflow noted, Day 7 starting*

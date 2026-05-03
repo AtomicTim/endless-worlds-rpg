@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 2.3
+**Version:** 2.4
 **Status:** Active Development — MVP Core Loop Complete
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -8,8 +8,8 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Day:** Day 11 — Character Sheet UI (Live)
-**Local Dev Port:** 3000 (note: Claude Code sessions may start on 3002 due to env conflict — see dev notes)
+**Current Day:** Day 12 — Inventory System
+**Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
 
@@ -25,8 +25,8 @@
 | 8 | Logic Resolution Engine | ✅ Complete |
 | 9 | The Narrator | ✅ Complete |
 | 10 | Full Game Loop | ✅ Complete — GAME IS PLAYABLE |
-| 11 | Character Sheet UI (Live) | 🔄 In Progress |
-| 12 | Inventory System | ⏳ Pending |
+| 11 | Character Sheet UI (Live) | ✅ Complete |
+| 12 | Inventory System | 🔄 In Progress |
 | 13 | Log Book & Save System | ⏳ Pending |
 | 14 | MVP Playtest & Bug Fix | ⏳ Pending |
 
@@ -38,15 +38,18 @@
 - **Day 6:** app/game/new/page.tsx (4-step wizard), app/game/page.tsx (session redirect)
 - **Day 7:** app/api/game/parse-intent/route.ts, lib/game/intent-parser.ts, lib/game/prompt-builder.ts
 - **Day 8:** lib/game/logic-resolver.ts, lib/game/dice.ts — 51/51 tests passing
-- **Day 9:** app/api/game/narrate/route.ts (streaming), lib/game/narrator.ts, prompt-builder narrator prompts
-- **Day 10:** lib/stores/game-store.ts (Zustand), hooks/useGameLoop.ts, app/game/page.tsx (full loop wired). Smoke test passed — real Claude narrative + ASCII art + state persistence confirmed. 42/42 tests passing.
+- **Day 9:** app/api/game/narrate/route.ts (streaming), lib/game/narrator.ts, narrator prompts
+- **Day 10:** lib/stores/game-store.ts, hooks/useGameLoop.ts — full loop wired and playable
+- **Day 11:** Live CharacterSheet (real stats, animated health bar, genre-adaptive resources, attribute modifiers), live InventoryPanel (items from background, click tooltip, use button), roll feedback line in StoryFeed, ASCII art prompt tightened (no lazy word substitutes — scene-content words like signs/labels OK)
+
+### ASCII Art Policy (established Day 11)
+Words ARE allowed in ASCII art when they represent in-world content (signs, building labels, character position markers). Words are NOT allowed as substitutes for visual elements that should be drawn with block characters. The prompt in prompt-builder.ts reflects this.
 
 ### ⚠️ Important Dev Environment Notes
-- **ANTHROPIC_API_KEY must be rotated** — was exposed in Claude Code console during Day 10 env diagnosis. Rotate at console.anthropic.com immediately.
-- Claude Code shells export ANTHROPIC_API_KEY="" to child processes. Next.js env precedence means .env.local cannot override an already-set empty var. If Claude Code starts a dev server it may have blank API keys. Always start your own dev server outside of Claude Code sessions.
-- After Claude Code pushes to GitHub, always run `git pull` locally then restart YOUR dev server
+- Claude Code shells export ANTHROPIC_API_KEY="" to child processes — always start dev server from your own terminal, not from Claude Code
+- After Claude Code pushes, run `git pull` locally then restart YOUR dev server
 - Windows PowerShell: use `Invoke-WebRequest` instead of `curl -X`
-- `npx tsc --noEmit` with blank output = pass
+- `npx tsc --noEmit` blank output = pass
 
 ### Branch Policy
 Always work on main. Do not create feature branches. Commit and push directly to main at end of each day.
@@ -100,7 +103,7 @@ Always work on main. Do not create feature branches. Commit and push directly to
 
 - Use **Block Elements** (█, ▓, ▒, ░) for depth and shading.
 - Implement **CSS-based ANSI coloring** to make the "text-only" world vibrant.
-- **The Visual Seed:** Store a unique seed for generated ASCII art per location to ensure consistent visuals on return visits.
+- **The Visual Seed:** Store a unique seed per location — Day 25 will cache generated art in Supabase so revisited locations always show the same art.
 - Genre-specific color palettes: Fantasy (amber/green), Cyberpunk (neon blue/magenta), Horror/Lovecraftian (sickly green/deep purple), Space Opera (purple/silver), Post-Apocalyptic (rust orange/ash grey).
 
 ---
@@ -134,11 +137,11 @@ Always work on main. Do not create feature branches. Commit and push directly to
 
 ## 7. Strategic Features
 
-- **Stat-Based Dialogue:** Use hard-coded attributes (Charisma, Intelligence) to gate or unlock AI-generated dialogue options.
-- **NPC Memory:** Individual context snippets per NPC tracking trust metrics and past interactions.
-- **Ambient Soundscapes:** Audio engine triggered by a "Sound ID" output from the AI Narrator.
-- **The Wildcard Mechanic:** Random world events injected every 5 player actions to make the world feel alive.
-- **Community Templates:** Users share Master Context world files for others to play.
+- **Stat-Based Dialogue:** Charisma/Intelligence gate AI-generated dialogue options.
+- **NPC Memory:** Per-NPC context snippets tracking trust and past interactions.
+- **Ambient Soundscapes:** Audio engine triggered by sound_id from Narrator.
+- **The Wildcard Mechanic:** Random world events every 5 player actions.
+- **Community Templates:** Users share Master Context world files.
 
 ---
 
@@ -150,70 +153,45 @@ Always work on main. Do not create feature branches. Commit and push directly to
 | --- | --- | --- | --- | --- | --- |
 | **Fantasy** | Epic, mythic, high adventure | Amber / Forest green | Gold | HP | D&D, Elder Scrolls |
 | **Cyberpunk** | Terse, gritty, neon-soaked | Neon cyan / Magenta | Credits | Integrity | Neuromancer, Blade Runner |
-| **Horror/Lovecraftian** | Dread, cosmic horror, sanity-eroding | Sickly green / Deep purple | None (survival focused) | Sanity + HP | Lovecraft, Darkest Dungeon |
+| **Horror/Lovecraftian** | Dread, cosmic horror, sanity-eroding | Sickly green / Deep purple | None | Sanity + HP | Lovecraft, Darkest Dungeon |
 | **Space Opera** | Pulpy, grand-scale, operatic | Purple / Silver | Stellar Units | Hull Integrity | Mass Effect, Dune |
 | **Post-Apocalyptic** | Bleak, dark-humored, survival | Rust orange / Ash grey | Caps | HP | Fallout, The Road |
 
 ### Genre-Specific Mechanics Notes
 
-**Horror/Lovecraftian:**
-- Dual-resource system: HP (physical) + Sanity (mental)
-- Sanity depletes on encounters with cosmic entities, forbidden knowledge, and certain locations
-- At 0 Sanity: character becomes erratic, dialogue options change, game over condition
-
-**Post-Apocalyptic:**
-- Resource scarcity: ammo/food/water tracked alongside HP
-- Fallout-inspired: dark humor, moral ambiguity, faction politics
-
-**Future genres to add post-launch:** Western, Pirate/Age of Sail, Superhero, Dark Fantasy, Steampunk
+**Horror/Lovecraftian:** Dual HP+Sanity system. 0 Sanity = game over condition.
+**Post-Apocalyptic:** Ammo/food/water tracked alongside HP and Caps.
+**Future genres:** Western, Pirate/Age of Sail, Superhero, Dark Fantasy, Steampunk
 
 ---
 
-## 9. Platform & Distribution Decision
+## 9. Platform Decision
 
-**Endless Worlds RPG is a PWA (Progressive Web App). This is a final decision.**
-
-- Zero friction distribution — players click a URL and play instantly
-- No Electron, no Steam, no Tauri — web-only
-- PWA manifest and service worker added on Day 35
+**PWA only. Final decision.** No Electron, no Steam, no Tauri. PWA manifest on Day 35.
 
 ---
 
 ## 10. Development Workflow
 
-### The Three-Tool Setup
+| Tool | Role |
+| --- | --- |
+| **Claude Code** | All coding, file writing, git commits |
+| **Cursor** | Code review, minor manual edits |
+| **Claude.ai** | Strategy, prompts, CLAUDE.md updates |
 
-| Tool | Role | When to Use |
-| --- | --- | --- |
-| **Claude Code** (CLI) | Builder — writes files, runs commands, pushes to GitHub | All actual coding and execution |
-| **Cursor** | Viewer/Reviewer — review code, make small manual edits | Reviewing, minor edits, reading the codebase |
-| **Claude.ai (this project)** | Strategist — architecture, planning, generating prompts, updating CLAUDE.md | Planning sessions, decisions, context updates |
+**Claude.ai owns all CLAUDE.md updates. Claude Code must not modify CLAUDE.md.**
 
-### Day-to-Day Workflow
-
-1. Claude Code completes the day's work and pushes to GitHub
-2. Run `git pull` locally then restart YOUR OWN dev server (not from Claude Code shell)
-3. Come to **Claude.ai** and say "Day X is done"
-4. Claude.ai reads repo, updates CLAUDE.md, gives test checklist
-5. You test and confirm — Claude.ai gives the next day's prompt
-6. Paste prompt into Claude Code and repeat
-
-### Important: Claude.ai owns all CLAUDE.md updates
-Claude Code should NOT update CLAUDE.md.
-
-### Branch Policy
-Always work directly on main. Do not create feature branches. Commit and push to main at the end of each session.
+Workflow: Claude Code pushes → git pull locally → restart own dev server → report to Claude.ai → get test checklist → confirm → get next prompt.
 
 ---
 
 ## 11. Reference Links
 
-- Supabase Dashboard: https://supabase.com/dashboard
+- Supabase: https://supabase.com/dashboard
 - Anthropic Console: https://console.anthropic.com
-- Vercel Dashboard: https://vercel.com/dashboard
-- Stripe Dashboard: https://dashboard.stripe.com
-- Claude Code Docs: https://docs.anthropic.com/en/docs/claude-code
+- Vercel: https://vercel.com/dashboard
+- Stripe: https://dashboard.stripe.com
 
 ---
 
-*Last updated: Session 14 — Day 10 complete. MVP core loop playable. API key rotation required. Day 11 starting.*
+*Last updated: Session 15 — Day 11 complete. ASCII art policy clarified. Day 12 starting.*

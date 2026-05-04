@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 4.2
+**Version:** 4.3
 **Status:** Active Development — Phase 1 MVP Nearly Complete
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -22,6 +22,7 @@
 | Day 13.5 | World Asset System + Lore Codex | ✅ Complete |
 | All pre-Day 13 fixes | Codex, dialogue, SVG, identity, name reveal, action authority | ✅ Complete |
 | 13 | Log Book & Save System | ✅ Complete |
+| LogBook fixes | Persistence via Zustand, log_summary, improved formats | ✅ Complete |
 | 14 | MVP Playtest & Bug Fix | 🔄 In Progress |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
@@ -33,15 +34,13 @@
 - `world_assets` — constitutions + svg_content + name_known
 - `codex` — lore encyclopedia entries
 
-### Day 13 Deliverables (confirmed on main — commit 02fad88)
-- `components/game/sidebar/LogBook.tsx` — styled by type, relative timestamps, newest-first
-- `useGameLoop.ts` — structured log entries (COMBAT/DISCOVERY/DIALOGUE/STORY), AUTO_SAVE_INTERVAL=10
-- `lib/game/location-formatter.ts` — formatLocationId() with known mappings + title-case fallback
-- `app/dashboard/page.tsx` — 3 save slots, genre badge, location, last entry preview, Continue/Delete
-- `app/game/page.tsx` — ?session_id= routing, fallback to most recent, redirect to /game/new
-- `GameLayout.tsx` — Save & Exit button (saves → "Saved! ✓" 2s → /dashboard)
-- `prompt-builder.ts` — readable objects (journals, books, notes, letters, signs) explicitly covered
-- `app/(marketing)/page.tsx` — auth-aware CTAs, 5 correct genres, dark RPG theme
+### LogBook Architecture (post-fix)
+- `persistedLogEntries` in Zustand — survives SPA navigation
+- `addPersistedLogEntry()` — appends, keeps last 100
+- `mergePersistedLogEntries()` — seeds from DB on hard refresh without overwriting live entries
+- `LogBook.tsx` reads from `persistedLogEntries`, not masterState
+- `log_summary` in NarratorResponse — 12-word max terse journal fragment
+- Entry formats: STORY=log_summary, DIALOGUE=first quoted speech, COMBAT=compact roll line, DISCOVERY="Found: X (Rarity)"
 
 ---
 
@@ -60,7 +59,7 @@ MOVE always succeeds. Only block: world flag `<location_id>_locked: true`.
 Plausible actions always attempted. Narrator describes outcomes only.
 
 ### 5. Objects Mentioned Exist
-If narrator described it, player can interact with it. Includes journals, books, notes, signs, documents. Narrator CANNOT retroactively un-create anything it mentioned.
+If narrator described it, player can interact with it. Includes journals, books, notes, signs, documents. Narrator CANNOT retroactively un-create anything.
 
 ---
 
@@ -80,18 +79,18 @@ Hidden World Seed: conflict + goal + 3-5 breadcrumbs + opening hook. Sealed in m
 SVG FRONT_PORTRAIT async on first encounter. Dialogue modal with portrait + options + free input.
 
 ## 🕵️ NPC Identity System
-name_known=false for CHARACTER. looksLikePlaceholder() 2+ word match. revealed_npc_names pipeline. updateMessagesNpcName patches feed.
+name_known=false for CHARACTER. looksLikePlaceholder() 2+ word match. revealed_npc_names pipeline.
 
 ## 💎 Item Value System (Day 16)
-Every item has sell value + lore blurb + optional dialogue unlock. Flavor items worth selling/discussing.
+Every item has sell value + lore blurb + optional dialogue unlock.
 
 ## ⚠️ Known Narrator Issue
-Occasional LORE object blocking (journals/books). Prompt updated but may still occur rarely. Monitor during Day 14 playtest.
+Occasional LORE object blocking. Monitor during Day 14 playtest.
 
 ---
 
 ## SVG Art Engine — Future (Phase 3)
-Option B (templates) + D (CC0 sprites) recommended. Deferred to Day 25+.
+Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 
 ---
 
@@ -104,8 +103,8 @@ Option B (templates) + D (CC0 sprites) recommended. Deferred to Day 25+.
 - MOVE: always arrives
 - EXAMINE/INTERACT/READ: always resolves, includes readable objects
 - WORLD ASSET: constitutions as facts
-- DIALOGUE: "NPC: 'speech'" quoted in accent/italic, prose normal
-- NPC NAMES: asset_id verbatim from ESTABLISHED WORLD ASSETS
+- DIALOGUE: "NPC: 'speech'" quoted in accent/italic
+- log_summary: 12-word max terse fragment, no "You/I/explored"
 
 ---
 
@@ -198,4 +197,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 33 — V4.2: Day 13 complete. Phase 1 MVP nearly done. Day 14 playtest starting.*
+*Last updated: Session 34 — V4.3: LogBook persistence + quality fixes complete. Day 14 playtest starting.*

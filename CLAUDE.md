@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 5.0
+**Version:** 5.1
 **Status:** Active Development — Phase 2 In Progress
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -18,6 +18,7 @@
 | 1–14 | Phase 1 MVP | ✅ Complete |
 | 15 | NPC Dialogue + Portraits | ✅ Complete |
 | 15.5 | Dialogue consistency architecture | ✅ Complete |
+| Dialogue fixes | NPC persistence, stat check display, logbook content | ✅ Complete |
 | 16 | NPC Trading + Item Value | 🔄 In Progress |
 | 17-18 | Main Narrative Thread | ⏳ Pending |
 | 19+ | Combat, Skills, Factions | ⏳ Pending |
@@ -25,20 +26,11 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Day 15.5 Deliverables (commit 3f86641 — 86/86 tests, clean build)
-- `ParsedAction.dialogue_tone` — friendly/persuasive/deceptive/intimidating/curious/neutral
-- `inferToneFromSpeech()` on fast-path quoted input — ALL dialogue goes same pipeline
-- `resolveDialogue()` switches on tone: persuasive→CHA, deceptive→CHA+2, intimidating→STR(or CHA), curious/friendly/neutral→no check
-- Trust-based difficulty: 0-30→15, 31-60→12, 61-80→9, 81-100→6
-- ACTIVE NPC CONTEXT injected into narrator when stat_checked (name+trust+disposition+personality+role)
-- `stat_check: {stat, difficulty, description}` replaces charisma_required — no hard gates, all options clickable
-- Amber stat badge: 💬CHA / 💪STR / 👁PER / 🧠INT with tooltip (player vs difficulty, Likely/Risky/Difficult)
-- `getNpcDisposition(score)` — hostile/suspicious/neutral/friendly/allied
-- DialogueModal disposition badge: 🔴/🟠/🟡/🟢/✨ reactive to trust_changes
-- NPC name+portrait persists across same-NPC dialogue turns
-- DialogueModal inline flex (never covers story content), StoryFeed min-h-0
-- Collapse/expand: ▼ minimize → 40px bar "▲ [NPC name] (N options)", options persist
-- Roll feedback generic: 🎭/💪/👁/🧠 icons + stat name in feed
+### Dialogue Fixes (commit 5e6f879)
+- `effectiveNpcName` fallback to `currentDialogueNpc` when primary_target is null — NPC name/portrait persists across option clicks
+- `resolveDialogue()` now always sets roll/modifier/total/difficulty/success/stat_checked on check path — `buildRollFeedback()` never returns null for stat checks
+- LogBook dialogue entry priority: log_summary → last quoted string (Array.from matchAll) → first sentence fallback
+- Console breadcrumb: `[resolveDialogue] stat check:` for verification
 
 ---
 
@@ -60,9 +52,7 @@ Plausible actions always attempted. Narrator describes outcomes only.
 EXAMINE/INTERACT resolver confirms object_confirmed=true. Prepended as first narrator fact.
 
 ### 6. Dialogue Is Consistent
-All dialogue — clicked option OR typed freely — goes through identical pipeline:
-Intent Parser classifies tone → Logic Resolver applies stat check → Narrator receives NPC constitution + trust score.
-No hard gates. Options are suggestions. Typed input runs same checks.
+All dialogue — clicked option OR typed freely — identical pipeline. No hard gates. Tone classified → stat check applied → NPC constitution + trust injected into narrator.
 
 ---
 
@@ -80,12 +70,13 @@ Hidden World Seed: conflict + goal + 3-5 breadcrumbs + opening hook. Sealed in m
 
 ## 🎭 NPC Dialogue System (Complete)
 - Tone classification: friendly/persuasive/deceptive/intimidating/curious/neutral
-- Stat checks: CHA for persuasion/deception, STR for intimidation, PER for investigation
 - Trust-scaled difficulty: hostile=15, neutral=12, friendly=9, allied=6
-- NPC constitution injected into narrator on every stat-checked dialogue call
-- Disposition badge: 🔴Hostile/🟠Suspicious/🟡Neutral/🟢Friendly/✨Allied
-- No hard gates — all options clickable, stat badge shows risk
-- Modal inline, collapses to bar, portrait+name persist across turns
+- effectiveNpcName fallback ensures NPC context persists across all dialogue turns
+- Stat check: roll/modifier/total always set, buildRollFeedback never bails
+- Roll line appears in feed before narrator response
+- Disposition badge: 🔴/🟠/🟡/🟢/✨ reactive to trust_changes
+- No hard gates — stat badge shows risk, all options clickable
+- Modal inline, collapses to bar, portrait persists
 
 ## 🕵️ NPC Identity System
 - name_known=false for CHARACTER. revealed_npc_names pipeline.
@@ -108,17 +99,14 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 - GOLDEN RULE: honor action, yes-and
 - MOVE: always arrives, world state saved immediately
 - EXAMINE/INTERACT: object_confirmed prepended as first fact
-- WORLD ASSET: constitutions injected as facts
-- DIALOGUE: ACTIVE NPC CONTEXT block when stat_checked (constitution+trust+disposition)
-- DIALOGUE OPTIONS: stat_check badge, all clickable, same pipeline as typed input
-- log_summary: 12-word max terse fragment
+- WORLD ASSET + ACTIVE NPC CONTEXT: injected when stat_checked
+- log_summary: 12-word max terse fragment (priority for logbook)
 
 ---
 
 ## Immediate Persistence Architecture
-- Log entries: after every narrative action
+- Log entries + recent_messages: after every narrative action
 - World state: after every MOVE or flag change
-- Recent messages: as part of LogBook patch
 - Full state: every 10 actions
 - Session isolation: clearSessionState() before every session load
 
@@ -143,7 +131,6 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 - Dialogue consistent: same pipeline regardless of input method
 - Immediate persistence: location + flags + logs after every action
 - Session isolation: clearSessionState() before every session load
-- Actions permitted by default, Location authoritative
 - Every item has value, Every campaign has a purpose
 - Truly endless — AI generates on demand
 
@@ -206,4 +193,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 41 — V5.0: Day 15.5 complete. Dialogue consistency architecture, stat checks, disposition, modal fixes. 6th foundational rule added. Day 16 starting.*
+*Last updated: Session 42 — V5.1: Dialogue fixes complete. NPC persistence, stat check display, logbook content. Day 16 starting.*

@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 3.4
+**Version:** 3.5
 **Status:** Active Development — MVP Core Loop Complete
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -20,25 +20,19 @@
 | Patch B | CONTAINER items, SVG art engine, dialogue prefix | ✅ Complete |
 | Location fix | State machine, ARRIVING/PRESENT, action authority | ✅ Complete |
 | Day 13.5 | World Asset System + Lore Codex | ✅ Complete |
-| 13 | Log Book & Save System | 🔄 In Progress |
+| Pre-Day 13 fixes | Codex deduplication, dialogue color, SVG→world asset link | ⏳ Pending before Day 13 |
+| 13 | Log Book & Save System | ⏳ Pending |
 | 14 | MVP Playtest & Bug Fix | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
 ### Supabase Tables (all applied)
-- `profiles` — user profiles
-- `game_sessions` — master state JSON per save slot
-- `characters` — character stats
-- `world_states` — flags and location IDs
-- `log_books` — story entries
-- `npcs` — NPC registry
-- `subscriptions` — Stripe tier
-- `community_templates` — shared worlds
-- `user_preferences` — settings
-- `art_cache` — SVG art per location+session
-- `world_assets` — immutable entity constitutions ✅ NEW
-- `codex` — lore encyclopedia entries ✅ NEW
+- `profiles`, `game_sessions`, `characters`, `world_states`, `log_books`, `npcs`, `subscriptions`, `community_templates`, `user_preferences`
+- `art_cache` — SVG art per location+session ✅
+- `world_assets` — immutable entity constitutions ✅
+- `codex` — lore encyclopedia entries ✅
+- `world_assets.svg_content` column — ⏳ migration 005 pending (pre-Day 13 fix)
 
 ---
 
@@ -54,7 +48,7 @@ MOVE actions always succeed. Only valid block: world flag `<location_id>_locked:
 `current_location_id` is the single source of truth. Narrator never infers location from history. Every narrator call receives `══ PLAYER STATE ══` header with explicit ARRIVING/PRESENT status.
 
 ### 4. Actions Are Permitted By Default
-Plausible actions always attempted. Narrator describes outcomes, never gatekeeps. Only hard physics/logic blocks are valid (locked door, can't fly). Logic Resolver handles success/failure — not the Narrator.
+Plausible actions always attempted. Narrator describes outcomes, never gatekeeps. Only hard physics/logic blocks are valid. Logic Resolver handles success/failure — not the Narrator.
 
 ---
 
@@ -70,18 +64,50 @@ narratorState always merges world_state delta before narrator call.
 
 ---
 
+## Known Issues & Pending Fixes (pre-Day 13)
+
+### 1. Duplicate codex entries for same character
+- **Cause:** Narrator generates different asset_id slugs for the same entity across calls
+- **Fix:** normalizeAssetId() function — CHARACTER always "character_[name_slug]", never role-based
+- **Status:** ⏳ Pending
+
+### 2. Dialogue text color
+- **Fix:** DIALOGUE messages render in --color-accent with left border, NPC name bolded
+- **Status:** ⏳ Pending
+
+### 3. SVG linked to world assets
+- **Fix:** svg_content column on world_assets (migration 005), art linked on save, shown in codex detail modal
+- **Status:** ⏳ Pending (migration file generated, not yet run)
+
+---
+
+## SVG Art Engine — Future Improvement Options (Phase 3)
+
+The current SVG generation produces structurally valid but visually rough output. Options for improvement, to be evaluated in Phase 3 (Day 25+):
+
+**Option A: Richer generation prompts** — More specific spatial instructions. Low effort, ~30-40% quality improvement. Still has "random blocks" feel.
+
+**Option B: SVG template system** — Pre-built scene templates with correct composition. AI fills color/detail variations. Consistent structure, less unique per location. Medium effort.
+
+**Option C: External image generation API** — Replicate or Stability AI for real pixel art sprites. Dramatically better quality. ~$0.002-0.005 per image. External dependency.
+
+**Option D: Pre-made CC0 sprite library** — Map location types to curated free pixel art assets. Zero generation cost, instant load, polished look. Less unique per world but very consistent.
+
+**Recommended approach for launch:** Option B + D combined — template system with CC0 sprite library for common scene types, SVG generator as fallback. Deferred to Phase 3.
+
+---
+
 ## Key Deliverables Log
 
 ### Day 13.5 (confirmed on main — 43/43 tests, build clean)
 - `types/game.ts`: AssetCategory enum, WorldAsset interface, WorldAssetConstitution
-- `lib/game/codex.ts`: saveWorldAsset (write-once), saveCodexEntry, getWorldAssetsForLocation, getWorldAssetsByCategory, getCodexByCategory, getAllCodex
+- `lib/game/codex.ts`: saveWorldAsset (write-once), saveCodexEntry, getWorldAssetsForLocation
 - `supabase/migrations/003_world_assets.sql` — applied ✅
 - `supabase/migrations/004_codex.sql` — applied ✅
 - `game-store.ts`: locationAssets store + setLocationAssets
 - `useGameLoop.ts`: fire-and-forget asset/codex saves, post-ARRIVING locationAssets refresh
-- `prompt-builder.ts`: ESTABLISHED WORLD ASSETS section injected when locationAssets present, WORLD ASSET CONSTITUTION instruction in system prompt
-- `narrator.ts` + `narrate/route.ts`: locationAssets threaded through
-- `app/game/codex/page.tsx`: full codex browser — tabs by category, cards, detail modal
+- `prompt-builder.ts`: ESTABLISHED WORLD ASSETS section, WORLD ASSET CONSTITUTION instruction
+- `app/game/codex/page.tsx`: full codex browser — tabs, cards, detail modal
 - `GameLayout`: 📖 Codex button in navbar
 
 ### Location Fix (confirmed on main)
@@ -89,12 +115,8 @@ narratorState always merges world_state delta before narrator call.
 - Every resolver sets location_status, MOVE sets ARRIVING
 - narratorState always fresh before narrator call
 
-### Patch B
-- CONTAINER item type, SVG art engine, art_cache table (applied), dialogue prefix
-
-### Patch A
-- Narrator: GOLDEN RULE, RESPONSE TIERS, END OF RESPONSE RULE, POI, CODEX
-- StoryFeed: clickable POI highlights, InteractionPopover, fast-path
+### Patch B — CONTAINER items, SVG art engine, dialogue prefix
+### Patch A — Narrator redesign, POI system, InteractionPopover, fast-path
 
 ---
 
@@ -120,21 +142,16 @@ narratorState always merges world_state delta before narrator call.
 
 ---
 
-## SVG Art Engine
-
-- Route: /api/game/generate-art — fires async after MOVE, never blocks
-- Scene types: TOP_DOWN_TOWN, SIDE_VIEW_INTERIOR, FRONT_PORTRAIT, ISOMETRIC_WIDE
-- Cached in Supabase art_cache + Zustand artCache
-
----
-
 ## Planned Systems
 
 | System | When | Description |
 | --- | --- | --- |
+| Codex dedup + dialogue color + SVG link | Pre-Day 13 | normalizeAssetId, accent dialogue, svg_content column |
 | Log Book + Save System | Day 13 | LogBook sidebar, dashboard, Save & Exit |
+| MVP Playtest | Day 14 | Full playtest, bug fixes, Phase 1 complete |
 | NPC Dialogue system | Day 15 | Full conversation mode, Charisma gates |
 | NPC Trading | Day 16 | Merchant NPCs, buy/sell UI |
+| Art Engine Overhaul | Phase 3 (Day 25+) | Template + CC0 sprite approach |
 
 ---
 
@@ -145,7 +162,7 @@ narratorState always merges world_state delta before narrator call.
 - **Movement is absolute.** Players always arrive.
 - **Location is authoritative state.** current_location_id is always correct.
 - **Actions are permitted by default.** Narrator describes, never gatekeeps.
-- **SVG Pixel Art + Text.** Async, cached per location.
+- **SVG Pixel Art + Text.** Async, cached per location. Art engine overhaul in Phase 3.
 - **Endless Versatility.** Genre Wrappers. Launch genres: Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic.
 
 ---
@@ -238,4 +255,4 @@ Workflow: Claude Code pushes → `git pull` + restart own server → report to C
 
 ---
 
-*Last updated: Session 25 — V3.4: Day 13.5 complete. world_assets + codex tables applied. Day 13 starting.*
+*Last updated: Session 26 — V3.5: SVG art improvement options noted for Phase 3. Pre-Day 13 fixes documented. Calling it a day.*

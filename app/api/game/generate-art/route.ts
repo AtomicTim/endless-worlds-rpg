@@ -76,15 +76,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing or invalid fields" }, { status: 400 });
   }
 
-  // ── 1. Cache lookup ────────────────────────────────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: cachedRow } = await (supabase.from("art_cache") as any)
-    .select("svg_content")
-    .eq("location_id", location_id)
-    .maybeSingle();
+  // ── 1. Cache lookup — scoped to this (location_id, session_id) pair ───────
+  if (session_id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: cachedRow } = await (supabase.from("art_cache") as any)
+      .select("svg_content")
+      .eq("location_id", location_id)
+      .eq("session_id", session_id)
+      .maybeSingle();
 
-  if (cachedRow?.svg_content) {
-    return NextResponse.json({ svg: cachedRow.svg_content, cached: true });
+    if (cachedRow?.svg_content) {
+      return NextResponse.json({ svg: cachedRow.svg_content, cached: true });
+    }
   }
 
   // ── 2. Generate fresh SVG via Claude ───────────────────────────────────────
@@ -128,7 +131,7 @@ export async function POST(request: NextRequest) {
         scene_type,
         svg_content: svg,
       },
-      { onConflict: "location_id", ignoreDuplicates: true }
+      { onConflict: "location_id,session_id", ignoreDuplicates: true }
     );
   }
 

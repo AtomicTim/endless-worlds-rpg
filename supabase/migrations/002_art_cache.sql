@@ -7,15 +7,17 @@
 
 CREATE TABLE IF NOT EXISTS public.art_cache (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  location_id   text NOT NULL UNIQUE,
+  location_id   text NOT NULL,
   session_id    uuid REFERENCES public.game_sessions(id) ON DELETE SET NULL,
   genre         text NOT NULL,
   scene_type    text NOT NULL,
   svg_content   text NOT NULL,
-  created_at    timestamptz NOT NULL DEFAULT NOW()
+  created_at    timestamptz NOT NULL DEFAULT NOW(),
+  CONSTRAINT art_cache_location_session_unique UNIQUE (location_id, session_id)
 );
 
-CREATE INDEX IF NOT EXISTS art_cache_location_id_idx ON public.art_cache (location_id);
+CREATE INDEX IF NOT EXISTS art_cache_location_session_idx
+  ON public.art_cache (location_id, session_id);
 CREATE INDEX IF NOT EXISTS art_cache_session_id_idx  ON public.art_cache (session_id);
 
 ALTER TABLE public.art_cache ENABLE ROW LEVEL SECURITY;

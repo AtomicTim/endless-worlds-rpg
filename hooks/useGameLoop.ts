@@ -5,10 +5,10 @@ import { useGameStore, makeMessage, type StoryMessage } from "@/lib/stores/game-
 import { parseIntent, IntentParserError } from "@/lib/game/intent-parser";
 import { resolveAction } from "@/lib/game/logic-resolver";
 import { narrateAction } from "@/lib/game/narrator";
-import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory } from "@/lib/game/state-utils";
+import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory, updateNPCTrust } from "@/lib/game/state-utils";
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
 import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, updateWorldAssetSvg, updateAssetNameRevealed } from "@/lib/game/codex";
-import { generateArt, getSceneType } from "@/lib/game/art-generator";
+import { generateArt, generateNpcPortrait, getSceneType } from "@/lib/game/art-generator";
 import { ActionType, AssetCategory, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { MasterState, ParsedAction, ResolutionResult, StoredMessage, WorldAsset } from "@/types/game";
 
@@ -564,6 +564,69 @@ export function useGameLoop() {
           if (placeholderName) {
             useGameStore.getState().updateMessagesNpcName(placeholderName, reveal.true_name);
           }
+        }
+      }
+
+      // ── 7e. Trust changes from dialogue ──────────────────────────────────────
+      if (narratorResponse.trust_changes && narratorResponse.trust_changes.length > 0) {
+        for (const tc of narratorResponse.trust_changes) {
+          updatedState = updateNPCTrust(updatedState, tc.npc_key, tc.delta);
+        }
+      }
+
+      // ── 7f. NPC portrait generation (DIALOGUE or new NPC introduced) ─────────
+      // Fire-and-forget: generates a FRONT_PORTRAIT SVG for the NPC and stores it
+      // in artCache[npc.id]. Silently no-ops if the portrait already exists.
+      if (isDialogueAction || narratorResponse.new_npcs.length > 0) {
+        const npcTargetName = parsedAction.primary_target ?? null;
+        if (npcTargetName) {
+          const currentAssets = useGameStore.getState().locationAssets;
+          const npcAsset = currentAssets.find(
+            (a) =>
+              a.category === AssetCategory.CHARACTER &&
+              a.name.toLowerCase() === npcTargetName.toLowerCase()
+          ) ?? null;
+
+          if (npcAsset) {
+            const alreadyCached = !!npcAsset.svg_content || !!useGameStore.getState().artCache[npcAsset.id];
+            if (!alreadyCached) {
+              void generateNpcPortrait(npcAsset, String(updatedState.metadata.genre), sessionId)
+                .then(async (res) => {
+                  if (!res?.svg) return;
+                  useGameStore.getState().setArtCache(npcAsset.id, res.svg);
+                  // If the Dialogue Modal is still showing this NPC, update its portrait live.
+                  const gs = useGameStore.getState();
+                  if (gs.currentDialogueNpc === npcTargetName) {
+                    gs.setDialogueOptions(gs.currentDialogueOptions, npcTargetName, res.svg);
+                  }
+                  await updateWorldAssetSvg(sessionId, npcAsset.id, res.svg);
+                });
+            }
+          }
+        }
+      }
+
+      // ── 7g. Dialogue options — store for the Dialogue Modal ──────────────────
+      // Show after every DIALOGUE action; clear after any non-DIALOGUE action.
+      {
+        const dialogueOpts = narratorResponse.dialogue_options ?? [];
+        if (isDialogueAction && dialogueOpts.length > 0) {
+          const npcTargetName  = parsedAction.primary_target ?? null;
+          const currentAssets  = useGameStore.getState().locationAssets;
+          const npcAsset       = npcTargetName
+            ? currentAssets.find(
+                (a) =>
+                  a.category === AssetCategory.CHARACTER &&
+                  a.name.toLowerCase() === npcTargetName.toLowerCase()
+              ) ?? null
+            : null;
+          const portrait =
+            npcAsset
+              ? (useGameStore.getState().artCache[npcAsset.id] ?? npcAsset.svg_content ?? null)
+              : null;
+          store.setDialogueOptions(dialogueOpts, npcTargetName, portrait);
+        } else if (!isDialogueAction) {
+          store.clearDialogueOptions();
         }
       }
 

@@ -1,10 +1,14 @@
 "use client";
 
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const MAX_LENGTH = 500;
 const MAX_HISTORY = 20;
+
+export interface InputBarHandle {
+  focus: () => void;
+}
 
 interface InputBarProps {
   onSubmit: (input: string) => void;
@@ -12,11 +16,11 @@ interface InputBarProps {
   processingStep?: string | null;
 }
 
-export function InputBar({
+export const InputBar = forwardRef<InputBarHandle, InputBarProps>(function InputBar({
   onSubmit,
   disabled = false,
   processingStep = null,
-}: InputBarProps) {
+}: InputBarProps, ref) {
   const [value, setValue] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -24,6 +28,10 @@ export function InputBar({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const wasDisabled = useRef(false);
+
+  useImperativeHandle(ref, () => ({
+    focus: () => inputRef.current?.focus(),
+  }));
 
   const remaining = MAX_LENGTH - value.length;
 
@@ -178,4 +186,4 @@ export function InputBar({
       </div>
     </div>
   );
-}
+});

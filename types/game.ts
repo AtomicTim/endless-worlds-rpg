@@ -240,6 +240,13 @@ export interface PointOfInterest {
   description: string;
 }
 
+export interface DialogueOption {
+  id:                  string;
+  text:                string;
+  charisma_required?:  number;
+  tone:                "friendly" | "aggressive" | "curious" | "deceptive";
+}
+
 export interface CodexEntry {
   id:                  string;
   category:            "LOCATION" | "CHARACTER" | "FACTION" | "ITEM" | "LORE" | "BESTIARY";
@@ -262,6 +269,10 @@ export interface NarratorResponse {
   revealed_npc_names?: Array<{ asset_id: string; true_name: string }>;
   /** Terse 12-word journal shorthand of the beat — used for LogBook STORY entries. */
   log_summary?:        string;
+  /** 3-4 response options shown in the Dialogue Modal; only for NPC interactions. */
+  dialogue_options?:   DialogueOption[];
+  /** Trust score deltas for NPCs affected by this interaction. */
+  trust_changes?:      Array<{ npc_key: string; delta: number; reason: string }>;
 }
 
 // ---------------------------------------------------------------------------

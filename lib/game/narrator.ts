@@ -1,5 +1,6 @@
 import type {
   CodexEntry,
+  DialogueOption,
   Item,
   MasterState,
   NarratorResponse,
@@ -86,6 +87,36 @@ function normalizeNarratorItem(raw: unknown): Item | null {
     quantity:  typeof o.quantity  === "number" ? o.quantity  : 1,
     stackable: typeof o.stackable === "boolean" ? o.stackable : type === ItemType.CONSUMABLE,
     weight:    typeof o.weight    === "number"  ? o.weight    : 1,
+  };
+}
+
+const DIALOGUE_TONES = new Set<string>(["friendly", "aggressive", "curious", "deceptive"]);
+
+function normalizeDialogueOption(raw: unknown): DialogueOption | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.text !== "string" || !o.text.trim()) return null;
+  const toneRaw = typeof o.tone === "string" ? o.tone.toLowerCase() : "";
+  if (!DIALOGUE_TONES.has(toneRaw)) return null;
+  return {
+    id:   typeof o.id === "string" && o.id.trim() ? o.id : `opt_${Math.random().toString(36).slice(2, 8)}`,
+    text: o.text.trim(),
+    tone: toneRaw as DialogueOption["tone"],
+    ...(typeof o.charisma_required === "number" && o.charisma_required > 0
+      ? { charisma_required: Math.round(o.charisma_required) }
+      : {}),
+  };
+}
+
+function normalizeTrustChange(raw: unknown): { npc_key: string; delta: number; reason: string } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.npc_key !== "string" || !o.npc_key.trim()) return null;
+  if (typeof o.delta !== "number") return null;
+  return {
+    npc_key: o.npc_key.trim(),
+    delta:   Math.max(-20, Math.min(20, Math.round(o.delta))),
+    reason:  typeof o.reason === "string" ? o.reason.trim() : "interaction",
   };
 }
 
@@ -199,6 +230,14 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
         ? parsed.log_summary.trim()
         : undefined;
 
+    const dialogue_options = Array.isArray(parsed.dialogue_options)
+      ? (parsed.dialogue_options.map(normalizeDialogueOption).filter(Boolean) as DialogueOption[])
+      : [];
+
+    const trust_changes = Array.isArray(parsed.trust_changes)
+      ? (parsed.trust_changes.map(normalizeTrustChange).filter(Boolean) as Array<{ npc_key: string; delta: number; reason: string }>)
+      : [];
+
     return {
       response_tier,
       narrative_text,
@@ -210,6 +249,8 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
       codex_entries,
       ...(revealed_npc_names.length > 0 ? { revealed_npc_names } : {}),
       ...(log_summary ? { log_summary } : {}),
+      ...(dialogue_options.length > 0 ? { dialogue_options } : {}),
+      ...(trust_changes.length > 0 ? { trust_changes } : {}),
     };
   } catch {
     return {

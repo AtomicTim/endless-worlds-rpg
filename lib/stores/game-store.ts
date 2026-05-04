@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { MasterState, WorldAsset, LogEntry } from "@/types/game";
+import type { MasterState, WorldAsset, LogEntry, DialogueOption } from "@/types/game";
 
 // ── Message types ─────────────────────────────────────────────────────────────
 
@@ -45,6 +45,11 @@ interface GameStore {
   artCache:          Record<string, string>;
   locationAssets:    WorldAsset[];
 
+  // ── Dialogue Modal ─────────────────────────────────────────────────────────
+  currentDialogueOptions: DialogueOption[];
+  currentDialogueNpc:     string | null;
+  currentNpcPortrait:     string | null;
+
   setMasterState:          (state: MasterState) => void;
   addMessage:              (message: StoryMessage) => void;
   setProcessing:           (isProcessing: boolean, step?: string) => void;
@@ -59,20 +64,27 @@ interface GameStore {
   addPersistedLogEntry:    (entry: LogEntry) => void;
   /** Merge DB-loaded entries into the in-memory log without overwriting existing ones. */
   mergePersistedLogEntries:(entries: LogEntry[]) => void;
+  /** Show the Dialogue Modal with the given options, NPC name, and portrait (if ready). */
+  setDialogueOptions:      (options: DialogueOption[], npcName: string | null, portrait: string | null) => void;
+  /** Hide the Dialogue Modal and clear all dialogue state. */
+  clearDialogueOptions:    () => void;
 
   persistedLogEntries: LogEntry[];
 }
 
 export const useGameStore = create<GameStore>((set) => ({
-  masterState:         null,
-  messages:            [],
-  isProcessing:        false,
-  processingStep:      null,
-  currentAsciiArt:     null,
-  lastNarrativeText:   null,
-  artCache:            {},
-  locationAssets:      [],
-  persistedLogEntries: [],
+  masterState:            null,
+  messages:               [],
+  isProcessing:           false,
+  processingStep:         null,
+  currentAsciiArt:        null,
+  lastNarrativeText:      null,
+  artCache:               {},
+  locationAssets:         [],
+  persistedLogEntries:    [],
+  currentDialogueOptions: [],
+  currentDialogueNpc:     null,
+  currentNpcPortrait:     null,
 
   setMasterState:       (state) => set({ masterState: state }),
   addMessage:           (message) => set((s) => ({ messages: [...s.messages, message] })),
@@ -110,4 +122,8 @@ export const useGameStore = create<GameStore>((set) => ({
         persistedLogEntries: [...chronological, ...s.persistedLogEntries].slice(-100),
       };
     }),
+  setDialogueOptions: (options, npcName, portrait) =>
+    set({ currentDialogueOptions: options, currentDialogueNpc: npcName, currentNpcPortrait: portrait }),
+  clearDialogueOptions: () =>
+    set({ currentDialogueOptions: [], currentDialogueNpc: null, currentNpcPortrait: null }),
 }));

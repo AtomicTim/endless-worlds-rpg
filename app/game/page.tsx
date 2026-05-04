@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GameLayout } from "@/components/layout/GameLayout";
 import { StoryFeed } from "@/components/game/StoryFeed";
-import { InputBar } from "@/components/game/InputBar";
+import { InputBar, type InputBarHandle } from "@/components/game/InputBar";
+import { DialogueModal } from "@/components/game/DialogueModal";
 import { SceneArt } from "@/components/game/SceneArt";
 import { CharacterSheet } from "@/components/game/sidebar/CharacterSheet";
 import { InventoryPanel } from "@/components/game/sidebar/InventoryPanel";
@@ -27,7 +28,8 @@ const WORLD_NAMES: Record<Genre, string> = {
 
 export default function GamePage() {
   const router = useRouter();
-  const initRef = useRef(false);
+  const initRef    = useRef(false);
+  const inputBarRef = useRef<InputBarHandle>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
 
   const masterState   = useGameStore((s) => s.masterState);
@@ -154,7 +156,12 @@ export default function GamePage() {
             isLoading={isProcessing && !!processingStep}
             onSubmit={(input) => { void submitAction(input); }}
           />
+          <DialogueModal
+            onSubmit={(input) => { void submitAction(input); }}
+            onFocusInput={() => { inputBarRef.current?.focus(); }}
+          />
           <InputBar
+            ref={inputBarRef}
             onSubmit={(input) => { void submitAction(input); }}
             disabled={isProcessing}
             processingStep={processingStep}

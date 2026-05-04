@@ -28,7 +28,7 @@ export function resolveAction(
     case ActionType.EXAMINE:  return resolveExamine(action, state);
     case ActionType.INTERACT: return resolveInteract(action, state);
     case ActionType.USE_ITEM: return resolveUseItem(action, state);
-    case ActionType.DIALOGUE: return resolveDialogue(action, state);
+    case ActionType.DIALOGUE: return resolveDialogue(action, state, opts);
     case ActionType.CUSTOM:
     default:                  return resolveCustom(action, state);
   }
@@ -449,11 +449,45 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
 
 // ── DIALOGUE ──────────────────────────────────────────────────────────────────
 
-function resolveDialogue(action: ParsedAction, state: MasterState): ResolutionResult {
+// Keywords that indicate a Charisma-gated attempt (persuasion/intimidation/deception).
+const PERSUADE_WORDS    = ["persuade", "persuasion", "convince", "beg", "plead", "charm"];
+const INTIMIDATE_WORDS  = ["intimidate", "intimidation", "threaten", "threat", "bully", "scare"];
+const DECEIVE_WORDS     = ["deceive", "deception", "lie", "bluff", "trick", "manipulate", "cheat", "seduce"];
+
+function detectChaBasedTone(intent: string): string | null {
+  const lower = intent.toLowerCase();
+  if (INTIMIDATE_WORDS.some((k) => lower.includes(k))) return "aggressive";
+  if (DECEIVE_WORDS.some((k) => lower.includes(k)))    return "deceptive";
+  if (PERSUADE_WORDS.some((k) => lower.includes(k)))   return "friendly";
+  return null;
+}
+
+function resolveDialogue(action: ParsedAction, state: MasterState, opts: ResolveOptions = {}): ResolutionResult {
   const charisma         = state.player_state.attributes.charisma;
   const charismaModifier = getAttributeModifier(charisma);
   const npcKey           = action.primary_target ? normalizeKey(action.primary_target) : null;
   const npc              = npcKey ? state.npc_registry[npcKey] ?? null : null;
+
+  const tone = detectChaBasedTone(action.inferred_intent);
+
+  // Roll a Charisma check whenever the intent involves persuasion, intimidation,
+  // or deception. Always return success=true — the Narrator writes the outcome
+  // based on whether the check passed.
+  const charismaCheckContext: Record<string, unknown> = {};
+  if (tone !== null) {
+    const roll       = rollD20(opts.seed);
+    const difficulty = 12;
+    const total      = roll + charismaModifier;
+    Object.assign(charismaCheckContext, {
+      charisma_check: true,
+      roll,
+      modifier:   charismaModifier,
+      total,
+      difficulty,
+      success:    total >= difficulty,
+      tone,
+    });
+  }
 
   return {
     success: true,
@@ -465,6 +499,7 @@ function resolveDialogue(action: ParsedAction, state: MasterState): ResolutionRe
       npc_key:           npcKey,
       npc,
       trust_score:       npc?.trust_score ?? null,
+      ...charismaCheckContext,
     },
   };
 }

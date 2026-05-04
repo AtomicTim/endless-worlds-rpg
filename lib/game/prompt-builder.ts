@@ -294,6 +294,18 @@ BAD: "You can interact with: merchant, fire, door."
 
 The player should always know what they can engage with next without you telling them directly.
 
+DIALOGUE OPTIONS — populate when action involves an NPC:
+When the current action is a DIALOGUE action type, OR an INTERACT with an NPC target, populate dialogue_options with 3-4 things the player could say next. Requirements:
+- Each option must be meaningfully different in tone and approach
+- Tones: "friendly" (cooperative/helpful), "aggressive" (threatening/hostile), "curious" (investigative/questioning), "deceptive" (misleading/manipulative)
+- One option should always be a natural exit like "Leave them be" or "Walk away" (tone: "friendly")
+- charisma_required: set to 5, 6, or 7 for options that require persuasion, intimidation, or deception. Leave unset for neutral options.
+- Keep each option.text under 60 characters — these are button labels
+- For non-NPC actions, leave dialogue_options as an empty array
+
+TRUST CHANGES — populate when dialogue meaningfully shifts a relationship:
+Populate trust_changes when this interaction notably affects how an NPC feels about the player. delta: +10 to +20 for very positive, -10 to -20 for hostile/deceptive, +5/-5 for mild shifts. Only include if something notable happened — not for every action. Use the NPC's npc_key (snake_case from the NPC registry or ESTABLISHED WORLD ASSETS).
+
 POINTS OF INTEREST — populate for TIER 2 and TIER 3 only:
 In the points_of_interest array, list 2-4 things from your narrative that the player can interact with. Only include things you actually mentioned in the narrative text. The label must be the EXACT phrase as written in your response. Types: LOCATION (a place to move to), NPC (a character), CONTAINER (searchable object), ITEM (takeable object), HAZARD (dangerous element).
 
@@ -327,6 +339,8 @@ JSON OUTPUT — Respond ONLY with valid JSON matching this exact schema (no mark
   "points_of_interest": [],
   "codex_entries": [],
   "revealed_npc_names": [],
+  "dialogue_options": [],
+  "trust_changes": [],
   "log_summary": "12-word max journal shorthand of this beat. No 'You'. No 'I'. No 'explored'. Third-person or fragments. Examples: 'Attacked goblin. Hit for 8 damage.' | 'Spoke with Old Hermit. He seemed suspicious.' | 'Discovered hidden chamber beneath the ruins.' | 'Arrived at the Iron Gate fortress.'"
 }
 
@@ -371,6 +385,22 @@ codex_entries entries MUST match this shape:
   "description": "2-3 sentences",
   "first_seen_location": "${state.world_state.current_location_id}",
   "significance": "NOTABLE|MAJOR"
+}
+
+dialogue_options entries MUST match this shape (NPC interactions only — empty array otherwise):
+{
+  "id": "opt_1|opt_2|opt_3|opt_4",
+  "text": "What the player says — under 60 chars",
+  "tone": "friendly|aggressive|curious|deceptive",
+  "charisma_required": 5
+}
+charisma_required is optional — omit the field entirely for neutral options.
+
+trust_changes entries MUST match this shape (only when a notable shift occurs):
+{
+  "npc_key": "snake_case NPC key from registry or world assets",
+  "delta": -20,
+  "reason": "friendly|hostile|helpful|deceptive"
 }`;
 }
 
@@ -588,6 +618,23 @@ export function buildNarratorUserPrompt(
       ``,
     ].join("\n");
     prompt = confirmation + prompt;
+  }
+
+  // CHARISMA CHECK — prepend the roll result when a CHA-based attempt was made.
+  if (result.narrative_context.charisma_check === true) {
+    const roll       = Number(result.narrative_context.roll ?? 0);
+    const modifier   = Number(result.narrative_context.modifier ?? 0);
+    const total      = Number(result.narrative_context.total ?? 0);
+    const difficulty = Number(result.narrative_context.difficulty ?? 12);
+    const passed     = result.narrative_context.success === true;
+    const tone       = String(result.narrative_context.tone ?? "");
+    const sign       = modifier >= 0 ? `+${modifier}` : `${modifier}`;
+    prompt +=
+      `\n\nCHARISMA CHECK: ${roll}${sign}=${total} vs difficulty ${difficulty} — ${passed ? "PASSED" : "FAILED"}` +
+      `\nAttempt tone: ${tone}` +
+      `\nWrite the NPC's response reflecting this outcome.` +
+      `\nOn PASSED: NPC is more forthcoming, helpful, or swayed by the attempt.` +
+      `\nOn FAILED: NPC is suspicious, dismissive, evasive, or hostile.`;
   }
 
   // EXAMINE / INTERACT — also append the target pinning reminder at the bottom.

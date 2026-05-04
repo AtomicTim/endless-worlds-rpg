@@ -2,6 +2,8 @@
 // client-side fetch wrapper. The actual Claude call lives in the
 // /api/game/generate-art route.
 
+import type { WorldAsset } from "@/types/game";
+
 export type SceneType =
   | "TOP_DOWN_TOWN"
   | "SIDE_VIEW_INTERIOR"
@@ -101,6 +103,32 @@ export interface GenerateArtRequest {
 export interface GenerateArtResponse {
   svg:    string;
   cached: boolean;
+}
+
+/**
+ * Generate a FRONT_PORTRAIT SVG for an NPC world asset.
+ * Uses npc.id as the art_cache key so each character gets exactly one portrait
+ * per session, and re-renders are served from cache instantly.
+ *
+ * Resolves to null on any failure — callers fall back gracefully.
+ */
+export async function generateNpcPortrait(
+  npc: WorldAsset,
+  genre: string,
+  sessionId: string
+): Promise<GenerateArtResponse | null> {
+  const appearance  = npc.constitution.appearance ?? npc.name;
+  const personality = npc.constitution.personality ?? "";
+  const description = [appearance, personality].filter(Boolean).join(". ");
+
+  return generateArt({
+    location_id:   npc.id,
+    location_name: appearance,
+    scene_type:    "FRONT_PORTRAIT",
+    genre,
+    description,
+    session_id:    sessionId,
+  });
 }
 
 /**

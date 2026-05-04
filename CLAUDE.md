@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 5.5
+**Version:** 5.6
 **Status:** Active Development — Phase 2 In Progress
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -26,12 +26,15 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Final Dialogue Fixes (commit e8b684e)
-- Modal name reveal: two-channel match (placeholder name OR registry key) — robust against race conditions
-- Stat check rolls: step 3b moved below step 4 so updatedState exists — rolls go to feed AND logbook as COMBAT entry
-- STR/PER/INT checks: all fields set correctly (stat_checked lowercase, roll, modifier, total, difficulty, success)
-- curious tone now fires Perception check (was no-op)
-- Verification log: `[resolveDialogue] stat check fields:` prints all fields for console confirmation
+### Latest Fixes (commit deaaafc)
+- `page.tsx`: `getWorldAssetsForLocation` preload confirmed + `[GamePage] Initial locationAssets loaded: N` log
+- `useGameLoop` step 7c: late-load fallback when locationAssets empty after any narrative action
+- Step 7g: npc_registry patched to store IMMEDIATELY after seeding (not waiting for step 10)
+- `intent-parser.ts`: dialogue_tone backstopped to 'neutral' when server returns none
+- `resolveDialogue`: tone logged before switch statement (`[resolveDialogue] tone: X`)
+- Stat check fields log now JSON.stringified for full visibility
+- `revealed_npc_names` hoisted to MANDATORY FIRST field in narrator prompt — lists all name-introduction phrasings, explicitly states MANDATORY when name revealed
+- `[GameLoop/7d] revealed_npc_names from narrator:` logged unconditionally after every narrator call
 
 ### Dialogue System — Complete Stat Check Matrix
 | Tone | Stat | Notes |
@@ -62,7 +65,7 @@ Plausible actions always attempted. Narrator describes outcomes only.
 EXAMINE/INTERACT resolver confirms object_confirmed=true. Prepended as first narrator fact.
 
 ### 6. Dialogue Is Consistent
-All dialogue identical pipeline. NPC name passed directly. Stat checks always fire from tone. All checks appear in feed AND logbook.
+All dialogue identical pipeline. NPC name passed directly. Stat checks fire from tone. All appear in feed AND logbook.
 
 ### 7. The AI Has Exactly Three Roles
 **Generator:** Creates assets on first encounter. Immutable after.
@@ -75,11 +78,11 @@ All dialogue identical pipeline. NPC name passed directly. Stat checks always fi
 
 **NPC interaction model (authoritative sources):**
 - Constitution → `world_assets` (locked on first meeting)
-- Trust score → `npc_registry` (seeded at 50 on first dialogue, updated by trust_changes)
+- Trust score → `npc_registry` (seeded at 50, immediately patched to store on seed)
 - Disposition → `getNpcDisposition(trustScore ?? 50)` — always renders
-- Name → `world_assets.name` (updates in modal via two-channel reveal match)
+- Name → `world_assets.name` (updates modal via two-channel reveal match)
 - Registry key → `normalizeAssetId(CHARACTER, name)`
-- Stat checks → resolver sets all fields; feed + logbook COMBAT entry
+- locationAssets → loaded on page mount AND late-loaded if empty during session
 
 ---
 
@@ -104,15 +107,16 @@ Hidden World Seed: conflict + goal + 3-5 breadcrumbs + opening hook. Sealed in m
 
 ## 🎭 NPC Dialogue System (Complete)
 - NPC name passed directly, never re-extracted
-- seedNpcRegistry() on first encounter, findNpcInRegistry() multi-strategy lookup
+- seedNpcRegistry() on first encounter, immediately patches store
+- findNpcInRegistry() multi-strategy lookup
 - All 4 stat checks fire (CHA/STR/PER/INT), appear in feed + logbook
 - Disposition badge always renders (🟡 Neutral fallback)
-- Name reveal updates modal via two-channel match
+- Name reveal: MANDATORY in narrator prompt, modal updates via two-channel match
 - SPA navigation preserves dialogue (clearTransientState vs clearSessionState)
 - ACTIVE NPC CONTEXT injected for all dialogue
 
 ## 🕵️ NPC Identity System
-- name_known=false for CHARACTER. revealed_npc_names. Modal updates on reveal.
+- name_known=false for CHARACTER. revealed_npc_names MANDATORY when name shared.
 
 ## 💎 Item Value System (Day 16)
 Every item: sell value + lore blurb + optional dialogue unlock. Merchant NPCs.
@@ -130,7 +134,8 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 ## Narrator Architecture
 
 **Pure interpreter of game state.**
-- YOUR ROLE block FIRST — three jobs, player blank-slate enforced
+- `revealed_npc_names` MANDATORY FIRST field — hoisted above YOUR ROLE
+- YOUR ROLE block — three jobs, player blank-slate enforced
 - ACTIVE NPC CONTEXT (constitution + trust from npc_registry) for all DIALOGUE
 - Tier 1/2/3 response lengths by action type
 - log_summary: 12-word max terse fragment
@@ -140,6 +145,8 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 ## Immediate Persistence Architecture
 - Log entries + recent_messages: after every narrative action
 - World state: after every MOVE or flag change
+- npc_registry: immediately patched to store on seed
+- locationAssets: loaded on page mount + late-loaded fallback
 - Full state: every 10 actions
 - clearSessionState() on session switch, clearTransientState() on SPA nav
 
@@ -163,7 +170,7 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 - **Hybrid Authority:** Code = Truth, AI = pure interpreter
 - **AI has 3 roles only:** Generator → Bridge → Thread
 - **Player is blank slate:** AI never speaks for them or invents history
-- **NPC state from game state:** npc_registry always seeded, authoritative
+- **NPC state from game state:** npc_registry seeded + immediately in store
 - World Assets permanent, Movement absolute, Objects exist
 - Dialogue consistent: all stat checks fire, all appear in feed + logbook
 - Immediate persistence after every relevant action
@@ -228,4 +235,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 46 — V5.5: All dialogue fixes complete. Stat checks in feed+logbook, name reveal robust, curious→PER. Day 16 starting.*
+*Last updated: Session 47 — V5.6: locationAssets page mount load, registry immediate store patch, revealed_npc_names mandatory. Day 16 starting.*

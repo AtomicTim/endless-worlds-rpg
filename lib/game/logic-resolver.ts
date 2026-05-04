@@ -545,18 +545,32 @@ function resolveDialogue(action: ParsedAction, state: MasterState, opts: Resolve
   };
 
   if (statChecked !== null) {
-    const roll  = rollD20(opts.seed);
-    const total = roll + modifier;
+    // FIX 2: ensure every required field for the feed roll-feedback line is
+    // present in narrative_context — buildRollFeedback() bails on missing roll.
+    const roll    = rollD20(opts.seed);                  // d20 result
+    const total   = roll + modifier;                     // roll + ability mod
+    const success = total >= difficulty;                 // pass/fail vs DC
     Object.assign(checkContext, {
       // Backward-compat alias so older UI checks (charisma_check) still light up.
-      charisma_check: statChecked === "charisma",
+      charisma_check:    statChecked === "charisma",
       stat_check_active: true,
       roll,
       modifier,
       total,
       difficulty,
-      success: total >= difficulty,
+      success,
       tone,
+    });
+    // Debug breadcrumb so the browser console confirms the check fired with
+    // all expected fields populated.
+    console.log("[resolveDialogue] stat check:", {
+      tone,
+      stat_checked: statChecked,
+      roll,
+      modifier,
+      total,
+      difficulty,
+      success,
     });
   }
 

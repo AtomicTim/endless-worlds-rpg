@@ -637,29 +637,38 @@ export function useGameLoop() {
       {
         const dialogueOpts = narratorResponse.dialogue_options ?? [];
         if (isDialogueAction && dialogueOpts.length > 0) {
-          const newNpcName     = parsedAction.primary_target ?? null;
-          const gsBefore       = useGameStore.getState();
-          const existingNpc    = gsBefore.currentDialogueNpc;
+          const newNpcName       = parsedAction.primary_target ?? null;
+          const gsBefore         = useGameStore.getState();
+          const existingNpc      = gsBefore.currentDialogueNpc;
           const existingPortrait = gsBefore.currentNpcPortrait;
+
+          // FIX 1: When the player clicks a dialogue option, the Intent Parser
+          // sees only the option's speech text and sets primary_target to null
+          // (it's classifying speech, not extracting "talk to X"). Fall back to
+          // the NPC we were already conversing with so the modal stays anchored
+          // to the same character across consecutive option clicks.
+          const effectiveNpcName =
+            newNpcName ??
+            (isDialogueAction && existingNpc ? existingNpc : null);
 
           // "Continuing" means: same NPC as last turn (case-insensitive match).
           // When the player addresses a different NPC, we always swap.
           const continuingSameNpc =
             !!existingNpc &&
-            !!newNpcName &&
-            existingNpc.toLowerCase() === newNpcName.toLowerCase();
+            !!effectiveNpcName &&
+            existingNpc.toLowerCase() === effectiveNpcName.toLowerCase();
 
           // Resolve the NPC asset for portrait fallback.
           const currentAssets = gsBefore.locationAssets;
-          const npcAsset = newNpcName
+          const npcAsset = effectiveNpcName
             ? currentAssets.find(
                 (a) =>
                   a.category === AssetCategory.CHARACTER &&
-                  a.name.toLowerCase() === newNpcName.toLowerCase()
+                  a.name.toLowerCase() === effectiveNpcName.toLowerCase()
               ) ?? null
             : null;
 
-          const npcName = continuingSameNpc ? existingNpc : newNpcName;
+          const npcName = continuingSameNpc ? existingNpc : effectiveNpcName;
           const portrait =
             continuingSameNpc && existingPortrait
               ? existingPortrait
@@ -741,9 +750,20 @@ export function useGameLoop() {
         updatedState = persistLogEntry(updatedState, LogEntryType.COMBAT,
           `Attack: ${roll2}${sign2}=${total2}${diffStr2} — ${label2}${dmgStr2}`);
       } else if (parsedAction.action_type === ActionType.DIALOGUE) {
-        // DIALOGUE entry: extract first NPC quote, fall back to first sentence.
-        const npcLabel   = parsedAction.primary_target ? `${parsedAction.primary_target}: ` : "";
-        const quotedText = narratorResponse.narrative_text.match(/"([^"]*)"/)?.[1]?.trim() ?? firstSentence;
+        // DIALOGUE entry priority: log_summary → last quoted speech → first
+        // sentence. The first quote in narrator prose is usually atmospheric
+        // (e.g. "Oh, this?"); the LAST quote is typically the meaningful NPC
+        // line that should land in the log book.
+        const npcLabel  = parsedAction.primary_target ? `${parsedAction.primary_target}: ` : "";
+        // Array.from instead of [...] — the project's tsconfig doesn't enable
+        // downlevelIteration so iterator spread on matchAll() won't compile.
+        const allQuotes = Array.from(narratorResponse.narrative_text.matchAll(/"([^"]*)"/g));
+        const lastQuote = allQuotes.length > 0
+          ? allQuotes[allQuotes.length - 1][1].trim()
+          : null;
+        const quotedText = narratorResponse.log_summary
+          ?? lastQuote
+          ?? firstSentence;
         updatedState = persistLogEntry(updatedState, LogEntryType.DIALOGUE, `${npcLabel}${quotedText}`);
       } else {
         // STORY entry: use narrator's log_summary when present, else first sentence.

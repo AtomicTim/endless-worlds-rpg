@@ -115,7 +115,7 @@ function MessageEntry({ message, onPoiClick }: MessageEntryProps) {
       return (
         <div
           className="message-enter space-y-0.5 border-l-2 pl-3"
-          style={{ borderColor: "color-mix(in srgb, var(--color-accent) 60%, transparent)" }}
+          style={{ borderColor: "var(--color-accent)", paddingLeft: "12px" }}
         >
           {npcName && (
             <span
@@ -127,7 +127,7 @@ function MessageEntry({ message, onPoiClick }: MessageEntryProps) {
           )}
           <p
             className="font-mono text-sm italic"
-            style={{ color: "color-mix(in srgb, var(--color-text) 88%, transparent)" }}
+            style={{ color: "var(--color-accent)", fontStyle: "italic" }}
           >
             &ldquo;{content}&rdquo;
           </p>

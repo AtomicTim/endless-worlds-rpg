@@ -103,8 +103,11 @@ export const useGameStore = create<GameStore>((set) => ({
       const existingIds = new Set(s.persistedLogEntries.map((e) => e.id));
       const newOnes     = entries.filter((e) => !existingIds.has(e.id));
       if (newOnes.length === 0) return s;
+      // DB entries arrive newest-first (addLogEntry prepends). Reverse so
+      // persistedLogEntries stays oldest-first (same order addPersistedLogEntry uses).
+      const chronological = [...newOnes].reverse();
       return {
-        persistedLogEntries: [...s.persistedLogEntries, ...newOnes].slice(-100),
+        persistedLogEntries: [...chronological, ...s.persistedLogEntries].slice(-100),
       };
     }),
 }));

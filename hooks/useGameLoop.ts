@@ -66,7 +66,8 @@ const RARITY_LABELS: Record<ItemRarity, string> = {
  */
 function persistLogEntry(state: MasterState, type: LogEntryType, content: string): MasterState {
   const updated = addLogEntry(state, type, content);
-  const latest  = updated.log_book.entries.at(-1);
+  // addLogEntry PREPENDS — the new entry is always at index [0].
+  const latest  = updated.log_book.entries[0];
   if (latest) {
     useGameStore.getState().addPersistedLogEntry(latest);
   }

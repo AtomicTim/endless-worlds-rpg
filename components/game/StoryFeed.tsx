@@ -40,7 +40,11 @@ export function StoryFeed({ messages, isLoading = false, onSubmit }: StoryFeedPr
   };
 
   return (
-    <div className="scrollbar-thin flex-1 space-y-3 overflow-y-auto px-4 py-4">
+    // `min-h-0` is required so this flex child can actually shrink below its
+    // content size and scroll independently when the DialogueModal takes up
+    // its own row in the column. Without it, flex's default `min-height: auto`
+    // would let the feed grow and push the modal/InputBar off-screen.
+    <div className="scrollbar-thin min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
       {messages.map((msg) => (
         <MessageEntry key={msg.id} message={msg} onPoiClick={openPopover} />
       ))}

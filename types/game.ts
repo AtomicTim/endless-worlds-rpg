@@ -217,6 +217,8 @@ export interface ParsedAction {
   item_used?:       string;
   inferred_intent:  string;
   confidence:       number;
+  /** Tone classification — only set when action_type is DIALOGUE. */
+  dialogue_tone?:   "friendly" | "persuasive" | "deceptive" | "intimidating" | "curious" | "neutral";
 }
 
 export type StateDelta = {
@@ -240,11 +242,20 @@ export interface PointOfInterest {
   description: string;
 }
 
+export interface DialogueStatCheck {
+  stat:        "charisma" | "strength" | "perception" | "intelligence";
+  difficulty:  number;
+  description: string;
+}
+
 export interface DialogueOption {
-  id:                  string;
-  text:                string;
-  charisma_required?:  number;
-  tone:                "friendly" | "aggressive" | "curious" | "deceptive";
+  id:           string;
+  text:         string;
+  tone:         "friendly" | "aggressive" | "curious" | "deceptive";
+  /** When set, clicking this option will require the named stat check.
+   *  Options are NEVER hard-gated — every option remains clickable; the
+   *  check determines the in-fiction outcome via the resolver. */
+  stat_check?:  DialogueStatCheck;
 }
 
 export interface CodexEntry {

@@ -41,14 +41,28 @@ function buildRollFeedback(resolution: ResolutionResult): string | null {
     return `⚔ Attack roll: ${roll} ${sign} (STR) = ${total}${diffStr} — ${label}`;
   }
 
-  // Charisma check feedback — read ctx.success (NOT resolution.success, which
-  // is always true for DIALOGUE since the resolver lets the narrator decide
-  // the in-fiction outcome). The boolean inside narrative_context is the
-  // actual roll-vs-difficulty result.
-  if (ctx.charisma_check === true) {
+  // Generic stat-check feedback (charisma / strength / perception / intelligence).
+  // Reads ctx.success (NOT resolution.success — DIALOGUE always succeeds at the
+  // resolver layer; the in-fiction outcome lives in narrative_context).
+  const statKey =
+    typeof ctx.stat_checked === "string" ? ctx.stat_checked.toLowerCase() : null;
+  if (statKey || ctx.charisma_check === true) {
+    const STAT_ICON: Record<string, string> = {
+      charisma: "🎭", strength: "💪", perception: "👁", intelligence: "🧠",
+    };
+    const STAT_NAME: Record<string, string> = {
+      charisma: "Charisma", strength: "Strength", perception: "Perception", intelligence: "Intelligence",
+    };
+    const STAT_SHORT: Record<string, string> = {
+      charisma: "CHA", strength: "STR", perception: "PER", intelligence: "INT",
+    };
+    const key   = statKey ?? "charisma";
+    const icon  = STAT_ICON[key] ?? "🎲";
+    const name  = STAT_NAME[key] ?? "Stat";
+    const short = STAT_SHORT[key] ?? "STAT";
     const passed = ctx.success === true;
     const label  = passed ? "Passed!" : "Failed.";
-    return `🎭 Charisma check: ${roll} ${sign} (CHA) = ${total}${diffStr} — ${label}`;
+    return `${icon} ${name} check: ${roll} ${sign} (${short}) = ${total}${diffStr} — ${label}`;
   }
 
   return `🎲 Roll: ${roll} ${sign} = ${total}${diffStr}`;
@@ -618,23 +632,42 @@ export function useGameLoop() {
 
       // ── 7g. Dialogue options — store for the Dialogue Modal ──────────────────
       // Show after every DIALOGUE action; clear after any non-DIALOGUE action.
+      // Preserve the existing NPC name + portrait across consecutive turns with
+      // the same NPC so the modal doesn't flash blank between turns.
       {
         const dialogueOpts = narratorResponse.dialogue_options ?? [];
         if (isDialogueAction && dialogueOpts.length > 0) {
-          const npcTargetName  = parsedAction.primary_target ?? null;
-          const currentAssets  = useGameStore.getState().locationAssets;
-          const npcAsset       = npcTargetName
+          const newNpcName     = parsedAction.primary_target ?? null;
+          const gsBefore       = useGameStore.getState();
+          const existingNpc    = gsBefore.currentDialogueNpc;
+          const existingPortrait = gsBefore.currentNpcPortrait;
+
+          // "Continuing" means: same NPC as last turn (case-insensitive match).
+          // When the player addresses a different NPC, we always swap.
+          const continuingSameNpc =
+            !!existingNpc &&
+            !!newNpcName &&
+            existingNpc.toLowerCase() === newNpcName.toLowerCase();
+
+          // Resolve the NPC asset for portrait fallback.
+          const currentAssets = gsBefore.locationAssets;
+          const npcAsset = newNpcName
             ? currentAssets.find(
                 (a) =>
                   a.category === AssetCategory.CHARACTER &&
-                  a.name.toLowerCase() === npcTargetName.toLowerCase()
+                  a.name.toLowerCase() === newNpcName.toLowerCase()
               ) ?? null
             : null;
+
+          const npcName = continuingSameNpc ? existingNpc : newNpcName;
           const portrait =
-            npcAsset
-              ? (useGameStore.getState().artCache[npcAsset.id] ?? npcAsset.svg_content ?? null)
-              : null;
-          store.setDialogueOptions(dialogueOpts, npcTargetName, portrait);
+            continuingSameNpc && existingPortrait
+              ? existingPortrait
+              : (npcAsset
+                  ? (gsBefore.artCache[npcAsset.id] ?? npcAsset.svg_content ?? null)
+                  : null);
+
+          store.setDialogueOptions(dialogueOpts, npcName, portrait);
         } else if (!isDialogueAction) {
           store.clearDialogueOptions();
         }

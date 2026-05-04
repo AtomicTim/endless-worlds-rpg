@@ -1,4 +1,4 @@
-import { Genre, ActionType, LocationStatus } from "@/types/game";
+import { Genre, ActionType, LocationStatus, AssetCategory } from "@/types/game";
 import type {
   MasterState,
   ParsedAction,
@@ -6,7 +6,7 @@ import type {
   WorldAsset,
   WorldAssetConstitution,
 } from "@/types/game";
-import { getEquippedLoadout } from "@/lib/game/state-utils";
+import { getEquippedLoadout, getNpcDisposition } from "@/lib/game/state-utils";
 import { GENRE_CONFIGS } from "@/lib/game/genre-config";
 
 // ── Intent Parser ─────────────────────────────────────────────────────────────
@@ -52,7 +52,8 @@ Required JSON shape (return exactly this, filled in):
   "secondary_target": "string describing a secondary target, or null",
   "item_used": "name of item from inventory, or null",
   "inferred_intent": "one sentence describing what the player wants to do",
-  "confidence": 0.0
+  "confidence": 0.0,
+  "dialogue_tone": "friendly|persuasive|deceptive|intimidating|curious|neutral|null"
 }
 
 Rules for field values:
@@ -62,7 +63,21 @@ Rules for field values:
 - confidence must be a number between 0.0 and 1.0
   - 0.8–1.0: unambiguous
   - 0.5–0.8: likely but could be interpreted differently
-  - 0.3–0.5: ambiguous; classify as CUSTOM when very uncertain`;
+  - 0.3–0.5: ambiguous; classify as CUSTOM when very uncertain
+
+DIALOGUE TONE CLASSIFICATION:
+When action_type is DIALOGUE, set dialogue_tone:
+- friendly: warm, kind, complimentary speech
+- persuasive: convincing, appealing, negotiating
+- deceptive: lying, misdirecting, pretending
+- intimidating: threatening, aggressive, dominating
+- curious: questioning, investigating, probing
+- neutral: simple conversation, greetings, farewells
+
+Classify based on the player's actual words, not their stated intent.
+"I'm sure we can work something out" = persuasive even if phrased politely.
+"I'd hate for something to happen to your shop" = intimidating despite the soft delivery.
+For non-DIALOGUE actions, set dialogue_tone to null.`;
 }
 
 /**
@@ -299,7 +314,7 @@ When the current action is a DIALOGUE action type, OR an INTERACT with an NPC ta
 - Each option must be meaningfully different in tone and approach
 - Tones: "friendly" (cooperative/helpful), "aggressive" (threatening/hostile), "curious" (investigative/questioning), "deceptive" (misleading/manipulative)
 - One option should always be a natural exit like "Leave them be" or "Walk away" (tone: "friendly")
-- charisma_required: set to 5, 6, or 7 for options that require persuasion, intimidation, or deception. Leave unset for neutral options.
+- stat_check: include when this option would require a stat roll. Set stat to the relevant attribute (charisma/strength/perception/intelligence), difficulty 6-15 based on how hard it is, description as a brief action label (e.g. "Persuade her to trust you"). ALL options are always clickable — there are NO hard gates. Omit stat_check entirely for plain conversational options.
 - Keep each option.text under 60 characters — these are button labels
 - For non-NPC actions, leave dialogue_options as an empty array
 
@@ -392,9 +407,14 @@ dialogue_options entries MUST match this shape (NPC interactions only — empty 
   "id": "opt_1|opt_2|opt_3|opt_4",
   "text": "What the player says — under 60 chars",
   "tone": "friendly|aggressive|curious|deceptive",
-  "charisma_required": 5
+  "stat_check": {
+    "stat": "charisma|strength|perception|intelligence",
+    "difficulty": 6,
+    "description": "brief action label e.g. 'Persuade her to trust you'"
+  }
 }
-charisma_required is optional — omit the field entirely for neutral options.
+stat_check is OPTIONAL — omit the field entirely for plain conversational options.
+ALL options remain clickable regardless of the player's stats; stat_check only signals the in-fiction roll.
 
 trust_changes entries MUST match this shape (only when a notable shift occurs):
 {
@@ -620,21 +640,63 @@ export function buildNarratorUserPrompt(
     prompt = confirmation + prompt;
   }
 
-  // CHARISMA CHECK — prepend the roll result when a CHA-based attempt was made.
-  if (result.narrative_context.charisma_check === true) {
+  // STAT CHECK — generic block (charisma / strength / perception / intelligence).
+  const statChecked = result.narrative_context.stat_checked;
+  if (typeof statChecked === "string" && statChecked.length > 0) {
+    const STAT_LABEL: Record<string, string> = {
+      charisma:     "CHARISMA",
+      strength:     "STRENGTH",
+      perception:   "PERCEPTION",
+      intelligence: "INTELLIGENCE",
+    };
+    const label = STAT_LABEL[statChecked] ?? statChecked.toUpperCase();
     const roll       = Number(result.narrative_context.roll ?? 0);
     const modifier   = Number(result.narrative_context.modifier ?? 0);
     const total      = Number(result.narrative_context.total ?? 0);
-    const difficulty = Number(result.narrative_context.difficulty ?? 12);
+    const difficulty = Number(result.narrative_context.check_difficulty ?? result.narrative_context.difficulty ?? 12);
     const passed     = result.narrative_context.success === true;
     const tone       = String(result.narrative_context.tone ?? "");
     const sign       = modifier >= 0 ? `+${modifier}` : `${modifier}`;
     prompt +=
-      `\n\nCHARISMA CHECK: ${roll}${sign}=${total} vs difficulty ${difficulty} — ${passed ? "PASSED" : "FAILED"}` +
-      `\nAttempt tone: ${tone}` +
+      `\n\n${label} CHECK: ${roll}${sign}=${total} vs difficulty ${difficulty} — ${passed ? "PASSED" : "FAILED"}` +
+      (tone ? `\nAttempt tone: ${tone}` : "") +
       `\nWrite the NPC's response reflecting this outcome.` +
-      `\nOn PASSED: NPC is more forthcoming, helpful, or swayed by the attempt.` +
-      `\nOn FAILED: NPC is suspicious, dismissive, evasive, or hostile.`;
+      `\nOn PASSED: NPC is more forthcoming, helpful, swayed, or backed down by the attempt.` +
+      `\nOn FAILED: NPC is suspicious, dismissive, evasive, hostile, or unmoved.`;
+
+    // ACTIVE NPC CONTEXT — inject the targeted NPC's full constitution so the
+    // narrator writes a strictly in-character response. Only when we have a
+    // matching CHARACTER asset in locationAssets.
+    const targetName = action?.primary_target ?? null;
+    if (targetName && locationAssets && locationAssets.length > 0) {
+      const npcAsset = locationAssets.find(
+        (a) =>
+          a.category === AssetCategory.CHARACTER &&
+          a.name.toLowerCase() === targetName.toLowerCase()
+      );
+      if (npcAsset) {
+        const trustScore  = Number(result.narrative_context.npc_trust_score ?? 50);
+        const disposition = getNpcDisposition(trustScore);
+        const c           = npcAsset.constitution;
+        const npcLines: string[] = [
+          "",
+          "ACTIVE NPC CONTEXT:",
+          `Name: ${npcAsset.name}`,
+          `Trust score: ${trustScore}/100 — ${disposition}`,
+        ];
+        if (c.personality)         npcLines.push(`Personality: ${c.personality}`);
+        if (c.role)                npcLines.push(`Role: ${c.role}`);
+        if (c.notes)               npcLines.push(`Known motivations: ${c.notes}`);
+        if (c.faction_affiliation) npcLines.push(`Faction: ${c.faction_affiliation}`);
+        npcLines.push(
+          "",
+          "The NPC must respond IN CHARACTER based on this profile.",
+          "Their response is filtered through their personality AND",
+          "their current trust level with the player."
+        );
+        prompt += `\n${npcLines.join("\n")}`;
+      }
+    }
   }
 
   // EXAMINE / INTERACT — also append the target pinning reminder at the bottom.

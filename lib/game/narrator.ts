@@ -91,6 +91,20 @@ function normalizeNarratorItem(raw: unknown): Item | null {
 }
 
 const DIALOGUE_TONES = new Set<string>(["friendly", "aggressive", "curious", "deceptive"]);
+const STAT_CHECK_STATS = new Set<string>(["charisma", "strength", "perception", "intelligence"]);
+
+function normalizeStatCheck(raw: unknown): DialogueOption["stat_check"] | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const statRaw = typeof o.stat === "string" ? o.stat.toLowerCase() : "";
+  if (!STAT_CHECK_STATS.has(statRaw)) return undefined;
+  if (typeof o.difficulty !== "number") return undefined;
+  return {
+    stat:        statRaw as NonNullable<DialogueOption["stat_check"]>["stat"],
+    difficulty:  Math.max(1, Math.min(20, Math.round(o.difficulty))),
+    description: typeof o.description === "string" ? o.description.trim() : "",
+  };
+}
 
 function normalizeDialogueOption(raw: unknown): DialogueOption | null {
   if (!raw || typeof raw !== "object") return null;
@@ -98,13 +112,14 @@ function normalizeDialogueOption(raw: unknown): DialogueOption | null {
   if (typeof o.text !== "string" || !o.text.trim()) return null;
   const toneRaw = typeof o.tone === "string" ? o.tone.toLowerCase() : "";
   if (!DIALOGUE_TONES.has(toneRaw)) return null;
+
+  const stat_check = normalizeStatCheck(o.stat_check);
+
   return {
     id:   typeof o.id === "string" && o.id.trim() ? o.id : `opt_${Math.random().toString(36).slice(2, 8)}`,
     text: o.text.trim(),
     tone: toneRaw as DialogueOption["tone"],
-    ...(typeof o.charisma_required === "number" && o.charisma_required > 0
-      ? { charisma_required: Math.round(o.charisma_required) }
-      : {}),
+    ...(stat_check ? { stat_check } : {}),
   };
 }
 

@@ -449,42 +449,113 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
 
 // ── DIALOGUE ──────────────────────────────────────────────────────────────────
 
-// Keywords that indicate a Charisma-gated attempt (persuasion/intimidation/deception).
-const PERSUADE_WORDS    = ["persuade", "persuasion", "convince", "beg", "plead", "charm"];
+// Fallback tone-from-text classifier — used when ParsedAction.dialogue_tone
+// isn't set (e.g. older callers, or actions where the parser couldn't infer it).
+const PERSUADE_WORDS    = ["persuade", "persuasion", "convince", "beg", "plead", "charm", "bargain"];
 const INTIMIDATE_WORDS  = ["intimidate", "intimidation", "threaten", "threat", "bully", "scare"];
 const DECEIVE_WORDS     = ["deceive", "deception", "lie", "bluff", "trick", "manipulate", "cheat", "seduce"];
 
-function detectChaBasedTone(intent: string): string | null {
-  const lower = intent.toLowerCase();
-  if (INTIMIDATE_WORDS.some((k) => lower.includes(k))) return "aggressive";
+type DialogueTone = "friendly" | "persuasive" | "deceptive" | "intimidating" | "curious" | "neutral";
+
+function inferToneFromText(text: string): DialogueTone {
+  const lower = text.toLowerCase();
+  if (INTIMIDATE_WORDS.some((k) => lower.includes(k))) return "intimidating";
   if (DECEIVE_WORDS.some((k) => lower.includes(k)))    return "deceptive";
-  if (PERSUADE_WORDS.some((k) => lower.includes(k)))   return "friendly";
-  return null;
+  if (PERSUADE_WORDS.some((k) => lower.includes(k)))   return "persuasive";
+  if (lower.includes("?") || /\b(what|how|why|where|when|who)\b/.test(lower)) return "curious";
+  if (/\b(thank|thanks|hello|hi|please|kind|wonderful|nice)\b/.test(lower)) return "friendly";
+  return "neutral";
+}
+
+/**
+ * Maps NPC trust score → base difficulty for dialogue-driven stat checks.
+ * Hostile NPCs are harder to sway; allied NPCs concede easily.
+ */
+function difficultyForTrust(trustScore: number): number {
+  if (trustScore <= 30)  return 15; // hostile / suspicious
+  if (trustScore <= 60)  return 12; // neutral (default)
+  if (trustScore <= 80)  return 9;  // friendly
+  return 6;                          // allied
 }
 
 function resolveDialogue(action: ParsedAction, state: MasterState, opts: ResolveOptions = {}): ResolutionResult {
   const charisma         = state.player_state.attributes.charisma;
+  const strength         = state.player_state.attributes.strength;
+  const perception       = state.player_state.attributes.perception;
   const charismaModifier = getAttributeModifier(charisma);
   const npcKey           = action.primary_target ? normalizeKey(action.primary_target) : null;
   const npc              = npcKey ? state.npc_registry[npcKey] ?? null : null;
 
-  const tone = detectChaBasedTone(action.inferred_intent);
+  // Use the parser-supplied tone first; fall back to text heuristics so quoted
+  // dialogue (which sometimes skips the tone slot) still routes correctly.
+  const tone: DialogueTone =
+    action.dialogue_tone ?? inferToneFromText(action.inferred_intent);
 
-  // Roll a Charisma check whenever the intent involves persuasion, intimidation,
-  // or deception. Always return success=true — the Narrator writes the outcome
-  // based on whether the check passed.
-  const charismaCheckContext: Record<string, unknown> = {};
-  if (tone !== null) {
-    const roll       = rollD20(opts.seed);
-    const difficulty = 12;
-    const total      = roll + charismaModifier;
-    Object.assign(charismaCheckContext, {
-      charisma_check: true,
+  // Trust score drives base difficulty. Default to 50 (neutral) when no NPC is
+  // in the registry yet (first-encounter situations).
+  const trustScore     = npc?.trust_score ?? 50;
+  const baseDifficulty = difficultyForTrust(trustScore);
+
+  // Decide which stat (if any) to check based on tone. friendly/neutral skip
+  // checks entirely. curious uses Perception only when the resolver knows
+  // something is hidden — in the current architecture we don't have that
+  // signal pre-narrator, so curious is treated as no-check.
+  let statChecked: "charisma" | "strength" | "perception" | null = null;
+  let modifier: number = 0;
+  let difficulty: number = baseDifficulty;
+
+  switch (tone) {
+    case "persuasive":
+      statChecked = "charisma";
+      modifier    = charismaModifier;
+      break;
+    case "deceptive":
+      statChecked = "charisma";
+      modifier    = charismaModifier;
+      difficulty  = baseDifficulty + 2; // deception is harder than honest persuasion
+      break;
+    case "intimidating":
+      // Low-STR characters intimidate verbally rather than physically.
+      if (strength >= 10) {
+        statChecked = "strength";
+        modifier    = getAttributeModifier(strength);
+      } else {
+        statChecked = "charisma";
+        modifier    = charismaModifier;
+      }
+      break;
+    case "curious":
+      // PER check would require a "hidden info" signal we don't have here yet.
+      // Leaving this as no-check until the narrator surfaces a hidden flag.
+      void perception;
+      break;
+    case "friendly":
+    case "neutral":
+    default:
+      // No stat check — just talk.
+      break;
+  }
+
+  // Always return success=true at the resolver layer; the narrator interprets
+  // the in-fiction outcome from the check result in narrative_context.
+  const checkContext: Record<string, unknown> = {
+    stat_checked:    statChecked,
+    check_difficulty: difficulty,
+    npc_trust_score: trustScore,
+  };
+
+  if (statChecked !== null) {
+    const roll  = rollD20(opts.seed);
+    const total = roll + modifier;
+    Object.assign(checkContext, {
+      // Backward-compat alias so older UI checks (charisma_check) still light up.
+      charisma_check: statChecked === "charisma",
+      stat_check_active: true,
       roll,
-      modifier:   charismaModifier,
+      modifier,
       total,
       difficulty,
-      success:    total >= difficulty,
+      success: total >= difficulty,
       tone,
     });
   }
@@ -499,7 +570,7 @@ function resolveDialogue(action: ParsedAction, state: MasterState, opts: Resolve
       npc_key:           npcKey,
       npc,
       trust_score:       npc?.trust_score ?? null,
-      ...charismaCheckContext,
+      ...checkContext,
     },
   };
 }

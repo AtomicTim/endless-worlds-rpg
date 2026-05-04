@@ -82,6 +82,18 @@ export function addLogEntry(state: MasterState, type: LogEntryType, content: str
   };
 }
 
+/**
+ * Maps an NPC trust score (0-100) to a human-readable disposition label.
+ * Used by the dialogue UI badge and the narrator's ACTIVE NPC CONTEXT block.
+ */
+export function getNpcDisposition(trustScore: number): string {
+  if (trustScore <= 20) return "hostile";
+  if (trustScore <= 40) return "suspicious";
+  if (trustScore <= 60) return "neutral";
+  if (trustScore <= 80) return "friendly";
+  return "allied";
+}
+
 export function updateNPCTrust(state: MasterState, npcKey: string, delta: number): MasterState {
   const npc = state.npc_registry[npcKey];
   if (!npc) return state;

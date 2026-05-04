@@ -49,6 +49,7 @@ interface GameStore {
   currentDialogueOptions: DialogueOption[];
   currentDialogueNpc:     string | null;
   currentNpcPortrait:     string | null;
+  dialogueModalCollapsed: boolean;
 
   setMasterState:          (state: MasterState) => void;
   addMessage:              (message: StoryMessage) => void;
@@ -68,6 +69,8 @@ interface GameStore {
   setDialogueOptions:      (options: DialogueOption[], npcName: string | null, portrait: string | null) => void;
   /** Hide the Dialogue Modal and clear all dialogue state. */
   clearDialogueOptions:    () => void;
+  /** Toggle the modal between full and collapsed views without clearing options. */
+  setDialogueModalCollapsed: (collapsed: boolean) => void;
   /** Wipe all per-session state so a fresh session loads with a clean slate.
    *  Does NOT clear masterState — that is replaced by the caller right after. */
   clearSessionState:       () => void;
@@ -88,6 +91,7 @@ export const useGameStore = create<GameStore>((set) => ({
   currentDialogueOptions: [],
   currentDialogueNpc:     null,
   currentNpcPortrait:     null,
+  dialogueModalCollapsed: false,
 
   setMasterState:       (state) => set({ masterState: state }),
   addMessage:           (message) => set((s) => ({ messages: [...s.messages, message] })),
@@ -126,15 +130,29 @@ export const useGameStore = create<GameStore>((set) => ({
       };
     }),
   setDialogueOptions: (options, npcName, portrait) =>
-    set({ currentDialogueOptions: options, currentDialogueNpc: npcName, currentNpcPortrait: portrait }),
+    set({
+      currentDialogueOptions: options,
+      currentDialogueNpc:     npcName,
+      currentNpcPortrait:     portrait,
+      // New options always re-expand the modal so the player sees them.
+      dialogueModalCollapsed: false,
+    }),
   clearDialogueOptions: () =>
-    set({ currentDialogueOptions: [], currentDialogueNpc: null, currentNpcPortrait: null }),
+    set({
+      currentDialogueOptions: [],
+      currentDialogueNpc:     null,
+      currentNpcPortrait:     null,
+      dialogueModalCollapsed: false,
+    }),
+  setDialogueModalCollapsed: (collapsed) =>
+    set({ dialogueModalCollapsed: collapsed }),
   clearSessionState: () =>
     set({
       persistedLogEntries:    [],
       currentDialogueOptions: [],
       currentDialogueNpc:     null,
       currentNpcPortrait:     null,
+      dialogueModalCollapsed: false,
       locationAssets:         [],
       artCache:               {},
       lastNarrativeText:      null,

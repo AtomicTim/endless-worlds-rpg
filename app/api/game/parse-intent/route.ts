@@ -7,6 +7,37 @@ import type { MasterState, ParsedAction } from "@/types/game";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+const DIALOGUE_TONES = new Set<string>([
+  "friendly", "persuasive", "deceptive", "intimidating", "curious", "neutral",
+]);
+
+type DialogueTone = NonNullable<ParsedAction["dialogue_tone"]>;
+
+/**
+ * Heuristic tone classifier for the dialogue fast-path (quoted input that
+ * skips Claude). Inspects the player's actual speech for tonal markers.
+ * Falls back to "neutral" when no markers match.
+ */
+function inferToneFromSpeech(speech: string): DialogueTone {
+  const lower = speech.toLowerCase();
+  if (/\b(threat|kill|hurt|burn|destroy|crush|shoot|stab|swear|or else|don't make me|i'll make you|i will end)\b/.test(lower)) {
+    return "intimidating";
+  }
+  if (/\b(lie|trick|fool|fake|pretend|swear i didn't|i don't know anything|wasn't me|never met)\b/.test(lower)) {
+    return "deceptive";
+  }
+  if (/\b(persuade|convince|please believe|trust me|i promise|let me explain|deal|bargain|reward|in return)\b/.test(lower)) {
+    return "persuasive";
+  }
+  if (lower.includes("?") || /^(what|how|why|where|when|who|which|do you|did you|have you|is it|are you|tell me)\b/.test(lower)) {
+    return "curious";
+  }
+  if (/\b(thank you|thanks|hello|hi|please|kind|wonderful|appreciate|good day|greetings|nice to)\b/.test(lower)) {
+    return "friendly";
+  }
+  return "neutral";
+}
+
 function makeFallback(input: string): ParsedAction {
   return {
     action_type: ActionType.CUSTOM,
@@ -26,6 +57,11 @@ function parseAIResponse(text: string): ParsedAction | null {
     if (typeof json.inferred_intent !== "string") return null;
     if (typeof json.confidence !== "number") return null;
 
+    const dialogueToneRaw =
+      typeof json.dialogue_tone === "string" ? json.dialogue_tone.toLowerCase() : "";
+    const dialogueTone =
+      DIALOGUE_TONES.has(dialogueToneRaw) ? (dialogueToneRaw as DialogueTone) : undefined;
+
     return {
       action_type:      json.action_type as ActionType,
       primary_target:   typeof json.primary_target === "string" ? json.primary_target : undefined,
@@ -33,6 +69,7 @@ function parseAIResponse(text: string): ParsedAction | null {
       item_used:        typeof json.item_used === "string" ? json.item_used : undefined,
       inferred_intent:  json.inferred_intent as string,
       confidence:       json.confidence as number,
+      ...(dialogueTone ? { dialogue_tone: dialogueTone } : {}),
     };
   } catch {
     return null;
@@ -68,6 +105,9 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Dialogue fast-path: quoted input becomes DIALOGUE without an AI call ─
+  // We still classify the dialogue_tone via local heuristics so the resolver's
+  // stat-check pipeline runs identically for typed quotes and AI-classified
+  // dialogue. Every dialogue beat is treated the same way.
   if (dialogueMode === true) {
     return NextResponse.json({
       action_type:      ActionType.DIALOGUE,
@@ -76,6 +116,7 @@ export async function POST(request: NextRequest) {
       item_used:        undefined,
       inferred_intent:  `says: ${trimmed}`,
       confidence:       1.0,
+      dialogue_tone:    inferToneFromSpeech(trimmed),
     } satisfies ParsedAction);
   }
 

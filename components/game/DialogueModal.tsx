@@ -1,7 +1,9 @@
 "use client";
 
-import { Lock, X } from "lucide-react";
+import { ChevronUp, ChevronDown } from "lucide-react";
 import { useGameStore } from "@/lib/stores/game-store";
+import { getNpcDisposition } from "@/lib/game/state-utils";
+import { AssetCategory } from "@/types/game";
 import type { DialogueOption } from "@/types/game";
 
 interface DialogueModalProps {
@@ -23,6 +25,30 @@ const TONE_LABELS: Record<DialogueOption["tone"], string> = {
   deceptive:  "Deceptive",
 };
 
+type StatKey = NonNullable<DialogueOption["stat_check"]>["stat"];
+
+const STAT_ICONS: Record<StatKey, string> = {
+  charisma:     "💬",
+  strength:     "💪",
+  perception:   "👁",
+  intelligence: "🧠",
+};
+
+const STAT_LABELS: Record<StatKey, string> = {
+  charisma:     "CHA",
+  strength:     "STR",
+  perception:   "PER",
+  intelligence: "INT",
+};
+
+const DISPOSITION_STYLES: Record<string, { color: string; icon: string }> = {
+  hostile:    { color: "#ef4444", icon: "🔴" },
+  suspicious: { color: "#f97316", icon: "🟠" },
+  neutral:    { color: "#eab308", icon: "🟡" },
+  friendly:   { color: "#22c55e", icon: "🟢" },
+  allied:     { color: "#a855f7", icon: "✨" },
+};
+
 /**
  * Force the portrait SVG to fill its container — same helper as SceneArt.
  */
@@ -34,19 +60,31 @@ function ensureResponsiveSvg(svg: string): string {
 }
 
 /**
- * Dialogue Modal — slides up from the bottom of the main game area when an
- * NPC interaction produces response options. Absolutely positioned within the
- * main panel so it overlays only the InputBar area without pushing the
- * StoryFeed up. Click outside the modal does NOT dismiss it (the InputBar is
- * still reachable via "type your own"); the small "X" / "walk away" buttons
- * close it explicitly.
+ * Dialogue Modal — rendered inline between the StoryFeed and the InputBar.
+ * Takes up DOM space (never overlays the story feed). Collapses to a compact
+ * 40px bar that the player can re-expand without losing their options.
  */
 export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
-  const options  = useGameStore((s) => s.currentDialogueOptions);
-  const npcName  = useGameStore((s) => s.currentDialogueNpc);
-  const portrait = useGameStore((s) => s.currentNpcPortrait);
-  const charisma = useGameStore((s) => s.masterState?.player_state.attributes.charisma ?? 10);
-  const clear    = useGameStore((s) => s.clearDialogueOptions);
+  const options       = useGameStore((s) => s.currentDialogueOptions);
+  const npcName       = useGameStore((s) => s.currentDialogueNpc);
+  const portrait      = useGameStore((s) => s.currentNpcPortrait);
+  const collapsed     = useGameStore((s) => s.dialogueModalCollapsed);
+  const setCollapsed  = useGameStore((s) => s.setDialogueModalCollapsed);
+  const clear         = useGameStore((s) => s.clearDialogueOptions);
+
+  // Player's own attribute scores — used by the stat-check tooltip & badge.
+  const playerStats = useGameStore((s) => s.masterState?.player_state.attributes);
+  // Trust score for the active NPC, looked up by display name in locationAssets.
+  const trustScore  = useGameStore((s) => {
+    if (!npcName) return null;
+    const npc = s.locationAssets.find(
+      (a) => a.category === AssetCategory.CHARACTER && a.name.toLowerCase() === npcName.toLowerCase()
+    );
+    if (!npc) return null;
+    // Fall back to the NPC registry trust score (more accurate than the asset itself).
+    const npcKey = npc.id.replace(/^character_/, "");
+    return s.masterState?.npc_registry[npcKey]?.trust_score ?? null;
+  });
 
   if (options.length === 0) return null;
 
@@ -60,167 +98,210 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
     onFocusInput();
   };
 
-  return (
-    <>
-      {/* Backdrop — only over the bottom strip where the modal sits.
-          Lets the StoryFeed above stay clear and interactive. */}
-      <div
-        aria-hidden
-        className="absolute inset-x-0 bottom-0 z-30 pointer-events-none"
+  // ── Collapsed bar ───────────────────────────────────────────────────────────
+  if (collapsed) {
+    return (
+      <button
+        onClick={() => setCollapsed(false)}
+        aria-label="Expand dialogue"
+        className="flex h-10 w-full shrink-0 items-center justify-center gap-2 transition-colors hover:bg-white/[0.04]"
         style={{
-          height:          "200px",
-          backgroundColor: "rgba(0,0,0,0.45)",
-        }}
-      />
-
-      <div
-        role="dialog"
-        aria-label="Dialogue options"
-        className="absolute inset-x-0 bottom-0 z-40 flex"
-        style={{
-          height:          "200px",
-          maxHeight:       "200px",
-          borderTop:       "3px solid var(--color-accent)",
-          backgroundColor: "var(--color-bg)",
+          borderTop:       "2px solid var(--color-accent)",
+          borderBottom:    "1px solid var(--color-border)",
+          backgroundColor: "color-mix(in srgb, var(--color-accent) 8%, var(--color-bg))",
+          color:           "var(--color-accent)",
         }}
       >
-        {/* ── LEFT — Portrait + NPC name ─────────────────────────────────── */}
+        <ChevronUp className="size-3.5" />
+        <span className="text-[10px] font-bold uppercase tracking-widest">
+          {npcName ?? "Dialogue"}
+        </span>
+        <span className="text-[9px] italic" style={{ color: "var(--color-muted)" }}>
+          ({options.length} options)
+        </span>
+      </button>
+    );
+  }
+
+  // ── Disposition badge ───────────────────────────────────────────────────────
+  const disposition = trustScore !== null ? getNpcDisposition(trustScore) : null;
+  const dispStyle   = disposition ? DISPOSITION_STYLES[disposition] : null;
+
+  // ── Expanded modal ──────────────────────────────────────────────────────────
+  return (
+    <div
+      role="dialog"
+      aria-label="Dialogue options"
+      className="flex shrink-0 overflow-hidden"
+      style={{
+        height:          "200px",
+        maxHeight:       "200px",
+        borderTop:       "3px solid var(--color-accent)",
+        borderBottom:    "1px solid var(--color-border)",
+        backgroundColor: "var(--color-bg)",
+      }}
+    >
+      {/* ── LEFT — Portrait, NPC name, disposition ─────────────────────────── */}
+      <div
+        className="flex shrink-0 flex-col items-center gap-1 px-2 py-2"
+        style={{
+          width:       "112px",
+          borderRight: "1px solid var(--color-border)",
+        }}
+      >
+        {/* Portrait box (80×80) */}
         <div
-          className="flex shrink-0 flex-col items-center justify-center gap-1.5 px-2 py-2"
+          className="overflow-hidden rounded-sm"
           style={{
-            width:       "112px",
-            borderRight: "1px solid var(--color-border)",
+            width:           "80px",
+            height:          "80px",
+            border:          "1px solid var(--color-accent)",
+            backgroundColor: "color-mix(in srgb, var(--color-accent) 6%, var(--color-bg))",
+            flexShrink:      0,
           }}
         >
-          {/* Portrait box (80×80) */}
-          <div
-            className="overflow-hidden rounded-sm"
-            style={{
-              width:           "80px",
-              height:          "80px",
-              border:          "1px solid var(--color-accent)",
-              backgroundColor: "color-mix(in srgb, var(--color-accent) 6%, var(--color-bg))",
-              flexShrink:      0,
-            }}
-          >
-            {portrait ? (
-              <div
-                className="h-full w-full"
-                style={{ imageRendering: "pixelated" }}
-                dangerouslySetInnerHTML={{ __html: ensureResponsiveSvg(portrait) }}
-              />
-            ) : (
-              <svg viewBox="0 0 80 80" className="h-full w-full" aria-hidden>
-                <circle cx="40" cy="28" r="14" fill="var(--color-muted)" opacity="0.35" />
-                <ellipse cx="40" cy="58" rx="22" ry="16" fill="var(--color-muted)" opacity="0.35" />
-              </svg>
-            )}
-          </div>
-
-          {/* NPC name */}
-          <p
-            className="text-center text-[10px] font-bold uppercase tracking-wider leading-tight"
-            style={{ color: "var(--color-accent)", maxWidth: "100px", wordBreak: "break-word" }}
-          >
-            {npcName ?? "???"}
-          </p>
-
-          {/* Walk away — small text link */}
-          <button
-            onClick={() => clear()}
-            className="text-[9px] italic underline-offset-2 underline transition-opacity hover:opacity-70"
-            style={{ color: "var(--color-muted)" }}
-          >
-            walk away
-          </button>
+          {portrait ? (
+            <div
+              className="h-full w-full"
+              style={{ imageRendering: "pixelated" }}
+              dangerouslySetInnerHTML={{ __html: ensureResponsiveSvg(portrait) }}
+            />
+          ) : (
+            <svg viewBox="0 0 80 80" className="h-full w-full" aria-hidden>
+              <circle cx="40" cy="28" r="14" fill="var(--color-muted)" opacity="0.35" />
+              <ellipse cx="40" cy="58" rx="22" ry="16" fill="var(--color-muted)" opacity="0.35" />
+            </svg>
+          )}
         </div>
 
-        {/* ── RIGHT — Response options + close ─────────────────────────── */}
-        <div className="relative flex min-w-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2 pr-8">
-          {/* Close button — top right */}
-          <button
-            onClick={() => clear()}
-            aria-label="Close dialogue"
-            className="absolute right-1.5 top-1.5 z-50 rounded-sm p-1 transition-colors hover:bg-white/10"
-            style={{ color: "var(--color-muted)" }}
+        {/* NPC name */}
+        <p
+          className="text-center text-[10px] font-bold uppercase tracking-wider leading-tight"
+          style={{ color: "var(--color-accent)", maxWidth: "100px", wordBreak: "break-word" }}
+        >
+          {npcName ?? "???"}
+        </p>
+
+        {/* Disposition indicator */}
+        {disposition && dispStyle && (
+          <span
+            className="flex items-center gap-1 rounded-sm px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider"
+            style={{
+              color:           dispStyle.color,
+              backgroundColor: `color-mix(in srgb, ${dispStyle.color} 12%, transparent)`,
+            }}
           >
-            <X className="size-3" />
-          </button>
+            <span aria-hidden>{dispStyle.icon}</span>
+            <span>{disposition}</span>
+          </span>
+        )}
 
-          {options.map((option) => {
-            const locked = typeof option.charisma_required === "number" && charisma < option.charisma_required;
-            const color  = TONE_COLORS[option.tone];
-            const label  = TONE_LABELS[option.tone];
+        {/* Walk away — fully clears the modal */}
+        <button
+          onClick={() => clear()}
+          className="mt-auto text-[9px] italic underline-offset-2 underline transition-opacity hover:opacity-70"
+          style={{ color: "var(--color-muted)" }}
+        >
+          walk away
+        </button>
+      </div>
 
-            return (
-              <button
-                key={option.id}
-                disabled={locked}
-                onClick={() => !locked && handleOption(option)}
-                className="flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left transition-opacity"
+      {/* ── RIGHT — Response options + minimize ───────────────────────────── */}
+      <div className="relative flex min-w-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2 pr-8">
+        {/* Minimize button — top right */}
+        <button
+          onClick={() => setCollapsed(true)}
+          aria-label="Minimize dialogue"
+          className="absolute right-1.5 top-1.5 z-50 rounded-sm p-1 transition-colors hover:bg-white/10"
+          style={{ color: "var(--color-muted)" }}
+        >
+          <ChevronDown className="size-3" />
+        </button>
+
+        {options.map((option) => {
+          const color = TONE_COLORS[option.tone];
+          const label = TONE_LABELS[option.tone];
+
+          // Stat-check badge — amber warning, never a hard gate.
+          const sc            = option.stat_check;
+          const playerStat    = sc && playerStats ? playerStats[sc.stat] ?? 10 : 10;
+          const tooltipText   = sc
+            ? `Your ${STAT_LABELS[sc.stat]}: ${playerStat} | Difficulty: ${sc.difficulty} — ${
+                playerStat >= sc.difficulty + 4 ? "Likely to succeed"
+                : playerStat >= sc.difficulty - 2 ? "Risky"
+                : "Difficult"
+              }`
+            : "";
+
+          return (
+            <button
+              key={option.id}
+              onClick={() => handleOption(option)}
+              className="flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left transition-opacity"
+              style={{
+                fontSize:        "0.85rem",
+                backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)`,
+                border:          `1px solid ${color}`,
+                cursor:          "pointer",
+              }}
+            >
+              {/* Tone dot */}
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{ backgroundColor: color }}
+                title={label}
+              />
+
+              {/* Tone label — visible from 480px and up, hidden on narrow mobile */}
+              <span
+                className="hidden shrink-0 text-[9px] font-bold uppercase tracking-wider min-[480px]:inline"
+                style={{ color, minWidth: "62px" }}
+              >
+                {label}
+              </span>
+
+              {/* Option text */}
+              <span
+                className="min-w-0 flex-1 truncate font-mono leading-snug"
                 style={{
-                  fontSize:        "0.85rem",
-                  backgroundColor: locked
-                    ? "color-mix(in srgb, var(--color-muted) 6%, transparent)"
-                    : `color-mix(in srgb, ${color} 10%, transparent)`,
-                  border:  `1px solid ${locked ? "color-mix(in srgb, var(--color-border) 80%, transparent)" : color}`,
-                  cursor:  locked ? "not-allowed" : "pointer",
-                  opacity: locked ? 0.5 : 1,
+                  color:    "var(--color-text)",
+                  fontSize: "0.85rem",
                 }}
               >
-                {/* Tone dot */}
-                <span
-                  className="size-2 shrink-0 rounded-full"
-                  style={{ backgroundColor: locked ? "var(--color-muted)" : color }}
-                  title={label}
-                />
+                {option.text}
+              </span>
 
-                {/* Tone label — visible from 480px and up, hidden on narrow mobile */}
+              {/* Stat-check badge (amber, informational) */}
+              {sc && (
                 <span
-                  className="hidden shrink-0 text-[9px] font-bold uppercase tracking-wider min-[480px]:inline"
-                  style={{ color: locked ? "var(--color-muted)" : color, minWidth: "62px" }}
-                >
-                  {label}
-                </span>
-
-                {/* Option text */}
-                <span
-                  className="min-w-0 flex-1 truncate font-mono leading-snug"
+                  title={tooltipText}
+                  className="ml-auto flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
                   style={{
-                    color:    locked ? "var(--color-muted)" : "var(--color-text)",
-                    fontSize: "0.85rem",
+                    color:           "#f59e0b",
+                    backgroundColor: "color-mix(in srgb, #f59e0b 14%, transparent)",
+                    border:          "1px solid color-mix(in srgb, #f59e0b 50%, transparent)",
                   }}
                 >
-                  {option.text}
+                  <span aria-hidden>{STAT_ICONS[sc.stat]}</span>
+                  <span>{STAT_LABELS[sc.stat]} {sc.difficulty}+</span>
                 </span>
+              )}
+            </button>
+          );
+        })}
 
-                {/* CHA lock badge */}
-                {locked && typeof option.charisma_required === "number" && (
-                  <span
-                    className="ml-auto flex shrink-0 items-center gap-0.5 text-[9px] uppercase tracking-wide"
-                    style={{ color: "var(--color-muted)" }}
-                  >
-                    <Lock className="size-2.5" />
-                    CHA {option.charisma_required}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-
-          {/* Type your own — always last */}
-          <button
-            onClick={handleTypeOwn}
-            className="mt-auto w-full rounded-sm px-2 py-1 text-center text-[10px] italic transition-opacity hover:opacity-70"
-            style={{
-              color:  "var(--color-muted)",
-              border: "1px dashed color-mix(in srgb, var(--color-border) 70%, transparent)",
-            }}
-          >
-            ✎ type your own response
-          </button>
-        </div>
+        {/* Type your own — always last */}
+        <button
+          onClick={handleTypeOwn}
+          className="mt-auto w-full rounded-sm px-2 py-1 text-center text-[10px] italic transition-opacity hover:opacity-70"
+          style={{
+            color:  "var(--color-muted)",
+            border: "1px dashed color-mix(in srgb, var(--color-border) 70%, transparent)",
+          }}
+        >
+          ✎ type your own response
+        </button>
       </div>
-    </>
+    </div>
   );
 }

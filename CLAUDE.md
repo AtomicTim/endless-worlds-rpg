@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 3.0
+**Version:** 3.1
 **Status:** Active Development — MVP Core Loop Complete
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Day:** Patch B — CONTAINER Items + SVG Art Engine
+**Current Day:** Day 13.5 — World Asset System + Lore Codex
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -17,8 +17,8 @@
 | --- | --- | --- |
 | 1–12 | Foundation through Inventory | ✅ Complete |
 | Patch A | Narrator redesign, POI system | ✅ Complete |
-| Patch B | CONTAINER items, SVG art engine | 🔄 In Progress |
-| Day 13.5 | World Asset System + Lore Codex | ⏳ Pending |
+| Patch B | CONTAINER items, SVG art engine, dialogue prefix | ✅ Complete |
+| Day 13.5 | World Asset System + Lore Codex | 🔄 In Progress |
 | 13 | Log Book & Save System | ⏳ Pending |
 | 14 | MVP Playtest & Bug Fix | ⏳ Pending |
 
@@ -44,64 +44,69 @@ When the game introduces a new location, character, faction, creature, or item o
 - Any significant lore element (historical event, legend, document)
 
 ### What gets locked on first introduction:
-**Locations:** name, physical description, atmosphere, size, faction affiliation, key landmarks, available services
-**Characters:** name, appearance, personality, role, faction, speech patterns, relationship to player at first meeting
-**Factions:** name, ideology, appearance/uniform, relationship to other factions, territory
-**Creatures:** name, appearance, behavior, habitat, threat level
+- **Locations:** name, physical description, atmosphere, size, faction affiliation, key landmarks, available services
+- **Characters:** name, appearance, personality, role, faction, speech patterns, relationship to player at first meeting
+- **Factions:** name, ideology, appearance/uniform, relationship to other factions, territory
+- **Creatures:** name, appearance, behavior, habitat, threat level
 
 ### What CAN change (story-driven only):
-- NPC relationship/trust with the player (changes through interaction)
-- Location state if explicitly destroyed, rebuilt, or captured in the story
+- NPC relationship/trust with player
+- Location state if explicitly destroyed/rebuilt/captured in story
 - Faction standing based on player actions
-- Character knowledge (they learn things over time)
+- Character knowledge over time
 
 ### How this is enforced in code:
-- On first introduction, the Narrator outputs a `codex_entries` array with the asset's full constitution
-- This gets saved to the `world_assets` table in Supabase (Day 13.5)
-- On every subsequent Narrator call, relevant world assets for the current location are injected into the prompt as immutable facts
-- The Narrator system prompt explicitly states: "World assets listed below are established facts. Never contradict, reinterpret, or change them unless a story event explicitly does so."
-
-### Dialogue prefix system (coming in dialogue patch):
-- Player text in "quotes" = dialogue/speech directed at nearby characters
-- Plain text = actions and commands
-- Intent Parser routes quoted text directly to DIALOGUE action type
+- Narrator outputs `codex_entries` with asset constitution on first introduction
+- Saved to `world_assets` Supabase table (Day 13.5)
+- Injected back into Narrator prompt as immutable facts on subsequent calls
+- Narrator system prompt: "World assets listed below are established facts. Never contradict them."
 
 ---
 
 ## Key Deliverables Log
 
-### Patch A (confirmed on main — next build passing)
-- `types/game.ts`: PointOfInterest, CodexEntry interfaces; NarratorResponse with response_tier, points_of_interest, codex_entries
-- `prompt-builder.ts`: Narrator redesigned — ROLE, GOLDEN RULE, RESPONSE TIERS, END OF RESPONSE RULE, POI, CODEX, IP guard
-- `StoryFeed.tsx`: clickable highlighted POI text with type-specific colors
-- `InteractionPopover.tsx`: desktop floating card / mobile bottom sheet with contextual action buttons
-- `useGameLoop.ts`: POI in message metadata, codex stub, startTransition fast-path
-- `lib/game/codex.ts`: stub for Day 13.5
+### Patch B (confirmed on main — next build passing)
+- `types/game.ts`: CONTAINER added to ItemType, Item.searched, Item.contains
+- `logic-resolver.ts`: CONTAINER branch — marks searched=true, passes container_search context
+- `prompt-builder.ts`: CONTAINER SEARCH instruction injected when container_search=true
+- `InventoryPanel.tsx`: CONTAINER shows "Search"/"Drop", "Empty" badge when searched
+- `app/api/game/generate-art/route.ts`: SVG art generation, cache lookup by location_id+session_id
+- `supabase/migrations/002_art_cache.sql`: art_cache table with composite UNIQUE(location_id, session_id) — **APPLIED to Supabase**
+- `lib/game/art-generator.ts`: scene_type detection, per-genre SVG prompts, SVG sanitizer
+- `components/game/SceneArt.tsx`: async art display, fade-in, Zustand art cache
+- `game-store.ts`: artCache Record<string,string>, setArtCache()
+- `app/game/page.tsx`: fires async art generation after MOVE actions
+- `lib/game/intent-parser.ts`: detectDialogue() — quoted input → DIALOGUE, no AI call
+- `parse-intent/route.ts`: dialogueMode bypass returns DIALOGUE action instantly
+- `InputBar.tsx`: accent border + 💬 icon + "Speak" button when in quote mode
 
-### Pre-Patch A fixes
-- Fast-path system (equip/unequip/drop/read bypass all AI — truly instant)
+### Patch A (confirmed on main)
+- Narrator redesigned: ROLE, GOLDEN RULE, RESPONSE TIERS, END OF RESPONSE RULE, POI, CODEX, IP guard
+- StoryFeed: clickable POI highlights, InteractionPopover (desktop card / mobile sheet)
+- Fast-path: equip/unequip/drop/read — zero AI calls, startTransition, no spinner
+
+### Pre-Patch fixes
 - Narrative continuity: lastNarrativeText + 5 log entries in every Narrator call
-- Original content only policy
-- Spinner double-gated: never shows for fast-path actions
+- Original content only policy in all narrator prompts
 
 ---
 
-## Narrator Architecture (post Patch A)
+## Narrator Architecture
 
 - **Tier 1** (2-3 sentences): repeated actions, USE_ITEM, simple CUSTOM
 - **Tier 2** (4-6 sentences): EXAMINE, ATTACK, INTERACT, DIALOGUE, first NPC
 - **Tier 3** (80-120 words): NEW location, major story moments
 - GOLDEN RULE: honor player action, yes-and, hard logic blocks only
-- END OF RESPONSE: weave 2-3 interactables into final sentences naturally
-- Narrator never generates art — handled by separate art engine (Patch B)
+- END OF RESPONSE: weave 2-3 interactables into final sentences
+- Narrator never generates art — separate art engine handles this
 
 ---
 
 ## Action Classification Policy
 
 - **FAST PATH** (zero AI, instant): equip, unequip, drop, read lore
-- **NARRATIVE PATH**: MOVE, ATTACK, INTERACT, EXAMINE, DIALOGUE, USE_ITEM(CONSUMABLE)
-- **DIALOGUE DETECTION** (coming): quoted text → DIALOGUE action type automatically
+- **NARRATIVE PATH**: MOVE, ATTACK, INTERACT, EXAMINE, DIALOGUE, USE_ITEM(CONSUMABLE), search CONTAINER
+- **DIALOGUE DETECTION**: quoted text ("...") → instant DIALOGUE, no intent parser AI call
 
 ---
 
@@ -114,25 +119,35 @@ When the game introduces a new location, character, faction, creature, or item o
 
 ---
 
+## SVG Art Engine
+
+- Route: /api/game/generate-art
+- Async — fires after MOVE, never blocks narrative
+- Scene types: TOP_DOWN_TOWN, SIDE_VIEW_INTERIOR, FRONT_PORTRAIT, ISOMETRIC_WIDE
+- Cached in Supabase art_cache (UNIQUE per location_id+session_id)
+- In-memory cache in Zustand artCache
+- SVG sanitizer strips script/text/image/event handlers
+- Art fades in over 0.5s when ready
+
+---
+
 ## Planned Systems (upcoming)
 
 | System | When | Description |
 | --- | --- | --- |
-| World Asset persistence | Day 13.5 | Supabase world_assets table, asset constitution injection into narrator |
+| World Asset persistence | Day 13.5 | world_assets Supabase table, constitution injection into narrator |
 | Lore Codex page | Day 13.5 | Full encyclopedia UI per campaign |
-| Dialogue prefix | After Patch B | Quoted text = speech, plain text = action |
-| NPC Dialogue system | Day 15 (pulled forward) | Full conversation mode, Charisma gates, relationship consequences |
-| NPC Trading | Day 16 | Merchant NPCs, buy/sell UI, genre currency |
-| CONTAINER items | Patch B | Searchable objects with loot generation |
-| SVG Art Engine | Patch B | Async per-location art, cached in Supabase |
+| Log Book + Save System | Day 13 | LogBook sidebar, dashboard, Save & Exit |
+| NPC Dialogue system | Day 15 | Full conversation mode, Charisma gates |
+| NPC Trading | Day 16 | Merchant NPCs, buy/sell UI |
 
 ---
 
 ## 1. Core Philosophy
 
 - **The Hybrid Authority Model:** The Code is the "Source of Truth." The AI is the "Narrator."
-- **World Assets are permanent.** Every significant entity introduced becomes an immutable game asset.
-- **Zero-Image Visuals:** SVG pixel art (Patch B) + text, optimized for mobile and web.
+- **World Assets are permanent.** Every significant entity introduced is an immutable game asset.
+- **SVG Pixel Art + Text:** Async art engine, cached per location.
 - **Endless Versatility:** Genre Wrappers. Launch genres: Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic.
 
 ---
@@ -145,15 +160,15 @@ When the game introduces a new location, character, faction, creature, or item o
 | --- | --- |
 | **Metadata** | Genre, tone, difficulty |
 | **Player State** | HP, resources, attributes, inventory |
-| **World State** | Flags, location IDs, world_assets |
-| **Log Book** | Story beats and discovered lore |
+| **World State** | Flags, location IDs, world assets |
+| **Log Book** | Story beats and lore |
 | **NPC Registry** | Per-NPC memory, trust scores |
 
 ### B. The Game Loop
-1. **Intent Parser** → ParsedAction JSON (AI)
+1. **Intent Parser** → ParsedAction (AI, or instant for dialogue/fast-path)
 2. **Logic Resolver** → ResolutionResult (no AI)
 3. **Narrator** → story + POI + codex_entries (AI)
-4. **Art Engine** → SVG scene async (AI, cached) [Patch B]
+4. **Art Engine** → SVG async (AI, cached) — non-blocking
 
 ---
 
@@ -172,42 +187,7 @@ When the game introduces a new location, character, faction, creature, or item o
 
 ---
 
-## 4. Visual Strategy
-
-- **SVG Pixel Art**: async, cached per location in Supabase
-- View by scene type: NPC/enemy = front portrait, town = top-down, interior = side-view, wilderness = isometric
-- Genre color palettes applied to SVG output
-
----
-
-## 5. Implementation Roadmap
-
-| Phase | Days | Goal |
-| --- | --- | --- |
-| **0 — Foundation** | 1–4 | Scaffold |
-| **1 — MVP Core Loop** | 5–14 | Playable game |
-| **2 — Logic Engine** | 15–24 | Combat, NPCs, dialogue, trading |
-| **3 — World & Visuals** | 25–34 | Art refinement, genre wrappers, sound |
-| **4 — Monetization** | 35–42 | Stripe, tiers |
-| **5 — Polish & Launch** | 43–45 | Security, analytics, deploy |
-
----
-
-## 6. Monetization Model
-
-| Feature | Free | Adventurer ($6.99/mo) | Legend ($14.99/mo) |
-| --- | --- | --- | --- |
-| Genres | Fantasy only | All 5 | All 5 + future |
-| Save Slots | 1 | 3 | Unlimited |
-| AI Actions/Day | 50 | Unlimited | Unlimited |
-| Art Generation | Basic SVG | Enhanced SVG | Enhanced + Custom |
-| Community Templates | Browse | Browse + Play | Create + Share |
-| Export Log Book | ❌ | ✅ | ✅ |
-| Priority AI Speed | ❌ | ❌ | ✅ |
-
----
-
-## 7. Genre Definitions (Final — No Noir)
+## 4. Genre Definitions (Final — No Noir)
 
 | Genre | Tone | Palette | Currency | HP Label |
 | --- | --- | --- | --- | --- |
@@ -223,26 +203,34 @@ When the game introduces a new location, character, faction, creature, or item o
 
 ---
 
-## 8. Platform: PWA Only
+## 5. Monetization Model
+
+| Feature | Free | Adventurer ($6.99/mo) | Legend ($14.99/mo) |
+| --- | --- | --- | --- |
+| Genres | Fantasy only | All 5 | All 5 + future |
+| Save Slots | 1 | 3 | Unlimited |
+| AI Actions/Day | 50 | Unlimited | Unlimited |
+| Art Generation | Basic SVG | Enhanced SVG | Enhanced + Custom |
+| Community Templates | Browse | Browse + Play | Create + Share |
+| Export Log Book | ❌ | ✅ | ✅ |
+| Priority AI Speed | ❌ | ❌ | ✅ |
+
+---
+
+## 6. Platform: PWA Only
 Final. No Electron, no Steam. PWA manifest Day 35.
 
 ---
 
-## 9. Development Workflow
+## 7. Development Workflow
 
 **Claude.ai owns all CLAUDE.md updates. Claude Code must not modify CLAUDE.md.**
-
-| Tool | Role |
-| --- | --- |
-| Claude Code | Coding, commits, push |
-| Cursor | Review, minor edits |
-| Claude.ai | Strategy, prompts, CLAUDE.md |
 
 Workflow: Claude Code pushes → `git pull` + restart own server → report to Claude.ai → checklist → confirm → next prompt.
 
 ---
 
-## 10. Reference Links
+## 8. Reference Links
 - Supabase: https://supabase.com/dashboard
 - Anthropic Console: https://console.anthropic.com
 - Vercel: https://vercel.com/dashboard
@@ -250,4 +238,4 @@ Workflow: Claude Code pushes → `git pull` + restart own server → report to C
 
 ---
 
-*Last updated: Session 21 — V3.0: World Asset rule added as foundational principle. Dialogue prefix system noted. NPC dialogue pulled to Day 15. Patch B starting.*
+*Last updated: Session 22 — Patch B complete. art_cache migration applied to Supabase. Day 13.5 starting.*

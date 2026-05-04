@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 4.5
+**Version:** 4.6
 **Status:** Active Development — Phase 1 MVP Nearly Complete
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -20,10 +20,9 @@
 | Patch B | CONTAINER items, SVG art engine, dialogue prefix | ✅ Complete |
 | Location fix | State machine, ARRIVING/PRESENT, action authority | ✅ Complete |
 | Day 13.5 | World Asset System + Lore Codex | ✅ Complete |
-| All pre-Day 13 fixes | Codex, dialogue, SVG, identity, name reveal, action authority | ✅ Complete |
+| All pre-Day 13 fixes | All codex, dialogue, SVG, identity, object existence | ✅ Complete |
 | 13 | Log Book & Save System | ✅ Complete |
-| LogBook fixes | Persistence, sort order, story restoration, POI labels | ✅ Complete |
-| Story/Object fixes | Feed restoration on reload, resolver-confirmed object existence | ✅ Complete |
+| All Day 14 fixes | LogBook, story feed, world state persistence | ✅ Complete |
 | 14 | MVP Playtest & Bug Fix | 🔄 In Progress |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
@@ -35,43 +34,48 @@
 - `world_assets` — constitutions + svg_content + name_known
 - `codex` — lore encyclopedia entries
 
-### Object Existence Architecture (commit 3de7b31)
-- `resolveExamine()` and `resolveInteract()` always return success=true with `object_confirmed: true`, `object_name`, `object_exists_message` in narrative_context
-- `buildNarratorUserPrompt()` prepends a hard-fact confirmed object block at the very top when object_confirmed=true — first thing the narrator reads
-- Two-layer guarantee: resolver confirms at code level + narrator prompt receives as undeniable fact
+### Immediate Persistence Architecture (commit 206c966)
+Three things now save to Supabase immediately after every relevant action:
+1. **Log entries** — `POST /api/game/log-entries` after every narrative action
+2. **World state** — `POST /api/game/world-state` after every MOVE or world flag change
+   - Condition: `wsKeys.some(k => k !== "location_status")` — catches location + all flag mutations
+3. **Recent messages** — saved as part of full LogBook patch
+4. **Full state** — still saves every 10 actions (AUTO_SAVE_INTERVAL=10)
 
-### Story Feed Restoration Architecture
-- `patchLogEntries` saves full LogBook (entries + recent_messages) to DB
-- `recent_messages` = last 8 NARRATIVE/DIALOGUE messages, saved on every action
-- On reload: "— Resuming your adventure —" separator + restored messages (80% opacity) + welcome line
-- Debug logs: `[GameLoop/9b]` and `[GamePage]` for tracing
+Session resume: "— Resuming your adventure —" + last 8 messages (80% opacity). No stale location line. Fresh sessions show formatLocationId() welcome.
+
+### Object Existence Architecture (commit 3de7b31)
+- resolveExamine() + resolveInteract() always success=true with object_confirmed=true
+- Confirmed object block prepended as first thing narrator reads
+- Two-layer guarantee: resolver code level + narrator prompt
 
 ---
 
 ## ⚡ FOUNDATIONAL RULES (Read Before Every Session)
 
 ### 1. World Assets Are Permanent
-Every significant entity introduced becomes an immutable game asset. Write-once constitution. `ignoreDuplicates: true`.
+Write-once constitution. `ignoreDuplicates: true`. SVG backfilled separately.
 
 ### 2. Movement Is Absolute
-MOVE always succeeds. Only block: world flag `<location_id>_locked: true`.
+MOVE always succeeds. `location_status: ARRIVING`. World state saved immediately after.
 
 ### 3. Location Is Authoritative State
-`current_location_id` is always correct. Never inferred from narrative.
+`current_location_id` always correct. Saved immediately on MOVE. Never inferred from narrative.
 
 ### 4. Actions Are Permitted By Default
-Plausible actions always attempted. Narrator describes outcomes only.
+Plausible actions always attempted. Narrator describes outcomes.
 
 ### 5. Objects Mentioned Exist
-If narrator described it, player can interact with it. EXAMINE/INTERACT resolver confirms existence at code level — narrator receives as undeniable hard fact. POI labels exact — no synonyms.
+EXAMINE/INTERACT resolver confirms at code level. object_confirmed prepended to narrator. POI labels exact.
 
 ---
 
 ## Location State Machine
 
 ```
-PRESENT  — acting in current location. lastNarrativeText = "CURRENT SCENE CONTEXT"
+PRESENT  — in current location. lastNarrativeText = "CURRENT SCENE CONTEXT"
 ARRIVING — just moved here. lastNarrativeText = "DEPARTED SCENE (backstory)"
+World state saved immediately on ARRIVING.
 ```
 
 ---
@@ -80,10 +84,10 @@ ARRIVING — just moved here. lastNarrativeText = "DEPARTED SCENE (backstory)"
 Hidden World Seed: conflict + goal + 3-5 breadcrumbs + opening hook. Sealed in metadata.main_quest.
 
 ## 🎭 NPC Dialogue Window + Portraits (Day 15)
-SVG FRONT_PORTRAIT async on first encounter. Dialogue modal with portrait + options + free input.
+SVG FRONT_PORTRAIT async. Dialogue modal with portrait + options + free input.
 
 ## 🕵️ NPC Identity System
-name_known=false for CHARACTER. looksLikePlaceholder() 2+ word match. revealed_npc_names pipeline.
+name_known=false for CHARACTER. revealed_npc_names pipeline. updateMessagesNpcName patches feed.
 
 ## 💎 Item Value System (Day 16)
 Every item has sell value + lore blurb + optional dialogue unlock.
@@ -101,9 +105,9 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 - **Tier 2** (4-6 sentences): EXAMINE, ATTACK, INTERACT, DIALOGUE, first NPC
 - **Tier 3** (80-120 words): ARRIVING at NEW location, major moments
 - GOLDEN RULE: honor action, yes-and
-- MOVE: always arrives
-- EXAMINE/INTERACT: resolver confirms object_confirmed=true, prepended as first prompt fact
-- WORLD ASSET: constitutions as facts
+- MOVE: always arrives, world state saved immediately
+- EXAMINE/INTERACT: object_confirmed prepended as first fact
+- WORLD ASSET: constitutions injected as facts
 - DIALOGUE: "NPC: 'speech'" quoted in accent/italic
 - log_summary: 12-word max terse fragment
 
@@ -114,8 +118,8 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 - **FAST PATH**: equip, unequip, drop, read lore
 - **NARRATIVE PATH**: MOVE, ATTACK, INTERACT, EXAMINE, DIALOGUE, USE_ITEM(CONSUMABLE), search CONTAINER
 - **DIALOGUE**: quoted → instant, no AI
-- **MOVE**: always MOVE_SUCCESS
-- **EXAMINE/INTERACT**: always success=true, object_confirmed prepended to narrator
+- **MOVE**: always MOVE_SUCCESS + immediate world state save
+- **EXAMINE/INTERACT**: always success=true + object_confirmed
 
 ---
 
@@ -123,7 +127,7 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 
 | System | When | Description |
 | --- | --- | --- |
-| MVP Playtest | Day 14 | Full playtest, bug list, Phase 1 complete |
+| MVP Playtest complete | Day 14 | Phase 1 done after this |
 | NPC Dialogue + Portraits | Day 15 | Dialogue modal, SVG portraits, identity |
 | NPC Trading + Item Value | Day 16 | Merchants, buy/sell, item value + lore blurbs |
 | Main Narrative Thread | Day 17-18 | World Seed, main quest, breadcrumbs |
@@ -134,8 +138,8 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 ## Core Philosophy
 
 - Hybrid Authority: Code = Truth, AI = Narrator
-- World Assets permanent, Movement absolute, Objects mentioned exist
-- EXAMINE/INTERACT confirmed at resolver level — narrator cannot deny
+- World Assets permanent, Movement absolute, Objects exist
+- Immediate persistence: location + flags + logs saved after every relevant action
 - Actions permitted by default, Location authoritative
 - Every item has value, Every campaign has a purpose
 - Truly endless — AI generates on demand
@@ -199,4 +203,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 36 — V4.5: Object existence confirmed at resolver level. Story feed restoration complete. Day 14 playtest ready.*
+*Last updated: Session 37 — V4.6: Immediate persistence for location + flags + logs. Day 14 playtest in final stretch.*

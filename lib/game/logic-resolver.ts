@@ -1,7 +1,7 @@
 import { ActionType, ItemType, LocationStatus } from "@/types/game";
 import type { ActiveBuff, Attributes, MasterState, ParsedAction, ResolutionResult } from "@/types/game";
 import { rollD20, rollD6, getAttributeModifier } from "./dice";
-import { equipItem, unequipItem, updateHealth, updateSanity } from "./state-utils";
+import { equipItem, unequipItem, updateHealth, updateSanity, findNpcInRegistry } from "./state-utils";
 
 // ── Tunables ──────────────────────────────────────────────────────────────────
 
@@ -483,8 +483,16 @@ function resolveDialogue(action: ParsedAction, state: MasterState, opts: Resolve
   const strength         = state.player_state.attributes.strength;
   const perception       = state.player_state.attributes.perception;
   const charismaModifier = getAttributeModifier(charisma);
-  const npcKey           = action.primary_target ? normalizeKey(action.primary_target) : null;
-  const npc              = npcKey ? state.npc_registry[npcKey] ?? null : null;
+
+  // Robust registry lookup — handles snake_case, asset-id, and name-scan keys.
+  const found  = findNpcInRegistry(state.npc_registry, action.primary_target);
+  const npcKey = found?.key ?? (action.primary_target ? normalizeKey(action.primary_target) : null);
+  const npc    = found?.npc ?? null;
+  console.log("[resolveDialogue] NPC lookup:", {
+    primary_target: action.primary_target ?? null,
+    found:          !!found,
+    resolved_key:   npcKey,
+  });
 
   // Use the parser-supplied tone first; fall back to text heuristics so quoted
   // dialogue (which sometimes skips the tone slot) still routes correctly.

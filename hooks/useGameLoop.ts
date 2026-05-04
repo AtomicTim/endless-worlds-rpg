@@ -5,7 +5,7 @@ import { useGameStore, makeMessage, type StoryMessage } from "@/lib/stores/game-
 import { parseIntent, IntentParserError } from "@/lib/game/intent-parser";
 import { resolveAction } from "@/lib/game/logic-resolver";
 import { narrateAction } from "@/lib/game/narrator";
-import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory, updateNPCTrust } from "@/lib/game/state-utils";
+import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory, updateNPCTrust, findNpcInRegistry } from "@/lib/game/state-utils";
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
 import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, updateWorldAssetSvg, updateAssetNameRevealed } from "@/lib/game/codex";
 import { generateArt, generateNpcPortrait, getSceneType } from "@/lib/game/art-generator";
@@ -260,7 +260,7 @@ export function useGameLoop() {
   const isProcessing   = useGameStore((s) => s.isProcessing);
   const processingStep = useGameStore((s) => s.processingStep);
 
-  const submitAction = useCallback(async (input: string) => {
+  const submitAction = useCallback(async (input: string, options?: { npcName?: string }) => {
     const store = useGameStore.getState();
 
     // ── 1. Validate input ────────────────────────────────────────────────────
@@ -304,6 +304,16 @@ export function useGameLoop() {
           throw err;
         }
         store.setProcessing(true, "The world responds...");
+      }
+
+      // ── 2b. NPC name override ──────────────────────────────────────────────
+      // When the caller provides an authoritative NPC name (e.g. dialogue
+      // modal click, or InputBar submit while a dialogue is active), pin
+      // primary_target to that name for DIALOGUE actions. This sidesteps the
+      // Intent Parser ever having to extract an NPC name from quoted speech —
+      // the name is whatever the game state says it is.
+      if (options?.npcName && parsedAction.action_type === ActionType.DIALOGUE) {
+        parsedAction = { ...parsedAction, primary_target: options.npcName };
       }
 
       // ── 3. Resolve action ──────────────────────────────────────────────────
@@ -592,9 +602,14 @@ export function useGameLoop() {
       }
 
       // ── 7e. Trust changes from dialogue ──────────────────────────────────────
+      // Resolve narrator-provided npc_key against whatever scheme the registry
+      // is actually using (snake_case, asset-id, or name match). Falls back to
+      // the literal key the narrator emitted when nothing matches.
       if (narratorResponse.trust_changes && narratorResponse.trust_changes.length > 0) {
         for (const tc of narratorResponse.trust_changes) {
-          updatedState = updateNPCTrust(updatedState, tc.npc_key, tc.delta);
+          const found = findNpcInRegistry(updatedState.npc_registry, tc.npc_key);
+          const key   = found?.key ?? tc.npc_key;
+          updatedState = updateNPCTrust(updatedState, key, tc.delta);
         }
       }
 
@@ -676,7 +691,26 @@ export function useGameLoop() {
                   ? (gsBefore.artCache[npcAsset.id] ?? npcAsset.svg_content ?? null)
                   : null);
 
-          store.setDialogueOptions(dialogueOpts, npcName, portrait);
+          // Resolve the NPC's npc_registry key so the modal can read trust
+          // directly from masterState.npc_registry (authoritative source).
+          // Falls back to this turn's new_npcs entries — those will be merged
+          // into the registry in step 8 with the same normalized key.
+          let npcRegistryKey: string | null = null;
+          if (npcName) {
+            const inRegistry = findNpcInRegistry(updatedState.npc_registry, npcName);
+            if (inRegistry) {
+              npcRegistryKey = inRegistry.key;
+            } else {
+              const newNpc = narratorResponse.new_npcs.find(
+                (n) => n.name.toLowerCase() === npcName.toLowerCase()
+              );
+              if (newNpc) {
+                npcRegistryKey = normalizeAssetId(AssetCategory.CHARACTER, newNpc.name);
+              }
+            }
+          }
+
+          store.setDialogueOptions(dialogueOpts, npcName, portrait, npcRegistryKey);
         } else if (!isDialogueAction) {
           store.clearDialogueOptions();
         }
@@ -720,9 +754,19 @@ export function useGameLoop() {
       }
 
       if (narratorResponse.new_npcs.length > 0) {
+        // Always key freshly-introduced NPCs by normalizeAssetId(CHARACTER, name).
+        // This matches the locationAssets / world_assets ID format and the
+        // disposition-lookup path used by the Dialogue Modal. trust_score
+        // defaults to 50 (neutral) when missing, memory_snippets to [].
         const merged = { ...updatedState.npc_registry };
         for (const npc of narratorResponse.new_npcs) {
-          merged[npc.npc_key] = npc;
+          const standardKey = normalizeAssetId(AssetCategory.CHARACTER, npc.name);
+          merged[standardKey] = {
+            ...npc,
+            npc_key:         standardKey,
+            trust_score:     typeof npc.trust_score === "number" ? npc.trust_score : 50,
+            memory_snippets: Array.isArray(npc.memory_snippets) ? npc.memory_snippets : [],
+          };
         }
         updatedState = { ...updatedState, npc_registry: merged };
       }

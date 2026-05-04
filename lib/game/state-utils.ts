@@ -94,6 +94,52 @@ export function getNpcDisposition(trustScore: number): string {
   return "allied";
 }
 
+/**
+ * Robust NPC lookup against npc_registry. The registry has historically been
+ * keyed three ways:
+ *   - direct (whatever the narrator emitted, e.g. "old_hermit")
+ *   - snake_case from a display name (e.g. "Old Hermit" → "old_hermit")
+ *   - asset-id style (e.g. "character_old_hermit" — the Day-15.5 standard)
+ * This helper checks all three plus a name-based scan, so callers don't need
+ * to know which scheme produced the original entry.
+ *
+ * Returns { key, npc } when found, null otherwise.
+ */
+export function findNpcInRegistry(
+  registry: Record<string, NPCMemory>,
+  target: string | null | undefined
+): { key: string; npc: NPCMemory } | null {
+  if (!target) return null;
+
+  // 0. Direct key match (target is already a registry key).
+  if (registry[target]) {
+    return { key: target, npc: registry[target] };
+  }
+
+  const normalized = target.toLowerCase().trim().replace(/\s+/g, "_");
+
+  // 1. Legacy snake_case match.
+  if (registry[normalized]) {
+    return { key: normalized, npc: registry[normalized] };
+  }
+
+  // 2. Asset-id style: "character_<slug>".
+  const assetKey = normalized.startsWith("character_") ? normalized : `character_${normalized}`;
+  if (registry[assetKey]) {
+    return { key: assetKey, npc: registry[assetKey] };
+  }
+
+  // 3. Scan by display name (case-insensitive).
+  const lowerTarget = target.toLowerCase();
+  for (const [key, npc] of Object.entries(registry)) {
+    if (npc.name.toLowerCase() === lowerTarget) {
+      return { key, npc };
+    }
+  }
+
+  return null;
+}
+
 export function updateNPCTrust(state: MasterState, npcKey: string, delta: number): MasterState {
   const npc = state.npc_registry[npcKey];
   if (!npc) return state;

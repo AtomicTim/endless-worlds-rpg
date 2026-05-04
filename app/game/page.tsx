@@ -160,12 +160,19 @@ export default function GamePage() {
             onSubmit={(input) => { void submitAction(input); }}
           />
           <DialogueModal
-            onSubmit={(input) => { void submitAction(input); }}
+            onSubmit={(input, opts) => { void submitAction(input, opts); }}
             onFocusInput={() => { inputBarRef.current?.focus(); }}
           />
           <InputBar
             ref={inputBarRef}
-            onSubmit={(input) => { void submitAction(input); }}
+            onSubmit={(input) => {
+              // While a dialogue is active (modal visible OR collapsed), pin the
+              // active NPC name so the Intent Parser doesn't have to extract it
+              // from quoted speech. Non-DIALOGUE actions ignore the override
+              // inside submitAction (it only applies when action_type === DIALOGUE).
+              const activeNpc = useGameStore.getState().currentDialogueNpc;
+              void submitAction(input, activeNpc ? { npcName: activeNpc } : undefined);
+            }}
             disabled={isProcessing}
             processingStep={processingStep}
           />

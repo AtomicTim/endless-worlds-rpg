@@ -3,11 +3,12 @@
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { useGameStore } from "@/lib/stores/game-store";
 import { getNpcDisposition } from "@/lib/game/state-utils";
-import { AssetCategory } from "@/types/game";
 import type { DialogueOption } from "@/types/game";
 
 interface DialogueModalProps {
-  onSubmit:     (input: string) => void;
+  /** Submit a player line. Includes the active NPC name so the game loop can
+   *  pin primary_target without relying on the Intent Parser to extract it. */
+  onSubmit:     (input: string, options?: { npcName?: string }) => void;
   onFocusInput: () => void;
 }
 
@@ -67,6 +68,7 @@ function ensureResponsiveSvg(svg: string): string {
 export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
   const options       = useGameStore((s) => s.currentDialogueOptions);
   const npcName       = useGameStore((s) => s.currentDialogueNpc);
+  const npcKey        = useGameStore((s) => s.currentDialogueNpcKey);
   const portrait      = useGameStore((s) => s.currentNpcPortrait);
   const collapsed     = useGameStore((s) => s.dialogueModalCollapsed);
   const setCollapsed  = useGameStore((s) => s.setDialogueModalCollapsed);
@@ -74,23 +76,22 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
 
   // Player's own attribute scores — used by the stat-check tooltip & badge.
   const playerStats = useGameStore((s) => s.masterState?.player_state.attributes);
-  // Trust score for the active NPC, looked up by display name in locationAssets.
-  const trustScore  = useGameStore((s) => {
-    if (!npcName) return null;
-    const npc = s.locationAssets.find(
-      (a) => a.category === AssetCategory.CHARACTER && a.name.toLowerCase() === npcName.toLowerCase()
-    );
-    if (!npc) return null;
-    // Fall back to the NPC registry trust score (more accurate than the asset itself).
-    const npcKey = npc.id.replace(/^character_/, "");
-    return s.masterState?.npc_registry[npcKey]?.trust_score ?? null;
+
+  // Trust score is the AUTHORITATIVE value: read directly from
+  // masterState.npc_registry via currentDialogueNpcKey. Updates reactively
+  // every time trust_changes are applied to the registry.
+  const trustScore = useGameStore((s) => {
+    if (!npcKey || !s.masterState) return null;
+    return s.masterState.npc_registry[npcKey]?.trust_score ?? null;
   });
 
   if (options.length === 0) return null;
 
+  // Both submit paths pass the stored NPC name so the game loop can pin
+  // primary_target without re-extracting it from speech.
   const handleOption = (option: DialogueOption) => {
     clear();
-    onSubmit(`"${option.text}"`);
+    onSubmit(`"${option.text}"`, npcName ? { npcName } : undefined);
   };
 
   const handleTypeOwn = () => {

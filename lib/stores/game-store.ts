@@ -48,6 +48,8 @@ interface GameStore {
   // ── Dialogue Modal ─────────────────────────────────────────────────────────
   currentDialogueOptions: DialogueOption[];
   currentDialogueNpc:     string | null;
+  /** npc_registry key for the active NPC — authoritative source for trust/disposition. */
+  currentDialogueNpcKey:  string | null;
   currentNpcPortrait:     string | null;
   dialogueModalCollapsed: boolean;
 
@@ -65,8 +67,8 @@ interface GameStore {
   addPersistedLogEntry:    (entry: LogEntry) => void;
   /** Merge DB-loaded entries into the in-memory log without overwriting existing ones. */
   mergePersistedLogEntries:(entries: LogEntry[]) => void;
-  /** Show the Dialogue Modal with the given options, NPC name, and portrait (if ready). */
-  setDialogueOptions:      (options: DialogueOption[], npcName: string | null, portrait: string | null) => void;
+  /** Show the Dialogue Modal with the given options, NPC name, portrait, and npc_registry key. */
+  setDialogueOptions:      (options: DialogueOption[], npcName: string | null, portrait: string | null, npcKey?: string | null) => void;
   /** Hide the Dialogue Modal and clear all dialogue state. */
   clearDialogueOptions:    () => void;
   /** Toggle the modal between full and collapsed views without clearing options. */
@@ -90,6 +92,7 @@ export const useGameStore = create<GameStore>((set) => ({
   persistedLogEntries:    [],
   currentDialogueOptions: [],
   currentDialogueNpc:     null,
+  currentDialogueNpcKey:  null,
   currentNpcPortrait:     null,
   dialogueModalCollapsed: false,
 
@@ -129,10 +132,11 @@ export const useGameStore = create<GameStore>((set) => ({
         persistedLogEntries: [...chronological, ...s.persistedLogEntries].slice(-100),
       };
     }),
-  setDialogueOptions: (options, npcName, portrait) =>
+  setDialogueOptions: (options, npcName, portrait, npcKey) =>
     set({
       currentDialogueOptions: options,
       currentDialogueNpc:     npcName,
+      currentDialogueNpcKey:  npcKey ?? null,
       currentNpcPortrait:     portrait,
       // New options always re-expand the modal so the player sees them.
       dialogueModalCollapsed: false,
@@ -141,6 +145,7 @@ export const useGameStore = create<GameStore>((set) => ({
     set({
       currentDialogueOptions: [],
       currentDialogueNpc:     null,
+      currentDialogueNpcKey:  null,
       currentNpcPortrait:     null,
       dialogueModalCollapsed: false,
     }),
@@ -151,6 +156,7 @@ export const useGameStore = create<GameStore>((set) => ({
       persistedLogEntries:    [],
       currentDialogueOptions: [],
       currentDialogueNpc:     null,
+      currentDialogueNpcKey:  null,
       currentNpcPortrait:     null,
       dialogueModalCollapsed: false,
       locationAssets:         [],

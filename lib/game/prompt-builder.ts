@@ -6,7 +6,7 @@ import type {
   WorldAsset,
   WorldAssetConstitution,
 } from "@/types/game";
-import { getEquippedLoadout, getNpcDisposition } from "@/lib/game/state-utils";
+import { getEquippedLoadout, getNpcDisposition, findNpcInRegistry } from "@/lib/game/state-utils";
 import { GENRE_CONFIGS } from "@/lib/game/genre-config";
 
 // ── Intent Parser ─────────────────────────────────────────────────────────────
@@ -162,7 +162,43 @@ export function buildNarratorSystemPrompt(state: MasterState): string {
     .map((t) => `${t.name} (${t.type}, ${t.rarity})`)
     .join(", ");
 
-  return `ROLE:
+  return `YOUR ROLE — READ THIS BEFORE ANYTHING ELSE:
+You are a pure interpreter of game state. You have exactly three jobs:
+
+1. ASSET GENERATOR: On first encounter, describe new locations, NPCs, and items vividly so they become real world assets. Once described, they are locked. You never change them.
+
+2. SCENE BRIDGE: Describe what happens when the player takes an action. The game engine tells you the outcome (success/failure, damage dealt, check passed/failed). You write the story around that outcome. You do NOT decide outcomes.
+
+3. STORY THREAD: Occasionally weave subtle hints toward the main quest into your descriptions. Never force. Never block.
+
+HARD LIMITS — violating these breaks the game:
+
+NEVER speak in the player's voice.
+NEVER attribute dialogue, thoughts, memories, or feelings to the player that they did not explicitly state.
+NEVER invent prior relationships between the player and any NPC — the player has no history unless stated in the game state or log book.
+NEVER have the player 'recognize' someone, 'remember' something, or 'know' something they didn't discover in this session.
+
+The player is always a blank-slate protagonist.
+Their past is ONLY what appears in the game log.
+Their knowledge is ONLY what they have discovered.
+Their relationships are ONLY what they have built.
+
+WRONG: 'You recognize your old mentor, Gareth.'
+WRONG: 'As a former soldier, you know this tactic.'
+WRONG: 'You and Elara have always had a complicated history.'
+RIGHT: 'An elderly man with winter-sky eyes watches you.'
+RIGHT: 'The soldier's stance suggests military training.'
+RIGHT: 'Elara seems to recognize something in your face.'
+
+When writing NPC dialogue responses:
+- The NPC speaks based on their constitution + trust score
+- You do NOT write the player's reply
+- You do NOT put words in the player's mouth
+- You describe the NPC's reaction to what the player SAID (which is provided to you in the action context)
+
+═══════════════════════════════════════════════════════
+
+ROLE:
 You are the Game Master of ${genre} — ${personality} You set the scene, honor the player's choices, and make the world feel alive and reactive.
 
 THE GOLDEN RULE — HONOR THE PLAYER'S ACTION:
@@ -663,11 +699,14 @@ export function buildNarratorUserPrompt(
       `\nWrite the NPC's response reflecting this outcome.` +
       `\nOn PASSED: NPC is more forthcoming, helpful, swayed, or backed down by the attempt.` +
       `\nOn FAILED: NPC is suspicious, dismissive, evasive, hostile, or unmoved.`;
+  }
 
-    // ACTIVE NPC CONTEXT — inject the targeted NPC's full constitution so the
-    // narrator writes a strictly in-character response. Only when we have a
-    // matching CHARACTER asset in locationAssets.
-    const targetName = action?.primary_target ?? null;
+  // ACTIVE NPC CONTEXT — inject the NPC's full constitution + authoritative
+  // trust score for ALL DIALOGUE actions where the NPC is already an
+  // established asset. First-encounter NPCs (not yet in locationAssets) are
+  // skipped so the narrator can mint them as a brand-new world asset.
+  if (action?.action_type === ActionType.DIALOGUE) {
+    const targetName = action.primary_target ?? null;
     if (targetName && locationAssets && locationAssets.length > 0) {
       const npcAsset = locationAssets.find(
         (a) =>
@@ -675,25 +714,32 @@ export function buildNarratorUserPrompt(
           a.name.toLowerCase() === targetName.toLowerCase()
       );
       if (npcAsset) {
-        const trustScore  = Number(result.narrative_context.npc_trust_score ?? 50);
-        const disposition = getNpcDisposition(trustScore);
-        const c           = npcAsset.constitution;
+        // Read trust DIRECTLY from npc_registry — the authoritative source.
+        // Fall back to 50 (neutral) when the NPC isn't registered yet.
+        const registryEntry = findNpcInRegistry(state.npc_registry, npcAsset.name);
+        const trustScore    = registryEntry?.npc.trust_score ?? 50;
+        const disposition   = getNpcDisposition(trustScore);
+        const c             = npcAsset.constitution;
+        const displayName   = npcAsset.name_known === false ? "Identity Unknown" : npcAsset.name;
+
         const npcLines: string[] = [
           "",
-          "ACTIVE NPC CONTEXT:",
-          `Name: ${npcAsset.name}`,
-          `Trust score: ${trustScore}/100 — ${disposition}`,
-        ];
-        if (c.personality)         npcLines.push(`Personality: ${c.personality}`);
-        if (c.role)                npcLines.push(`Role: ${c.role}`);
-        if (c.notes)               npcLines.push(`Known motivations: ${c.notes}`);
-        if (c.faction_affiliation) npcLines.push(`Faction: ${c.faction_affiliation}`);
-        npcLines.push(
+          "═══ ACTIVE NPC — TREAT AS IMMUTABLE GAME FACTS ═══",
+          `Asset ID: ${npcAsset.id}`,
+          `Name: ${displayName}`,
+          `Trust score: ${trustScore}/100 → Disposition: ${disposition}`,
+          `Personality: ${c.personality ?? "Unknown"}`,
+          `Role: ${c.role ?? "Unknown"}`,
+          `Faction: ${c.faction_affiliation ?? "None known"}`,
+          `Motivations: ${c.notes ?? "Unknown"}`,
+          `First seen: ${npcAsset.first_seen_location || "Unknown"}`,
           "",
-          "The NPC must respond IN CHARACTER based on this profile.",
-          "Their response is filtered through their personality AND",
-          "their current trust level with the player."
-        );
+          "This NPC's responses MUST be consistent with these facts.",
+          "Their personality does not change. Their role does not change.",
+          "Their trust level affects how forthcoming they are — not",
+          "their fundamental character.",
+          "═════════════════════════════════════════════════════",
+        ];
         prompt += `\n${npcLines.join("\n")}`;
       }
     }

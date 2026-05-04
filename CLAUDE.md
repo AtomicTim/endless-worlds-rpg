@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 4.0
+**Version:** 4.1
 **Status:** Active Development — MVP Core Loop Complete
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -38,63 +38,76 @@
 ## ⚡ FOUNDATIONAL RULES (Read Before Every Session)
 
 ### 1. World Assets Are Permanent
-Every significant entity the Narrator introduces becomes an immutable game asset. Locked on first introduction. Constitution is write-once. SVG art backfilled separately. `ignoreDuplicates: true` on all saves.
+Every significant entity the Narrator introduces becomes an immutable game asset. Locked on first introduction. Constitution is write-once. `ignoreDuplicates: true` on all saves.
 
 ### 2. Movement Is Absolute
-MOVE actions always succeed. Only valid block: world flag `<location_id>_locked: true`. `resolveMove()` always returns MOVE_SUCCESS with `location_status: ARRIVING`.
+MOVE actions always succeed. Only valid block: world flag `<location_id>_locked: true`.
 
 ### 3. Location Is Authoritative State
-`current_location_id` is the single source of truth. Narrator never infers location from history. Every narrator call receives `══ PLAYER STATE ══` header with ARRIVING/PRESENT status.
+`current_location_id` is the single source of truth. Never inferred from narrative history.
 
 ### 4. Actions Are Permitted By Default
-Plausible actions always attempted. Narrator describes outcomes, never gatekeeps. Logic Resolver handles success/failure — not the Narrator.
+Plausible actions always attempted. Narrator describes outcomes, never gatekeeps.
 
 ### 5. Objects Mentioned Exist
-If the narrator described something, it exists and the player can interact with it. The narrator CANNOT retroactively un-create objects it mentioned. EXAMINE/INTERACT actions always resolve — narrator describes what the player finds, not an excuse for why it isn't there.
+If the narrator described something, it exists and the player can interact with it. Narrator CANNOT retroactively un-create objects. This includes readable objects like journals, books, notes, signs — if the narrator mentions a journal, the player can read it. EXAMINE/INTERACT/READ always resolves.
 
 ---
 
 ## Location State Machine
 
 ```
-PRESENT  — acting within current location. lastNarrativeText = "CURRENT SCENE CONTEXT"
+PRESENT  — acting in current location. lastNarrativeText = "CURRENT SCENE CONTEXT"
 ARRIVING — just moved here. lastNarrativeText = "DEPARTED SCENE (backstory)"
-
-Every resolver sets location_status in state_delta.
-narratorState always merges world_state delta before narrator call.
 ```
 
 ---
 
 ## 🎯 Main Narrative Thread (Day 17-18)
 
-Every new campaign generates a hidden **World Seed**:
-- Central conflict/threat, goal state, 3-5 organic breadcrumbs, opening hook
-- Stored in metadata.main_quest (sealed from player)
-- Narrator plants clues naturally — player can follow or free-roam
-- Win conditions: narrative resolution, faction victory, survival, discovery
+- Hidden World Seed: conflict, goal, 3-5 breadcrumbs, opening hook
+- Stored in metadata.main_quest (sealed)
+- Narrator plants clues naturally
+- Win conditions: resolution, faction victory, survival, discovery
 
 ---
 
 ## 🎭 NPC Dialogue Window + Portraits (Day 15)
 
-- SVG portrait (FRONT_PORTRAIT) generated on first NPC encounter, async
-- Dedicated dialogue modal: portrait + name/placeholder + dialogue + 3-4 response options + free input
+- SVG FRONT_PORTRAIT on first NPC encounter (async)
+- Dialogue modal: portrait + name + dialogue + 3-4 AI options + free input
 - Portrait cached in world_assets.svg_content
-- Name/portrait updates when true identity revealed
 
 ---
 
 ## 🕵️ NPC Identity System
 
-- `name_known: boolean` on world_assets (false for CHARACTER by default)
-- `looksLikePlaceholder(name)` — expanded word set, requires 2+ matching words for compound names
-- Auto-promotes to `name_known=true` if name contains no placeholder words
-- `revealed_npc_names` in NarratorResponse — narrator outputs when name learned
-  - Narrator must copy asset_id verbatim from ESTABLISHED WORLD ASSETS
-  - Fallback in step 7d: scans locationAssets by constitution.true_name if ID mismatch
-- `updateMessagesNpcName()` in game store patches existing feed messages on reveal
-- Codex dedup: updateAssetNameRevealed updates existing entry, never creates new one
+- `name_known` false for CHARACTER by default
+- `looksLikePlaceholder(name)` — 2+ matching words from expanded set
+- `revealed_npc_names` in NarratorResponse — asset_id copied verbatim from context
+- `updateMessagesNpcName()` patches existing feed messages on reveal
+
+---
+
+## 💎 Item Value System (Day 16)
+
+Every item, even seemingly minor ones, should have:
+- A **sell value** in genre currency (even junk has scrap value)
+- A **lore blurb** — one interesting sentence about its origin or nature
+- Optional **dialogue unlock**: carrying certain items opens conversation options with NPCs
+  (e.g. "I see you have a silver pendant..." → NPC recognizes it and reveals lore)
+- Items don't need to be "useful" to be valuable — flavor items enrich the world
+
+Implementation: Day 16 economy system. Narrator already generates item descriptions —
+add `value: number` and ensure `description` is always interesting, never generic.
+
+---
+
+## ⚠️ Known Remaining Narrator Issue
+
+Occasional instances of the narrator blocking LORE-type object interactions (journals,
+books, notes) despite the "objects mentioned exist" rule. Prompt language to be tightened
+in the next narrator prompt update — specifically adding LORE objects to the absolute rule.
 
 ---
 
@@ -107,17 +120,16 @@ Every new campaign generates a hidden **World Seed**:
 
 ## Key Deliverables Log
 
-### Action Authority Fix (confirmed on main — commit 74094b0)
-- `prompt-builder.ts`: EXAMINE AND INTERACT ABSOLUTE RULE — objects mentioned exist, narrator cannot un-create them
-- `prompt-builder.ts`: ⚠️ EXAMINE/INTERACT header in user prompt for those action types
-- `game-store.ts`: updateMessagesNpcName() — patches existing DIALOGUE messages on name reveal
-- `useGameLoop.ts`: step 7d captures placeholder name, calls updateMessagesNpcName after reveal
-- `useGameLoop.ts`: asset_id fallback scan by constitution.true_name
-- `codex.ts`: PLACEHOLDER_WORDS expanded, looksLikePlaceholder requires 2+ word matches
-
-### All previous fixes confirmed on main
-- normalizeAssetId, dialogue text parsing, SVG backfill, name_known, revealed_npc_names pipeline
+### All pre-Day 13 fixes (confirmed on main)
+- normalizeAssetId, dialogue text parsing, SVG backfill, name_known, revealed_npc_names
+- updateMessagesNpcName, asset_id fallback scan, looksLikePlaceholder expansion
+- EXAMINE/INTERACT ABSOLUTE RULE in narrator prompt
 - Migrations 001-006 all applied
+
+### Day 13.5 — world_assets + codex, constitution injection, codex browser
+### Location Fix — LocationStatus PRESENT/ARRIVING, narratorState always fresh
+### Patch B — CONTAINER, SVG art engine, dialogue prefix
+### Patch A — Narrator redesign, POI, InteractionPopover, fast-path
 
 ---
 
@@ -128,11 +140,11 @@ Every new campaign generates a hidden **World Seed**:
 - **Tier 3** (80-120 words): ARRIVING at NEW location, major story moments
 - GOLDEN RULE: honor player action, yes-and
 - MOVE RULE: player always arrives
-- EXAMINE/INTERACT RULE: objects mentioned exist, always resolve
-- LOCATION RULE: state authoritative, history is backstory
-- WORLD ASSET RULE: constitutions injected as immutable facts
-- DIALOGUE FORMAT: "NPC Name: 'speech'" — quoted in accent/italic, prose normal
-- NPC NAMES: asset_id copied verbatim from ESTABLISHED WORLD ASSETS on reveal
+- EXAMINE/INTERACT/READ RULE: objects mentioned exist, always resolve — including journals, books, notes, signs
+- LOCATION RULE: state authoritative
+- WORLD ASSET RULE: constitutions injected as facts
+- DIALOGUE FORMAT: "NPC: 'speech'" — quoted in accent/italic, prose normal
+- NPC NAMES: asset_id copied verbatim from ESTABLISHED WORLD ASSETS
 - Narrator never generates art
 
 ---
@@ -142,8 +154,8 @@ Every new campaign generates a hidden **World Seed**:
 - **FAST PATH** (zero AI, instant): equip, unequip, drop, read lore
 - **NARRATIVE PATH**: MOVE, ATTACK, INTERACT, EXAMINE, DIALOGUE, USE_ITEM(CONSUMABLE), search CONTAINER
 - **DIALOGUE**: quoted text → instant DIALOGUE, no AI call
-- **MOVE**: always MOVE_SUCCESS, sets ARRIVING
-- **EXAMINE/INTERACT**: always resolves, narrator describes outcome
+- **MOVE**: always MOVE_SUCCESS
+- **EXAMINE/INTERACT/READ**: always resolves, narrator describes outcome
 
 ---
 
@@ -154,7 +166,7 @@ Every new campaign generates a hidden **World Seed**:
 | Log Book + Save System | Day 13 | LogBook sidebar, dashboard, Save & Exit |
 | MVP Playtest | Day 14 | Full playtest, Phase 1 complete |
 | NPC Dialogue + Portraits | Day 15 | Dialogue modal, SVG portraits, identity reveal |
-| NPC Trading | Day 16 | Merchant NPCs, buy/sell UI |
+| NPC Trading + Item Value | Day 16 | Merchant NPCs, buy/sell, item value + lore blurbs |
 | Main Narrative Thread | Day 17-18 | World Seed, main quest, breadcrumbs |
 | Art Engine Overhaul | Phase 3 (Day 25+) | Template + CC0 sprite approach |
 
@@ -165,9 +177,10 @@ Every new campaign generates a hidden **World Seed**:
 - **Hybrid Authority Model:** Code is Source of Truth. AI is the Narrator.
 - **World Assets are permanent.** Write-once constitutions.
 - **Movement is absolute.** Players always arrive.
-- **Objects mentioned exist.** Narrator cannot un-create what it described.
-- **Location is authoritative state.** current_location_id is always correct.
+- **Objects mentioned exist.** Narrator cannot un-create what it described. Includes readable objects.
+- **Location is authoritative state.**
 - **Actions are permitted by default.** Narrator describes, never gatekeeps.
+- **Every item has value.** Even flavor items have worth and story.
 - **The world has a purpose.** Every campaign has a hidden main quest.
 - **Truly endless.** AI generates content on demand.
 
@@ -262,4 +275,4 @@ Workflow: Claude Code pushes → `git pull` + restart own server → report to C
 
 ---
 
-*Last updated: Session 31 — V4.0: All action authority rules complete. 5 foundational rules now. Day 13 ready.*
+*Last updated: Session 32 — V4.1: Item value system noted for Day 16. LORE object interaction issue noted. Day 13 starting now.*

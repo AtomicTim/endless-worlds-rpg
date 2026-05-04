@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
-import { getAllCodex, getWorldAssetsByCategory, normalizeAssetId } from "@/lib/game/codex";
+import { getAllCodex, getWorldAssetsByCategory, normalizeAssetId, looksLikePlaceholder } from "@/lib/game/codex";
 import { AssetCategory } from "@/types/game";
 import type { CodexEntry, MasterState, WorldAsset } from "@/types/game";
 
@@ -194,7 +194,7 @@ export default function CodexPage() {
                       (a) => a.id === normalizeAssetId("CHARACTER", entry.name)
                     )
                   : undefined;
-              const identityUnknown = charAsset?.name_known === false;
+              const identityUnknown = charAsset?.name_known === false && looksLikePlaceholder(entry.name);
 
               return (
                 <button
@@ -283,7 +283,7 @@ export default function CodexPage() {
                       (a) => a.id === normalizeAssetId("CHARACTER", selected.name)
                     )
                   : undefined;
-              const modalIdentityUnknown = modalCharAsset?.name_known === false;
+              const modalIdentityUnknown = modalCharAsset?.name_known === false && looksLikePlaceholder(selected.name);
               return (
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>

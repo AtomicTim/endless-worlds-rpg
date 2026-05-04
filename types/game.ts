@@ -247,6 +247,8 @@ export interface NarratorResponse {
   items_acquired?:     Item[];
   points_of_interest:  PointOfInterest[];
   codex_entries:       CodexEntry[];
+  /** Populated when the player learns a CHARACTER's true identity this turn. */
+  revealed_npc_names?: Array<{ asset_id: string; true_name: string }>;
 }
 
 // ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@ import { resolveAction } from "@/lib/game/logic-resolver";
 import { narrateAction } from "@/lib/game/narrator";
 import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory } from "@/lib/game/state-utils";
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
-import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, updateWorldAssetSvg } from "@/lib/game/codex";
+import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, updateWorldAssetSvg, updateAssetNameRevealed } from "@/lib/game/codex";
 import { generateArt, getSceneType } from "@/lib/game/art-generator";
 import { ActionType, AssetCategory, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { MasterState, ParsedAction, ResolutionResult, WorldAsset } from "@/types/game";
@@ -451,6 +451,25 @@ export function useGameLoop() {
         void getWorldAssetsForLocation(sessionId, arrivedAt).then((assets) => {
           useGameStore.getState().setLocationAssets(assets);
         });
+      }
+
+      // ── 7d. Process revealed NPC names ───────────────────────────────────────
+      // When the narrator signals that the player learned a character's true
+      // identity this turn, persist the reveal and optimistically patch the
+      // Zustand locationAssets store so the codex UI reflects it immediately.
+      if (narratorResponse.revealed_npc_names && narratorResponse.revealed_npc_names.length > 0) {
+        for (const reveal of narratorResponse.revealed_npc_names) {
+          // Persist to DB — fire-and-forget.
+          void updateAssetNameRevealed(sessionId, reveal.asset_id, reveal.true_name);
+          // Optimistic local patch.
+          const currentAssets = useGameStore.getState().locationAssets;
+          const patched = currentAssets.map((a) =>
+            a.id === reveal.asset_id
+              ? { ...a, name: reveal.true_name, name_known: true }
+              : a
+          );
+          useGameStore.getState().setLocationAssets(patched);
+        }
       }
 
       // ── 8. Merge new NPCs into registry ────────────────────────────────────

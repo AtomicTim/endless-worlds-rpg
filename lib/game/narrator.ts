@@ -170,6 +170,26 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
       ? (parsed.codex_entries.map(normalizeCodex).filter(Boolean) as CodexEntry[])
       : [];
 
+    const revealed_npc_names = Array.isArray(parsed.revealed_npc_names)
+      ? (parsed.revealed_npc_names as unknown[]).reduce<Array<{ asset_id: string; true_name: string }>>(
+          (acc, entry) => {
+            if (
+              entry &&
+              typeof entry === "object" &&
+              typeof (entry as Record<string, unknown>).asset_id  === "string" &&
+              typeof (entry as Record<string, unknown>).true_name === "string"
+            ) {
+              acc.push({
+                asset_id:  (entry as Record<string, unknown>).asset_id  as string,
+                true_name: (entry as Record<string, unknown>).true_name as string,
+              });
+            }
+            return acc;
+          },
+          []
+        )
+      : [];
+
     const tierRaw = parsed.response_tier;
     const response_tier: 1 | 2 | 3 =
       tierRaw === 1 || tierRaw === 2 || tierRaw === 3 ? tierRaw : 2;
@@ -177,12 +197,13 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
     return {
       response_tier,
       narrative_text,
-      ascii_art:          null,
-      sound_id:           typeof parsed.sound_id === "string" ? parsed.sound_id : null,
+      ascii_art:           null,
+      sound_id:            typeof parsed.sound_id === "string" ? parsed.sound_id : null,
       new_npcs,
       items_acquired,
       points_of_interest,
       codex_entries,
+      ...(revealed_npc_names.length > 0 ? { revealed_npc_names } : {}),
     };
   } catch {
     return {

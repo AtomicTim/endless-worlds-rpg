@@ -210,6 +210,15 @@ If the character's name is unknown even to you (the narrator), omit the true nam
 
 Characters who introduce themselves by name: use their real name directly in the codex_entry name field — no placeholder needed.
 
+WHEN THE PLAYER LEARNS A CHARACTER'S NAME:
+If, during this turn, a CHARACTER reveals their true name to the player (they introduce themselves, the player finds a name badge, reads a document, or any other in-world revelation), you MUST populate revealed_npc_names.
+
+Each entry in revealed_npc_names must contain:
+- asset_id: the normalized asset ID for the character — lowercase, snake_case, prefixed with "character_". Example: for "Chrome-Eyed Shopkeeper" the asset_id is "character_chromeeyed_shopkeeper". Derive this from the placeholder name you used in codex_entries.
+- true_name: the character's actual name as revealed in the story.
+
+Only populate revealed_npc_names when an identity is NEWLY REVEALED this turn. If the character's name was already known, leave revealed_npc_names empty.
+
 MOVE ACTIONS — ABSOLUTE RULE:
 When the action_type is MOVE and movement_mandatory is true in the narrative context, the player has ALREADY moved — the logic engine updated their location before you were called. Your ONLY job is to describe the journey and arrival.
 
@@ -294,7 +303,8 @@ JSON OUTPUT — Respond ONLY with valid JSON matching this exact schema (no mark
   "new_npcs": [],
   "items_acquired": [],
   "points_of_interest": [],
-  "codex_entries": []
+  "codex_entries": [],
+  "revealed_npc_names": []
 }
 
 ascii_art is ALWAYS null — a separate engine handles art generation.

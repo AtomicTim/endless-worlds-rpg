@@ -59,6 +59,43 @@ function rowToWorldAsset(row: WorldAssetRow): WorldAsset {
   };
 }
 
+// ── Placeholder detection ─────────────────────────────────────────────────────
+
+/**
+ * Common descriptor words that appear in placeholder NPC names.
+ * A CHARACTER name is a placeholder when it contains at least one of these.
+ * Real proper names (e.g. "Kira Vale", "Old Ezra") either lack these entirely
+ * or mix them with a surname — the heuristic is intentionally conservative:
+ * it is better to show a "?" on a real name than to hide a "?" on a placeholder.
+ */
+const PLACEHOLDER_WORDS = new Set([
+  // Roles / professions
+  "figure", "man", "woman", "person", "stranger", "guard", "merchant",
+  "shopkeeper", "ferryman", "innkeeper", "bartender", "soldier", "officer",
+  "captain", "sergeant", "lieutenant", "doctor", "nurse", "engineer", "pilot",
+  "technician", "vendor", "trader", "dealer", "broker", "runner", "keeper",
+  "warden", "jailer", "herald", "courier", "scavenger", "raider", "cultist",
+  "priest", "monk", "acolyte", "assassin", "thief", "beggar", "vagrant",
+  "exile", "nomad", "wanderer",
+  // Descriptors
+  "hooded", "masked", "scarred", "cloaked", "armored", "robed", "tattooed",
+  "chrome", "eyed", "armed", "pale", "dark", "blind", "mute", "limping",
+  "bearded", "shaven", "bald", "hunched", "towering", "gaunt", "heavyset",
+  "one-armed", "one", "two", "three", "four", "old", "young", "elderly",
+  "ancient", "grizzled", "weathered", "mysterious", "unknown", "nameless",
+  "faceless",
+]);
+
+/**
+ * Returns true when `name` looks like a descriptive NPC placeholder rather
+ * than a proper character name. Used to avoid showing the "Identity Unknown"
+ * badge on entries where the narrator gave us a real name directly.
+ */
+export function looksLikePlaceholder(name: string): boolean {
+  const words = name.toLowerCase().replace(/[^a-z\s-]/g, "").split(/[\s-]+/);
+  return words.some((w) => PLACEHOLDER_WORDS.has(w));
+}
+
 // ── ID normalisation ──────────────────────────────────────────────────────────
 
 /**
@@ -114,10 +151,18 @@ export async function saveWorldAsset(
     const assetId   = normalizeAssetId(asset.category, asset.name);
     // CHARACTER assets default name_known=false (identity may be a placeholder).
     // All other categories are always known by name.
-    const nameKnown =
+    let nameKnown =
       asset.name_known !== undefined
         ? asset.name_known
         : asset.category !== AssetCategory.CHARACTER;
+
+    // Auto-promote: if a CHARACTER was assigned name_known=false but the name
+    // doesn't look like a descriptive placeholder (e.g. the narrator output a
+    // real name directly), treat it as already-revealed so the UI never shows
+    // a spurious "?" badge on a proper name.
+    if (!nameKnown && asset.category === AssetCategory.CHARACTER && !looksLikePlaceholder(asset.name)) {
+      nameKnown = true;
+    }
 
     const row: Record<string, unknown> = {
       session_id:          sessionId,

@@ -122,16 +122,30 @@ describe("MOVE", () => {
     expect(result.narrative_context.first_visit).toBe(true);
   });
 
-  it("fails for a different-genre location and flags invalid_location", () => {
+  it("succeeds for any valid target — MOVE always arrives unless explicitly locked", () => {
     const state  = baseState(); // current = fantasy_start_01
     const result = resolveAction(
       actionOf({ action_type: ActionType.MOVE, primary_target: "cyberpunk_alley_01" }),
       state
     );
 
+    expect(result.success).toBe(true);
+    expect(result.outcome_type).toBe("MOVE_SUCCESS");
+    expect(result.narrative_context.movement_mandatory).toBe(true);
+    expect(result.state_delta.world_state?.current_location_id).toBe("cyberpunk_alley_01");
+  });
+
+  it("fails when the target location has a _locked world flag", () => {
+    const state = baseState();
+    state.world_state.flags["cyberpunk_alley_01_locked"] = true;
+    const result = resolveAction(
+      actionOf({ action_type: ActionType.MOVE, primary_target: "cyberpunk_alley_01" }),
+      state
+    );
+
     expect(result.success).toBe(false);
-    expect(result.outcome_type).toBe("MOVE_INVALID");
-    expect(result.narrative_context.invalid_location).toBe(true);
+    expect(result.outcome_type).toBe("MOVE_BLOCKED");
+    expect(result.narrative_context.movement_blocked).toBe(true);
     expect(result.state_delta).toEqual({});
   });
 });

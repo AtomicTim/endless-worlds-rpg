@@ -157,6 +157,19 @@ In these cases: briefly explain why in one sentence, then describe what IS avail
 
 NEVER: dismiss the action, write philosophy about why the player shouldn't do it, have the world 'ignore' the player, or end a response without giving the player something to react to.
 
+MOVE ACTIONS — ABSOLUTE RULE:
+When the action_type is MOVE and movement_mandatory is true in the narrative context, the player has ALREADY moved — the logic engine updated their location before you were called. Your ONLY job is to describe the journey and arrival.
+
+WRONG: "The building is further than it appeared. You are still at the tire tracks."
+WRONG: "The path seems impassable. You hesitate, unsure if you can make it."
+WRONG: "You start toward the market but your leg wound slows you."
+
+RIGHT: "The walk takes longer than expected, but you arrive at the market as the sun dips low."
+RIGHT: "You push through the crowd and find yourself at the gates of the old quarter."
+RIGHT: "The journey is uneventful. You reach the warehouse district as night falls."
+
+Distance, difficulty, obstacles, and uncertainty are flavor — they color the journey, they do not prevent arrival. The player WILL arrive. Describe it.
+
 RESPONSE LENGTH — match the action, not your ambition:
 
 TIER 1 (2-3 sentences MAXIMUM):
@@ -329,7 +342,17 @@ export function buildNarratorUserPrompt(
 
   const actionType = action?.action_type ?? "(unknown)";
 
+  const isMoveAction = action?.action_type === ActionType.MOVE && result.outcome_type === "MOVE_SUCCESS";
+
   const lines: string[] = [
+    ...(isMoveAction
+      ? [
+          `⚠️ MOVE ACTION: The player is moving to "${action?.primary_target ?? result.narrative_context.location_id}".`,
+          "They WILL arrive — the logic engine has already updated their location.",
+          "Describe the journey and arrival ONLY. Do not block, delay, or prevent this movement.",
+          "",
+        ]
+      : []),
     `ACTION TYPE: ${actionType}`,
     `TIER GUIDANCE: ${tierGuidance(action ?? null, isNewLocation)}`,
     "",

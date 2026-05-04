@@ -78,23 +78,25 @@ function resolveMove(action: ParsedAction, state: MasterState): ResolutionResult
     };
   }
 
-  const visited  = state.world_state.visited_locations;
-  const isVisit  = visited.includes(target);
-  const isAdj    = isAdjacent(current, target);
-
-  if (!isVisit && !isAdj) {
+  // Only hard block: an explicit world flag marks this destination as locked.
+  const lockFlag = `${normalizeKey(target)}_locked`;
+  if (state.world_state.flags[lockFlag] === true) {
     return {
       success: false,
-      outcome_type: "MOVE_INVALID",
+      outcome_type: "MOVE_BLOCKED",
       state_delta: {},
       narrative_context: {
-        invalid_location: true,
+        movement_blocked: true,
+        reason: "locked",
+        lock_flag: lockFlag,
         location_id: target,
         current_location_id: current,
       },
     };
   }
 
+  const visited    = state.world_state.visited_locations;
+  const isVisit    = visited.includes(target);
   const newVisited = isVisit ? visited : [...visited, target];
 
   return {
@@ -111,6 +113,7 @@ function resolveMove(action: ParsedAction, state: MasterState): ResolutionResult
       location_id:        target,
       from_location:      current,
       first_visit:        !isVisit,
+      movement_mandatory: true,
     },
   };
 }

@@ -298,6 +298,9 @@ export interface WorldAssetConstitution {
 
   // Shared
   notes?: string;
+
+  // CHARACTER — true name (may differ from placeholder display name)
+  true_name?: string;
 }
 
 export interface WorldAsset {
@@ -310,4 +313,6 @@ export interface WorldAsset {
   session_id:          string;
   created_at:          string;
   svg_content?:        string;
+  /** false = player hasn't learned this CHARACTER's real identity yet */
+  name_known:          boolean;
 }

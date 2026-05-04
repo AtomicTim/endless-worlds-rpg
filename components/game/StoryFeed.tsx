@@ -114,7 +114,7 @@ function MessageEntry({ message, onPoiClick }: MessageEntryProps) {
     case "DIALOGUE":
       return (
         <div
-          className="message-enter space-y-0.5 border-l-2 pl-3"
+          className="message-enter space-y-0.5 border-l-2"
           style={{ borderColor: "var(--color-accent)", paddingLeft: "12px" }}
         >
           {npcName && (
@@ -125,11 +125,21 @@ function MessageEntry({ message, onPoiClick }: MessageEntryProps) {
               {npcName}
             </span>
           )}
-          <p
-            className="font-mono text-sm italic"
-            style={{ color: "var(--color-accent)", fontStyle: "italic" }}
-          >
-            &ldquo;{content}&rdquo;
+          <p className="font-mono text-sm leading-relaxed">
+            {parseDialogueText(content).map((seg, i) =>
+              seg.isQuote ? (
+                <span
+                  key={i}
+                  style={{ color: "var(--color-accent)", fontStyle: "italic" }}
+                >
+                  {seg.content}
+                </span>
+              ) : (
+                <span key={i} style={{ color: "var(--color-text)" }}>
+                  {seg.content}
+                </span>
+              )
+            )}
           </p>
         </div>
       );
@@ -173,6 +183,42 @@ function MessageEntry({ message, onPoiClick }: MessageEntryProps) {
     default:
       return null;
   }
+}
+
+// ── Dialogue text parsing ─────────────────────────────────────────────────────
+
+interface DialogueSegment {
+  content: string;
+  isQuote: boolean;
+}
+
+/**
+ * Splits narrator dialogue text into prose segments and quoted segments.
+ * Quoted segments are text inside "double quotes" — the narrator's speech
+ * format. Prose segments stay in --color-text; quoted segments get
+ * --color-accent + italic so only the spoken words pop visually.
+ */
+function parseDialogueText(text: string): DialogueSegment[] {
+  const segments: DialogueSegment[] = [];
+  // Match content inside "double quotes" (the narrator's dialogue format).
+  // Simple non-greedy match — doesn't need to handle escaped quotes because
+  // the LLM output doesn't produce them in this context.
+  const quoteRegex = /"[^"]*"/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = quoteRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ content: text.slice(lastIndex, match.index), isQuote: false });
+    }
+    segments.push({ content: match[0], isQuote: true });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    segments.push({ content: text.slice(lastIndex), isQuote: false });
+  }
+  // If no quotes found (plain narrative fallback), return whole text as prose.
+  return segments.length > 0 ? segments : [{ content: text, isQuote: false }];
 }
 
 // ── POI rendering ─────────────────────────────────────────────────────────────

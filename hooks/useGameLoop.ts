@@ -7,7 +7,7 @@ import { resolveAction } from "@/lib/game/logic-resolver";
 import { narrateAction } from "@/lib/game/narrator";
 import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory } from "@/lib/game/state-utils";
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
-import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId } from "@/lib/game/codex";
+import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, updateWorldAssetSvg } from "@/lib/game/codex";
 import { generateArt, getSceneType } from "@/lib/game/art-generator";
 import { ActionType, AssetCategory, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { MasterState, ParsedAction, ResolutionResult, WorldAsset } from "@/types/game";
@@ -322,11 +322,37 @@ export function useGameLoop() {
       // ── 7. Art engine — fire async on MOVE_SUCCESS (non-blocking) ────────
       if (resolution.outcome_type === "MOVE_SUCCESS") {
         const newLocationId = updatedState.world_state.current_location_id;
+        const artSessionId  = updatedState.metadata.session_id;
         const cached = useGameStore.getState().artCache[newLocationId];
         if (!cached) {
-          const sessionId = updatedState.metadata.session_id;
-          const genre     = String(updatedState.metadata.genre);
-          const desc      = narratorResponse.narrative_text.slice(0, 200);
+          const genre = String(updatedState.metadata.genre);
+          const desc  = narratorResponse.narrative_text.slice(0, 200);
+          console.log(`[GameLoop/art] Generating art for ${newLocationId} (session=${artSessionId})`);
+
+          // Helper: try to link the generated SVG to the world asset.
+          // Returns true when the asset was found and the update was issued;
+          // false when the asset isn't in the store yet (race condition).
+          const tryLinkSvgToAsset = async (svg: string): Promise<boolean> => {
+            const store = useGameStore.getState();
+            const matching = store.locationAssets.find(
+              (a) => a.category === AssetCategory.LOCATION && a.first_seen_location === newLocationId
+            );
+            if (!matching) {
+              console.log(
+                `[GameLoop/art] LOCATION asset not in store yet for ${newLocationId}` +
+                ` (locationAssets=${store.locationAssets.length}) — will retry in 2s`
+              );
+              return false;
+            }
+            if (matching.svg_content) {
+              console.log(`[GameLoop/art] SVG already set on asset ${matching.id}, skipping backfill.`);
+              return true;
+            }
+            console.log(`[GameLoop/art] Linking SVG → asset ${matching.id} (session=${artSessionId})`);
+            await updateWorldAssetSvg(artSessionId, matching.id, svg);
+            return true;
+          };
+
           // Fire and forget — art shows up when ready, never blocks the loop.
           void generateArt({
             location_id:   newLocationId,
@@ -334,9 +360,16 @@ export function useGameLoop() {
             scene_type:    getSceneType(newLocationId),
             genre,
             description:   desc,
-            session_id:    sessionId,
-          }).then((res) => {
-            if (res?.svg) useGameStore.getState().setArtCache(newLocationId, res.svg);
+            session_id:    artSessionId,
+          }).then(async (res) => {
+            if (!res?.svg) return;
+            useGameStore.getState().setArtCache(newLocationId, res.svg);
+            // Attempt to backfill svg_content on the world asset. The asset
+            // is saved in step 7b (fire-and-forget), so it might not be in
+            // locationAssets yet if art finishes first. Retry once after 2s.
+            if (!(await tryLinkSvgToAsset(res.svg))) {
+              setTimeout(() => { void tryLinkSvgToAsset(res.svg!); }, 2000);
+            }
           });
         }
       }
@@ -364,13 +397,20 @@ export function useGameLoop() {
             : AssetCategory.LORE;
 
         // For LOCATION assets introduced while ARRIVING, attach the cached SVG
-        // if it is already ready — otherwise SceneArt will backfill it later.
+        // if it is already ready — otherwise the art-engine retry in step 7
+        // will backfill it once the asset lands in the store.
         const isArrivingLocation =
           assetCategory === AssetCategory.LOCATION &&
           resolution.state_delta.world_state?.location_status === LocationStatus.ARRIVING;
         const cachedSvg = isArrivingLocation
           ? useGameStore.getState().artCache[currentLocationId]
           : undefined;
+        if (isArrivingLocation) {
+          console.log(
+            `[GameLoop/7b] Saving LOCATION asset for ${currentLocationId}` +
+            ` (session=${sessionId}, cachedSvg=${!!cachedSvg})`
+          );
+        }
 
         const asset: WorldAsset = {
           id:                  normalizeAssetId(assetCategory, entry.name),
@@ -381,6 +421,8 @@ export function useGameLoop() {
           first_seen_location: currentLocationId,
           session_id:          sessionId,
           created_at:          new Date().toISOString(),
+          // CHARACTER assets default to name_known=false; all others are known.
+          name_known:          assetCategory !== AssetCategory.CHARACTER,
           ...(cachedSvg ? { svg_content: cachedSvg } : {}),
         };
         try {

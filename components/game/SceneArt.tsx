@@ -57,14 +57,34 @@ export function SceneArt({
         // Backfill svg_content on the world asset for this location so the
         // Codex page can display it. Only write if session is known and the
         // asset exists without SVG already.
-        if (sessionId) {
-          const store           = useGameStore.getState();
-          const assetId         = normalizeAssetId(AssetCategory.LOCATION, locationName);
-          const matchingAsset   = store.locationAssets.find(
+        if (!sessionId) {
+          console.warn("[SceneArt] sessionId is undefined — cannot backfill SVG on world asset.");
+        } else {
+          const store         = useGameStore.getState();
+          const assetId       = normalizeAssetId(AssetCategory.LOCATION, locationName);
+          const matchingAsset = store.locationAssets.find(
             (a) => a.category === AssetCategory.LOCATION && a.first_seen_location === locationId
           );
-          if (matchingAsset && !matchingAsset.svg_content) {
-            void updateWorldAssetSvg(sessionId, matchingAsset.id ?? assetId, result.svg);
+
+          console.log(
+            `[SceneArt] SVG ready for locationId=${locationId} session=${sessionId}`,
+            `matchingAsset=${matchingAsset?.id ?? "none"}`,
+            `locationAssets count=${store.locationAssets.length}`
+          );
+
+          if (!matchingAsset) {
+            console.warn(
+              `[SceneArt] No LOCATION world asset found for locationId=${locationId}` +
+              ` — asset may not be saved yet (race condition). GameLoop will retry.`
+            );
+          } else if (matchingAsset.svg_content) {
+            console.log(`[SceneArt] SVG already set on asset ${matchingAsset.id}, skipping.`);
+          } else {
+            const targetId = matchingAsset.id ?? assetId;
+            console.log(`[SceneArt] Calling updateWorldAssetSvg(session=${sessionId}, asset=${targetId})`);
+            void updateWorldAssetSvg(sessionId, targetId, result.svg)
+              .then(() => console.log(`[SceneArt] SVG backfill succeeded for asset ${targetId}`))
+              .catch((err) => console.error(`[SceneArt] SVG backfill failed for asset ${targetId}:`, err));
             // Optimistically update the in-memory store so Codex page sees it
             // without a full refetch.
             setLocationAssets(

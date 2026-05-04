@@ -22,6 +22,7 @@ interface WorldAssetRow {
   significance:        string;
   first_seen_location: string | null;
   svg_content:         string | null;
+  name_known:          boolean | null;
   created_at:          string;
   updated_at:          string;
 }
@@ -41,6 +42,9 @@ interface CodexRow {
 // ── Mappers ───────────────────────────────────────────────────────────────────
 
 function rowToWorldAsset(row: WorldAssetRow): WorldAsset {
+  // name_known defaults: false for CHARACTER (identity may be unknown),
+  // true for everything else (locations, factions etc. are always "known").
+  const defaultNameKnown = row.category !== "CHARACTER";
   return {
     id:                  row.asset_id,
     category:            row.category as AssetCategory,
@@ -50,6 +54,7 @@ function rowToWorldAsset(row: WorldAssetRow): WorldAsset {
     first_seen_location: row.first_seen_location ?? "",
     session_id:          row.session_id,
     created_at:          row.created_at,
+    name_known:          row.name_known ?? defaultNameKnown,
     ...(row.svg_content ? { svg_content: row.svg_content } : {}),
   };
 }
@@ -107,6 +112,13 @@ export async function saveWorldAsset(
   try {
     const supabase  = createClient();
     const assetId   = normalizeAssetId(asset.category, asset.name);
+    // CHARACTER assets default name_known=false (identity may be a placeholder).
+    // All other categories are always known by name.
+    const nameKnown =
+      asset.name_known !== undefined
+        ? asset.name_known
+        : asset.category !== AssetCategory.CHARACTER;
+
     const row: Record<string, unknown> = {
       session_id:          sessionId,
       asset_id:            assetId,
@@ -115,6 +127,7 @@ export async function saveWorldAsset(
       constitution:        asset.constitution,
       significance:        asset.significance,
       first_seen_location: asset.first_seen_location,
+      name_known:          nameKnown,
     };
     if (asset.svg_content) row.svg_content = asset.svg_content;
 
@@ -154,6 +167,46 @@ export async function updateWorldAssetSvg(
     }
   } catch (err) {
     console.error("[updateWorldAssetSvg] unexpected", err);
+  }
+}
+
+/**
+ * Mark a CHARACTER asset's identity as revealed.
+ * Updates both world_assets (name + name_known) and the matching codex entry
+ * so the player-facing encyclopedia shows the true name immediately.
+ * Called by the Day 15 NPC dialogue system when a character introduces
+ * themselves by name.
+ * Never throws — logs errors only.
+ */
+export async function updateAssetNameRevealed(
+  sessionId: string,
+  assetId:   string,
+  trueName:  string
+): Promise<void> {
+  try {
+    const supabase = createClient();
+
+    // Update world_assets
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: assetErr } = await (supabase.from("world_assets") as any)
+      .update({ name: trueName, name_known: true })
+      .eq("session_id", sessionId)
+      .eq("asset_id", assetId);
+    if (assetErr) {
+      console.error("[updateAssetNameRevealed] world_assets update failed:", assetErr);
+    }
+
+    // Update codex entry (entry_id == assetId since both are normalizeAssetId output)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: codexErr } = await (supabase.from("codex") as any)
+      .update({ name: trueName })
+      .eq("session_id", sessionId)
+      .eq("entry_id", assetId);
+    if (codexErr) {
+      console.error("[updateAssetNameRevealed] codex update failed:", codexErr);
+    }
+  } catch (err) {
+    console.error("[updateAssetNameRevealed] unexpected", err);
   }
 }
 

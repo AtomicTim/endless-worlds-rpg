@@ -28,12 +28,13 @@ const TABS: TabConfig[] = [
 
 export default function CodexPage() {
   const router = useRouter();
-  const [characterName, setCharacterName]       = useState<string>("");
-  const [entries, setEntries]                   = useState<CodexEntry[]>([]);
+  const [characterName, setCharacterName]             = useState<string>("");
+  const [entries, setEntries]                         = useState<CodexEntry[]>([]);
   const [locationWorldAssets, setLocationWorldAssets] = useState<WorldAsset[]>([]);
-  const [activeTab, setActiveTab]               = useState<TabId>("LOCATION");
-  const [selected, setSelected]                 = useState<CodexEntry | null>(null);
-  const [loading, setLoading]                   = useState(true);
+  const [characterWorldAssets, setCharacterWorldAssets] = useState<WorldAsset[]>([]);
+  const [activeTab, setActiveTab]                     = useState<TabId>("LOCATION");
+  const [selected, setSelected]                       = useState<CodexEntry | null>(null);
+  const [loading, setLoading]                         = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,13 +67,15 @@ export default function CodexPage() {
       const session = sessions[0];
       setCharacterName(session.master_state.player_state.name);
       const sessionId = session.master_state.metadata.session_id;
-      const [all, locAssets] = await Promise.all([
+      const [all, locAssets, charAssets] = await Promise.all([
         getAllCodex(sessionId),
         getWorldAssetsByCategory(sessionId, AssetCategory.LOCATION),
+        getWorldAssetsByCategory(sessionId, AssetCategory.CHARACTER),
       ]);
       if (!cancelled) {
         setEntries(all);
         setLocationWorldAssets(locAssets);
+        setCharacterWorldAssets(charAssets);
         setLoading(false);
       }
     }
@@ -183,6 +186,16 @@ export default function CodexPage() {
             {tabEntries.map((entry) => {
               const isMajor = entry.significance === "MAJOR";
               const tab = TABS.find((t) => t.id === activeTab);
+
+              // Check name_known for CHARACTER entries
+              const charAsset =
+                entry.category === "CHARACTER"
+                  ? characterWorldAssets.find(
+                      (a) => a.id === normalizeAssetId("CHARACTER", entry.name)
+                    )
+                  : undefined;
+              const identityUnknown = charAsset?.name_known === false;
+
               return (
                 <button
                   key={entry.id}
@@ -200,20 +213,32 @@ export default function CodexPage() {
                         className="text-sm font-bold"
                         style={{ color: "var(--color-primary)" }}
                       >
-                        {entry.name}
+                        {entry.name}{identityUnknown ? " ?" : ""}
                       </span>
                     </div>
-                    <span
-                      className="rounded-sm px-1.5 py-0.5 text-[9px] tracking-wider uppercase"
-                      style={{
-                        backgroundColor: isMajor
-                          ? "color-mix(in srgb, #f59e0b 20%, transparent)"
-                          : "color-mix(in srgb, var(--color-muted) 15%, transparent)",
-                        color: isMajor ? "#fbbf24" : "var(--color-muted)",
-                      }}
-                    >
-                      {entry.significance}
-                    </span>
+                    {identityUnknown ? (
+                      <span
+                        className="rounded-sm px-1.5 py-0.5 text-[9px] tracking-wider uppercase"
+                        style={{
+                          backgroundColor: "color-mix(in srgb, var(--color-muted) 15%, transparent)",
+                          color:           "var(--color-muted)",
+                        }}
+                      >
+                        Identity Unknown
+                      </span>
+                    ) : (
+                      <span
+                        className="rounded-sm px-1.5 py-0.5 text-[9px] tracking-wider uppercase"
+                        style={{
+                          backgroundColor: isMajor
+                            ? "color-mix(in srgb, #f59e0b 20%, transparent)"
+                            : "color-mix(in srgb, var(--color-muted) 15%, transparent)",
+                          color: isMajor ? "#fbbf24" : "var(--color-muted)",
+                        }}
+                      >
+                        {entry.significance}
+                      </span>
+                    )}
                   </div>
                   <p
                     className="line-clamp-3 text-xs leading-relaxed"
@@ -250,30 +275,53 @@ export default function CodexPage() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <p
-                  className="text-[10px] tracking-wider uppercase"
-                  style={{ color: "var(--color-muted)" }}
-                >
-                  {selected.category}
-                </p>
-                <h2
-                  className="text-xl font-bold"
-                  style={{ color: "var(--color-primary)" }}
-                >
-                  {selected.name}
-                </h2>
-              </div>
-              <button
-                onClick={() => setSelected(null)}
-                className="text-lg"
-                style={{ color: "var(--color-muted)" }}
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
+            {/* Modal header — resolves name_known for CHARACTER entries */}
+            {(() => {
+              const modalCharAsset =
+                selected.category === "CHARACTER"
+                  ? characterWorldAssets.find(
+                      (a) => a.id === normalizeAssetId("CHARACTER", selected.name)
+                    )
+                  : undefined;
+              const modalIdentityUnknown = modalCharAsset?.name_known === false;
+              return (
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p
+                      className="text-[10px] tracking-wider uppercase"
+                      style={{ color: "var(--color-muted)" }}
+                    >
+                      {selected.category}
+                    </p>
+                    <h2
+                      className="text-xl font-bold"
+                      style={{ color: "var(--color-primary)" }}
+                    >
+                      {selected.name}{modalIdentityUnknown ? " ?" : ""}
+                    </h2>
+                    {modalIdentityUnknown && (
+                      <span
+                        className="mt-1 inline-block rounded-sm px-2 py-0.5 text-[9px] tracking-wider uppercase"
+                        style={{
+                          backgroundColor: "color-mix(in srgb, var(--color-muted) 15%, transparent)",
+                          color:           "var(--color-muted)",
+                        }}
+                      >
+                        Identity Unknown
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setSelected(null)}
+                    className="text-lg"
+                    style={{ color: "var(--color-muted)" }}
+                    aria-label="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })()}
 
             {/* SVG scene art — LOCATION entries only */}
             {selected.category === "LOCATION" && (() => {

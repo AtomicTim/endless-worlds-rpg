@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { GameLayout } from "@/components/layout/GameLayout";
 import { StoryFeed } from "@/components/game/StoryFeed";
 import { InputBar } from "@/components/game/InputBar";
+import { SceneArt } from "@/components/game/SceneArt";
 import { CharacterSheet } from "@/components/game/sidebar/CharacterSheet";
 import { InventoryPanel } from "@/components/game/sidebar/InventoryPanel";
 import { Genre } from "@/types/game";
@@ -28,7 +29,6 @@ export default function GamePage() {
 
   const masterState   = useGameStore((s) => s.masterState);
   const messages      = useGameStore((s) => s.messages);
-  const currentAscii  = useGameStore((s) => s.currentAsciiArt);
 
   const { submitAction, isProcessing, processingStep } = useGameLoop();
 
@@ -93,16 +93,14 @@ export default function GamePage() {
       genre={genre}
       mainPanel={
         <>
-          {currentAscii && (
-            <pre
-              className="ascii-art text-glow shrink-0 overflow-x-auto px-4 py-3"
-              style={{
-                color: "var(--color-primary)",
-                borderBottom: "1px solid var(--color-border)",
-              }}
-            >
-              {currentAscii}
-            </pre>
+          {masterState && (
+            <SceneArt
+              locationId={masterState.world_state.current_location_id}
+              locationName={masterState.world_state.current_location_id.replace(/_/g, " ")}
+              genre={String(masterState.metadata.genre)}
+              description={masterState.player_state.background}
+              sessionId={masterState.metadata.session_id}
+            />
           )}
           <StoryFeed
             messages={messages}

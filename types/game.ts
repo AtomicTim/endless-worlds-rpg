@@ -34,6 +34,7 @@ export enum ItemType {
   CONSUMABLE = "CONSUMABLE",
   KEY        = "KEY",
   LORE       = "LORE",
+  CONTAINER  = "CONTAINER",
 }
 
 export enum ItemRarity {
@@ -76,6 +77,8 @@ export interface Item {
   max_stack?:  number;
   equipped?:   boolean;
   stat_bonus?: Partial<Attributes>;
+  searched?:   boolean;
+  contains?:   Item[];
 }
 
 export interface EquippedLoadout {

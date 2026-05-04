@@ -319,7 +319,8 @@ JSON OUTPUT — Respond ONLY with valid JSON matching this exact schema (no mark
   "items_acquired": [],
   "points_of_interest": [],
   "codex_entries": [],
-  "revealed_npc_names": []
+  "revealed_npc_names": [],
+  "log_summary": "12-word max journal shorthand of this beat. No 'You'. No 'I'. No 'explored'. Third-person or fragments. Examples: 'Attacked goblin. Hit for 8 damage.' | 'Spoke with Old Hermit. He seemed suspicious.' | 'Discovered hidden chamber beneath the ruins.' | 'Arrived at the Iron Gate fortress.'"
 }
 
 ascii_art is ALWAYS null — a separate engine handles art generation.

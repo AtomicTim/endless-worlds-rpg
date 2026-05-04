@@ -249,6 +249,8 @@ export interface NarratorResponse {
   codex_entries:       CodexEntry[];
   /** Populated when the player learns a CHARACTER's true identity this turn. */
   revealed_npc_names?: Array<{ asset_id: string; true_name: string }>;
+  /** Terse 12-word journal shorthand of the beat — used for LogBook STORY entries. */
+  log_summary?:        string;
 }
 
 // ---------------------------------------------------------------------------

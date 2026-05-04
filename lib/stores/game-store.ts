@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { MasterState, WorldAsset } from "@/types/game";
+import type { MasterState, WorldAsset, LogEntry } from "@/types/game";
 
 // ── Message types ─────────────────────────────────────────────────────────────
 
@@ -55,17 +55,24 @@ interface GameStore {
   setLocationAssets:       (assets: WorldAsset[]) => void;
   /** Update the npcName metadata on any DIALOGUE messages that still carry an old placeholder name. */
   updateMessagesNpcName:   (oldName: string, newName: string) => void;
+  /** Append a single log entry; keeps the newest 100. */
+  addPersistedLogEntry:    (entry: LogEntry) => void;
+  /** Merge DB-loaded entries into the in-memory log without overwriting existing ones. */
+  mergePersistedLogEntries:(entries: LogEntry[]) => void;
+
+  persistedLogEntries: LogEntry[];
 }
 
 export const useGameStore = create<GameStore>((set) => ({
-  masterState:       null,
-  messages:          [],
-  isProcessing:      false,
-  processingStep:    null,
-  currentAsciiArt:   null,
-  lastNarrativeText: null,
-  artCache:          {},
-  locationAssets:    [],
+  masterState:         null,
+  messages:            [],
+  isProcessing:        false,
+  processingStep:      null,
+  currentAsciiArt:     null,
+  lastNarrativeText:   null,
+  artCache:            {},
+  locationAssets:      [],
+  persistedLogEntries: [],
 
   setMasterState:       (state) => set({ masterState: state }),
   addMessage:           (message) => set((s) => ({ messages: [...s.messages, message] })),
@@ -87,4 +94,17 @@ export const useGameStore = create<GameStore>((set) => ({
           : m
       ),
     })),
+  addPersistedLogEntry: (entry) =>
+    set((s) => ({
+      persistedLogEntries: [...s.persistedLogEntries, entry].slice(-100),
+    })),
+  mergePersistedLogEntries: (entries) =>
+    set((s) => {
+      const existingIds = new Set(s.persistedLogEntries.map((e) => e.id));
+      const newOnes     = entries.filter((e) => !existingIds.has(e.id));
+      if (newOnes.length === 0) return s;
+      return {
+        persistedLogEntries: [...s.persistedLogEntries, ...newOnes].slice(-100),
+      };
+    }),
 }));

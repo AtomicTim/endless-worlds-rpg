@@ -194,6 +194,11 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
     const response_tier: 1 | 2 | 3 =
       tierRaw === 1 || tierRaw === 2 || tierRaw === 3 ? tierRaw : 2;
 
+    const log_summary =
+      typeof parsed.log_summary === "string" && parsed.log_summary.trim()
+        ? parsed.log_summary.trim()
+        : undefined;
+
     return {
       response_tier,
       narrative_text,
@@ -204,6 +209,7 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
       points_of_interest,
       codex_entries,
       ...(revealed_npc_names.length > 0 ? { revealed_npc_names } : {}),
+      ...(log_summary ? { log_summary } : {}),
     };
   } catch {
     return {

@@ -86,6 +86,7 @@ export default function GamePage() {
 
       store.clearMessages();
       store.setMasterState(state);
+      store.mergePersistedLogEntries(state.log_book.entries);
       store.setAsciiArt(null);
 
       const worldName = WORLD_NAMES[state.metadata.genre] ?? "World";

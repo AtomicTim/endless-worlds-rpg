@@ -60,8 +60,7 @@ const ENTRY_STYLES: Record<LogEntryType, EntryStyle> = {
 // ── LogBook ───────────────────────────────────────────────────────────────────
 
 export function LogBook() {
-  const masterState = useGameStore((s) => s.masterState);
-  const entries     = masterState?.log_book.entries ?? [];
+  const entries = useGameStore((s) => s.persistedLogEntries);
 
   return (
     <SidebarPanel

@@ -9,7 +9,7 @@ import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory } fro
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
 import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, updateWorldAssetSvg, updateAssetNameRevealed } from "@/lib/game/codex";
 import { generateArt, getSceneType } from "@/lib/game/art-generator";
-import { ActionType, AssetCategory, ItemType, LocationStatus, LogEntryType } from "@/types/game";
+import { ActionType, AssetCategory, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { MasterState, ParsedAction, ResolutionResult, WorldAsset } from "@/types/game";
 
 const MAX_INPUT_LENGTH  = 500;
@@ -51,6 +51,26 @@ function outcomeToLogType(outcomeType: string): LogEntryType {
     return LogEntryType.DISCOVERY;
   }
   return LogEntryType.STORY;
+}
+
+const RARITY_LABELS: Record<ItemRarity, string> = {
+  [ItemRarity.COMMON]:    "Common",
+  [ItemRarity.UNCOMMON]:  "Uncommon",
+  [ItemRarity.RARE]:      "Rare",
+  [ItemRarity.LEGENDARY]: "Legendary",
+};
+
+/**
+ * Adds a log entry to masterState AND syncs it to the Zustand persistedLogEntries
+ * so the LogBook survives SPA navigation without waiting for a DB auto-save.
+ */
+function persistLogEntry(state: MasterState, type: LogEntryType, content: string): MasterState {
+  const updated = addLogEntry(state, type, content);
+  const latest  = updated.log_book.entries.at(-1);
+  if (latest) {
+    useGameStore.getState().addPersistedLogEntry(latest);
+  }
+  return updated;
 }
 
 async function persistState(
@@ -436,7 +456,7 @@ export function useGameLoop() {
         }
 
         if (entry.significance === "MAJOR") {
-          updatedState = addLogEntry(
+          updatedState = persistLogEntry(
             updatedState,
             LogEntryType.DISCOVERY,
             `New codex entry: ${entry.name} — ${entry.description}`
@@ -536,10 +556,11 @@ export function useGameLoop() {
             )
           );
           // DISCOVERY log entry per item acquired.
-          updatedState = addLogEntry(
+          const rarityLabel = RARITY_LABELS[item.rarity] ?? item.rarity;
+          updatedState = persistLogEntry(
             updatedState,
             LogEntryType.DISCOVERY,
-            `Found: ${item.name}${item.description ? ` — ${item.description}` : ""}`
+            `Found: ${item.name} (${rarityLabel})`
           );
         }
       }
@@ -553,21 +574,36 @@ export function useGameLoop() {
       }
 
       // ── 9. Append a structured log entry for this beat ────────────────────
-      // Extract first sentence (up to 120 chars) for a compact log preview.
+      // Extract first sentence (up to 120 chars) as fallback for log content.
       const firstSentence =
         (narratorResponse.narrative_text.match(/^[^.!?]*[.!?]/) ?? [])[0]?.trim() ??
         narratorResponse.narrative_text.slice(0, 120);
 
-      if (resolution.outcome_type.startsWith("ATTACK") && rollMsg) {
-        // COMBAT entry: dice result string is most useful here.
-        updatedState = addLogEntry(updatedState, LogEntryType.COMBAT, rollMsg);
+      if (resolution.outcome_type.startsWith("ATTACK")) {
+        // COMBAT entry: compact roll+outcome format.
+        const ctx2      = resolution.narrative_context;
+        const roll2     = typeof ctx2.roll      === "number" ? ctx2.roll      : null;
+        const mod2      = typeof ctx2.modifier  === "number" ? ctx2.modifier  : 0;
+        const total2    = typeof ctx2.total     === "number" ? ctx2.total     : (roll2 ?? 0) + mod2;
+        const diff2     = typeof ctx2.difficulty === "number" ? ctx2.difficulty : null;
+        const damage2   = typeof ctx2.damage    === "number" ? ctx2.damage    : 0;
+        const sign2     = mod2 >= 0 ? `+${mod2}` : `${mod2}`;
+        const diffStr2  = diff2 !== null ? ` vs ${diff2}` : "";
+        const label2    = ctx2.critical_hit  ? "Crit!"  :
+                          ctx2.critical_miss ? "Miss!"  :
+                          resolution.success ? "Hit!"   : "Miss!";
+        const dmgStr2   = damage2 > 0 ? ` (${damage2} dmg)` : "";
+        updatedState = persistLogEntry(updatedState, LogEntryType.COMBAT,
+          `Attack: ${roll2}${sign2}=${total2}${diffStr2} — ${label2}${dmgStr2}`);
       } else if (parsedAction.action_type === ActionType.DIALOGUE) {
-        // DIALOGUE entry: prefix with NPC name when available.
-        const npcLabel = parsedAction.primary_target ? `${parsedAction.primary_target}: ` : "";
-        updatedState = addLogEntry(updatedState, LogEntryType.DIALOGUE, `${npcLabel}${firstSentence}`);
+        // DIALOGUE entry: extract first NPC quote, fall back to first sentence.
+        const npcLabel   = parsedAction.primary_target ? `${parsedAction.primary_target}: ` : "";
+        const quotedText = narratorResponse.narrative_text.match(/"([^"]*)"/)?.[1]?.trim() ?? firstSentence;
+        updatedState = persistLogEntry(updatedState, LogEntryType.DIALOGUE, `${npcLabel}${quotedText}`);
       } else {
-        // STORY entry for MOVE, EXAMINE, INTERACT, CUSTOM, USE_ITEM narratives.
-        updatedState = addLogEntry(updatedState, LogEntryType.STORY, firstSentence);
+        // STORY entry: use narrator's log_summary when present, else first sentence.
+        const storyContent = narratorResponse.log_summary ?? firstSentence;
+        updatedState = persistLogEntry(updatedState, LogEntryType.STORY, storyContent);
       }
 
       // Bump last_played so the session sorts correctly on reload.

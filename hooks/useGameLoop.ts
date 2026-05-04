@@ -7,7 +7,7 @@ import { resolveAction } from "@/lib/game/logic-resolver";
 import { narrateAction } from "@/lib/game/narrator";
 import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory } from "@/lib/game/state-utils";
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
-import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation } from "@/lib/game/codex";
+import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId } from "@/lib/game/codex";
 import { generateArt, getSceneType } from "@/lib/game/art-generator";
 import { ActionType, AssetCategory, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { MasterState, ParsedAction, ResolutionResult, WorldAsset } from "@/types/game";
@@ -299,13 +299,23 @@ export function useGameLoop() {
       }
 
       // ── 6. Add narrative message ───────────────────────────────────────────
+      // DIALOGUE actions get their own message type so StoryFeed can style
+      // them with the NPC accent colour and quoted presentation.
+      const isDialogueAction = parsedAction.action_type === ActionType.DIALOGUE;
       store.addMessage(
-        makeMessage("NARRATIVE", narratorResponse.narrative_text, {
-          outcome_type:       resolution.outcome_type,
-          sound_id:           narratorResponse.sound_id,
-          response_tier:      narratorResponse.response_tier,
-          points_of_interest: narratorResponse.points_of_interest,
-        })
+        makeMessage(
+          isDialogueAction ? "DIALOGUE" : "NARRATIVE",
+          narratorResponse.narrative_text,
+          {
+            outcome_type:       resolution.outcome_type,
+            sound_id:           narratorResponse.sound_id,
+            response_tier:      narratorResponse.response_tier,
+            points_of_interest: narratorResponse.points_of_interest,
+            ...(isDialogueAction && parsedAction.primary_target
+              ? { npcName: parsedAction.primary_target }
+              : {}),
+          }
+        )
       );
       store.setLastNarrativeText(narratorResponse.narrative_text);
 
@@ -352,8 +362,18 @@ export function useGameLoop() {
           (Object.values(AssetCategory) as string[]).includes(entry.category)
             ? (entry.category as AssetCategory)
             : AssetCategory.LORE;
+
+        // For LOCATION assets introduced while ARRIVING, attach the cached SVG
+        // if it is already ready — otherwise SceneArt will backfill it later.
+        const isArrivingLocation =
+          assetCategory === AssetCategory.LOCATION &&
+          resolution.state_delta.world_state?.location_status === LocationStatus.ARRIVING;
+        const cachedSvg = isArrivingLocation
+          ? useGameStore.getState().artCache[currentLocationId]
+          : undefined;
+
         const asset: WorldAsset = {
-          id:                  entry.id,
+          id:                  normalizeAssetId(assetCategory, entry.name),
           category:            assetCategory,
           name:                entry.name,
           constitution:        { notes: entry.description },
@@ -361,6 +381,7 @@ export function useGameLoop() {
           first_seen_location: currentLocationId,
           session_id:          sessionId,
           created_at:          new Date().toISOString(),
+          ...(cachedSvg ? { svg_content: cachedSvg } : {}),
         };
         try {
           void saveWorldAsset(sessionId, asset);

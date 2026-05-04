@@ -21,6 +21,7 @@ interface WorldAssetRow {
   constitution:        WorldAssetConstitution;
   significance:        string;
   first_seen_location: string | null;
+  svg_content:         string | null;
   created_at:          string;
   updated_at:          string;
 }
@@ -49,7 +50,32 @@ function rowToWorldAsset(row: WorldAssetRow): WorldAsset {
     first_seen_location: row.first_seen_location ?? "",
     session_id:          row.session_id,
     created_at:          row.created_at,
+    ...(row.svg_content ? { svg_content: row.svg_content } : {}),
   };
+}
+
+// ── ID normalisation ──────────────────────────────────────────────────────────
+
+/**
+ * Derives a canonical, deterministic asset ID from category + name so that the
+ * same real-world entity always maps to the same DB row even when the Narrator
+ * generates a slightly different slug across calls.
+ *
+ * e.g. normalizeAssetId("CHARACTER", "Old Ezra") → "character_old_ezra"
+ */
+export function normalizeAssetId(category: string, name: string): string {
+  const slug   = name.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim().replace(/\s+/g, "_");
+  const prefix = (
+    {
+      CHARACTER: "character",
+      LOCATION:  "location",
+      FACTION:   "faction",
+      BESTIARY:  "creature",
+      ITEM:      "item",
+      LORE:      "lore",
+    } as Record<string, string>
+  )[category] ?? "asset";
+  return `${prefix}_${slug}`;
 }
 
 function rowToCodexEntry(row: CodexRow): CodexEntry {
@@ -79,18 +105,22 @@ export async function saveWorldAsset(
   asset: WorldAsset
 ): Promise<void> {
   try {
-    const supabase = createClient();
+    const supabase  = createClient();
+    const assetId   = normalizeAssetId(asset.category, asset.name);
+    const row: Record<string, unknown> = {
+      session_id:          sessionId,
+      asset_id:            assetId,
+      category:            asset.category,
+      name:                asset.name,
+      constitution:        asset.constitution,
+      significance:        asset.significance,
+      first_seen_location: asset.first_seen_location,
+    };
+    if (asset.svg_content) row.svg_content = asset.svg_content;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase.from("world_assets") as any).upsert(
-      {
-        session_id:          sessionId,
-        asset_id:            asset.id,
-        category:            asset.category,
-        name:                asset.name,
-        constitution:        asset.constitution,
-        significance:        asset.significance,
-        first_seen_location: asset.first_seen_location,
-      },
+      row,
       { onConflict: "session_id,asset_id", ignoreDuplicates: true }
     );
     if (error) {
@@ -98,6 +128,32 @@ export async function saveWorldAsset(
     }
   } catch (err) {
     console.error("[saveWorldAsset] unexpected", err);
+  }
+}
+
+/**
+ * Update ONLY the svg_content of an existing world asset.
+ * Uses .update() (not upsert) so it never overwrites the constitution.
+ * Silently no-ops if the asset doesn't exist yet.
+ */
+export async function updateWorldAssetSvg(
+  sessionId: string,
+  assetId:   string,
+  svgContent: string
+): Promise<void> {
+  try {
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase.from("world_assets") as any)
+      .update({ svg_content: svgContent })
+      .eq("session_id", sessionId)
+      .eq("asset_id", assetId)
+      .is("svg_content", null);   // only write when not already set
+    if (error) {
+      console.error("[updateWorldAssetSvg]", error);
+    }
+  } catch (err) {
+    console.error("[updateWorldAssetSvg] unexpected", err);
   }
 }
 
@@ -111,11 +167,12 @@ export async function saveCodexEntry(
 ): Promise<void> {
   try {
     const supabase = createClient();
+    const entryId  = normalizeAssetId(entry.category, entry.name);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase.from("codex") as any).upsert(
       {
         session_id:          sessionId,
-        entry_id:            entry.id,
+        entry_id:            entryId,
         category:            entry.category,
         name:                entry.name,
         description:         entry.description,

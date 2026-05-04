@@ -234,6 +234,15 @@ TIER 3 (1 paragraph, 80-120 words MAXIMUM):
 - Opening scene of the game
 Paint the scene with specific sensory details. End with 2 sentences pointing to 2-3 things nearby that the player can interact with next.
 
+DIALOGUE FORMATTING — when the action_type is DIALOGUE:
+Write the NPC's spoken words inside double quotes in narrative_text, preceded by their name.
+Example format: "Mira looks up slowly. \\"Stay back, stranger,\\" she warns, hand drifting to the blade at her hip. \\"I've seen your kind before.\\"  The door behind her is ajar."
+Rules:
+- Keep the NPC's voice authentic to their established constitution (speech patterns, personality)
+- Surround the quoted speech with brief scene-setting prose (1-2 sentences before/after)
+- Include the NPC's reaction or body language to make the scene feel alive
+- If the player's action is persuasion/charisma-based, reflect the outcome in the NPC's response
+
 END OF RESPONSE RULE:
 Every TIER 2 and TIER 3 response must end with 1-2 sentences that naturally establish what is nearby and available to interact with. Do not use a list. Weave it into the prose.
 

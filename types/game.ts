@@ -309,4 +309,5 @@ export interface WorldAsset {
   first_seen_location: string;
   session_id:          string;
   created_at:          string;
+  svg_content?:        string;
 }

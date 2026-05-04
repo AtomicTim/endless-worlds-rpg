@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useGameStore } from "@/lib/stores/game-store";
 import { generateArt, getSceneType } from "@/lib/game/art-generator";
+import { updateWorldAssetSvg, normalizeAssetId } from "@/lib/game/codex";
+import { AssetCategory } from "@/types/game";
 
 interface SceneArtProps {
   locationId:   string;
@@ -25,8 +27,9 @@ export function SceneArt({
   description,
   sessionId,
 }: SceneArtProps) {
-  const cached      = useGameStore((s) => s.artCache[locationId]);
-  const setArtCache = useGameStore((s) => s.setArtCache);
+  const cached           = useGameStore((s) => s.artCache[locationId]);
+  const setArtCache      = useGameStore((s) => s.setArtCache);
+  const setLocationAssets = useGameStore((s) => s.setLocationAssets);
   const [loading, setLoading] = useState(!cached);
 
   useEffect(() => {
@@ -48,7 +51,30 @@ export function SceneArt({
         session_id:    sessionId,
       });
       if (cancelled) return;
-      if (result?.svg) setArtCache(locationId, result.svg);
+      if (result?.svg) {
+        setArtCache(locationId, result.svg);
+
+        // Backfill svg_content on the world asset for this location so the
+        // Codex page can display it. Only write if session is known and the
+        // asset exists without SVG already.
+        if (sessionId) {
+          const store           = useGameStore.getState();
+          const assetId         = normalizeAssetId(AssetCategory.LOCATION, locationName);
+          const matchingAsset   = store.locationAssets.find(
+            (a) => a.category === AssetCategory.LOCATION && a.first_seen_location === locationId
+          );
+          if (matchingAsset && !matchingAsset.svg_content) {
+            void updateWorldAssetSvg(sessionId, matchingAsset.id ?? assetId, result.svg);
+            // Optimistically update the in-memory store so Codex page sees it
+            // without a full refetch.
+            setLocationAssets(
+              store.locationAssets.map((a) =>
+                a.id === matchingAsset.id ? { ...a, svg_content: result.svg } : a
+              )
+            );
+          }
+        }
+      }
       setLoading(false);
     })();
 

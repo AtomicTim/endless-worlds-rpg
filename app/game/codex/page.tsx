@@ -5,8 +5,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
-import { getAllCodex } from "@/lib/game/codex";
-import type { CodexEntry, MasterState } from "@/types/game";
+import { getAllCodex, getWorldAssetsByCategory, normalizeAssetId } from "@/lib/game/codex";
+import { AssetCategory } from "@/types/game";
+import type { CodexEntry, MasterState, WorldAsset } from "@/types/game";
 
 type TabId = "LOCATION" | "CHARACTER" | "FACTION" | "ITEM" | "LORE" | "BESTIARY";
 
@@ -27,11 +28,12 @@ const TABS: TabConfig[] = [
 
 export default function CodexPage() {
   const router = useRouter();
-  const [characterName, setCharacterName] = useState<string>("");
-  const [entries, setEntries]             = useState<CodexEntry[]>([]);
-  const [activeTab, setActiveTab]         = useState<TabId>("LOCATION");
-  const [selected, setSelected]           = useState<CodexEntry | null>(null);
-  const [loading, setLoading]             = useState(true);
+  const [characterName, setCharacterName]       = useState<string>("");
+  const [entries, setEntries]                   = useState<CodexEntry[]>([]);
+  const [locationWorldAssets, setLocationWorldAssets] = useState<WorldAsset[]>([]);
+  const [activeTab, setActiveTab]               = useState<TabId>("LOCATION");
+  const [selected, setSelected]                 = useState<CodexEntry | null>(null);
+  const [loading, setLoading]                   = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,9 +65,14 @@ export default function CodexPage() {
 
       const session = sessions[0];
       setCharacterName(session.master_state.player_state.name);
-      const all = await getAllCodex(session.master_state.metadata.session_id);
+      const sessionId = session.master_state.metadata.session_id;
+      const [all, locAssets] = await Promise.all([
+        getAllCodex(sessionId),
+        getWorldAssetsByCategory(sessionId, AssetCategory.LOCATION),
+      ]);
       if (!cancelled) {
         setEntries(all);
+        setLocationWorldAssets(locAssets);
         setLoading(false);
       }
     }
@@ -267,6 +274,27 @@ export default function CodexPage() {
                 ✕
               </button>
             </div>
+
+            {/* SVG scene art — LOCATION entries only */}
+            {selected.category === "LOCATION" && (() => {
+              const normalizedId = normalizeAssetId("LOCATION", selected.name);
+              const wa = locationWorldAssets.find(
+                (a) => a.id === normalizedId || a.first_seen_location === selected.first_seen_location
+              );
+              return wa?.svg_content ? (
+                <div
+                  className="mb-4 overflow-hidden rounded-sm"
+                  style={{
+                    width:       "100%",
+                    aspectRatio: "320 / 200",
+                    border:      "1px solid color-mix(in srgb, var(--color-primary) 55%, transparent)",
+                    backgroundColor: "var(--color-bg)",
+                  }}
+                  dangerouslySetInnerHTML={{ __html: wa.svg_content }}
+                />
+              ) : null;
+            })()}
+
             <p className="text-sm leading-relaxed" style={{ color: "var(--color-text)" }}>
               {selected.description}
             </p>

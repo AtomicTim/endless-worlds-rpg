@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 3.9
+**Version:** 4.0
 **Status:** Active Development — MVP Core Loop Complete
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -20,8 +20,7 @@
 | Patch B | CONTAINER items, SVG art engine, dialogue prefix | ✅ Complete |
 | Location fix | State machine, ARRIVING/PRESENT, action authority | ✅ Complete |
 | Day 13.5 | World Asset System + Lore Codex | ✅ Complete |
-| Pre-Day 13 fixes A+B | All codex, dialogue, SVG, identity fixes | ✅ Complete |
-| NPC name reveal fix | revealed_npc_names pipeline, badge logic | ✅ Complete |
+| All pre-Day 13 fixes | Codex, dialogue, SVG, identity, name reveal, action authority | ✅ Complete |
 | 13 | Log Book & Save System | 🔄 In Progress |
 | 14 | MVP Playtest & Bug Fix | ⏳ Pending |
 
@@ -39,16 +38,19 @@
 ## ⚡ FOUNDATIONAL RULES (Read Before Every Session)
 
 ### 1. World Assets Are Permanent
-Every significant entity the Narrator introduces becomes an immutable game asset. Named locations, characters, factions, creatures, unique items — locked on first introduction. Stored in `world_assets` table. Injected into every relevant Narrator call as hard facts. Constitution is write-once — `ignoreDuplicates: true`. SVG art backfilled via `updateWorldAssetSvg()` separately.
+Every significant entity the Narrator introduces becomes an immutable game asset. Locked on first introduction. Constitution is write-once. SVG art backfilled separately. `ignoreDuplicates: true` on all saves.
 
 ### 2. Movement Is Absolute
 MOVE actions always succeed. Only valid block: world flag `<location_id>_locked: true`. `resolveMove()` always returns MOVE_SUCCESS with `location_status: ARRIVING`.
 
 ### 3. Location Is Authoritative State
-`current_location_id` is the single source of truth. Narrator never infers location from history. Every narrator call receives `══ PLAYER STATE ══` header with explicit ARRIVING/PRESENT status.
+`current_location_id` is the single source of truth. Narrator never infers location from history. Every narrator call receives `══ PLAYER STATE ══` header with ARRIVING/PRESENT status.
 
 ### 4. Actions Are Permitted By Default
-Plausible actions always attempted. Narrator describes outcomes, never gatekeeps. Only hard physics/logic blocks are valid. Logic Resolver handles success/failure — not the Narrator.
+Plausible actions always attempted. Narrator describes outcomes, never gatekeeps. Logic Resolver handles success/failure — not the Narrator.
+
+### 5. Objects Mentioned Exist
+If the narrator described something, it exists and the player can interact with it. The narrator CANNOT retroactively un-create objects it mentioned. EXAMINE/INTERACT actions always resolve — narrator describes what the player finds, not an excuse for why it isn't there.
 
 ---
 
@@ -86,39 +88,36 @@ Every new campaign generates a hidden **World Seed**:
 ## 🕵️ NPC Identity System
 
 - `name_known: boolean` on world_assets (false for CHARACTER by default)
-- `looksLikePlaceholder(name)` — 60-word set of descriptor/role words
+- `looksLikePlaceholder(name)` — expanded word set, requires 2+ matching words for compound names
 - Auto-promotes to `name_known=true` if name contains no placeholder words
 - `revealed_npc_names` in NarratorResponse — narrator outputs when name learned
-- Step 7d in useGameLoop: calls `updateAssetNameRevealed()` + patches Zustand store
-- Codex badge: "?" + "Identity Unknown" only when name_known=false AND looksLikePlaceholder()
+  - Narrator must copy asset_id verbatim from ESTABLISHED WORLD ASSETS
+  - Fallback in step 7d: scans locationAssets by constitution.true_name if ID mismatch
+- `updateMessagesNpcName()` in game store patches existing feed messages on reveal
+- Codex dedup: updateAssetNameRevealed updates existing entry, never creates new one
 
 ---
 
 ## SVG Art Engine — Future Improvement Options (Phase 3)
 
-- **Option A:** Richer prompts | **Option B:** SVG templates | **Option C:** External API (~$0.002-0.005/img) | **Option D:** CC0 sprite library
-- **Recommended:** Option B + D combined. Deferred to Phase 3 (Day 25+).
+- **Option A:** Richer prompts | **Option B:** SVG templates | **Option C:** External API | **Option D:** CC0 sprites
+- **Recommended:** Option B + D. Deferred to Phase 3 (Day 25+).
 
 ---
 
 ## Key Deliverables Log
 
-### NPC Name Reveal Fix (confirmed on main)
-- `types/game.ts`: NarratorResponse.revealed_npc_names
-- `narrator.ts`: parseNarratorResponse extracts revealed_npc_names
-- `prompt-builder.ts`: revealed_npc_names in JSON schema + NPC NAMES instructions
-- `useGameLoop.ts`: step 7d — updateAssetNameRevealed + Zustand optimistic patch
-- `codex.ts`: looksLikePlaceholder(name), auto-promotes name_known for proper names
-- `codex/page.tsx`: badge requires name_known=false AND looksLikePlaceholder()
+### Action Authority Fix (confirmed on main — commit 74094b0)
+- `prompt-builder.ts`: EXAMINE AND INTERACT ABSOLUTE RULE — objects mentioned exist, narrator cannot un-create them
+- `prompt-builder.ts`: ⚠️ EXAMINE/INTERACT header in user prompt for those action types
+- `game-store.ts`: updateMessagesNpcName() — patches existing DIALOGUE messages on name reveal
+- `useGameLoop.ts`: step 7d captures placeholder name, calls updateMessagesNpcName after reveal
+- `useGameLoop.ts`: asset_id fallback scan by constitution.true_name
+- `codex.ts`: PLACEHOLDER_WORDS expanded, looksLikePlaceholder requires 2+ word matches
 
-### Pre-Day 13 Fixes A+B (confirmed on main)
-- normalizeAssetId, dialogue text parsing, SVG backfill with debug, name_known field
-- Migrations 005 + 006 applied
-
-### Day 13.5 — world_assets + codex tables, constitution injection, codex browser
-### Location Fix — LocationStatus PRESENT/ARRIVING, narratorState always fresh
-### Patch B — CONTAINER, SVG art engine, dialogue prefix
-### Patch A — Narrator redesign, POI, InteractionPopover, fast-path
+### All previous fixes confirmed on main
+- normalizeAssetId, dialogue text parsing, SVG backfill, name_known, revealed_npc_names pipeline
+- Migrations 001-006 all applied
 
 ---
 
@@ -128,11 +127,12 @@ Every new campaign generates a hidden **World Seed**:
 - **Tier 2** (4-6 sentences): EXAMINE, ATTACK, INTERACT, DIALOGUE, first NPC
 - **Tier 3** (80-120 words): ARRIVING at NEW location, major story moments
 - GOLDEN RULE: honor player action, yes-and
+- MOVE RULE: player always arrives
+- EXAMINE/INTERACT RULE: objects mentioned exist, always resolve
 - LOCATION RULE: state authoritative, history is backstory
-- ACTION RULE: plausible actions always attempted
 - WORLD ASSET RULE: constitutions injected as immutable facts
-- DIALOGUE FORMAT: "NPC Name: 'speech'" — quoted speech in accent/italic, prose normal
-- NPC NAMES: placeholder until introduced, revealed_npc_names signals reveal
+- DIALOGUE FORMAT: "NPC Name: 'speech'" — quoted in accent/italic, prose normal
+- NPC NAMES: asset_id copied verbatim from ESTABLISHED WORLD ASSETS on reveal
 - Narrator never generates art
 
 ---
@@ -142,7 +142,8 @@ Every new campaign generates a hidden **World Seed**:
 - **FAST PATH** (zero AI, instant): equip, unequip, drop, read lore
 - **NARRATIVE PATH**: MOVE, ATTACK, INTERACT, EXAMINE, DIALOGUE, USE_ITEM(CONSUMABLE), search CONTAINER
 - **DIALOGUE**: quoted text → instant DIALOGUE, no AI call
-- **MOVE**: always MOVE_SUCCESS, sets ARRIVING, narrator describes arrival
+- **MOVE**: always MOVE_SUCCESS, sets ARRIVING
+- **EXAMINE/INTERACT**: always resolves, narrator describes outcome
 
 ---
 
@@ -154,7 +155,7 @@ Every new campaign generates a hidden **World Seed**:
 | MVP Playtest | Day 14 | Full playtest, Phase 1 complete |
 | NPC Dialogue + Portraits | Day 15 | Dialogue modal, SVG portraits, identity reveal |
 | NPC Trading | Day 16 | Merchant NPCs, buy/sell UI |
-| Main Narrative Thread | Day 17-18 | World Seed, main quest, breadcrumbs, win conditions |
+| Main Narrative Thread | Day 17-18 | World Seed, main quest, breadcrumbs |
 | Art Engine Overhaul | Phase 3 (Day 25+) | Template + CC0 sprite approach |
 
 ---
@@ -162,14 +163,13 @@ Every new campaign generates a hidden **World Seed**:
 ## 1. Core Philosophy
 
 - **Hybrid Authority Model:** Code is Source of Truth. AI is the Narrator.
-- **World Assets are permanent.** Write-once constitutions + SVG + identity reveal.
+- **World Assets are permanent.** Write-once constitutions.
 - **Movement is absolute.** Players always arrive.
+- **Objects mentioned exist.** Narrator cannot un-create what it described.
 - **Location is authoritative state.** current_location_id is always correct.
 - **Actions are permitted by default.** Narrator describes, never gatekeeps.
-- **The world has a purpose.** Every campaign has a hidden main quest thread.
-- **SVG Pixel Art + Text.** Async, cached. Art engine overhaul Phase 3.
-- **Truly endless.** AI generates content on demand. The world grows with every session.
-- **Endless Versatility.** Genre Wrappers. Launch genres: Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic.
+- **The world has a purpose.** Every campaign has a hidden main quest.
+- **Truly endless.** AI generates content on demand.
 
 ---
 
@@ -190,8 +190,8 @@ Every new campaign generates a hidden **World Seed**:
 2. **Logic Resolver** → ResolutionResult + location_status (no AI)
 3. **narratorState** = updatedState merged with world_state delta
 4. **Narrator** → story + POI + codex_entries + revealed_npc_names (AI)
-5. **Asset saves** → fire-and-forget to world_assets + codex tables
-6. **Name reveals** → updateAssetNameRevealed + Zustand patch (step 7d)
+5. **Asset saves** → fire-and-forget
+6. **Name reveals** → updateAssetNameRevealed + Zustand patches
 7. **Art Engine** → SVG async (AI, cached) — non-blocking
 
 ---
@@ -262,4 +262,4 @@ Workflow: Claude Code pushes → `git pull` + restart own server → report to C
 
 ---
 
-*Last updated: Session 30 — V3.9: NPC name reveal pipeline complete. Day 13 ready.*
+*Last updated: Session 31 — V4.0: All action authority rules complete. 5 foundational rules now. Day 13 ready.*

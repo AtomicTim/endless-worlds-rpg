@@ -77,23 +77,34 @@ const PLACEHOLDER_WORDS = new Set([
   "warden", "jailer", "herald", "courier", "scavenger", "raider", "cultist",
   "priest", "monk", "acolyte", "assassin", "thief", "beggar", "vagrant",
   "exile", "nomad", "wanderer",
-  // Descriptors
+  // Descriptors — physical
   "hooded", "masked", "scarred", "cloaked", "armored", "robed", "tattooed",
   "chrome", "eyed", "armed", "pale", "dark", "blind", "mute", "limping",
   "bearded", "shaven", "bald", "hunched", "towering", "gaunt", "heavyset",
   "one-armed", "one", "two", "three", "four", "old", "young", "elderly",
   "ancient", "grizzled", "weathered", "mysterious", "unknown", "nameless",
-  "faceless",
+  "faceless", "tall", "short", "injured", "crippled",
+  // Descriptors — background / origin
+  "ashen", "village", "survivor", "local", "foreign", "exiled", "lone",
+  "wandering", "nervous", "silent", "wasteland", "ruined", "forgotten",
+  "lost", "fleeing", "passing",
 ]);
 
 /**
  * Returns true when `name` looks like a descriptive NPC placeholder rather
  * than a proper character name. Used to avoid showing the "Identity Unknown"
  * badge on entries where the narrator gave us a real name directly.
+ *
+ * A name is treated as a placeholder when MORE THAN ONE of its words appear
+ * in PLACEHOLDER_WORDS — compound descriptors like "Ashen Village Survivor"
+ * (3 hits) are unambiguously not proper names. Single-word matches are
+ * intentionally excluded to avoid false positives on names like "Old Ezra"
+ * where only "old" matches but "Ezra" is a real given name.
  */
 export function looksLikePlaceholder(name: string): boolean {
-  const words = name.toLowerCase().replace(/[^a-z\s-]/g, "").split(/[\s-]+/);
-  return words.some((w) => PLACEHOLDER_WORDS.has(w));
+  const words  = name.toLowerCase().replace(/[^a-z\s-]/g, "").split(/[\s-]+/);
+  const hits   = words.filter((w) => PLACEHOLDER_WORDS.has(w));
+  return hits.length > 1;
 }
 
 // ── ID normalisation ──────────────────────────────────────────────────────────

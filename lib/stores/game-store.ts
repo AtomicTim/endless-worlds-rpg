@@ -45,14 +45,16 @@ interface GameStore {
   artCache:          Record<string, string>;
   locationAssets:    WorldAsset[];
 
-  setMasterState:       (state: MasterState) => void;
-  addMessage:           (message: StoryMessage) => void;
-  setProcessing:        (isProcessing: boolean, step?: string) => void;
-  setAsciiArt:          (art: string | null) => void;
-  clearMessages:        () => void;
-  setLastNarrativeText: (text: string) => void;
-  setArtCache:          (locationId: string, svg: string) => void;
-  setLocationAssets:    (assets: WorldAsset[]) => void;
+  setMasterState:          (state: MasterState) => void;
+  addMessage:              (message: StoryMessage) => void;
+  setProcessing:           (isProcessing: boolean, step?: string) => void;
+  setAsciiArt:             (art: string | null) => void;
+  clearMessages:           () => void;
+  setLastNarrativeText:    (text: string) => void;
+  setArtCache:             (locationId: string, svg: string) => void;
+  setLocationAssets:       (assets: WorldAsset[]) => void;
+  /** Update the npcName metadata on any DIALOGUE messages that still carry an old placeholder name. */
+  updateMessagesNpcName:   (oldName: string, newName: string) => void;
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -75,4 +77,14 @@ export const useGameStore = create<GameStore>((set) => ({
   setArtCache:          (locationId, svg) =>
     set((s) => ({ artCache: { ...s.artCache, [locationId]: svg } })),
   setLocationAssets:    (assets) => set({ locationAssets: assets }),
+  updateMessagesNpcName: (oldName, newName) =>
+    set((s) => ({
+      messages: s.messages.map((m) =>
+        m.type === "DIALOGUE" &&
+        typeof m.metadata?.npcName === "string" &&
+        m.metadata.npcName.toLowerCase() === oldName.toLowerCase()
+          ? { ...m, metadata: { ...m.metadata, npcName: newName } }
+          : m
+      ),
+    })),
 }));

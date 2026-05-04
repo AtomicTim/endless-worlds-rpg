@@ -459,16 +459,48 @@ export function useGameLoop() {
       // Zustand locationAssets store so the codex UI reflects it immediately.
       if (narratorResponse.revealed_npc_names && narratorResponse.revealed_npc_names.length > 0) {
         for (const reveal of narratorResponse.revealed_npc_names) {
-          // Persist to DB — fire-and-forget.
-          void updateAssetNameRevealed(sessionId, reveal.asset_id, reveal.true_name);
-          // Optimistic local patch.
+          // FIX 3b: Validate the narrator-provided asset_id against locationAssets.
+          // The narrator may generate an ID based on the true name instead of the
+          // existing placeholder asset_id. Resolve the correct ID here.
           const currentAssets = useGameStore.getState().locationAssets;
+          let effectiveAssetId = reveal.asset_id;
+          let matchedAsset     = currentAssets.find((a) => a.id === reveal.asset_id);
+
+          if (!matchedAsset) {
+            // Fallback: find a CHARACTER whose constitution.true_name matches.
+            matchedAsset = currentAssets.find(
+              (a) =>
+                a.category === AssetCategory.CHARACTER &&
+                typeof a.constitution.true_name === "string" &&
+                a.constitution.true_name.toLowerCase() === reveal.true_name.toLowerCase()
+            );
+            if (matchedAsset) {
+              effectiveAssetId = matchedAsset.id;
+              console.log(
+                `[GameLoop/7d] asset_id corrected "${reveal.asset_id}" → "${effectiveAssetId}"`
+              );
+            }
+          }
+
+          // Capture placeholder name BEFORE the reveal (needed for FIX 2).
+          const placeholderName = matchedAsset?.name ?? "";
+
+          // Persist to DB — fire-and-forget.
+          void updateAssetNameRevealed(sessionId, effectiveAssetId, reveal.true_name);
+
+          // Optimistic local patch of locationAssets.
           const patched = currentAssets.map((a) =>
-            a.id === reveal.asset_id
+            a.id === effectiveAssetId
               ? { ...a, name: reveal.true_name, name_known: true }
               : a
           );
           useGameStore.getState().setLocationAssets(patched);
+
+          // FIX 2: Update any DIALOGUE messages in the feed that still carry
+          // the old placeholder name so the header reflects the reveal immediately.
+          if (placeholderName) {
+            useGameStore.getState().updateMessagesNpcName(placeholderName, reveal.true_name);
+          }
         }
       }
 

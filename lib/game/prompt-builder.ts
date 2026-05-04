@@ -163,6 +163,19 @@ In these cases: briefly explain why in one sentence, then describe what IS avail
 
 NEVER: dismiss the action, write philosophy about why the player shouldn't do it, have the world 'ignore' the player, or end a response without giving the player something to react to.
 
+EXAMINE AND INTERACT — ABSOLUTE RULE:
+If the player attempts to search, examine, or interact with something that was mentioned in a previous narrative, that thing EXISTS and the player can interact with it. The narrator described it — it is now a fact of the world.
+
+WRONG: 'The satchel was just a trick of shadow'
+WRONG: 'What you thought was a bag was merely stones'
+WRONG: Retroactively un-creating things the narrator mentioned
+
+RIGHT: Describe what the player finds when they search it
+RIGHT: The search succeeds or fails based on what's inside
+RIGHT: If truly nothing is there, say the object is empty or yields nothing
+
+The only exception: if the LOGIC RESOLVER returned success=false AND the world flags confirm the object is not present. In that case, briefly explain it is not there and offer what IS available.
+
 LOCATION & ACTION AUTHORITY:
 
 1. LOCATION IS A FACT, NOT AN INFERENCE:
@@ -214,7 +227,7 @@ WHEN THE PLAYER LEARNS A CHARACTER'S NAME:
 If, during this turn, a CHARACTER reveals their true name to the player (they introduce themselves, the player finds a name badge, reads a document, or any other in-world revelation), you MUST populate revealed_npc_names.
 
 Each entry in revealed_npc_names must contain:
-- asset_id: the normalized asset ID for the character — lowercase, snake_case, prefixed with "character_". Example: for "Chrome-Eyed Shopkeeper" the asset_id is "character_chromeeyed_shopkeeper". Derive this from the placeholder name you used in codex_entries.
+- asset_id: use the EXACT asset_id that appears in the ESTABLISHED WORLD ASSETS section for this character. Do NOT generate a new asset_id based on the true name — copy the existing asset_id verbatim from the ESTABLISHED WORLD ASSETS block. If the character is NOT yet in ESTABLISHED WORLD ASSETS (introduced this same turn), derive the asset_id from their placeholder name: lowercase the placeholder name, remove all punctuation except spaces, replace spaces with underscores, prefix with "character_". Example: "Chrome-Eyed Shopkeeper" → "character_chromeeyed_shopkeeper".
 - true_name: the character's actual name as revealed in the story.
 
 Only populate revealed_npc_names when an identity is NEWLY REVEALED this turn. If the character's name was already known, leave revealed_npc_names empty.
@@ -550,6 +563,15 @@ export function buildNarratorUserPrompt(
   ];
 
   let prompt = lines.join("\n");
+
+  // EXAMINE / INTERACT — remind the narrator the target exists.
+  if (
+    action?.action_type === ActionType.EXAMINE ||
+    action?.action_type === ActionType.INTERACT
+  ) {
+    const target = action.primary_target ?? action.secondary_target ?? "the target";
+    prompt += `\n\n⚠️ EXAMINE/INTERACT: Player is interacting with '${target}'. This object/entity EXISTS — it was established in the world. Describe what happens when they interact with it.`;
+  }
 
   // CONTAINER search → instruct the Narrator to populate items_acquired.
   const ctx = result.narrative_context;

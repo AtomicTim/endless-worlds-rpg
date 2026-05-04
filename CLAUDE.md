@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 3.8
+**Version:** 3.9
 **Status:** Active Development — MVP Core Loop Complete
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -20,8 +20,8 @@
 | Patch B | CONTAINER items, SVG art engine, dialogue prefix | ✅ Complete |
 | Location fix | State machine, ARRIVING/PRESENT, action authority | ✅ Complete |
 | Day 13.5 | World Asset System + Lore Codex | ✅ Complete |
-| Pre-Day 13 fixes A | Codex dedup, dialogue color, SVG→world asset link | ✅ Complete |
-| Pre-Day 13 fixes B | Dialogue parsing, SVG debug, NPC name visibility | ✅ Complete |
+| Pre-Day 13 fixes A+B | All codex, dialogue, SVG, identity fixes | ✅ Complete |
+| NPC name reveal fix | revealed_npc_names pipeline, badge logic | ✅ Complete |
 | 13 | Log Book & Save System | 🔄 In Progress |
 | 14 | MVP Playtest & Bug Fix | ⏳ Pending |
 
@@ -31,7 +31,7 @@
 ### Supabase Tables (all applied ✅)
 - `profiles`, `game_sessions`, `characters`, `world_states`, `log_books`, `npcs`, `subscriptions`, `community_templates`, `user_preferences`
 - `art_cache` — SVG art per location+session
-- `world_assets` — constitutions + svg_content + name_known columns
+- `world_assets` — constitutions + svg_content + name_known
 - `codex` — lore encyclopedia entries
 
 ---
@@ -71,7 +71,6 @@ Every new campaign generates a hidden **World Seed**:
 - Stored in metadata.main_quest (sealed from player)
 - Narrator plants clues naturally — player can follow or free-roam
 - Win conditions: narrative resolution, faction victory, survival, discovery
-- Implemented Day 17-18 after NPC dialogue (15) and trading (16)
 
 ---
 
@@ -80,16 +79,18 @@ Every new campaign generates a hidden **World Seed**:
 - SVG portrait (FRONT_PORTRAIT) generated on first NPC encounter, async
 - Dedicated dialogue modal: portrait + name/placeholder + dialogue + 3-4 response options + free input
 - Portrait cached in world_assets.svg_content
-- Name/portrait updates when true identity revealed via updateAssetNameRevealed()
+- Name/portrait updates when true identity revealed
 
 ---
 
 ## 🕵️ NPC Identity System
 
-- `name_known: boolean` on world_assets (false for CHARACTER, true for others)
-- Before name learned: descriptive placeholder ("Chrome-Eyed Shopkeeper"), "?" suffix in codex
-- After name learned: updateAssetNameRevealed() updates world_assets + codex
-- Narrator prompt includes NPC NAMES section with placeholder instructions
+- `name_known: boolean` on world_assets (false for CHARACTER by default)
+- `looksLikePlaceholder(name)` — 60-word set of descriptor/role words
+- Auto-promotes to `name_known=true` if name contains no placeholder words
+- `revealed_npc_names` in NarratorResponse — narrator outputs when name learned
+- Step 7d in useGameLoop: calls `updateAssetNameRevealed()` + patches Zustand store
+- Codex badge: "?" + "Identity Unknown" only when name_known=false AND looksLikePlaceholder()
 
 ---
 
@@ -102,17 +103,18 @@ Every new campaign generates a hidden **World Seed**:
 
 ## Key Deliverables Log
 
-### Pre-Day 13 Fixes B (confirmed on main)
-- `StoryFeed.tsx`: parseDialogueText() — quoted speech in accent/italic, prose stays normal
-- `SceneArt.tsx`: sessionId guard, detailed logging, .catch() on updateWorldAssetSvg
-- `useGameLoop.ts`: tryLinkSvgToAsset() helper, 2-second delayed retry for race condition
-- `types/game.ts`: WorldAsset.name_known boolean
-- `lib/game/codex.ts`: saveWorldAsset sets name_known=false for CHARACTER, updateAssetNameRevealed()
-- `prompt-builder.ts`: NPC NAMES section in narrator system prompt
-- `codex/page.tsx`: "Name ?" + "Identity Unknown" badge for unknown characters
-- `supabase/migrations/006_world_assets_name_known.sql` — applied ✅
+### NPC Name Reveal Fix (confirmed on main)
+- `types/game.ts`: NarratorResponse.revealed_npc_names
+- `narrator.ts`: parseNarratorResponse extracts revealed_npc_names
+- `prompt-builder.ts`: revealed_npc_names in JSON schema + NPC NAMES instructions
+- `useGameLoop.ts`: step 7d — updateAssetNameRevealed + Zustand optimistic patch
+- `codex.ts`: looksLikePlaceholder(name), auto-promotes name_known for proper names
+- `codex/page.tsx`: badge requires name_known=false AND looksLikePlaceholder()
 
-### Pre-Day 13 Fixes A — normalizeAssetId, accent styling, SVG link, migration 005 applied
+### Pre-Day 13 Fixes A+B (confirmed on main)
+- normalizeAssetId, dialogue text parsing, SVG backfill with debug, name_known field
+- Migrations 005 + 006 applied
+
 ### Day 13.5 — world_assets + codex tables, constitution injection, codex browser
 ### Location Fix — LocationStatus PRESENT/ARRIVING, narratorState always fresh
 ### Patch B — CONTAINER, SVG art engine, dialogue prefix
@@ -129,8 +131,8 @@ Every new campaign generates a hidden **World Seed**:
 - LOCATION RULE: state authoritative, history is backstory
 - ACTION RULE: plausible actions always attempted
 - WORLD ASSET RULE: constitutions injected as immutable facts
-- DIALOGUE FORMAT: "NPC Name: 'speech'" — prose stays normal color, quotes in accent italic
-- NPC NAMES: placeholder until introduced, true_name in constitution always
+- DIALOGUE FORMAT: "NPC Name: 'speech'" — quoted speech in accent/italic, prose normal
+- NPC NAMES: placeholder until introduced, revealed_npc_names signals reveal
 - Narrator never generates art
 
 ---
@@ -187,9 +189,10 @@ Every new campaign generates a hidden **World Seed**:
 1. **Intent Parser** → ParsedAction (AI, or instant for dialogue/fast-path)
 2. **Logic Resolver** → ResolutionResult + location_status (no AI)
 3. **narratorState** = updatedState merged with world_state delta
-4. **Narrator** → story + POI + codex_entries (AI, seeds breadcrumbs from main_quest)
+4. **Narrator** → story + POI + codex_entries + revealed_npc_names (AI)
 5. **Asset saves** → fire-and-forget to world_assets + codex tables
-6. **Art Engine** → SVG async (AI, cached) — non-blocking
+6. **Name reveals** → updateAssetNameRevealed + Zustand patch (step 7d)
+7. **Art Engine** → SVG async (AI, cached) — non-blocking
 
 ---
 
@@ -259,4 +262,4 @@ Workflow: Claude Code pushes → `git pull` + restart own server → report to C
 
 ---
 
-*Last updated: Session 29 — V3.8: Pre-Day 13 fixes B complete, migration 006 applied. Day 13 testing starting.*
+*Last updated: Session 30 — V3.9: NPC name reveal pipeline complete. Day 13 ready.*

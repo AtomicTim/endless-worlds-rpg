@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 3.3
+**Version:** 3.4
 **Status:** Active Development — MVP Core Loop Complete
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Day:** Day 13.5 — World Asset System + Lore Codex
+**Current Day:** Day 13 — Log Book & Save System
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -19,72 +19,82 @@
 | Patch A | Narrator redesign, POI system | ✅ Complete |
 | Patch B | CONTAINER items, SVG art engine, dialogue prefix | ✅ Complete |
 | Location fix | State machine, ARRIVING/PRESENT, action authority | ✅ Complete |
-| Day 13.5 | World Asset System + Lore Codex | 🔄 In Progress |
-| 13 | Log Book & Save System | ⏳ Pending |
+| Day 13.5 | World Asset System + Lore Codex | ✅ Complete |
+| 13 | Log Book & Save System | 🔄 In Progress |
 | 14 | MVP Playtest & Bug Fix | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
+
+### Supabase Tables (all applied)
+- `profiles` — user profiles
+- `game_sessions` — master state JSON per save slot
+- `characters` — character stats
+- `world_states` — flags and location IDs
+- `log_books` — story entries
+- `npcs` — NPC registry
+- `subscriptions` — Stripe tier
+- `community_templates` — shared worlds
+- `user_preferences` — settings
+- `art_cache` — SVG art per location+session
+- `world_assets` — immutable entity constitutions ✅ NEW
+- `codex` — lore encyclopedia entries ✅ NEW
 
 ---
 
 ## ⚡ FOUNDATIONAL RULES (Read Before Every Session)
 
 ### 1. World Assets Are Permanent
-Every significant entity the Narrator introduces becomes an immutable game asset. Named locations, characters, factions, creatures, unique items — all locked on first introduction with a constitution that never changes unless the story explicitly changes it. Stored in world_assets Supabase table (Day 13.5). Injected into every relevant Narrator call as hard facts.
+Every significant entity the Narrator introduces becomes an immutable game asset. Named locations, characters, factions, creatures, unique items — locked on first introduction. Stored in `world_assets` table. Injected into every relevant Narrator call as hard facts. Constitution is write-once — `ignoreDuplicates: true` on all saves.
 
 ### 2. Movement Is Absolute
-MOVE actions always succeed. The only valid block is a world flag `<location_id>_locked: true`. Distance and danger are journey flavor, never blockers. `resolveMove()` always returns MOVE_SUCCESS with `location_status: ARRIVING`.
+MOVE actions always succeed. Only valid block: world flag `<location_id>_locked: true`. `resolveMove()` always returns MOVE_SUCCESS with `location_status: ARRIVING`.
 
 ### 3. Location Is Authoritative State
-`current_location_id` in world_state is the single source of truth for player location. The Narrator must never infer location from narrative history. The PLAYER STATE header in every narrator prompt makes this unambiguous.
+`current_location_id` is the single source of truth. Narrator never infers location from history. Every narrator call receives `══ PLAYER STATE ══` header with explicit ARRIVING/PRESENT status.
 
 ### 4. Actions Are Permitted By Default
-If an action is physically plausible at the current location, the player can attempt it. The Narrator describes what happens — it does not decide if the player is allowed to try. The only valid blocks are hard physics/logic (locked door without key, can't fly without wings). All other actions succeed or fail through the Logic Resolver, not the Narrator.
+Plausible actions always attempted. Narrator describes outcomes, never gatekeeps. Only hard physics/logic blocks are valid (locked door, can't fly). Logic Resolver handles success/failure — not the Narrator.
 
 ---
 
 ## Location State Machine
 
 ```
-LocationStatus enum: PRESENT | ARRIVING
+PRESENT  — acting within current location. lastNarrativeText = "CURRENT SCENE CONTEXT"
+ARRIVING — just moved here. lastNarrativeText = "DEPARTED SCENE (backstory)"
 
-PRESENT  — player is here, taking actions within this location
-           Narrator: picks up contextually, doesn't re-describe whole scene
-           lastNarrativeText labeled: "CURRENT SCENE CONTEXT"
-
-ARRIVING — player just moved here this turn (MOVE action)
-           Narrator: describes journey + first impressions
-           lastNarrativeText labeled: "DEPARTED SCENE (backstory)"
-
-Every resolver sets location_status in state_delta:
-- MOVE_SUCCESS → ARRIVING + new current_location_id
-- All other actions → PRESENT
-
-narratorState always receives merged world_state before narrator call
+Every resolver sets location_status in state_delta.
+narratorState always merges world_state delta before narrator call.
 ```
 
 ---
 
 ## Key Deliverables Log
 
-### Location Fix (confirmed on main — 43/43 tests, build clean)
-- `types/game.ts`: LocationStatus enum, WorldState.location_status, StateDelta type
-- `state-factory.ts`: location_status: PRESENT as default
-- `logic-resolver.ts`: full rewrite — every resolver sets PRESENT, MOVE sets ARRIVING
-- `useGameLoop.ts`: narratorState merges world_state delta before every narrator call
-- `prompt-builder.ts`: LOCATION & ACTION AUTHORITY (5 rules), ══ PLAYER STATE ══ header, conditional ARRIVING/PRESENT framing
+### Day 13.5 (confirmed on main — 43/43 tests, build clean)
+- `types/game.ts`: AssetCategory enum, WorldAsset interface, WorldAssetConstitution
+- `lib/game/codex.ts`: saveWorldAsset (write-once), saveCodexEntry, getWorldAssetsForLocation, getWorldAssetsByCategory, getCodexByCategory, getAllCodex
+- `supabase/migrations/003_world_assets.sql` — applied ✅
+- `supabase/migrations/004_codex.sql` — applied ✅
+- `game-store.ts`: locationAssets store + setLocationAssets
+- `useGameLoop.ts`: fire-and-forget asset/codex saves, post-ARRIVING locationAssets refresh
+- `prompt-builder.ts`: ESTABLISHED WORLD ASSETS section injected when locationAssets present, WORLD ASSET CONSTITUTION instruction in system prompt
+- `narrator.ts` + `narrate/route.ts`: locationAssets threaded through
+- `app/game/codex/page.tsx`: full codex browser — tabs by category, cards, detail modal
+- `GameLayout`: 📖 Codex button in navbar
 
-### Patch B (confirmed on main)
-- CONTAINER item type, search mechanic, already-searched state
-- SVG art engine: /api/game/generate-art, scene_type detection, async fade-in
-- art_cache Supabase table (UNIQUE per location_id+session_id) — applied
-- Dialogue prefix: quoted text → instant DIALOGUE, 💬 UI
+### Location Fix (confirmed on main)
+- LocationStatus enum: PRESENT | ARRIVING
+- Every resolver sets location_status, MOVE sets ARRIVING
+- narratorState always fresh before narrator call
 
-### Patch A (confirmed on main)
+### Patch B
+- CONTAINER item type, SVG art engine, art_cache table (applied), dialogue prefix
+
+### Patch A
 - Narrator: GOLDEN RULE, RESPONSE TIERS, END OF RESPONSE RULE, POI, CODEX
-- StoryFeed: clickable POI highlights, InteractionPopover
-- Fast-path: equip/unequip/drop/read — zero AI, startTransition
+- StoryFeed: clickable POI highlights, InteractionPopover, fast-path
 
 ---
 
@@ -94,8 +104,9 @@ narratorState always receives merged world_state before narrator call
 - **Tier 2** (4-6 sentences): EXAMINE, ATTACK, INTERACT, DIALOGUE, first NPC
 - **Tier 3** (80-120 words): ARRIVING at NEW location, major story moments
 - GOLDEN RULE: honor player action, yes-and
-- LOCATION RULE: state is authoritative, history is backstory not constraint
-- ACTION RULE: plausible actions always attempted, narrator describes outcome
+- LOCATION RULE: state authoritative, history is backstory
+- ACTION RULE: plausible actions always attempted
+- WORLD ASSET RULE: constitutions injected as immutable facts
 - Narrator never generates art
 
 ---
@@ -121,8 +132,6 @@ narratorState always receives merged world_state before narrator call
 
 | System | When | Description |
 | --- | --- | --- |
-| World Asset persistence | Day 13.5 | world_assets table, constitution injection |
-| Lore Codex page | Day 13.5 | Full encyclopedia UI per campaign |
 | Log Book + Save System | Day 13 | LogBook sidebar, dashboard, Save & Exit |
 | NPC Dialogue system | Day 15 | Full conversation mode, Charisma gates |
 | NPC Trading | Day 16 | Merchant NPCs, buy/sell UI |
@@ -132,11 +141,11 @@ narratorState always receives merged world_state before narrator call
 ## 1. Core Philosophy
 
 - **Hybrid Authority Model:** Code is Source of Truth. AI is the Narrator.
-- **World Assets are permanent.** Immutable game assets from first introduction.
-- **Movement is absolute.** Players always arrive. Distance is flavor.
+- **World Assets are permanent.** Write-once constitutions, injected as facts.
+- **Movement is absolute.** Players always arrive.
 - **Location is authoritative state.** current_location_id is always correct.
-- **Actions are permitted by default.** Narrator describes outcomes, never gatekeeps.
-- **SVG Pixel Art + Text.** Async art engine, cached per location.
+- **Actions are permitted by default.** Narrator describes, never gatekeeps.
+- **SVG Pixel Art + Text.** Async, cached per location.
 - **Endless Versatility.** Genre Wrappers. Launch genres: Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic.
 
 ---
@@ -149,16 +158,17 @@ narratorState always receives merged world_state before narrator call
 | --- | --- |
 | **Metadata** | Genre, tone, difficulty |
 | **Player State** | HP, resources, attributes, inventory |
-| **World State** | Flags, location_id, location_status, world assets |
+| **World State** | Flags, location_id, location_status |
 | **Log Book** | Story beats and lore |
 | **NPC Registry** | Per-NPC memory, trust scores |
 
 ### B. The Game Loop
 1. **Intent Parser** → ParsedAction (AI, or instant for dialogue/fast-path)
 2. **Logic Resolver** → ResolutionResult + location_status (no AI)
-3. **narratorState** = updatedState merged with world_state delta (always fresh)
-4. **Narrator** → story + POI + codex_entries (AI, sees correct location)
-5. **Art Engine** → SVG async (AI, cached) — non-blocking
+3. **narratorState** = updatedState merged with world_state delta
+4. **Narrator** → story + POI + codex_entries (AI, sees correct location + world assets)
+5. **Asset saves** → fire-and-forget to world_assets + codex tables
+6. **Art Engine** → SVG async (AI, cached) — non-blocking
 
 ---
 
@@ -228,4 +238,4 @@ Workflow: Claude Code pushes → `git pull` + restart own server → report to C
 
 ---
 
-*Last updated: Session 24 — V3.3: Location state machine complete. 4 foundational rules. Day 13.5 starting.*
+*Last updated: Session 25 — V3.4: Day 13.5 complete. world_assets + codex tables applied. Day 13 starting.*

@@ -87,7 +87,18 @@ export async function parseIntent(
       return makeFallback(stripped);
     }
 
-    return (await response.json()) as ParsedAction;
+    const parsed = (await response.json()) as ParsedAction;
+
+    // Backstop: every DIALOGUE action must carry a tone. The server-side
+    // route SHOULD always set one (AI classification or fast-path heuristic),
+    // but if it doesn't (model returned an unknown tone, JSON malformed,
+    // legacy cache) default to 'neutral' so the resolver doesn't fall back
+    // to keyword text matching.
+    if (parsed.action_type === ActionType.DIALOGUE && !parsed.dialogue_tone) {
+      parsed.dialogue_tone = "neutral";
+    }
+
+    return parsed;
   } catch {
     return makeFallback(stripped);
   }

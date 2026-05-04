@@ -146,11 +146,15 @@ export default function GamePage() {
         ));
       }
 
-      // Preload established world assets so the first narrator call sees them.
+      // Preload established world assets so the first narrator call sees
+      // them. The player is PRESENT on session load, never ARRIVING — so
+      // step 7c in useGameLoop won't trigger this; the page MUST seed
+      // locationAssets here or the narrator runs blind for the first beat.
       void getWorldAssetsForLocation(
         state.metadata.session_id,
         state.world_state.current_location_id
       ).then((assets) => {
+        console.log("[GamePage] Initial locationAssets loaded:", assets.length);
         useGameStore.getState().setLocationAssets(assets);
       });
 

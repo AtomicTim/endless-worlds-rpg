@@ -553,12 +553,30 @@ export function useGameLoop() {
         void getWorldAssetsForLocation(sessionId, arrivedAt).then((assets) => {
           useGameStore.getState().setLocationAssets(assets);
         });
+      } else {
+        // Late-load fallback: if locationAssets is still empty at this point,
+        // page.tsx's seed must have failed (network error, race, hard reload
+        // restored masterState before the seed completed). Try once now so
+        // subsequent narrator calls aren't blind.
+        const liveAssets = useGameStore.getState().locationAssets;
+        if (liveAssets.length === 0 && currentLocationId) {
+          void getWorldAssetsForLocation(sessionId, currentLocationId).then((assets) => {
+            if (assets.length > 0) {
+              console.log("[GameLoop/7c] Late locationAssets load:", assets.length);
+              useGameStore.getState().setLocationAssets(assets);
+            }
+          });
+        }
       }
 
       // ── 7d. Process revealed NPC names ───────────────────────────────────────
       // When the narrator signals that the player learned a character's true
       // identity this turn, persist the reveal and optimistically patch the
       // Zustand locationAssets store so the codex UI reflects it immediately.
+      console.log(
+        "[GameLoop/7d] revealed_npc_names from narrator:",
+        JSON.stringify(narratorResponse.revealed_npc_names)
+      );
       if (narratorResponse.revealed_npc_names && narratorResponse.revealed_npc_names.length > 0) {
         for (const reveal of narratorResponse.revealed_npc_names) {
           // FIX 3b: Validate the narrator-provided asset_id against locationAssets.
@@ -785,6 +803,19 @@ export function useGameLoop() {
               matchingAsset?.constitution.role
             );
             console.log(`[GameLoop/7g] Seeded npc_registry entry for ${npcName} → ${npcRegistryKey}`);
+
+            // FIX 2: patch the live store IMMEDIATELY so the next action's
+            // resolveDialogue (which reads state from the store BEFORE step 10
+            // commits updatedState) sees the seeded entry. Without this, the
+            // resolver would log "NPC not in registry" on every consecutive
+            // dialogue beat against this same character.
+            const currentMaster = useGameStore.getState().masterState;
+            if (currentMaster) {
+              useGameStore.getState().setMasterState({
+                ...currentMaster,
+                npc_registry: updatedState.npc_registry,
+              });
+            }
           }
 
           store.setDialogueOptions(dialogueOpts, npcName, portrait, npcRegistryKey);

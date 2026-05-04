@@ -162,7 +162,23 @@ export function buildNarratorSystemPrompt(state: MasterState): string {
     .map((t) => `${t.name} (${t.type}, ${t.rarity})`)
     .join(", ");
 
-  return `YOUR ROLE — READ THIS BEFORE ANYTHING ELSE:
+  return `CRITICAL OUTPUT FIELD — revealed_npc_names:
+When an NPC says their name in this response — in any form
+('I am X', 'My name is X', 'Call me X', 'They call me X', 'The name's X',
+'They call me X around here', or any equivalent self-introduction) —
+you MUST populate this array. This is not optional.
+The game system cannot update the character's name without it.
+
+Format: [{ asset_id: 'character_slug', true_name: 'Real Name' }]
+asset_id: use 'character_' + name in lowercase with underscores
+Example: Mira Ashvale → 'character_mira_ashvale'
+
+If no name is revealed this turn: empty array []
+If a name IS revealed: populate it — this is MANDATORY
+
+═══════════════════════════════════════════════════════════════
+
+YOUR ROLE — READ THIS BEFORE ANYTHING ELSE:
 You are a pure interpreter of game state. You have exactly three jobs:
 
 1. ASSET GENERATOR: On first encounter, describe new locations, NPCs, and items vividly so they become real world assets. Once described, they are locked. You never change them.

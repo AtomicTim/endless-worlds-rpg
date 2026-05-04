@@ -506,6 +506,14 @@ function resolveDialogue(action: ParsedAction, state: MasterState, opts: Resolve
   const tone: DialogueTone =
     action.dialogue_tone ?? inferToneFromText(action.inferred_intent);
 
+  // Visibility log — confirms the resolver received a tone for this beat
+  // and shows what the parser produced before any fallback heuristic ran.
+  console.log(
+    "[resolveDialogue] tone:", action.dialogue_tone,
+    "| raw action:", action.action_type,
+    "| inferred:", action.inferred_intent
+  );
+
   // Trust score drives base difficulty. Default to 50 (neutral) when no NPC is
   // in the registry yet (first-encounter situations).
   const trustScore     = npc?.trust_score ?? 50;
@@ -584,16 +592,19 @@ function resolveDialogue(action: ParsedAction, state: MasterState, opts: Resolve
       success,
       tone,
     });
-    // Verification log — confirms every field downstream consumers expect.
-    console.log("[resolveDialogue] stat check fields:", {
-      stat_checked:    statChecked,
-      roll,
-      modifier,
-      total,
-      difficulty,
-      success,
-      charisma_check:  statChecked === "charisma",
-    });
+    // Verification log — JSON.stringify so the full payload is one-line
+    // searchable in the browser console even when nested objects truncate.
+    console.log(
+      "[resolveDialogue] stat check fields:",
+      JSON.stringify({
+        stat_checked: statChecked,
+        roll,
+        modifier,
+        total,
+        difficulty,
+        success,
+      })
+    );
   }
 
   return {

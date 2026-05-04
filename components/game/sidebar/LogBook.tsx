@@ -78,7 +78,7 @@ export function LogBook() {
         </p>
       ) : (
         <div className="flex max-h-64 flex-col gap-1.5 overflow-y-auto pr-0.5">
-          {entries.map((entry) => {
+          {[...entries].reverse().map((entry) => {
             const style = ENTRY_STYLES[entry.type] ?? ENTRY_STYLES[LogEntryType.STORY];
             return (
               <div key={entry.id} className="flex flex-col gap-0.5">

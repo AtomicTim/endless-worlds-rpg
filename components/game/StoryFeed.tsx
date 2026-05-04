@@ -75,6 +75,7 @@ interface MessageEntryProps {
 
 function MessageEntry({ message, onPoiClick }: MessageEntryProps) {
   const { type, content, metadata } = message;
+  const restored = metadata?.restored === true;
   const npcName =
     typeof metadata?.npcName === "string" ? metadata.npcName : undefined;
   const points =
@@ -82,6 +83,7 @@ function MessageEntry({ message, onPoiClick }: MessageEntryProps) {
       ? (metadata!.points_of_interest as PointOfInterest[])
       : [];
 
+  const inner = (() => {
   switch (type) {
     case "NARRATIVE":
       return (
@@ -183,6 +185,13 @@ function MessageEntry({ message, onPoiClick }: MessageEntryProps) {
     default:
       return null;
   }
+  })();
+
+  if (!inner) return null;
+  if (!restored) return <>{inner}</>;
+  // Restored messages from a previous session — slightly muted to distinguish
+  // them from new messages in the current session.
+  return <div style={{ opacity: 0.8 }}>{inner}</div>;
 }
 
 // ── Dialogue text parsing ─────────────────────────────────────────────────────

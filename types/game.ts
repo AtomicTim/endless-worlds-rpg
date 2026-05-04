@@ -149,9 +149,20 @@ export interface LogEntry {
   content:   string;
 }
 
+/** Minimal snapshot of a narrative/dialogue feed message stored in the session for restoration. */
+export interface StoredMessage {
+  id:        string;
+  type:      "NARRATIVE" | "DIALOGUE";
+  content:   string;
+  timestamp: string; // ISO string — survives JSON round-trip
+  metadata?: Record<string, unknown>;
+}
+
 export interface LogBook {
-  entries:         LogEntry[];
-  session_summary: string | null;
+  entries:          LogEntry[];
+  session_summary:  string | null;
+  /** Last 8 NARRATIVE/DIALOGUE messages — restored to the StoryFeed on session reload. */
+  recent_messages?: StoredMessage[];
 }
 
 // ---------------------------------------------------------------------------

@@ -86,13 +86,30 @@ export default function GamePage() {
 
       store.clearMessages();
       store.setMasterState(state);
-      store.mergePersistedLogEntries(state.log_book.entries);
+      store.mergePersistedLogEntries(state.log_book?.entries ?? []);
       store.setAsciiArt(null);
 
+      // ── Restore recent narrative messages from the previous session ──────────
+      // Gives the player context to continue without re-reading the entire log.
+      const recentMsgs = state.log_book?.recent_messages ?? [];
+      if (recentMsgs.length > 0) {
+        store.addMessage(makeMessage("SYSTEM", "— Resuming your adventure —"));
+        for (const m of recentMsgs) {
+          store.addMessage({
+            id:        m.id,
+            type:      m.type,
+            content:   m.content,
+            timestamp: new Date(m.timestamp),
+            metadata:  { ...(m.metadata ?? {}), restored: true },
+          });
+        }
+      }
+
       const worldName = WORLD_NAMES[state.metadata.genre] ?? "World";
-      const opening =
-        `You are ${state.player_state.name}, a ${state.player_state.background} in the ${worldName}. ` +
-        `Your adventure begins at ${state.world_state.current_location_id}. What do you do?`;
+      const opening = recentMsgs.length > 0
+        ? `You are ${state.player_state.name} — currently at ${state.world_state.current_location_id}. What do you do?`
+        : `You are ${state.player_state.name}, a ${state.player_state.background} in the ${worldName}. ` +
+          `Your adventure begins at ${state.world_state.current_location_id}. What do you do?`;
       store.addMessage(makeMessage("SYSTEM", opening));
 
       // Preload established world assets so the first narrator call sees them.

@@ -178,6 +178,13 @@ The only exception: if the LOGIC RESOLVER returned success=false AND the world f
 
 This rule applies to ALL objects including readable items such as journals, books, notes, letters, signs, and documents. If the narrator described a leather-bound journal on a desk, the player can read it. Describe its contents. NEVER say a readable object was an illusion or trick of light.
 
+POI LABEL INTEGRITY:
+When the player interacts with something they clicked from a highlighted point of interest, that object's EXACT label must be honored. Do not rename, re-label, or substitute synonyms.
+If the player interacts with 'hearth', there IS a hearth. Not a fireplace, not a 'what you thought was a hearth'. The exact word the player used came from YOUR description. Honor it exactly.
+WRONG: Referring to the target by a different name than the one the player used
+WRONG: 'What you thought was the hearth was actually a fireplace'
+RIGHT: Use the player's exact word when referring to the object throughout your response
+
 LOCATION & ACTION AUTHORITY:
 
 1. LOCATION IS A FACT, NOT AN INFERENCE:
@@ -567,13 +574,13 @@ export function buildNarratorUserPrompt(
 
   let prompt = lines.join("\n");
 
-  // EXAMINE / INTERACT — remind the narrator the target exists.
+  // EXAMINE / INTERACT — remind the narrator the target exists and pin its exact label.
   if (
     action?.action_type === ActionType.EXAMINE ||
     action?.action_type === ActionType.INTERACT
   ) {
     const target = action.primary_target ?? action.secondary_target ?? "the target";
-    prompt += `\n\n⚠️ EXAMINE/INTERACT: Player is interacting with '${target}'. This object/entity EXISTS — it was established in the world. Describe what happens when they interact with it.`;
+    prompt += `\n\nINTERACTION TARGET: '${target}'\nThis object EXISTS in the current scene. You described it. Use this exact name when referring to it in your response. Do NOT substitute a synonym, rename it, or question its existence.`;
   }
 
   // CONTAINER search → instruct the Narrator to populate items_acquired.

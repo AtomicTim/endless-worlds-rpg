@@ -10,7 +10,7 @@ import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/
 import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, updateWorldAssetSvg, updateAssetNameRevealed } from "@/lib/game/codex";
 import { generateArt, getSceneType } from "@/lib/game/art-generator";
 import { ActionType, AssetCategory, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
-import type { MasterState, ParsedAction, ResolutionResult, WorldAsset } from "@/types/game";
+import type { MasterState, ParsedAction, ResolutionResult, StoredMessage, WorldAsset } from "@/types/game";
 
 const MAX_INPUT_LENGTH  = 500;
 const AUTO_SAVE_INTERVAL = 10;
@@ -72,6 +72,25 @@ function persistLogEntry(state: MasterState, type: LogEntryType, content: string
     useGameStore.getState().addPersistedLogEntry(latest);
   }
   return updated;
+}
+
+/**
+ * Fire-and-forget: immediately persist just the log_book.entries to the DB so
+ * they survive a hard page refresh without waiting for the 10-action auto-save.
+ * Entries should be in newest-first order (same as masterState.log_book.entries).
+ */
+function saveLogEntriesAsync(sessionId: string, entries: import("@/types/game").LogEntry[]): void {
+  void (async () => {
+    try {
+      await fetch("/api/game/log-entries", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ sessionId, entries }),
+      });
+    } catch {
+      // Silently swallow — this is best-effort; the 10-action auto-save is the fallback.
+    }
+  })();
 }
 
 async function persistState(
@@ -606,6 +625,31 @@ export function useGameLoop() {
         const storyContent = narratorResponse.log_summary ?? firstSentence;
         updatedState = persistLogEntry(updatedState, LogEntryType.STORY, storyContent);
       }
+
+      // ── 9b. Capture recent feed messages for session restoration ─────────────
+      // Grab the last 8 NARRATIVE/DIALOGUE messages from the live feed and store
+      // them in log_book.recent_messages so they can be restored on page reload.
+      {
+        const allMsgs = useGameStore.getState().messages;
+        const recent: StoredMessage[] = allMsgs
+          .filter((m) => m.type === "NARRATIVE" || m.type === "DIALOGUE")
+          .slice(-8)
+          .map((m) => ({
+            id:        m.id,
+            type:      m.type as "NARRATIVE" | "DIALOGUE",
+            content:   m.content,
+            timestamp: m.timestamp instanceof Date ? m.timestamp.toISOString() : String(m.timestamp),
+            metadata:  m.metadata,
+          }));
+        updatedState = {
+          ...updatedState,
+          log_book: { ...updatedState.log_book, recent_messages: recent },
+        };
+      }
+
+      // Fire-and-forget: persist log entries immediately after every narrative
+      // action so they survive a hard refresh without the 10-action auto-save.
+      saveLogEntriesAsync(updatedState.metadata.session_id, updatedState.log_book.entries);
 
       // Bump last_played so the session sorts correctly on reload.
       updatedState = {

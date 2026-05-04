@@ -1,4 +1,4 @@
-import { ActionType, ItemType } from "@/types/game";
+import { ActionType, ItemType, LocationStatus } from "@/types/game";
 import type { ActiveBuff, Attributes, MasterState, ParsedAction, ResolutionResult } from "@/types/game";
 import { rollD20, rollD6, getAttributeModifier } from "./dice";
 import { equipItem, unequipItem, updateHealth, updateSanity } from "./state-utils";
@@ -6,6 +6,9 @@ import { equipItem, unequipItem, updateHealth, updateSanity } from "./state-util
 // ── Tunables ──────────────────────────────────────────────────────────────────
 
 const ATTACK_DEFAULT_DIFFICULTY = 12;
+
+// Shorthand delta fragment: player is present at their current location.
+const PRESENT = { location_status: LocationStatus.PRESENT };
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -33,17 +36,6 @@ export function resolveAction(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function genrePrefix(locationId: string): string {
-  // Convention: <genre>_<place>_<index>  e.g. "fantasy_tavern_01".
-  return locationId.split("_")[0] ?? "";
-}
-
-function isAdjacent(from: string, to: string): boolean {
-  const a = genrePrefix(from);
-  const b = genrePrefix(to);
-  return a.length > 0 && a === b;
-}
-
 function pickFlagsRelatedTo(
   flags: Record<string, boolean | number | string>,
   needle: string
@@ -68,7 +60,7 @@ function resolveMove(action: ParsedAction, state: MasterState): ResolutionResult
     return {
       success: false,
       outcome_type: "MOVE_INVALID",
-      state_delta: {},
+      state_delta: { world_state: PRESENT },
       narrative_context: {
         invalid_location: true,
         reason: "no_target",
@@ -84,7 +76,7 @@ function resolveMove(action: ParsedAction, state: MasterState): ResolutionResult
     return {
       success: false,
       outcome_type: "MOVE_BLOCKED",
-      state_delta: {},
+      state_delta: { world_state: PRESENT },
       narrative_context: {
         movement_blocked: true,
         reason: "locked",
@@ -104,9 +96,9 @@ function resolveMove(action: ParsedAction, state: MasterState): ResolutionResult
     outcome_type: "MOVE_SUCCESS",
     state_delta: {
       world_state: {
-        ...state.world_state,
         current_location_id: target,
         visited_locations:   newVisited,
+        location_status:     LocationStatus.ARRIVING,
       },
     },
     narrative_context: {
@@ -151,7 +143,7 @@ function resolveAttack(
   return {
     success: hit,
     outcome_type: outcome,
-    state_delta: {},
+    state_delta: { world_state: PRESENT },
     narrative_context: {
       roll,
       modifier:       strMod,
@@ -179,7 +171,7 @@ function resolveExamine(action: ParsedAction, state: MasterState): ResolutionRes
   return {
     success: true,
     outcome_type: "EXAMINE_SUCCESS",
-    state_delta: {},
+    state_delta: { world_state: PRESENT },
     narrative_context: {
       perception_bonus,
       current_location_id: current,
@@ -199,7 +191,7 @@ function resolveInteract(action: ParsedAction, state: MasterState): ResolutionRe
     return {
       success: true,
       outcome_type: "INTERACT_GENERIC",
-      state_delta: {},
+      state_delta: { world_state: PRESENT },
       narrative_context: { target: null, relevant_flags: {} },
     };
   }
@@ -214,7 +206,7 @@ function resolveInteract(action: ParsedAction, state: MasterState): ResolutionRe
     return {
       success: false,
       outcome_type: "INTERACT_BLOCKED",
-      state_delta: {},
+      state_delta: { world_state: PRESENT },
       narrative_context: {
         target,
         blocked_by:     blockFlag,
@@ -230,8 +222,8 @@ function resolveInteract(action: ParsedAction, state: MasterState): ResolutionRe
     outcome_type: "INTERACT_SUCCESS",
     state_delta: {
       world_state: {
-        ...state.world_state,
-        flags: newFlags,
+        flags:           newFlags,
+        location_status: LocationStatus.PRESENT,
       },
     },
     narrative_context: {
@@ -251,7 +243,7 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
     return {
       success: false,
       outcome_type: "USE_ITEM_NO_TARGET",
-      state_delta: {},
+      state_delta: { world_state: PRESENT },
       narrative_context: { item_not_found: true, attempted: null },
     };
   }
@@ -264,7 +256,7 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
     return {
       success: false,
       outcome_type: "USE_ITEM_NOT_FOUND",
-      state_delta: {},
+      state_delta: { world_state: PRESENT },
       narrative_context: { item_not_found: true, attempted: lookup },
     };
   }
@@ -282,12 +274,10 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
     const effectsApplied: string[] = [];
 
     if (item.effect) {
-      // heal
       if (typeof item.effect.heal === "number") {
         updated = updateHealth(updated, item.effect.heal);
         effectsApplied.push(`heal ${item.effect.heal}`);
       }
-      // sanity
       if (typeof item.effect.sanity === "number") {
         const sanityResult = updateSanity(updated, item.effect.sanity);
         if (sanityResult) {
@@ -295,7 +285,6 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
           effectsApplied.push(`sanity ${item.effect.sanity}`);
         }
       }
-      // buff_[stat]_[amount]
       for (const [key] of Object.entries(item.effect)) {
         const m = key.match(/^buff_([a-z_]+)_(\d+)$/);
         if (!m) continue;
@@ -329,7 +318,7 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
     return {
       success: true,
       outcome_type: "USE_ITEM_CONSUMED",
-      state_delta: { player_state: updated.player_state },
+      state_delta: { player_state: updated.player_state, world_state: PRESENT },
       narrative_context: {
         item_id:            item.id,
         item_name:          item.name,
@@ -349,7 +338,7 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
     return {
       success:      true,
       outcome_type: item.equipped ? "USE_ITEM_UNEQUIPPED" : "USE_ITEM_EQUIPPED",
-      state_delta:  { player_state: nextState.player_state },
+      state_delta:  { player_state: nextState.player_state, world_state: PRESENT },
       narrative_context: {
         item_id:    item.id,
         item_name:  item.name,
@@ -366,7 +355,7 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
       return {
         success:      false,
         outcome_type: "USE_ITEM_CONTAINER_EMPTY",
-        state_delta:  {},
+        state_delta:  { world_state: PRESENT },
         narrative_context: {
           already_searched: true,
           container_id:     item.id,
@@ -374,14 +363,13 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
         },
       };
     }
-    // Mark as searched so it can't be looted again. Narrator generates loot.
     const inventory = state.player_state.inventory.map((i) =>
       i.id === item.id ? { ...i, searched: true } : i
     );
     return {
       success:      true,
       outcome_type: "USE_ITEM_CONTAINER_SEARCHED",
-      state_delta:  { player_state: { ...state.player_state, inventory } },
+      state_delta:  { player_state: { ...state.player_state, inventory }, world_state: PRESENT },
       narrative_context: {
         container_search: true,
         container_id:     item.id,
@@ -404,11 +392,11 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
         state_delta: {
           player_state: { ...state.player_state, inventory },
           world_state: {
-            ...state.world_state,
             flags: {
               ...state.world_state.flags,
               [`unlocked_${state.world_state.current_location_id}`]: true,
             },
+            location_status: LocationStatus.PRESENT,
           },
         },
         narrative_context: {
@@ -424,7 +412,7 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
     return {
       success:      false,
       outcome_type: "USE_ITEM_KEY_MISMATCH",
-      state_delta:  {},
+      state_delta:  { world_state: PRESENT },
       narrative_context: {
         item_id:   item.id,
         item_name: item.name,
@@ -439,7 +427,7 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
   return {
     success:      true,
     outcome_type: "USE_ITEM_GENERIC",
-    state_delta:  {},
+    state_delta:  { world_state: PRESENT },
     narrative_context: {
       item_id:   item.id,
       item_name: item.name,
@@ -460,7 +448,7 @@ function resolveDialogue(action: ParsedAction, state: MasterState): ResolutionRe
   return {
     success: true,
     outcome_type: "DIALOGUE_SUCCESS",
-    state_delta: {},
+    state_delta: { world_state: PRESENT },
     narrative_context: {
       charisma,
       charisma_modifier: charismaModifier,
@@ -477,7 +465,7 @@ function resolveCustom(action: ParsedAction, state: MasterState): ResolutionResu
   return {
     success: true,
     outcome_type: "CUSTOM",
-    state_delta: {},
+    state_delta: { world_state: PRESENT },
     narrative_context: {
       inferred_intent:     action.inferred_intent,
       confidence:          action.confidence,

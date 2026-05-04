@@ -1,4 +1,4 @@
-import { Genre, ActionType } from "@/types/game";
+import { Genre, ActionType, LocationStatus } from "@/types/game";
 import type { MasterState, ParsedAction, ResolutionResult } from "@/types/game";
 import { getEquippedLoadout } from "@/lib/game/state-utils";
 import { GENRE_CONFIGS } from "@/lib/game/genre-config";
@@ -156,6 +156,29 @@ The ONLY exceptions are hard logic blocks:
 In these cases: briefly explain why in one sentence, then describe what IS available to the player instead. Never dwell on failure — always give the player a path forward.
 
 NEVER: dismiss the action, write philosophy about why the player shouldn't do it, have the world 'ignore' the player, or end a response without giving the player something to react to.
+
+LOCATION & ACTION AUTHORITY:
+
+1. LOCATION IS A FACT, NOT AN INFERENCE:
+The player's location is defined by current_location_id in the game state. This is the absolute truth. Never infer or guess the player's location from narrative history. If current_location_id is 'gas_station_01', the player is at the gas station. Full stop.
+
+2. LOCATION STATUS:
+- ARRIVING: The player just moved here this turn. Describe the journey and first impressions. This is a scene change.
+- PRESENT: The player is already here and taking an action within this location. Do not re-describe the whole location. Pick up where the story left off. Keep it contextual.
+
+3. PREVIOUS NARRATIVE IS BACKSTORY, NOT CURRENT REALITY:
+The DEPARTED SCENE / CURRENT SCENE CONTEXT in your context shows where the player was and what happened there. It is history — valuable for continuity, never a constraint on what the player can do now.
+
+4. WHAT THE PLAYER CAN DO IS DEFINED BY THEIR LOCATION:
+If the player is at a gas station, they can search it, examine things in it, interact with anything there, attack anything there, or leave. They cannot do things that are physically impossible at that location. But if an action is physically plausible given where they are — they can attempt it. Your job is to describe what happens, not to decide if the player is allowed to try.
+
+5. NEVER BLOCK PLAUSIBLE ACTIONS:
+These responses are ALWAYS wrong:
+- 'You can't do that here'
+- 'That's not possible from where you are'
+- 'You'd need to be somewhere else to do that'
+- Any response that ends with the player having done nothing
+If an action truly makes no sense given the location, briefly acknowledge it and then give the player something they CAN do.
 
 MOVE ACTIONS — ABSOLUTE RULE:
 When the action_type is MOVE and movement_mandatory is true in the narrative context, the player has ALREADY moved — the logic engine updated their location before you were called. Your ONLY job is to describe the journey and arrival.
@@ -340,19 +363,52 @@ export function buildNarratorUserPrompt(
     result.outcome_type === "MOVE_SUCCESS" &&
     result.narrative_context.first_visit === true;
 
-  const actionType = action?.action_type ?? "(unknown)";
+  const actionType   = action?.action_type ?? "(unknown)";
+  const actionDesc   = `${actionType} — ${action?.inferred_intent ?? result.outcome_type}`;
 
-  const isMoveAction = action?.action_type === ActionType.MOVE && result.outcome_type === "MOVE_SUCCESS";
+  // Location status is authoritative — set by the logic resolver, not inferred.
+  const locationStatus   = world_state.location_status ?? LocationStatus.PRESENT;
+  const isArriving       = locationStatus === LocationStatus.ARRIVING;
+  const previousLocation = isArriving
+    ? (typeof result.narrative_context.from_location === "string"
+        ? result.narrative_context.from_location
+        : world_state.current_location_id)
+    : world_state.current_location_id;
 
+  // ── Authoritative state header ─────────────────────────────────────────────
+  const headerLines = [
+    "══════════════════════════════",
+    "PLAYER STATE (authoritative — trust this, not the narrative)",
+    `Current location : ${world_state.current_location_id}`,
+    `Location status  : ${locationStatus}`,
+    `Previous location: ${previousLocation}`,
+    `Action taken     : ${actionDesc}`,
+    "══════════════════════════════",
+  ];
+
+  // ── Scene context block ────────────────────────────────────────────────────
+  const sceneLines: string[] = [];
+  if (isArriving) {
+    sceneLines.push(
+      `SCENE TRANSITION: Player has left ${previousLocation} and arrived at ${world_state.current_location_id}. Write their arrival. The departed scene below is backstory.`,
+      "",
+      "DEPARTED SCENE (where player just came from — past, not present):",
+      lastNarrativeText ?? "(no previous scene)",
+      "══════════════════════════════",
+    );
+  } else if (lastNarrativeText) {
+    sceneLines.push(
+      "CURRENT SCENE CONTEXT (player is still here, acting within it):",
+      lastNarrativeText,
+      "══════════════════════════════",
+    );
+  }
+
+  // ── Main body ──────────────────────────────────────────────────────────────
   const lines: string[] = [
-    ...(isMoveAction
-      ? [
-          `⚠️ MOVE ACTION: The player is moving to "${action?.primary_target ?? result.narrative_context.location_id}".`,
-          "They WILL arrive — the logic engine has already updated their location.",
-          "Describe the journey and arrival ONLY. Do not block, delay, or prevent this movement.",
-          "",
-        ]
-      : []),
+    ...headerLines,
+    ...(sceneLines.length > 0 ? ["", ...sceneLines] : []),
+    "",
     `ACTION TYPE: ${actionType}`,
     `TIER GUIDANCE: ${tierGuidance(action ?? null, isNewLocation)}`,
     "",
@@ -371,22 +427,11 @@ export function buildNarratorUserPrompt(
     `- Weapon: ${weaponLine}`,
     `- Armor: ${armorLine}`,
     "",
-    `LOCATION: ${world_state.current_location_id}`,
-    "",
     `ACTIVE WORLD FLAGS (most recent 10): ${flagSummary}`,
     "",
     "RECENT LOG:",
     recentLog || "  (no recent entries)",
   ];
-
-  if (lastNarrativeText) {
-    lines.push(
-      "",
-      "PREVIOUS NARRATIVE (what just happened):",
-      lastNarrativeText,
-      "The new narrative must be consistent with and follow on from this. If the player just established they are at a specific location or saw specific things, honor that."
-    );
-  }
 
   let prompt = lines.join("\n");
 

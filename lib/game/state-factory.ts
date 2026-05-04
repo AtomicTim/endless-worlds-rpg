@@ -1,6 +1,7 @@
 import {
   Genre,
   Difficulty,
+  LocationStatus,
   LogEntryType,
   type MasterState,
   type PlayerState,
@@ -59,6 +60,7 @@ export function createNewMasterState(
     current_location_id: startLoc,
     visited_locations:   [startLoc],
     flags:               {},
+    location_status:     LocationStatus.PRESENT,
   };
 
   const log_book: LogBook = {

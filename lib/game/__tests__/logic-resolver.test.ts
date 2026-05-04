@@ -17,6 +17,7 @@ import {
   Genre,
   ItemRarity,
   ItemType,
+  LocationStatus,
 } from "@/types/game";
 import type { Item, MasterState, NPCMemory, ParsedAction } from "@/types/game";
 import { rollD20, rollD6 } from "../dice";
@@ -106,6 +107,7 @@ describe("MOVE", () => {
     expect(result.success).toBe(true);
     expect(result.outcome_type).toBe("MOVE_SUCCESS");
     expect(result.state_delta.world_state?.current_location_id).toBe("fantasy_tavern_01");
+    expect(result.state_delta.world_state?.location_status).toBe(LocationStatus.ARRIVING);
     expect(result.narrative_context.location_id).toBe("fantasy_tavern_01");
   });
 
@@ -119,6 +121,7 @@ describe("MOVE", () => {
     expect(result.success).toBe(true);
     expect(result.state_delta.world_state?.current_location_id).toBe("fantasy_forest_01");
     expect(result.state_delta.world_state?.visited_locations).toContain("fantasy_forest_01");
+    expect(result.state_delta.world_state?.location_status).toBe(LocationStatus.ARRIVING);
     expect(result.narrative_context.first_visit).toBe(true);
   });
 
@@ -133,6 +136,7 @@ describe("MOVE", () => {
     expect(result.outcome_type).toBe("MOVE_SUCCESS");
     expect(result.narrative_context.movement_mandatory).toBe(true);
     expect(result.state_delta.world_state?.current_location_id).toBe("cyberpunk_alley_01");
+    expect(result.state_delta.world_state?.location_status).toBe(LocationStatus.ARRIVING);
   });
 
   it("fails when the target location has a _locked world flag", () => {
@@ -146,7 +150,7 @@ describe("MOVE", () => {
     expect(result.success).toBe(false);
     expect(result.outcome_type).toBe("MOVE_BLOCKED");
     expect(result.narrative_context.movement_blocked).toBe(true);
-    expect(result.state_delta).toEqual({});
+    expect(result.state_delta.world_state?.location_status).toBe(LocationStatus.PRESENT);
   });
 });
 
@@ -165,6 +169,7 @@ describe("ATTACK", () => {
 
     expect(result.success).toBe(true);
     expect(result.outcome_type).toBe("ATTACK_HIT");
+    expect(result.state_delta.world_state?.location_status).toBe(LocationStatus.PRESENT);
     expect(result.narrative_context.roll).toBe(15);
     expect(result.narrative_context.modifier).toBe(4);
     expect(result.narrative_context.total).toBe(19);
@@ -217,7 +222,7 @@ describe("EXAMINE", () => {
     );
 
     expect(result.success).toBe(true);
-    expect(result.state_delta).toEqual({});
+    expect(result.state_delta.world_state?.location_status).toBe(LocationStatus.PRESENT);
     expect(result.narrative_context.perception_bonus).toBe(3);
     expect(result.narrative_context.current_location_id).toBe(state.world_state.current_location_id);
   });
@@ -253,6 +258,7 @@ describe("INTERACT", () => {
     expect(result.success).toBe(true);
     expect(result.outcome_type).toBe("INTERACT_SUCCESS");
     expect(result.state_delta.world_state?.flags?.interact_lever_completed).toBe(true);
+    expect(result.state_delta.world_state?.location_status).toBe(LocationStatus.PRESENT);
   });
 });
 
@@ -280,7 +286,7 @@ describe("USE_ITEM", () => {
 
     expect(result.success).toBe(true);
     expect(result.outcome_type).toBe("USE_ITEM_CONSUMED");
-    expect(result.state_delta.player_state?.inventory[0].quantity).toBe(2);
+    expect(result.state_delta.player_state?.inventory?.[0]?.quantity).toBe(2);
     expect(result.narrative_context.remaining_quantity).toBe(2);
   });
 
@@ -377,6 +383,7 @@ describe("CUSTOM", () => {
     );
 
     expect(result.success).toBe(true);
+    expect(result.state_delta.world_state?.location_status).toBe(LocationStatus.PRESENT);
     expect(result.narrative_context.inferred_intent).toBe("Player wants to meditate.");
     expect(result.narrative_context.confidence).toBe(0.4);
   });

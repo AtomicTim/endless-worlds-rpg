@@ -7,6 +7,7 @@ import {
   type Item,
   type MasterState,
   type NPCMemory,
+  type StateDelta,
 } from "@/types/game";
 
 export function updateHealth(state: MasterState, delta: number): MasterState {
@@ -107,7 +108,7 @@ export function addNPCMemory(state: MasterState, npcKey: string, memory: string)
   };
 }
 
-export function applyStateDelta(state: MasterState, delta: Partial<MasterState>): MasterState {
+export function applyStateDelta(state: MasterState, delta: StateDelta): MasterState {
   return {
     ...state,
     ...delta,

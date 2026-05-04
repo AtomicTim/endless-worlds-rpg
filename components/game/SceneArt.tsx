@@ -101,6 +101,7 @@ export function SceneArt({
     return () => {
       cancelled = true;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locationId, locationName, genre, description, sessionId, cached, setArtCache]);
 
   return (

@@ -8,6 +8,7 @@ import { InputBar } from "@/components/game/InputBar";
 import { SceneArt } from "@/components/game/SceneArt";
 import { CharacterSheet } from "@/components/game/sidebar/CharacterSheet";
 import { InventoryPanel } from "@/components/game/sidebar/InventoryPanel";
+import { LogBook } from "@/components/game/sidebar/LogBook";
 import { Genre } from "@/types/game";
 import type { MasterState } from "@/types/game";
 import { createClient } from "@/lib/supabase/client";
@@ -33,16 +34,18 @@ export default function GamePage() {
 
   const { submitAction, isProcessing, processingStep } = useGameLoop();
 
-  // ── Load active session on mount ─────────────────────────────────────────
-  // Note: initRef guards against React strict-mode's double effect invocation.
-  // We deliberately don't use a "cancelled" flag — strict mode's interleaved
-  // cleanup would set it to true on the in-flight first call and prevent the
-  // session from ever being loaded.
+  // ── Load session on mount ─────────────────────────────────────────────────
+  // Reads ?session_id= from the URL to load a specific save slot.
+  // Falls back to the most recent active session if no param is present.
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
 
     async function loadSession() {
+      // Read search param without useSearchParams() to avoid Suspense requirement.
+      const params        = new URLSearchParams(window.location.search);
+      const sessionIdParam = params.get("session_id");
+
       const supabase = createClient();
       const {
         data: { user },
@@ -53,20 +56,32 @@ export default function GamePage() {
         return;
       }
 
+      // Load all active sessions (free tier max = 3, so this is always cheap).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: sessions } = (await (supabase.from("game_sessions") as any)
         .select("id, master_state")
         .eq("user_id", user.id)
         .eq("is_active", true)
-        .order("last_played", { ascending: false })
-        .limit(1)) as { data: { id: string; master_state: MasterState }[] | null };
+        .order("last_played", { ascending: false })) as {
+          data: { id: string; master_state: MasterState }[] | null;
+        };
 
       if (!sessions || sessions.length === 0) {
         router.push("/game/new");
         return;
       }
 
-      const state = sessions[0].master_state;
+      // Pick the requested session or fall back to the most recent.
+      const session = sessionIdParam
+        ? sessions.find((s) => s.master_state.metadata.session_id === sessionIdParam)
+        : sessions[0];
+
+      if (!session) {
+        router.push("/game/new");
+        return;
+      }
+
+      const state = session.master_state;
       const store = useGameStore.getState();
 
       store.clearMessages();
@@ -79,8 +94,7 @@ export default function GamePage() {
         `Your adventure begins at ${state.world_state.current_location_id}. What do you do?`;
       store.addMessage(makeMessage("SYSTEM", opening));
 
-      // Load any previously-established world assets for the current location
-      // so the very first narrator call this session sees them as fact.
+      // Preload established world assets so the first narrator call sees them.
       void getWorldAssetsForLocation(
         state.metadata.session_id,
         state.world_state.current_location_id
@@ -118,9 +132,7 @@ export default function GamePage() {
             onSubmit={(input) => { void submitAction(input); }}
           />
           <InputBar
-            onSubmit={(input) => {
-              void submitAction(input);
-            }}
+            onSubmit={(input) => { void submitAction(input); }}
             disabled={isProcessing}
             processingStep={processingStep}
           />
@@ -130,6 +142,7 @@ export default function GamePage() {
         <>
           <CharacterSheet />
           <InventoryPanel onSubmit={(input) => { void submitAction(input); }} />
+          <LogBook />
         </>
       }
     />

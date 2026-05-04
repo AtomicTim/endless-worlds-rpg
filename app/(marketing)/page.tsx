@@ -1,74 +1,169 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import type { User } from "@supabase/supabase-js";
+
+const GENRES = [
+  { label: "Fantasy",           color: "#f59e0b", border: "#b45309", desc: "Swords, sorcery, and ancient prophecies." },
+  { label: "Cyberpunk",         color: "#06b6d4", border: "#0e7490", desc: "Hack the grid. Survive the neon sprawl." },
+  { label: "Horror",            color: "#a855f7", border: "#6d28d9", desc: "Cosmic dread. Reality frays at the edges." },
+  { label: "Space Opera",       color: "#c084fc", border: "#7c3aed", desc: "Galaxies burn. Empires fall. Your destiny spans the stars." },
+  { label: "Post-Apocalyptic",  color: "#d97706", border: "#92400e", desc: "The world ended. You didn't. Now what?" },
+];
+
 export default function MarketingHomePage() {
+  const [user, setUser] = useState<User | null | undefined>(undefined);
+
+  useEffect(() => {
+    const supabase = createClient();
+    void supabase.auth.getUser().then(({ data }) => setUser(data.user));
+  }, []);
+
+  const isLoggedIn = !!user;
+  // undefined = still loading; show nothing for auth-gated links until resolved.
+  const loaded     = user !== undefined;
+
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background">
+    <div
+      className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden font-mono"
+      style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
+    >
       {/* Subtle grid overlay */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-10"
+        className="pointer-events-none absolute inset-0 opacity-[0.06]"
         style={{
           backgroundImage:
-            "linear-gradient(rgba(245,158,11,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(245,158,11,0.15) 1px, transparent 1px)",
+            "linear-gradient(var(--color-primary) 1px, transparent 1px), linear-gradient(90deg, var(--color-primary) 1px, transparent 1px)",
           backgroundSize: "40px 40px",
         }}
       />
 
       <div className="relative z-10 flex flex-col items-center gap-8 px-4 text-center">
-        {/* ASCII logo */}
-        <pre className="ascii-art text-amber-400 text-glow-amber select-none hidden sm:block">
-          {`╔═══════════════════════════════════════════╗
-║                                           ║
-║    ███████╗███╗   ██╗██████╗ ██╗     ███████╗███████╗  ║
-║    ██╔════╝████╗  ██║██╔══██╗██║     ██╔════╝██╔════╝  ║
-║    █████╗  ██╔██╗ ██║██║  ██║██║     █████╗  ███████╗  ║
-║    ██╔══╝  ██║╚██╗██║██║  ██║██║     ██╔══╝  ╚════██║  ║
-║    ███████╗██║ ╚████║██████╔╝███████╗███████╗███████║  ║
-║    ╚══════╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚══════╝╚══════╝  ║
-║                                           ║
-║              W O R L D S   R P G         ║
-║                                           ║
-╚═══════════════════════════════════════════╝`}
+        {/* ASCII logo — desktop */}
+        <pre
+          className="select-none hidden sm:block text-[0.55rem] leading-tight"
+          style={{ color: "var(--color-primary)" }}
+        >
+          {`╔══════════════════════════════════════╗
+║  ███████╗███╗  ██╗██████╗ ██╗     ███████╗███████╗  ║
+║  ██╔════╝████╗ ██║██╔══██╗██║     ██╔════╝██╔════╝  ║
+║  █████╗  ██╔██╗██║██║  ██║██║     █████╗  ███████╗  ║
+║  ██╔══╝  ██║╚████║██║  ██║██║     ██╔══╝  ╚════██║  ║
+║  ███████╗██║ ╚███║██████╔╝███████╗███████╗███████║  ║
+║  ╚══════╝╚═╝  ╚══╝╚═════╝ ╚══════╝╚══════╝╚══════╝  ║
+║              W O R L D S   R P G                     ║
+╚══════════════════════════════════════╝`}
         </pre>
 
         {/* Mobile title */}
         <div className="sm:hidden">
-          <h1 className="text-4xl font-bold tracking-widest text-amber-400 text-glow-amber font-mono">
+          <h1
+            className="text-4xl font-bold tracking-widest"
+            style={{ color: "var(--color-primary)" }}
+          >
             ENDLESS WORLDS
           </h1>
-          <p className="text-lg text-amber-600 font-mono tracking-widest mt-1">R P G</p>
+          <p className="mt-1 text-lg tracking-widest" style={{ color: "var(--color-accent)" }}>
+            R P G
+          </p>
         </div>
 
-        <div className="flex flex-col items-center gap-3">
-          <p className="text-xl text-amber-400/80 font-mono tracking-wider">
-            — Coming Soon —
+        {/* Tagline */}
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-base tracking-wider" style={{ color: "var(--color-primary)" }}>
+            — A Truly Endless AI-Driven RPG —
           </p>
-          <p className="max-w-md text-muted-foreground font-mono text-sm leading-relaxed">
-            A genre-agnostic AI-driven RPG engine. Choose your world — Fantasy,
-            Cyberpunk, Noir, or Space Opera — and let the story unfold.
+          <p
+            className="max-w-md text-sm leading-relaxed"
+            style={{ color: "var(--color-muted)" }}
+          >
+            Genre-agnostic, infinitely replayable. Every world is generated by AI.
+            Every choice persists. Every action writes your story.
           </p>
         </div>
 
         {/* Genre badges */}
-        <div className="flex flex-wrap justify-center gap-2 mt-2">
-          {[
-            { label: "Fantasy", color: "text-amber-400 border-amber-400/30 bg-amber-400/5" },
-            { label: "Cyberpunk", color: "text-sky-400 border-sky-400/30 bg-sky-400/5" },
-            { label: "Noir", color: "text-yellow-700 border-yellow-700/30 bg-yellow-700/5" },
-            { label: "Space Opera", color: "text-purple-400 border-purple-400/30 bg-purple-400/5" },
-          ].map(({ label, color }) => (
-            <span
+        <div className="flex flex-wrap justify-center gap-2">
+          {GENRES.map(({ label, color, border, desc }) => (
+            <div
               key={label}
-              className={`px-3 py-1 rounded border font-mono text-xs tracking-widest ${color}`}
+              className="group relative"
             >
-              {label}
-            </span>
+              <span
+                className="inline-block cursor-default rounded-sm px-3 py-1 text-xs tracking-widest uppercase transition-all"
+                style={{ border: `1px solid ${border}`, color }}
+              >
+                {label}
+              </span>
+              {/* Tooltip */}
+              <div
+                className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 rounded-sm px-2 py-1 text-[10px] text-center leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                style={{
+                  backgroundColor: "var(--color-bg)",
+                  border:          `1px solid ${border}`,
+                  color:           "var(--color-muted)",
+                }}
+              >
+                {desc}
+              </div>
+            </div>
           ))}
         </div>
 
-        {/* Status indicator */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono mt-4">
-          <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-          <span>Day 1 — Scaffold initialized</span>
+        {/* CTA buttons */}
+        {loaded && (
+          <div className="flex flex-col items-center gap-3 sm:flex-row">
+            <Link
+              href={isLoggedIn ? "/game" : "/login"}
+              className="rounded-sm px-8 py-3 text-sm font-bold uppercase tracking-widest transition-all"
+              style={{
+                backgroundColor: "color-mix(in srgb, var(--color-primary) 15%, transparent)",
+                border:          "1px solid var(--color-primary)",
+                color:           "var(--color-primary)",
+              }}
+            >
+              {isLoggedIn ? "Continue Playing →" : "Play Now →"}
+            </Link>
+            {isLoggedIn ? (
+              <Link
+                href="/dashboard"
+                className="rounded-sm px-6 py-3 text-sm font-bold uppercase tracking-widest transition-all"
+                style={{
+                  border: "1px solid color-mix(in srgb, var(--color-primary) 35%, transparent)",
+                  color:  "var(--color-muted)",
+                }}
+              >
+                Your Adventures
+              </Link>
+            ) : (
+              <Link
+                href="/signup"
+                className="rounded-sm px-6 py-3 text-sm font-bold uppercase tracking-widest transition-all"
+                style={{
+                  border: "1px solid color-mix(in srgb, var(--color-primary) 35%, transparent)",
+                  color:  "var(--color-muted)",
+                }}
+              >
+                Create Account
+              </Link>
+            )}
+          </div>
+        )}
+
+        {/* Status */}
+        <div
+          className="flex items-center gap-2 text-xs"
+          style={{ color: "var(--color-muted)" }}
+        >
+          <span
+            className="inline-block h-2 w-2 rounded-full animate-pulse"
+            style={{ backgroundColor: "var(--color-primary)" }}
+          />
+          <span>Active Development — MVP in progress</span>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

@@ -176,6 +176,8 @@ RIGHT: If truly nothing is there, say the object is empty or yields nothing
 
 The only exception: if the LOGIC RESOLVER returned success=false AND the world flags confirm the object is not present. In that case, briefly explain it is not there and offer what IS available.
 
+This rule applies to ALL objects including readable items such as journals, books, notes, letters, signs, and documents. If the narrator described a leather-bound journal on a desk, the player can read it. Describe its contents. NEVER say a readable object was an illusion or trick of light.
+
 LOCATION & ACTION AUTHORITY:
 
 1. LOCATION IS A FACT, NOT AN INFERENCE:

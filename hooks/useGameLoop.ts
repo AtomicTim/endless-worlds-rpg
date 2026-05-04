@@ -12,7 +12,11 @@ import { generateArt, getSceneType } from "@/lib/game/art-generator";
 import { ActionType, AssetCategory, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { MasterState, ParsedAction, ResolutionResult, WorldAsset } from "@/types/game";
 
-const MAX_INPUT_LENGTH = 500;
+const MAX_INPUT_LENGTH  = 500;
+const AUTO_SAVE_INTERVAL = 10;
+
+// Module-level counter — persists across renders, resets when the module reloads.
+let autoSaveActionCount = 0;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -531,6 +535,12 @@ export function useGameLoop() {
               `[ ${item.rarity} item added to pack: ${item.name} ]`
             )
           );
+          // DISCOVERY log entry per item acquired.
+          updatedState = addLogEntry(
+            updatedState,
+            LogEntryType.DISCOVERY,
+            `Found: ${item.name}${item.description ? ` — ${item.description}` : ""}`
+          );
         }
       }
 
@@ -542,13 +552,23 @@ export function useGameLoop() {
         updatedState = { ...updatedState, npc_registry: merged };
       }
 
-      // ── 9. Append a log entry summarising this beat ────────────────────────
-      const logSummary = narratorResponse.narrative_text.slice(0, 200);
-      updatedState = addLogEntry(
-        updatedState,
-        outcomeToLogType(resolution.outcome_type),
-        logSummary
-      );
+      // ── 9. Append a structured log entry for this beat ────────────────────
+      // Extract first sentence (up to 120 chars) for a compact log preview.
+      const firstSentence =
+        (narratorResponse.narrative_text.match(/^[^.!?]*[.!?]/) ?? [])[0]?.trim() ??
+        narratorResponse.narrative_text.slice(0, 120);
+
+      if (resolution.outcome_type.startsWith("ATTACK") && rollMsg) {
+        // COMBAT entry: dice result string is most useful here.
+        updatedState = addLogEntry(updatedState, LogEntryType.COMBAT, rollMsg);
+      } else if (parsedAction.action_type === ActionType.DIALOGUE) {
+        // DIALOGUE entry: prefix with NPC name when available.
+        const npcLabel = parsedAction.primary_target ? `${parsedAction.primary_target}: ` : "";
+        updatedState = addLogEntry(updatedState, LogEntryType.DIALOGUE, `${npcLabel}${firstSentence}`);
+      } else {
+        // STORY entry for MOVE, EXAMINE, INTERACT, CUSTOM, USE_ITEM narratives.
+        updatedState = addLogEntry(updatedState, LogEntryType.STORY, firstSentence);
+      }
 
       // Bump last_played so the session sorts correctly on reload.
       updatedState = {
@@ -556,9 +576,12 @@ export function useGameLoop() {
         metadata: { ...updatedState.metadata, last_played: new Date().toISOString() },
       };
 
-      // ── 10. Commit local state, then persist ───────────────────────────────
+      // ── 10. Commit local state; auto-save every 10 narrative actions ───────
       store.setMasterState(updatedState);
-      await persistState(updatedState, store.addMessage);
+      autoSaveActionCount++;
+      if (autoSaveActionCount % AUTO_SAVE_INTERVAL === 0) {
+        await persistState(updatedState, store.addMessage);
+      }
     } catch (err) {
       // Catch-all for unexpected errors — never crash the UI.
       console.error("Game loop error:", err);

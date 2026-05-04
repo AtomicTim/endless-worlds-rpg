@@ -31,6 +31,7 @@ function baseState(): MasterState {
   return createNewMasterState(Genre.FANTASY, "Aria", "knight", Difficulty.NORMAL);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function withCurrentLocation(state: MasterState, locationId: string): MasterState {
   return {
     ...state,

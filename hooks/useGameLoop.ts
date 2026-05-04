@@ -41,6 +41,16 @@ function buildRollFeedback(resolution: ResolutionResult): string | null {
     return `⚔ Attack roll: ${roll} ${sign} (STR) = ${total}${diffStr} — ${label}`;
   }
 
+  // Charisma check feedback — read ctx.success (NOT resolution.success, which
+  // is always true for DIALOGUE since the resolver lets the narrator decide
+  // the in-fiction outcome). The boolean inside narrative_context is the
+  // actual roll-vs-difficulty result.
+  if (ctx.charisma_check === true) {
+    const passed = ctx.success === true;
+    const label  = passed ? "Passed!" : "Failed.";
+    return `🎭 Charisma check: ${roll} ${sign} (CHA) = ${total}${diffStr} — ${label}`;
+  }
+
   return `🎲 Roll: ${roll} ${sign} = ${total}${diffStr}`;
 }
 

@@ -87,10 +87,13 @@ export default function GamePage() {
       const state = session.master_state;
       const store = useGameStore.getState();
 
+      // Wipe all per-session caches BEFORE loading the new session so nothing
+      // bleeds across (log entries, location assets, art cache, dialogue modal,
+      // last narrative text, ascii art). masterState is set immediately after.
+      store.clearSessionState();
       store.clearMessages();
       store.setMasterState(state);
       store.mergePersistedLogEntries(state.log_book?.entries ?? []);
-      store.setAsciiArt(null);
 
       // ── Restore recent narrative messages from the previous session ──────────
       // Gives the player context to continue without re-reading the entire log.

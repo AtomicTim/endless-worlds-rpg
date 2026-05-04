@@ -152,8 +152,9 @@ export function GameLayout({
 
       {/* ── Content row ─────────────────────────────────────────── */}
       <div className="relative flex flex-1 overflow-hidden">
-        {/* Main panel */}
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Main panel — `relative` so absolutely-positioned overlays
+            (e.g. the DialogueModal) anchor to the game area, not the viewport. */}
+        <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
           {mainPanel}
         </main>
 

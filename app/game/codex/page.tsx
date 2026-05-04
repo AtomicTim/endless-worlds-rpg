@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getAllCodex, getWorldAssetsByCategory, normalizeAssetId, looksLikePlaceholder } from "@/lib/game/codex";
 import { AssetCategory } from "@/types/game";
 import type { CodexEntry, MasterState, WorldAsset } from "@/types/game";
+import { useGameStore } from "@/lib/stores/game-store";
 
 type TabId = "LOCATION" | "CHARACTER" | "FACTION" | "ITEM" | "LORE" | "BESTIARY";
 
@@ -28,6 +29,13 @@ const TABS: TabConfig[] = [
 
 export default function CodexPage() {
   const router = useRouter();
+  // Always read sessionId from the live game store first — this is the
+  // authoritative source for whichever session the player is currently in.
+  // Falls back to a DB lookup only if the store hasn't been hydrated yet
+  // (e.g. direct navigation to /game/codex without visiting /game first).
+  const storeSessionId   = useGameStore((s) => s.masterState?.metadata.session_id ?? null);
+  const storeCharacterName = useGameStore((s) => s.masterState?.player_state.name ?? null);
+
   const [characterName, setCharacterName]             = useState<string>("");
   const [entries, setEntries]                         = useState<CodexEntry[]>([]);
   const [locationWorldAssets, setLocationWorldAssets] = useState<WorldAsset[]>([]);
@@ -49,24 +57,35 @@ export default function CodexPage() {
         return;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: sessions } = (await (supabase.from("game_sessions") as any)
-        .select("id, master_state")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .order("last_played", { ascending: false })
-        .limit(1)) as { data: { id: string; master_state: MasterState }[] | null };
+      // ── Resolve sessionId & characterName ──────────────────────────────────
+      // Prefer the in-memory game store (always correct for the active session).
+      // Only hit the DB when the store has no master_state (e.g. cold load).
+      let sessionId   = storeSessionId;
+      let charName    = storeCharacterName ?? "";
 
-      if (cancelled) return;
+      if (!sessionId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: sessions } = (await (supabase.from("game_sessions") as any)
+          .select("id, master_state")
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .order("last_played", { ascending: false })
+          .limit(1)) as { data: { id: string; master_state: MasterState }[] | null };
 
-      if (!sessions || sessions.length === 0) {
-        router.push("/game/new");
-        return;
+        if (cancelled) return;
+
+        if (!sessions || sessions.length === 0) {
+          router.push("/game/new");
+          return;
+        }
+
+        const session = sessions[0];
+        sessionId = session.master_state.metadata.session_id;
+        charName  = session.master_state.player_state.name;
       }
 
-      const session = sessions[0];
-      setCharacterName(session.master_state.player_state.name);
-      const sessionId = session.master_state.metadata.session_id;
+      setCharacterName(charName);
+
       const [all, locAssets, charAssets] = await Promise.all([
         getAllCodex(sessionId),
         getWorldAssetsByCategory(sessionId, AssetCategory.LOCATION),
@@ -84,7 +103,7 @@ export default function CodexPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, storeSessionId, storeCharacterName]);
 
   // Close modal on Escape
   useEffect(() => {

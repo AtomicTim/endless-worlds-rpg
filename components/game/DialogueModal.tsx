@@ -1,6 +1,6 @@
 "use client";
 
-import { Lock } from "lucide-react";
+import { Lock, X } from "lucide-react";
 import { useGameStore } from "@/lib/stores/game-store";
 import type { DialogueOption } from "@/types/game";
 
@@ -34,12 +34,12 @@ function ensureResponsiveSvg(svg: string): string {
 }
 
 /**
- * Dialogue Modal — slides in above the InputBar when an NPC interaction
- * produces response options. Shows the NPC portrait on the left (if available)
- * and a column of response buttons on the right.
- *
- * Each option is submitted as a quoted string ("text") so the game loop routes
- * it through the DIALOGUE path automatically.
+ * Dialogue Modal — slides up from the bottom of the main game area when an
+ * NPC interaction produces response options. Absolutely positioned within the
+ * main panel so it overlays only the InputBar area without pushing the
+ * StoryFeed up. Click outside the modal does NOT dismiss it (the InputBar is
+ * still reachable via "type your own"); the small "X" / "walk away" buttons
+ * close it explicitly.
  */
 export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
   const options  = useGameStore((s) => s.currentDialogueOptions);
@@ -48,7 +48,6 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
   const charisma = useGameStore((s) => s.masterState?.player_state.attributes.charisma ?? 10);
   const clear    = useGameStore((s) => s.clearDialogueOptions);
 
-  // Hidden when there are no options — zero height, no layout impact.
   if (options.length === 0) return null;
 
   const handleOption = (option: DialogueOption) => {
@@ -62,30 +61,43 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
   };
 
   return (
-    <div
-      className="shrink-0 overflow-hidden"
-      style={{
-        height:          "280px",
-        borderTop:       "3px solid var(--color-accent)",
-        borderBottom:    "1px solid var(--color-border)",
-        backgroundColor: "var(--color-bg)",
-      }}
-    >
-      <div className="flex h-full">
+    <>
+      {/* Backdrop — only over the bottom strip where the modal sits.
+          Lets the StoryFeed above stay clear and interactive. */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 z-30 pointer-events-none"
+        style={{
+          height:          "200px",
+          backgroundColor: "rgba(0,0,0,0.45)",
+        }}
+      />
+
+      <div
+        role="dialog"
+        aria-label="Dialogue options"
+        className="absolute inset-x-0 bottom-0 z-40 flex"
+        style={{
+          height:          "200px",
+          maxHeight:       "200px",
+          borderTop:       "3px solid var(--color-accent)",
+          backgroundColor: "var(--color-bg)",
+        }}
+      >
         {/* ── LEFT — Portrait + NPC name ─────────────────────────────────── */}
         <div
-          className="flex shrink-0 flex-col items-center gap-2 p-3"
+          className="flex shrink-0 flex-col items-center justify-center gap-1.5 px-2 py-2"
           style={{
-            width:       "28%",
+            width:       "112px",
             borderRight: "1px solid var(--color-border)",
           }}
         >
-          {/* Portrait box */}
+          {/* Portrait box (80×80) */}
           <div
             className="overflow-hidden rounded-sm"
             style={{
-              width:           "76px",
-              height:          "76px",
+              width:           "80px",
+              height:          "80px",
               border:          "1px solid var(--color-accent)",
               backgroundColor: "color-mix(in srgb, var(--color-accent) 6%, var(--color-bg))",
               flexShrink:      0,
@@ -98,45 +110,56 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
                 dangerouslySetInnerHTML={{ __html: ensureResponsiveSvg(portrait) }}
               />
             ) : (
-              // Generic silhouette placeholder while portrait loads (or if unavailable)
-              <svg viewBox="0 0 76 76" className="h-full w-full" aria-hidden>
-                <circle cx="38" cy="26" r="13" fill="var(--color-muted)" opacity="0.35" />
-                <ellipse cx="38" cy="56" rx="20" ry="15" fill="var(--color-muted)" opacity="0.35" />
+              <svg viewBox="0 0 80 80" className="h-full w-full" aria-hidden>
+                <circle cx="40" cy="28" r="14" fill="var(--color-muted)" opacity="0.35" />
+                <ellipse cx="40" cy="58" rx="22" ry="16" fill="var(--color-muted)" opacity="0.35" />
               </svg>
             )}
           </div>
 
           {/* NPC name */}
           <p
-            className="text-center text-[10px] font-bold uppercase tracking-widest leading-tight"
-            style={{ color: "var(--color-accent)", maxWidth: "88px", wordBreak: "break-word" }}
+            className="text-center text-[10px] font-bold uppercase tracking-wider leading-tight"
+            style={{ color: "var(--color-accent)", maxWidth: "100px", wordBreak: "break-word" }}
           >
             {npcName ?? "???"}
           </p>
 
-          {/* Walk away — small text link at bottom */}
+          {/* Walk away — small text link */}
           <button
             onClick={() => clear()}
-            className="mt-auto text-[9px] italic underline-offset-2 underline hover:opacity-70 transition-opacity"
+            className="text-[9px] italic underline-offset-2 underline transition-opacity hover:opacity-70"
             style={{ color: "var(--color-muted)" }}
           >
             walk away
           </button>
         </div>
 
-        {/* ── RIGHT — Response options ────────────────────────────────────── */}
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto p-3">
+        {/* ── RIGHT — Response options + close ─────────────────────────── */}
+        <div className="relative flex min-w-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2 pr-8">
+          {/* Close button — top right */}
+          <button
+            onClick={() => clear()}
+            aria-label="Close dialogue"
+            className="absolute right-1.5 top-1.5 z-50 rounded-sm p-1 transition-colors hover:bg-white/10"
+            style={{ color: "var(--color-muted)" }}
+          >
+            <X className="size-3" />
+          </button>
+
           {options.map((option) => {
             const locked = typeof option.charisma_required === "number" && charisma < option.charisma_required;
             const color  = TONE_COLORS[option.tone];
+            const label  = TONE_LABELS[option.tone];
 
             return (
               <button
                 key={option.id}
                 disabled={locked}
                 onClick={() => !locked && handleOption(option)}
-                className="flex w-full items-start gap-2 rounded-sm px-3 py-2 text-left text-xs transition-opacity"
+                className="flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left transition-opacity"
                 style={{
+                  fontSize:        "0.85rem",
                   backgroundColor: locked
                     ? "color-mix(in srgb, var(--color-muted) 6%, transparent)"
                     : `color-mix(in srgb, ${color} 10%, transparent)`,
@@ -147,15 +170,26 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
               >
                 {/* Tone dot */}
                 <span
-                  className="mt-0.5 size-2 shrink-0 rounded-full"
+                  className="size-2 shrink-0 rounded-full"
                   style={{ backgroundColor: locked ? "var(--color-muted)" : color }}
-                  title={TONE_LABELS[option.tone]}
+                  title={label}
                 />
+
+                {/* Tone label — visible from 480px and up, hidden on narrow mobile */}
+                <span
+                  className="hidden shrink-0 text-[9px] font-bold uppercase tracking-wider min-[480px]:inline"
+                  style={{ color: locked ? "var(--color-muted)" : color, minWidth: "62px" }}
+                >
+                  {label}
+                </span>
 
                 {/* Option text */}
                 <span
-                  className="flex-1 font-mono text-[11px] leading-snug"
-                  style={{ color: locked ? "var(--color-muted)" : "var(--color-text)" }}
+                  className="min-w-0 flex-1 truncate font-mono leading-snug"
+                  style={{
+                    color:    locked ? "var(--color-muted)" : "var(--color-text)",
+                    fontSize: "0.85rem",
+                  }}
                 >
                   {option.text}
                 </span>
@@ -177,7 +211,7 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
           {/* Type your own — always last */}
           <button
             onClick={handleTypeOwn}
-            className="mt-auto w-full rounded-sm px-3 py-1.5 text-center text-[10px] italic transition-opacity hover:opacity-70"
+            className="mt-auto w-full rounded-sm px-2 py-1 text-center text-[10px] italic transition-opacity hover:opacity-70"
             style={{
               color:  "var(--color-muted)",
               border: "1px dashed color-mix(in srgb, var(--color-border) 70%, transparent)",
@@ -187,6 +221,6 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </>
   );
 }

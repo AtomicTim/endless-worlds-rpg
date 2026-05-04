@@ -68,6 +68,9 @@ interface GameStore {
   setDialogueOptions:      (options: DialogueOption[], npcName: string | null, portrait: string | null) => void;
   /** Hide the Dialogue Modal and clear all dialogue state. */
   clearDialogueOptions:    () => void;
+  /** Wipe all per-session state so a fresh session loads with a clean slate.
+   *  Does NOT clear masterState — that is replaced by the caller right after. */
+  clearSessionState:       () => void;
 
   persistedLogEntries: LogEntry[];
 }
@@ -126,4 +129,15 @@ export const useGameStore = create<GameStore>((set) => ({
     set({ currentDialogueOptions: options, currentDialogueNpc: npcName, currentNpcPortrait: portrait }),
   clearDialogueOptions: () =>
     set({ currentDialogueOptions: [], currentDialogueNpc: null, currentNpcPortrait: null }),
+  clearSessionState: () =>
+    set({
+      persistedLogEntries:    [],
+      currentDialogueOptions: [],
+      currentDialogueNpc:     null,
+      currentNpcPortrait:     null,
+      locationAssets:         [],
+      artCache:               {},
+      lastNarrativeText:      null,
+      currentAsciiArt:        null,
+    }),
 }));

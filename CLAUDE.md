@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 5.3
+**Version:** 5.4
 **Status:** Active Development — Phase 2 In Progress
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -17,8 +17,8 @@
 | --- | --- | --- |
 | 1–14 | Phase 1 MVP | ✅ Complete |
 | 15 | NPC Dialogue + Portraits | ✅ Complete |
-| 15.5 | Dialogue consistency architecture | ✅ Complete |
-| Integrity patch | AI role constraints, NPC state from game state | ✅ Complete |
+| 15.5 | Dialogue consistency + integrity patch | ✅ Complete |
+| Dialogue fixes | Registry seeding, stat checks, disposition, SPA nav | ✅ Complete |
 | 16 | NPC Trading + Item Value | 🔄 In Progress |
 | 17-18 | Main Narrative Thread | ⏳ Pending |
 | 19+ | Combat, Skills, Factions | ⏳ Pending |
@@ -26,16 +26,14 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Integrity Patch (commit ca6a83d — 86/86 tests, clean build)
-- Narrator system prompt opens with YOUR ROLE block — three jobs defined, player blank-slate enforced
-- `submitAction(input, options?: { npcName? })` — NPC name pinned from store, Intent Parser never re-extracts
-- DialogueModal + InputBar pass npcName to submitAction
-- `findNpcInRegistry(registry, target)` — multi-strategy lookup (snake_case, asset-id, direct, name-scan)
-- `currentDialogueNpcKey` in game store — disposition badge reads trust directly from npc_registry
-- All new NPCs keyed by `normalizeAssetId(CHARACTER, name)`, trust_score=50, memory_snippets=[]
-- Trust deltas routed through findNpcInRegistry — always hits correct entry
-- ACTIVE NPC CONTEXT block injected for ALL dialogue (not just stat-checked), trust from npc_registry
-- First-encounter NPCs skip block so narrator can mint them as new assets
+### Dialogue Fixes (commit 3d4b4ef)
+- `seedNpcRegistry(state, key, name?, role?)` — no-op if key exists, neutral defaults
+- Every NPC encountered in dialogue gets a registry entry on first beat (step 7g seeds on spot)
+- `resolveDialogue` always fires stat check from tone alone even without registry entry (default difficulty=12)
+- Disposition badge always renders with `trustScore ?? 50` fallback — 🟡 Neutral by default
+- Name reveal updates modal header immediately: setDialogueOptions called when currentDialogueNpc matches placeholder
+- `clearSessionState` = full wipe (session switch only). `clearTransientState` = art/narrative only (SPA nav)
+- Module-level `lastLoadedSessionId` in page.tsx survives unmount — SPA navigation preserves dialogue modal, log entries, feed
 
 ---
 
@@ -57,39 +55,32 @@ Plausible actions always attempted. Narrator describes outcomes only.
 EXAMINE/INTERACT resolver confirms object_confirmed=true. Prepended as first narrator fact.
 
 ### 6. Dialogue Is Consistent
-All dialogue — clicked option OR typed freely — identical pipeline. NPC name passed directly as parameter.
+All dialogue — clicked option OR typed freely — identical pipeline. NPC name passed directly as parameter. Stat checks always fire from tone classification.
 
 ### 7. The AI Has Exactly Three Roles
 **Generator:** Creates assets on first encounter. Once created, immutable.
-**Bridge:** Describes results of player actions. Does NOT decide outcomes, speak for the player, or invent history.
+**Bridge:** Describes results of player actions. Never speaks for the player or invents history.
 **Thread:** Plants subtle story breadcrumbs. Never forces or blocks.
-
-The AI NEVER: speaks for the player, attributes memories/relationships/knowledge to them, retcons established assets, or takes unprompted action.
 
 ---
 
 ## 🎮 Game System Architecture
 
-Every entity is a game asset with defined states. The AI generates on first encounter, then becomes a pure interpreter.
+Every entity is a game asset with defined states. The AI generates on first encounter, then interprets.
 
 **NPC interaction model (authoritative sources):**
-- Constitution (appearance, personality, role) → `world_assets` — locked on first meeting
-- Trust score → `npc_registry` — updated by resolveDialogue(), found via findNpcInRegistry()
-- Disposition → derived from trust score by getNpcDisposition()
-- Name → `world_assets.name` (name_known ? name : placeholder)
-- NPC key → `normalizeAssetId(CHARACTER, name)` — consistent across all lookups
-
-**Nothing about an NPC comes from the AI's current response. Everything comes from stored game state.**
+- Constitution → `world_assets` (locked on first meeting)
+- Trust score → `npc_registry` (seeded on first dialogue, updated by resolveDialogue)
+- Disposition → `getNpcDisposition(trustScore ?? 50)` — always renders
+- Name → `world_assets.name` (name_known ? name : placeholder), updates in modal on reveal
+- Registry key → `normalizeAssetId(CHARACTER, name)` — consistent across all lookups
 
 ---
 
 ## 🔮 Future Systems
 
 ### Character Background System (Phase 3)
-Full character creation expansion:
-- Background traits in player_state, injected into narrator prompt
-- Affects how ALL NPCs react, starting faction relationships, reputation
-- Background-specific starting locations and dialogue options
+Background traits in player_state, injected into narrator. Affects NPC reactions, starting rep.
 
 ---
 
@@ -107,14 +98,16 @@ Hidden World Seed: conflict + goal + 3-5 breadcrumbs + opening hook. Sealed in m
 
 ## 🎭 NPC Dialogue System (Complete)
 - NPC name passed directly — never re-extracted from AI output
-- findNpcInRegistry() — robust multi-strategy lookup
-- Trust from npc_registry (authoritative), disposition reactive
-- ACTIVE NPC CONTEXT always injected for dialogue
-- Tone → stat check → trust-scaled difficulty
-- No hard gates — stat badge (💬CHA/💪STR/👁PER/🧠INT) shows risk
+- seedNpcRegistry() on every first dialogue encounter
+- findNpcInRegistry() multi-strategy lookup
+- Stat checks always fire from tone (persuasive/deceptive/intimidating)
+- Trust from npc_registry (seeded at 50, updated by trust_changes)
+- Disposition badge always shows (fallback 🟡 Neutral)
+- Name reveal updates modal header immediately
+- SPA navigation preserves dialogue modal
 
 ## 🕵️ NPC Identity System
-- name_known=false for CHARACTER. revealed_npc_names pipeline.
+- name_known=false for CHARACTER. revealed_npc_names pipeline. Modal header updates on reveal.
 
 ## 💎 Item Value System (Day 16)
 Every item: sell value + lore blurb + optional dialogue unlock. Merchant NPCs.
@@ -131,12 +124,10 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 
 ## Narrator Architecture
 
-**Pure interpreter of game state. Not a decision-maker.**
+**Pure interpreter of game state.**
 
-- YOUR ROLE block is the FIRST thing in the system prompt
-- NEVER speaks for player, invents history, or retcons assets
-- Player is always blank slate — past = log book only
-- ACTIVE NPC CONTEXT (constitution + trust) injected for all dialogue
+- YOUR ROLE block is FIRST in system prompt — three jobs defined, player blank-slate enforced
+- ACTIVE NPC CONTEXT injected for all DIALOGUE (constitution + trust from npc_registry)
 - Tier 1/2/3 response lengths based on action type
 - log_summary: 12-word max terse fragment
 
@@ -146,7 +137,8 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 - Log entries + recent_messages: after every narrative action
 - World state: after every MOVE or flag change
 - Full state: every 10 actions
-- Session isolation: clearSessionState() before every session load
+- Session isolation: clearSessionState() on session switch only
+- SPA navigation: clearTransientState() — dialogue/logs/feed preserved
 
 ---
 
@@ -168,10 +160,11 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 - **Hybrid Authority:** Code = Truth, AI = pure interpreter
 - **AI has 3 roles only:** Generator → Bridge → Thread
 - **Player is blank slate:** AI never speaks for them or invents their history
-- **NPC state from game state:** npc_registry + world_assets, never from AI output
+- **NPC state from game state:** npc_registry always seeded, never from AI output
 - World Assets permanent, Movement absolute, Objects exist
-- Dialogue consistent: NPC name passed directly
+- Dialogue consistent: NPC name passed directly, stat checks always fire
 - Immediate persistence after every relevant action
+- SPA navigation preserves dialogue and feed state
 - Truly endless — AI generates on demand
 
 ---
@@ -233,4 +226,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 44 — V5.3: Integrity patch complete. AI three-role model enforced in code. NPC state fully from game state. Day 16 starting.*
+*Last updated: Session 45 — V5.4: NPC registry seeding, stat checks always fire, disposition badge, SPA nav preserves dialogue. Day 16 starting.*

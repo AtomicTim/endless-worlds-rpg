@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 4.3
+**Version:** 4.4
 **Status:** Active Development — Phase 1 MVP Nearly Complete
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -22,7 +22,7 @@
 | Day 13.5 | World Asset System + Lore Codex | ✅ Complete |
 | All pre-Day 13 fixes | Codex, dialogue, SVG, identity, name reveal, action authority | ✅ Complete |
 | 13 | Log Book & Save System | ✅ Complete |
-| LogBook fixes | Persistence via Zustand, log_summary, improved formats | ✅ Complete |
+| LogBook fixes | Persistence, sort order, story restoration, POI labels | ✅ Complete |
 | 14 | MVP Playtest & Bug Fix | 🔄 In Progress |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
@@ -34,13 +34,14 @@
 - `world_assets` — constitutions + svg_content + name_known
 - `codex` — lore encyclopedia entries
 
-### LogBook Architecture (post-fix)
-- `persistedLogEntries` in Zustand — survives SPA navigation
-- `addPersistedLogEntry()` — appends, keeps last 100
-- `mergePersistedLogEntries()` — seeds from DB on hard refresh without overwriting live entries
-- `LogBook.tsx` reads from `persistedLogEntries`, not masterState
-- `log_summary` in NarratorResponse — 12-word max terse journal fragment
-- Entry formats: STORY=log_summary, DIALOGUE=first quoted speech, COMBAT=compact roll line, DISCOVERY="Found: X (Rarity)"
+### LogBook & Feed Architecture (post-fix — commit eb06437)
+- `persistedLogEntries` in Zustand — oldest-first, display reversed for newest-at-top
+- `patchLogEntries()` — immediate DB save after every log entry (survives hard refresh)
+- `POST /api/game/log-entries` — dedicated route for log persistence
+- `LogBook.tsx` — `[...entries].reverse()` for display only, newest at top
+- `LogBook.recent_messages` — last 8 NARRATIVE/DIALOGUE messages saved to state
+- On reload: "— Resuming your adventure —" separator + restored messages at 80% opacity
+- POI LABEL INTEGRITY rule in narrator prompt — exact target name honored, no synonyms
 
 ---
 
@@ -59,7 +60,7 @@ MOVE always succeeds. Only block: world flag `<location_id>_locked: true`.
 Plausible actions always attempted. Narrator describes outcomes only.
 
 ### 5. Objects Mentioned Exist
-If narrator described it, player can interact with it. Includes journals, books, notes, signs, documents. Narrator CANNOT retroactively un-create anything.
+If narrator described it, player can interact with it. POI labels are exact — no synonyms, no renaming. Includes journals, books, notes, signs, documents.
 
 ---
 
@@ -85,7 +86,7 @@ name_known=false for CHARACTER. looksLikePlaceholder() 2+ word match. revealed_n
 Every item has sell value + lore blurb + optional dialogue unlock.
 
 ## ⚠️ Known Narrator Issue
-Occasional LORE object blocking. Monitor during Day 14 playtest.
+Occasional LORE object blocking. POI label integrity added but monitor during playtest.
 
 ---
 
@@ -101,10 +102,11 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 - **Tier 3** (80-120 words): ARRIVING at NEW location, major moments
 - GOLDEN RULE: honor action, yes-and
 - MOVE: always arrives
-- EXAMINE/INTERACT/READ: always resolves, includes readable objects
+- EXAMINE/INTERACT/READ: always resolves
+- POI LABEL INTEGRITY: exact target name used, no synonyms
 - WORLD ASSET: constitutions as facts
 - DIALOGUE: "NPC: 'speech'" quoted in accent/italic
-- log_summary: 12-word max terse fragment, no "You/I/explored"
+- log_summary: 12-word max terse fragment
 
 ---
 
@@ -134,6 +136,7 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 
 - Hybrid Authority: Code = Truth, AI = Narrator
 - World Assets permanent, Movement absolute, Objects mentioned exist
+- POI labels exact — no synonyms or renaming
 - Actions permitted by default, Location authoritative
 - Every item has value, Every campaign has a purpose
 - Truly endless — AI generates on demand
@@ -197,4 +200,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 34 — V4.3: LogBook persistence + quality fixes complete. Day 14 playtest starting.*
+*Last updated: Session 35 — V4.4: All persistence, sort order, story restoration, POI label fixes complete. Day 14 playtest ready.*

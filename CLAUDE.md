@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 3.1
+**Version:** 3.2
 **Status:** Active Development — MVP Core Loop Complete
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -18,6 +18,7 @@
 | 1–12 | Foundation through Inventory | ✅ Complete |
 | Patch A | Narrator redesign, POI system | ✅ Complete |
 | Patch B | CONTAINER items, SVG art engine, dialogue prefix | ✅ Complete |
+| Move fix | MOVE always succeeds, narrator cannot block | ✅ Complete |
 | Day 13.5 | World Asset System + Lore Codex | 🔄 In Progress |
 | 13 | Log Book & Save System | ⏳ Pending |
 | 14 | MVP Playtest & Bug Fix | ⏳ Pending |
@@ -63,31 +64,38 @@ When the game introduces a new location, character, faction, creature, or item o
 
 ---
 
+## ⚡ MOVEMENT RULE (Read Before Every Session)
+
+**MOVE actions ALWAYS succeed. The Narrator cannot block player movement.**
+
+- `resolveMove()` returns `MOVE_SUCCESS` for all destinations
+- The ONLY valid block is a world flag `<location_id>_locked: true`
+- Distance, danger, and difficulty are journey flavor — never blockers
+- `movement_mandatory: true` is set in narrative_context on every MOVE
+- Narrator system prompt contains "MOVE ACTIONS — ABSOLUTE RULE" with explicit WRONG/RIGHT examples
+- Narrator user prompt prepends ⚠️ MOVE ACTION block on every MOVE_SUCCESS
+- 43/43 tests passing including new MOVE_BLOCKED lock-flag case
+
+---
+
 ## Key Deliverables Log
 
-### Patch B (confirmed on main — next build passing)
-- `types/game.ts`: CONTAINER added to ItemType, Item.searched, Item.contains
-- `logic-resolver.ts`: CONTAINER branch — marks searched=true, passes container_search context
-- `prompt-builder.ts`: CONTAINER SEARCH instruction injected when container_search=true
-- `InventoryPanel.tsx`: CONTAINER shows "Search"/"Drop", "Empty" badge when searched
-- `app/api/game/generate-art/route.ts`: SVG art generation, cache lookup by location_id+session_id
-- `supabase/migrations/002_art_cache.sql`: art_cache table with composite UNIQUE(location_id, session_id) — **APPLIED to Supabase**
-- `lib/game/art-generator.ts`: scene_type detection, per-genre SVG prompts, SVG sanitizer
-- `components/game/SceneArt.tsx`: async art display, fade-in, Zustand art cache
-- `game-store.ts`: artCache Record<string,string>, setArtCache()
-- `app/game/page.tsx`: fires async art generation after MOVE actions
-- `lib/game/intent-parser.ts`: detectDialogue() — quoted input → DIALOGUE, no AI call
-- `parse-intent/route.ts`: dialogueMode bypass returns DIALOGUE action instantly
-- `InputBar.tsx`: accent border + 💬 icon + "Speak" button when in quote mode
+### Move Fix (confirmed on main)
+- `logic-resolver.ts`: resolveMove() always MOVE_SUCCESS except explicit lock flag
+- `prompt-builder.ts`: MOVE ABSOLUTE RULE in system prompt, ⚠️ block in user prompt
+- `logic-resolver.test.ts`: 43/43 passing, new MOVE_BLOCKED test case
+
+### Patch B (confirmed on main)
+- CONTAINER item type with search/already-searched flow
+- SVG art engine: /api/game/generate-art, scene_type detection, genre palettes
+- art_cache Supabase table (UNIQUE per location_id+session_id) — applied
+- SceneArt.tsx: async fade-in, Zustand cache
+- Dialogue prefix: quoted text → instant DIALOGUE, 💬 UI, "Speak" button
 
 ### Patch A (confirmed on main)
-- Narrator redesigned: ROLE, GOLDEN RULE, RESPONSE TIERS, END OF RESPONSE RULE, POI, CODEX, IP guard
-- StoryFeed: clickable POI highlights, InteractionPopover (desktop card / mobile sheet)
-- Fast-path: equip/unequip/drop/read — zero AI calls, startTransition, no spinner
-
-### Pre-Patch fixes
-- Narrative continuity: lastNarrativeText + 5 log entries in every Narrator call
-- Original content only policy in all narrator prompts
+- Narrator: ROLE, GOLDEN RULE, RESPONSE TIERS, END OF RESPONSE RULE
+- StoryFeed: clickable POI highlights, InteractionPopover
+- Fast-path: equip/unequip/drop/read — zero AI, startTransition
 
 ---
 
@@ -96,9 +104,10 @@ When the game introduces a new location, character, faction, creature, or item o
 - **Tier 1** (2-3 sentences): repeated actions, USE_ITEM, simple CUSTOM
 - **Tier 2** (4-6 sentences): EXAMINE, ATTACK, INTERACT, DIALOGUE, first NPC
 - **Tier 3** (80-120 words): NEW location, major story moments
-- GOLDEN RULE: honor player action, yes-and, hard logic blocks only
+- GOLDEN RULE: honor player action, yes-and
+- MOVE RULE: player always arrives, no exceptions except lock flags
 - END OF RESPONSE: weave 2-3 interactables into final sentences
-- Narrator never generates art — separate art engine handles this
+- Narrator never generates art
 
 ---
 
@@ -106,28 +115,17 @@ When the game introduces a new location, character, faction, creature, or item o
 
 - **FAST PATH** (zero AI, instant): equip, unequip, drop, read lore
 - **NARRATIVE PATH**: MOVE, ATTACK, INTERACT, EXAMINE, DIALOGUE, USE_ITEM(CONSUMABLE), search CONTAINER
-- **DIALOGUE DETECTION**: quoted text ("...") → instant DIALOGUE, no intent parser AI call
-
----
-
-## Points of Interest System
-
-- Types: LOCATION | NPC | CONTAINER | ITEM | HAZARD
-- Highlighted in StoryFeed with type-specific colors
-- Clicking → InteractionPopover with contextual action buttons
-- Desktop: floating card; Mobile: bottom sheet
+- **DIALOGUE DETECTION**: quoted text → instant DIALOGUE, no AI call
+- **MOVE**: always succeeds in resolver, Narrator describes arrival only
 
 ---
 
 ## SVG Art Engine
 
-- Route: /api/game/generate-art
-- Async — fires after MOVE, never blocks narrative
+- Route: /api/game/generate-art — fires async after MOVE, never blocks narrative
 - Scene types: TOP_DOWN_TOWN, SIDE_VIEW_INTERIOR, FRONT_PORTRAIT, ISOMETRIC_WIDE
-- Cached in Supabase art_cache (UNIQUE per location_id+session_id)
-- In-memory cache in Zustand artCache
+- Cached in Supabase art_cache + Zustand artCache
 - SVG sanitizer strips script/text/image/event handlers
-- Art fades in over 0.5s when ready
 
 ---
 
@@ -135,7 +133,7 @@ When the game introduces a new location, character, faction, creature, or item o
 
 | System | When | Description |
 | --- | --- | --- |
-| World Asset persistence | Day 13.5 | world_assets Supabase table, constitution injection into narrator |
+| World Asset persistence | Day 13.5 | world_assets Supabase table, constitution injection |
 | Lore Codex page | Day 13.5 | Full encyclopedia UI per campaign |
 | Log Book + Save System | Day 13 | LogBook sidebar, dashboard, Save & Exit |
 | NPC Dialogue system | Day 15 | Full conversation mode, Charisma gates |
@@ -146,9 +144,10 @@ When the game introduces a new location, character, faction, creature, or item o
 ## 1. Core Philosophy
 
 - **The Hybrid Authority Model:** The Code is the "Source of Truth." The AI is the "Narrator."
-- **World Assets are permanent.** Every significant entity introduced is an immutable game asset.
-- **SVG Pixel Art + Text:** Async art engine, cached per location.
-- **Endless Versatility:** Genre Wrappers. Launch genres: Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic.
+- **World Assets are permanent.** Every significant entity is an immutable game asset.
+- **Movement is absolute.** Players always arrive. Distance is flavor, not a wall.
+- **SVG Pixel Art + Text.** Async art engine, cached per location.
+- **Endless Versatility.** Genre Wrappers. Launch genres: Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic.
 
 ---
 
@@ -166,8 +165,8 @@ When the game introduces a new location, character, faction, creature, or item o
 
 ### B. The Game Loop
 1. **Intent Parser** → ParsedAction (AI, or instant for dialogue/fast-path)
-2. **Logic Resolver** → ResolutionResult (no AI)
-3. **Narrator** → story + POI + codex_entries (AI)
+2. **Logic Resolver** → ResolutionResult (no AI, MOVE always succeeds)
+3. **Narrator** → story + POI + codex_entries (AI, describes arrival for MOVE)
 4. **Art Engine** → SVG async (AI, cached) — non-blocking
 
 ---
@@ -238,4 +237,4 @@ Workflow: Claude Code pushes → `git pull` + restart own server → report to C
 
 ---
 
-*Last updated: Session 22 — Patch B complete. art_cache migration applied to Supabase. Day 13.5 starting.*
+*Last updated: Session 23 — Move fix complete (always succeeds, 43/43 tests). Day 13.5 starting.*

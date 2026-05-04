@@ -15,6 +15,7 @@ const ITEM_ICONS: Record<ItemType, string> = {
   [ItemType.CONSUMABLE]: "⚗",
   [ItemType.KEY]:        "🗝",
   [ItemType.LORE]:       "📜",
+  [ItemType.CONTAINER]:  "📦",
 };
 
 const RARITY_COLORS: Record<ItemRarity, string> = {
@@ -240,9 +241,22 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
               title={item?.name}
             >
               {item && (
-                <span style={{ color: RARITY_COLORS[item.rarity] }}>
-                  {ITEM_ICONS[item.type]}
-                </span>
+                <div className="relative flex flex-col items-center justify-center">
+                  <span style={{ color: RARITY_COLORS[item.rarity] }}>
+                    {ITEM_ICONS[item.type]}
+                  </span>
+                  {item.type === ItemType.CONTAINER && item.searched && (
+                    <span
+                      className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 rounded-sm px-1 text-[7px] font-bold uppercase tracking-wider"
+                      style={{
+                        backgroundColor: "color-mix(in srgb, var(--color-muted) 60%, transparent)",
+                        color:           "var(--color-bg)",
+                      }}
+                    >
+                      Empty
+                    </span>
+                  )}
+                </div>
               )}
             </button>
           ))}
@@ -342,6 +356,25 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
                   }}
                 >
                   Read
+                </button>
+              )}
+
+              {selectedItem.type === ItemType.CONTAINER && onSubmit && (
+                <button
+                  className="flex-1 rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-opacity disabled:opacity-40"
+                  style={{
+                    backgroundColor: selectedItem.searched
+                      ? "color-mix(in srgb, var(--color-muted) 30%, transparent)"
+                      : "var(--color-primary)",
+                    color: selectedItem.searched ? "var(--color-muted)" : "#000",
+                  }}
+                  disabled={isProcessing || selectedItem.searched}
+                  onClick={() => {
+                    onSubmit(`search ${selectedItem.name}`);
+                    setSelectedId(null);
+                  }}
+                >
+                  {selectedItem.searched ? "Searched" : "Search"}
                 </button>
               )}
 

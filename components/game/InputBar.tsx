@@ -27,6 +27,9 @@ export function InputBar({
 
   const remaining = MAX_LENGTH - value.length;
 
+  // Dialogue mode: input begins with a quote character.
+  const dialogueMode = /^["'“‘]/.test(value);
+
   // Re-focus the input when transitioning from disabled (processing) → enabled.
   useEffect(() => {
     if (wasDisabled.current && !disabled) {
@@ -105,44 +108,67 @@ export function InputBar({
       </div>
 
       <div className="flex gap-2">
-        <input
-          ref={inputRef}
-          type="text"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={disabled}
-          maxLength={MAX_LENGTH}
-          placeholder="What do you do?"
-          className="min-w-0 flex-1 rounded-sm bg-black px-3 py-2 font-mono text-sm transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
-          style={{
-            border: "1px solid color-mix(in srgb, var(--color-primary) 35%, transparent)",
-            color: "var(--color-text)",
-            caretColor: "var(--color-primary)",
-          }}
-          onFocus={(e) => {
-            e.currentTarget.style.borderColor = "var(--color-primary)";
-          }}
-          onBlur={(e) => {
-            e.currentTarget.style.borderColor =
-              "color-mix(in srgb, var(--color-primary) 35%, transparent)";
-          }}
-        />
+        <div className="relative min-w-0 flex-1">
+          <input
+            ref={inputRef}
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={disabled}
+            maxLength={MAX_LENGTH}
+            placeholder="What do you do?"
+            className="w-full rounded-sm bg-black py-2 pl-3 pr-8 font-mono text-sm transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+            style={{
+              border: dialogueMode
+                ? "1px solid var(--color-accent)"
+                : "1px solid color-mix(in srgb, var(--color-primary) 35%, transparent)",
+              color:      "var(--color-text)",
+              caretColor: dialogueMode ? "var(--color-accent)" : "var(--color-primary)",
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = dialogueMode
+                ? "var(--color-accent)"
+                : "var(--color-primary)";
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = dialogueMode
+                ? "var(--color-accent)"
+                : "color-mix(in srgb, var(--color-primary) 35%, transparent)";
+            }}
+          />
+          {/* Mode indicator — speech bubble in dialogue mode, default chevron otherwise */}
+          <span
+            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm leading-none"
+            style={{ color: dialogueMode ? "var(--color-accent)" : "var(--color-muted)" }}
+            aria-hidden
+          >
+            {dialogueMode ? "💬" : "›"}
+          </span>
+        </div>
         <Button
           onClick={handleSubmit}
           disabled={disabled || !value.trim()}
           className="shrink-0 px-4 font-mono font-bold disabled:opacity-40"
           style={{
-            backgroundColor: "var(--color-primary)",
+            backgroundColor: dialogueMode ? "var(--color-accent)" : "var(--color-primary)",
             color: "#000",
           }}
         >
-          Act
+          {dialogueMode ? "Speak" : "Act"}
         </Button>
       </div>
 
-      {/* Character counter */}
-      <div className="mt-1 flex justify-end">
+      {/* Hint + character counter */}
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <span
+          className="font-mono text-[10px] italic"
+          style={{ color: dialogueMode ? "var(--color-accent)" : "var(--color-muted)" }}
+        >
+          {dialogueMode
+            ? "Speech mode — your line goes to nearby characters"
+            : 'Tip: Use "quotes" to speak to nearby characters'}
+        </span>
         <span
           className="font-mono text-[10px]"
           style={{ color: remaining <= 50 ? "#ef4444" : "var(--color-muted)" }}

@@ -42,6 +42,7 @@ interface GameStore {
   processingStep:    string | null;
   currentAsciiArt:   string | null;
   lastNarrativeText: string | null;
+  artCache:          Record<string, string>;
 
   setMasterState:       (state: MasterState) => void;
   addMessage:           (message: StoryMessage) => void;
@@ -49,6 +50,7 @@ interface GameStore {
   setAsciiArt:          (art: string | null) => void;
   clearMessages:        () => void;
   setLastNarrativeText: (text: string) => void;
+  setArtCache:          (locationId: string, svg: string) => void;
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -58,6 +60,7 @@ export const useGameStore = create<GameStore>((set) => ({
   processingStep:    null,
   currentAsciiArt:   null,
   lastNarrativeText: null,
+  artCache:          {},
 
   setMasterState:       (state) => set({ masterState: state }),
   addMessage:           (message) => set((s) => ({ messages: [...s.messages, message] })),
@@ -66,4 +69,6 @@ export const useGameStore = create<GameStore>((set) => ({
   setAsciiArt:          (art) => set({ currentAsciiArt: art }),
   clearMessages:        () => set({ messages: [] }),
   setLastNarrativeText: (text) => set({ lastNarrativeText: text }),
+  setArtCache:          (locationId, svg) =>
+    set((s) => ({ artCache: { ...s.artCache, [locationId]: svg } })),
 }));

@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 2.9
+**Version:** 3.0
 **Status:** Active Development — MVP Core Loop Complete
 **Objective:** To create a genre-agnostic, AI-driven RPG engine that combines hard-coded game logic with dynamic LLM storytelling and ASCII visuals.
 
@@ -18,72 +18,121 @@
 | 1–12 | Foundation through Inventory | ✅ Complete |
 | Patch A | Narrator redesign, POI system | ✅ Complete |
 | Patch B | CONTAINER items, SVG art engine | 🔄 In Progress |
-| Day 13.5 | Lore Codex page | ⏳ Pending |
+| Day 13.5 | World Asset System + Lore Codex | ⏳ Pending |
 | 13 | Log Book & Save System | ⏳ Pending |
 | 14 | MVP Playtest & Bug Fix | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Patch A Deliverables (confirmed on main — next build passing)
-- `types/game.ts`: PointOfInterest, CodexEntry interfaces; NarratorResponse extended with response_tier, points_of_interest, codex_entries
-- `prompt-builder.ts`: Narrator completely redesigned — ROLE, GOLDEN RULE (yes-and), RESPONSE TIERS (1/2/3), END OF RESPONSE RULE, POI section, CODEX section, IP guard, JSON schema
-- `narrate/route.ts`: ParsedAction threaded through for tier guidance
-- `StoryFeed.tsx`: renderNarrativeText highlights POI labels with type-specific colors and dotted underline
-- `InteractionPopover.tsx`: desktop floating card / mobile bottom sheet, type-specific action buttons, ESC/click-outside closes
-- `poi-colors.ts`: shared color tokens
-- `useGameLoop.ts`: POI stored in message metadata, codex_entries filtered to NOTABLE/MAJOR, saveCodexEntry() stub, MAJOR entries → DISCOVERY log
+---
+
+## ⚡ FOUNDATIONAL RULE — WORLD ASSETS (Read Before Every Session)
+
+**Every significant thing the Narrator introduces is a World Asset.**
+
+When the game introduces a new location, character, faction, creature, or item of note, that entity becomes a permanent game asset with immutable core characteristics. Think of it exactly like a video game asset — once a town is created with specific attributes, those attributes are locked into that world forever unless something in the story explicitly changes them.
+
+**This is the most important rule in the entire codebase.**
+
+### What makes a World Asset:
+- Any named location (town, building, region, planet, district)
+- Any named character or NPC
+- Any named faction or organization
+- Any unique or legendary item
+- Any named creature or enemy type
+- Any significant lore element (historical event, legend, document)
+
+### What gets locked on first introduction:
+**Locations:** name, physical description, atmosphere, size, faction affiliation, key landmarks, available services
+**Characters:** name, appearance, personality, role, faction, speech patterns, relationship to player at first meeting
+**Factions:** name, ideology, appearance/uniform, relationship to other factions, territory
+**Creatures:** name, appearance, behavior, habitat, threat level
+
+### What CAN change (story-driven only):
+- NPC relationship/trust with the player (changes through interaction)
+- Location state if explicitly destroyed, rebuilt, or captured in the story
+- Faction standing based on player actions
+- Character knowledge (they learn things over time)
+
+### How this is enforced in code:
+- On first introduction, the Narrator outputs a `codex_entries` array with the asset's full constitution
+- This gets saved to the `world_assets` table in Supabase (Day 13.5)
+- On every subsequent Narrator call, relevant world assets for the current location are injected into the prompt as immutable facts
+- The Narrator system prompt explicitly states: "World assets listed below are established facts. Never contradict, reinterpret, or change them unless a story event explicitly does so."
+
+### Dialogue prefix system (coming in dialogue patch):
+- Player text in "quotes" = dialogue/speech directed at nearby characters
+- Plain text = actions and commands
+- Intent Parser routes quoted text directly to DIALOGUE action type
+
+---
+
+## Key Deliverables Log
+
+### Patch A (confirmed on main — next build passing)
+- `types/game.ts`: PointOfInterest, CodexEntry interfaces; NarratorResponse with response_tier, points_of_interest, codex_entries
+- `prompt-builder.ts`: Narrator redesigned — ROLE, GOLDEN RULE, RESPONSE TIERS, END OF RESPONSE RULE, POI, CODEX, IP guard
+- `StoryFeed.tsx`: clickable highlighted POI text with type-specific colors
+- `InteractionPopover.tsx`: desktop floating card / mobile bottom sheet with contextual action buttons
+- `useGameLoop.ts`: POI in message metadata, codex stub, startTransition fast-path
 - `lib/game/codex.ts`: stub for Day 13.5
-- Fast-path wrapped in startTransition() — equip flash eliminated
-- ascii_art removed from Narrator — art handled by Patch B
 
-### Narrator Architecture (post Patch A)
-- **Response Tier 1** (2-3 sentences): repeated actions, USE_ITEM, simple CUSTOM
-- **Response Tier 2** (4-6 sentences): EXAMINE, ATTACK, INTERACT, DIALOGUE, first NPC
-- **Response Tier 3** (80-120 words): NEW location MOVE, major story moments
-- Narrator never generates art — ascii_art always null from Narrator
-- Art generated by separate /api/game/generate-art (Patch B)
-- GOLDEN RULE: honor player action, yes-and, only hard logic blocks allowed
-- END OF RESPONSE: always weave 2-3 interactables into final sentences
+### Pre-Patch A fixes
+- Fast-path system (equip/unequip/drop/read bypass all AI — truly instant)
+- Narrative continuity: lastNarrativeText + 5 log entries in every Narrator call
+- Original content only policy
+- Spinner double-gated: never shows for fast-path actions
 
-### Points of Interest System
-- POI types: LOCATION | NPC | CONTAINER | ITEM | HAZARD
-- Highlighted in StoryFeed with type-specific colors (poi-colors.ts)
-- Clicking opens InteractionPopover with contextual action buttons
-- Desktop: floating card anchored to word; Mobile: bottom sheet
-- Buttons construct natural language commands and submit as player turn
+---
 
-### Codex System (stub — full implementation Day 13.5)
-- CodexEntry categories: LOCATION | CHARACTER | FACTION | ITEM | LORE | BESTIARY
-- Only NOTABLE and MAJOR significance saved
-- saveCodexEntry() currently stubs to console.log
-- Full Supabase table + codex page in Day 13.5
+## Narrator Architecture (post Patch A)
 
-### Action Classification Policy
-- **FAST PATH** (zero AI, instant, no spinner): equip, unequip, drop, read
+- **Tier 1** (2-3 sentences): repeated actions, USE_ITEM, simple CUSTOM
+- **Tier 2** (4-6 sentences): EXAMINE, ATTACK, INTERACT, DIALOGUE, first NPC
+- **Tier 3** (80-120 words): NEW location, major story moments
+- GOLDEN RULE: honor player action, yes-and, hard logic blocks only
+- END OF RESPONSE: weave 2-3 interactables into final sentences naturally
+- Narrator never generates art — handled by separate art engine (Patch B)
+
+---
+
+## Action Classification Policy
+
+- **FAST PATH** (zero AI, instant): equip, unequip, drop, read lore
 - **NARRATIVE PATH**: MOVE, ATTACK, INTERACT, EXAMINE, DIALOGUE, USE_ITEM(CONSUMABLE)
+- **DIALOGUE DETECTION** (coming): quoted text → DIALOGUE action type automatically
 
-### Original Content Policy
-No Star Wars, Star Trek, Marvel, DC, LotR, Harry Potter, Dune, Mass Effect, or any recognizable IP.
+---
 
-### ASCII Art Policy
-Completely removed from Narrator. SVG art engine being built in Patch B.
+## Points of Interest System
 
-### ⚠️ Dev Environment Notes
-- Claude Code shells export ANTHROPIC_API_KEY="" — start dev server from your own terminal
-- After Claude Code pushes: `git pull` + restart YOUR dev server
-- Windows PowerShell: `Invoke-WebRequest` not `curl -X`
-- `npx tsc --noEmit` blank = pass
+- Types: LOCATION | NPC | CONTAINER | ITEM | HAZARD
+- Highlighted in StoryFeed with type-specific colors
+- Clicking → InteractionPopover with contextual action buttons
+- Desktop: floating card; Mobile: bottom sheet
 
-### Branch Policy
-Always work on main. No feature branches. Push directly to main.
+---
+
+## Planned Systems (upcoming)
+
+| System | When | Description |
+| --- | --- | --- |
+| World Asset persistence | Day 13.5 | Supabase world_assets table, asset constitution injection into narrator |
+| Lore Codex page | Day 13.5 | Full encyclopedia UI per campaign |
+| Dialogue prefix | After Patch B | Quoted text = speech, plain text = action |
+| NPC Dialogue system | Day 15 (pulled forward) | Full conversation mode, Charisma gates, relationship consequences |
+| NPC Trading | Day 16 | Merchant NPCs, buy/sell UI, genre currency |
+| CONTAINER items | Patch B | Searchable objects with loot generation |
+| SVG Art Engine | Patch B | Async per-location art, cached in Supabase |
 
 ---
 
 ## 1. Core Philosophy
 
 - **The Hybrid Authority Model:** The Code is the "Source of Truth." The AI is the "Narrator."
-- **Zero-Image Visuals:** SVG pixel art (Patch B) + ASCII text, optimized for mobile and web.
+- **World Assets are permanent.** Every significant entity introduced becomes an immutable game asset.
+- **Zero-Image Visuals:** SVG pixel art (Patch B) + text, optimized for mobile and web.
 - **Endless Versatility:** Genre Wrappers. Launch genres: Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic.
 
 ---
@@ -96,15 +145,15 @@ Always work on main. No feature branches. Push directly to main.
 | --- | --- |
 | **Metadata** | Genre, tone, difficulty |
 | **Player State** | HP, resources, attributes, inventory |
-| **World State** | Flags and location IDs |
+| **World State** | Flags, location IDs, world_assets |
 | **Log Book** | Story beats and discovered lore |
 | **NPC Registry** | Per-NPC memory, trust scores |
 
-### B. The Three-Pass Game Loop
-1. **Intent Parser** → structured ParsedAction JSON (AI call)
-2. **Logic Resolver** → deterministic ResolutionResult (no AI)
-3. **Narrator** → story text + POI + codex entries (AI call, no art)
-4. **Art Engine** → SVG scene (async AI call, cached per location) [Patch B]
+### B. The Game Loop
+1. **Intent Parser** → ParsedAction JSON (AI)
+2. **Logic Resolver** → ResolutionResult (no AI)
+3. **Narrator** → story + POI + codex_entries (AI)
+4. **Art Engine** → SVG scene async (AI, cached) [Patch B]
 
 ---
 
@@ -125,10 +174,9 @@ Always work on main. No feature branches. Push directly to main.
 
 ## 4. Visual Strategy
 
-- **SVG Pixel Art** (Patch B): async generated per location, cached in Supabase
-- View type by scene: NPC/enemy = front portrait, town = top-down, interior = side-view, wilderness = isometric
+- **SVG Pixel Art**: async, cached per location in Supabase
+- View by scene type: NPC/enemy = front portrait, town = top-down, interior = side-view, wilderness = isometric
 - Genre color palettes applied to SVG output
-- Block elements (█▓▒░) still used for UI decorative elements
 
 ---
 
@@ -138,8 +186,8 @@ Always work on main. No feature branches. Push directly to main.
 | --- | --- | --- |
 | **0 — Foundation** | 1–4 | Scaffold |
 | **1 — MVP Core Loop** | 5–14 | Playable game |
-| **2 — Logic Engine** | 15–24 | Combat, skills, NPCs |
-| **3 — World & Visuals** | 25–34 | Art engine refinement, genre wrappers, sound |
+| **2 — Logic Engine** | 15–24 | Combat, NPCs, dialogue, trading |
+| **3 — World & Visuals** | 25–34 | Art refinement, genre wrappers, sound |
 | **4 — Monetization** | 35–42 | Stripe, tiers |
 | **5 — Polish & Launch** | 43–45 | Security, analytics, deploy |
 
@@ -175,24 +223,12 @@ Always work on main. No feature branches. Push directly to main.
 
 ---
 
-## 8. Lore Codex (Day 13.5)
-
-Full lore encyclopedia per campaign. Categories:
-- Locations, Characters, Factions, Items of Note, Lore Entries, Bestiary
-
-Auto-populated from codex_entries in every Narrator response.
-Only NOTABLE and MAJOR significance entries saved.
-Accessible from game UI and dashboard.
-Per-campaign — each save file has its own codex.
-
----
-
-## 9. Platform: PWA Only
+## 8. Platform: PWA Only
 Final. No Electron, no Steam. PWA manifest Day 35.
 
 ---
 
-## 10. Development Workflow
+## 9. Development Workflow
 
 **Claude.ai owns all CLAUDE.md updates. Claude Code must not modify CLAUDE.md.**
 
@@ -206,7 +242,7 @@ Workflow: Claude Code pushes → `git pull` + restart own server → report to C
 
 ---
 
-## 11. Reference Links
+## 10. Reference Links
 - Supabase: https://supabase.com/dashboard
 - Anthropic Console: https://console.anthropic.com
 - Vercel: https://vercel.com/dashboard
@@ -214,4 +250,4 @@ Workflow: Claude Code pushes → `git pull` + restart own server → report to C
 
 ---
 
-*Last updated: Session 20 — Patch A complete (next build passing). Narrator redesigned, POI system live, codex stub in place. Patch B starting.*
+*Last updated: Session 21 — V3.0: World Asset rule added as foundational principle. Dialogue prefix system noted. NPC dialogue pulled to Day 15. Patch B starting.*

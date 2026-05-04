@@ -46,14 +46,14 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let body: { input?: string; masterState?: MasterState };
+  let body: { input?: string; masterState?: MasterState; dialogueMode?: boolean };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { input, masterState } = body;
+  const { input, masterState, dialogueMode } = body;
 
   if (typeof input !== "string" || !input.trim()) {
     return NextResponse.json({ error: "Missing or empty input" }, { status: 400 });
@@ -65,6 +65,18 @@ export async function POST(request: NextRequest) {
   const trimmed = input.trim();
   if (trimmed.length > 500) {
     return NextResponse.json({ error: "Input must be 500 characters or fewer" }, { status: 400 });
+  }
+
+  // ── Dialogue fast-path: quoted input becomes DIALOGUE without an AI call ─
+  if (dialogueMode === true) {
+    return NextResponse.json({
+      action_type:      ActionType.DIALOGUE,
+      primary_target:   undefined,
+      secondary_target: undefined,
+      item_used:        undefined,
+      inferred_intent:  `says: ${trimmed}`,
+      confidence:       1.0,
+    } satisfies ParsedAction);
   }
 
   const systemPrompt   = buildIntentParserPrompt(masterState);

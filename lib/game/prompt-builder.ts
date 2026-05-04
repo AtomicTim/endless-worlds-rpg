@@ -239,7 +239,7 @@ items_acquired entries MUST match this shape (only on success AND when narrative
 {
   "id": "short_unique_snake_case_id",
   "name": "string",
-  "type": "WEAPON|ARMOR|CONSUMABLE|KEY|LORE",
+  "type": "WEAPON|ARMOR|CONSUMABLE|KEY|LORE|CONTAINER",
   "rarity": "COMMON|UNCOMMON|RARE|LEGENDARY",
   "description": "one sentence",
   "effect": "heal_20 | buff_strength_2 | sanity_10 | or empty string",
@@ -366,6 +366,16 @@ export function buildNarratorUserPrompt(
   }
 
   let prompt = lines.join("\n");
+
+  // CONTAINER search → instruct the Narrator to populate items_acquired.
+  const ctx = result.narrative_context;
+  if (ctx.container_search === true) {
+    const containerName = typeof ctx.container_name === "string" ? ctx.container_name : "the container";
+    prompt += `\n\nCONTAINER SEARCH: The player is searching ${containerName}. Decide what (if anything) is inside based on context, genre, and logic. A rusted toolbox in a wasteland might have basic tools or nothing. A merchant's chest might have valuable goods. Populate items_acquired with 0-3 contextually appropriate items. Do not put legendary items in random containers.`;
+  }
+  if (ctx.already_searched === true) {
+    prompt += "\n\nCONTAINER ALREADY SEARCHED: The player has already searched this container. Describe it as empty, picked clean — nothing new to find. Set items_acquired to an empty array.";
+  }
 
   // Lovecraftian + low sanity → unreliable narrator instruction.
   if (

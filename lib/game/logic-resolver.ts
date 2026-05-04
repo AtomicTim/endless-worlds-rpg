@@ -357,6 +357,36 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
     };
   }
 
+  // ── CONTAINER — searchable; Narrator decides what's inside ───────────────────
+  if (item.type === ItemType.CONTAINER) {
+    if (item.searched) {
+      return {
+        success:      false,
+        outcome_type: "USE_ITEM_CONTAINER_EMPTY",
+        state_delta:  {},
+        narrative_context: {
+          already_searched: true,
+          container_id:     item.id,
+          container_name:   item.name,
+        },
+      };
+    }
+    // Mark as searched so it can't be looted again. Narrator generates loot.
+    const inventory = state.player_state.inventory.map((i) =>
+      i.id === item.id ? { ...i, searched: true } : i
+    );
+    return {
+      success:      true,
+      outcome_type: "USE_ITEM_CONTAINER_SEARCHED",
+      state_delta:  { player_state: { ...state.player_state, inventory } },
+      narrative_context: {
+        container_search: true,
+        container_id:     item.id,
+        container_name:   item.name,
+      },
+    };
+  }
+
   // ── KEY ──────────────────────────────────────────────────────────────────────
   if (item.type === ItemType.KEY) {
     const requiredKeyFlag = `requires_${normalizeKey(item.name)}`;

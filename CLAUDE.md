@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 4.8
+**Version:** 4.9
 **Status:** Active Development — Phase 2 In Progress
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -17,6 +17,7 @@
 | --- | --- | --- |
 | 1–14 | Phase 1 MVP | ✅ Complete |
 | 15 | NPC Dialogue + Portraits | ✅ Complete |
+| Session fixes | Isolation, modal sizing, CHA feedback | ✅ Complete |
 | 16 | NPC Trading + Item Value | 🔄 In Progress |
 | 17-18 | Main Narrative Thread | ⏳ Pending |
 | 19+ | Combat, Skills, Factions | ⏳ Pending |
@@ -24,27 +25,24 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Day 15 Deliverables (confirmed on main — commit 1d011b2)
-- `lib/game/art-generator.ts`: generateNpcPortrait() — uses npc.id as art cache key
-- `hooks/useGameLoop.ts`: portrait generation on DIALOGUE/new_npcs, live-updates modal
-- `types/game.ts`: DialogueOption, trust_changes in NarratorResponse
-- `lib/game/prompt-builder.ts`: DIALOGUE OPTIONS + TRUST CHANGES in narrator schema
-- `lib/game/narrator.ts`: normalizeDialogueOption(), normalizeTrustChange() parsers
-- `lib/stores/game-store.ts`: currentDialogueOptions, currentDialogueNpc, currentNpcPortrait
-- `components/game/DialogueModal.tsx`: slides above InputBar, portrait left, options right, tone dots, CHA locks
-- `components/game/InputBar.tsx`: forwardRef with InputBarHandle.focus()
-- `lib/game/logic-resolver.ts`: resolveDialogue() — Charisma check with d20+CHA vs 12
-- Trust system: trust_changes processed in step 7e, updateNPCTrust called
+### Session Isolation Fix (commit 5325309)
+- `clearSessionState()` in game-store — wipes all session-specific Zustand state before loading new session
+- Called at very top of session load in page.tsx — previous session bleed impossible
+- Codex reads sessionId from live game store, not stale local variable
+- Dialogue modal dismisses on session switch (included in clearSessionState)
+- DialogueModal: 200px max, absolute-positioned overlay, 80px portrait, tone labels, X close button
+- CHA check: 🎭 feedback line in feed before narrator response, reads ctx.success not resolution.success
+
+### Day 15 Deliverables (commit 1d011b2)
+- DialogueModal, NPC portraits, response options, tone dots, CHA gates, trust system
 
 ### Phase 1 Complete — What Works
 - ✅ Full game loop, character creation, location state machine
 - ✅ World asset persistence, lore codex, NPC identity system
-- ✅ Inventory (equip/use/drop/search, CONTAINER items)
-- ✅ LogBook (immediate persistence, terse summaries)
-- ✅ Story feed restoration, immediate persistence for all state
-- ✅ POI system, SVG art engine, dialogue prefix, fast-path actions
-- ✅ Object existence guarantee (resolver confirms)
-- ✅ NPC dialogue modal with portraits, response options, CHA gates, trust system
+- ✅ Inventory, LogBook, story feed restoration
+- ✅ Immediate persistence: location + flags + logs
+- ✅ POI system, SVG art, dialogue prefix, fast-path, object existence guarantee
+- ✅ NPC dialogue modal, portraits, CHA gates, trust system, session isolation
 
 ---
 
@@ -79,16 +77,14 @@ ARRIVING — just moved here. lastNarrativeText = "DEPARTED SCENE (backstory)"
 ## 🎯 Main Narrative Thread (Day 17-18)
 Hidden World Seed: conflict + goal + 3-5 breadcrumbs + opening hook. Sealed in metadata.main_quest.
 
-## 🎭 NPC Dialogue System (Day 15 — Complete)
-- DialogueModal: slides above InputBar, portrait left, options right
-- 3-4 AI-generated response options with tone dots + CHA locks
-- Charisma check: d20 + CHA modifier vs 12 for persuade/intimidate/deceive
-- Trust system: trust_changes in NarratorResponse, updateNPCTrust called
-- Portrait: async FRONT_PORTRAIT SVG, cached in art_cache + world_assets
+## 🎭 NPC Dialogue System (Complete)
+- DialogueModal: 200px, absolute overlay, portrait left, options right, tone labels
+- Charisma check: d20+CHA vs 12, 🎭 feedback line in feed
+- Trust system: trust_changes processed, updateNPCTrust called
+- Portrait: async FRONT_PORTRAIT, cached in art_cache + world_assets
 
 ## 🕵️ NPC Identity System
-- name_known=false for CHARACTER. looksLikePlaceholder() 2+ word match
-- revealed_npc_names pipeline. updateMessagesNpcName patches feed.
+- name_known=false for CHARACTER. revealed_npc_names pipeline.
 
 ## 💎 Item Value System (Day 16 — IN PROGRESS)
 Every item: sell value + lore blurb + optional dialogue unlock.
@@ -111,7 +107,6 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 - EXAMINE/INTERACT: object_confirmed prepended as first fact
 - WORLD ASSET: constitutions injected as facts
 - DIALOGUE: response options + trust_changes in response
-- CHARISMA CHECK: d20+CHA vs 12, outcome in narrative_context
 - log_summary: 12-word max terse fragment
 
 ---
@@ -120,7 +115,7 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 
 - **FAST PATH**: equip, unequip, drop, read lore
 - **NARRATIVE PATH**: MOVE, ATTACK, INTERACT, EXAMINE, DIALOGUE, USE_ITEM(CONSUMABLE), search CONTAINER
-- **DIALOGUE**: quoted text → instant DIALOGUE, no AI call
+- **DIALOGUE**: quoted → instant, no AI
 - **MOVE**: always MOVE_SUCCESS + immediate world state save
 - **EXAMINE/INTERACT**: always success=true + object_confirmed
 
@@ -143,6 +138,7 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 - Hybrid Authority: Code = Truth, AI = Narrator
 - World Assets permanent, Movement absolute, Objects exist
 - Immediate persistence: location + flags + logs after every action
+- Session isolation: clearSessionState() before every session load
 - Actions permitted by default, Location authoritative
 - Every item has value, Every campaign has a purpose
 - Truly endless — AI generates on demand
@@ -206,4 +202,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 39 — V4.8: Day 15 complete (86/86 tests). NPC dialogue modal, portraits, CHA gates, trust system. Day 16 starting.*
+*Last updated: Session 40 — V4.9: Session isolation complete. Dialogue modal fixed. Day 16 starting.*

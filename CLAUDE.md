@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 4.9
+**Version:** 5.0
 **Status:** Active Development — Phase 2 In Progress
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -17,7 +17,7 @@
 | --- | --- | --- |
 | 1–14 | Phase 1 MVP | ✅ Complete |
 | 15 | NPC Dialogue + Portraits | ✅ Complete |
-| Session fixes | Isolation, modal sizing, CHA feedback | ✅ Complete |
+| 15.5 | Dialogue consistency architecture | ✅ Complete |
 | 16 | NPC Trading + Item Value | 🔄 In Progress |
 | 17-18 | Main Narrative Thread | ⏳ Pending |
 | 19+ | Combat, Skills, Factions | ⏳ Pending |
@@ -25,24 +25,20 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Session Isolation Fix (commit 5325309)
-- `clearSessionState()` in game-store — wipes all session-specific Zustand state before loading new session
-- Called at very top of session load in page.tsx — previous session bleed impossible
-- Codex reads sessionId from live game store, not stale local variable
-- Dialogue modal dismisses on session switch (included in clearSessionState)
-- DialogueModal: 200px max, absolute-positioned overlay, 80px portrait, tone labels, X close button
-- CHA check: 🎭 feedback line in feed before narrator response, reads ctx.success not resolution.success
-
-### Day 15 Deliverables (commit 1d011b2)
-- DialogueModal, NPC portraits, response options, tone dots, CHA gates, trust system
-
-### Phase 1 Complete — What Works
-- ✅ Full game loop, character creation, location state machine
-- ✅ World asset persistence, lore codex, NPC identity system
-- ✅ Inventory, LogBook, story feed restoration
-- ✅ Immediate persistence: location + flags + logs
-- ✅ POI system, SVG art, dialogue prefix, fast-path, object existence guarantee
-- ✅ NPC dialogue modal, portraits, CHA gates, trust system, session isolation
+### Day 15.5 Deliverables (commit 3f86641 — 86/86 tests, clean build)
+- `ParsedAction.dialogue_tone` — friendly/persuasive/deceptive/intimidating/curious/neutral
+- `inferToneFromSpeech()` on fast-path quoted input — ALL dialogue goes same pipeline
+- `resolveDialogue()` switches on tone: persuasive→CHA, deceptive→CHA+2, intimidating→STR(or CHA), curious/friendly/neutral→no check
+- Trust-based difficulty: 0-30→15, 31-60→12, 61-80→9, 81-100→6
+- ACTIVE NPC CONTEXT injected into narrator when stat_checked (name+trust+disposition+personality+role)
+- `stat_check: {stat, difficulty, description}` replaces charisma_required — no hard gates, all options clickable
+- Amber stat badge: 💬CHA / 💪STR / 👁PER / 🧠INT with tooltip (player vs difficulty, Likely/Risky/Difficult)
+- `getNpcDisposition(score)` — hostile/suspicious/neutral/friendly/allied
+- DialogueModal disposition badge: 🔴/🟠/🟡/🟢/✨ reactive to trust_changes
+- NPC name+portrait persists across same-NPC dialogue turns
+- DialogueModal inline flex (never covers story content), StoryFeed min-h-0
+- Collapse/expand: ▼ minimize → 40px bar "▲ [NPC name] (N options)", options persist
+- Roll feedback generic: 🎭/💪/👁/🧠 icons + stat name in feed
 
 ---
 
@@ -61,7 +57,12 @@ MOVE always succeeds. World state saved immediately after every MOVE.
 Plausible actions always attempted. Narrator describes outcomes only.
 
 ### 5. Objects Mentioned Exist
-EXAMINE/INTERACT resolver confirms object_confirmed=true. Prepended as first narrator fact. POI labels exact.
+EXAMINE/INTERACT resolver confirms object_confirmed=true. Prepended as first narrator fact.
+
+### 6. Dialogue Is Consistent
+All dialogue — clicked option OR typed freely — goes through identical pipeline:
+Intent Parser classifies tone → Logic Resolver applies stat check → Narrator receives NPC constitution + trust score.
+No hard gates. Options are suggestions. Typed input runs same checks.
 
 ---
 
@@ -78,17 +79,19 @@ ARRIVING — just moved here. lastNarrativeText = "DEPARTED SCENE (backstory)"
 Hidden World Seed: conflict + goal + 3-5 breadcrumbs + opening hook. Sealed in metadata.main_quest.
 
 ## 🎭 NPC Dialogue System (Complete)
-- DialogueModal: 200px, absolute overlay, portrait left, options right, tone labels
-- Charisma check: d20+CHA vs 12, 🎭 feedback line in feed
-- Trust system: trust_changes processed, updateNPCTrust called
-- Portrait: async FRONT_PORTRAIT, cached in art_cache + world_assets
+- Tone classification: friendly/persuasive/deceptive/intimidating/curious/neutral
+- Stat checks: CHA for persuasion/deception, STR for intimidation, PER for investigation
+- Trust-scaled difficulty: hostile=15, neutral=12, friendly=9, allied=6
+- NPC constitution injected into narrator on every stat-checked dialogue call
+- Disposition badge: 🔴Hostile/🟠Suspicious/🟡Neutral/🟢Friendly/✨Allied
+- No hard gates — all options clickable, stat badge shows risk
+- Modal inline, collapses to bar, portrait+name persist across turns
 
 ## 🕵️ NPC Identity System
 - name_known=false for CHARACTER. revealed_npc_names pipeline.
 
 ## 💎 Item Value System (Day 16 — IN PROGRESS)
-Every item: sell value + lore blurb + optional dialogue unlock.
-Merchant NPCs with dynamic inventory. Buy/sell UI.
+Every item: sell value + lore blurb + optional dialogue unlock. Merchant NPCs.
 
 ---
 
@@ -106,18 +109,18 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 - MOVE: always arrives, world state saved immediately
 - EXAMINE/INTERACT: object_confirmed prepended as first fact
 - WORLD ASSET: constitutions injected as facts
-- DIALOGUE: response options + trust_changes in response
+- DIALOGUE: ACTIVE NPC CONTEXT block when stat_checked (constitution+trust+disposition)
+- DIALOGUE OPTIONS: stat_check badge, all clickable, same pipeline as typed input
 - log_summary: 12-word max terse fragment
 
 ---
 
-## Action Classification
-
-- **FAST PATH**: equip, unequip, drop, read lore
-- **NARRATIVE PATH**: MOVE, ATTACK, INTERACT, EXAMINE, DIALOGUE, USE_ITEM(CONSUMABLE), search CONTAINER
-- **DIALOGUE**: quoted → instant, no AI
-- **MOVE**: always MOVE_SUCCESS + immediate world state save
-- **EXAMINE/INTERACT**: always success=true + object_confirmed
+## Immediate Persistence Architecture
+- Log entries: after every narrative action
+- World state: after every MOVE or flag change
+- Recent messages: as part of LogBook patch
+- Full state: every 10 actions
+- Session isolation: clearSessionState() before every session load
 
 ---
 
@@ -137,6 +140,7 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 
 - Hybrid Authority: Code = Truth, AI = Narrator
 - World Assets permanent, Movement absolute, Objects exist
+- Dialogue consistent: same pipeline regardless of input method
 - Immediate persistence: location + flags + logs after every action
 - Session isolation: clearSessionState() before every session load
 - Actions permitted by default, Location authoritative
@@ -202,4 +206,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 40 — V4.9: Session isolation complete. Dialogue modal fixed. Day 16 starting.*
+*Last updated: Session 41 — V5.0: Day 15.5 complete. Dialogue consistency architecture, stat checks, disposition, modal fixes. 6th foundational rule added. Day 16 starting.*

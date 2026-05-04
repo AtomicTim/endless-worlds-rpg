@@ -5,7 +5,13 @@ import {
   buildNarratorSystemPrompt,
   buildNarratorUserPrompt,
 } from "@/lib/game/prompt-builder";
-import type { MasterState, NarratorResponse, ParsedAction, ResolutionResult } from "@/types/game";
+import type {
+  MasterState,
+  NarratorResponse,
+  ParsedAction,
+  ResolutionResult,
+  WorldAsset,
+} from "@/types/game";
 
 const FALLBACK_RESPONSE: NarratorResponse = {
   response_tier:      2,
@@ -32,6 +38,7 @@ export async function POST(request: NextRequest) {
     masterState?:       MasterState;
     lastNarrativeText?: string;
     action?:            ParsedAction;
+    locationAssets?:    WorldAsset[];
   };
   try {
     body = await request.json();
@@ -39,7 +46,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { resolutionResult, masterState, lastNarrativeText, action } = body;
+  const { resolutionResult, masterState, lastNarrativeText, action, locationAssets } = body;
   if (!resolutionResult || !masterState) {
     return NextResponse.json(
       { error: "Missing resolutionResult or masterState" },
@@ -53,8 +60,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const safeAssets = Array.isArray(locationAssets) ? locationAssets : null;
+
   const systemPrompt = buildNarratorSystemPrompt(masterState);
-  const userPrompt   = buildNarratorUserPrompt(resolutionResult, masterState, lastNarrativeText, action);
+  const userPrompt   = buildNarratorUserPrompt(
+    resolutionResult,
+    masterState,
+    lastNarrativeText,
+    action,
+    safeAssets
+  );
 
   // Instantiate per-request so the apiKey is read from process.env at call time
   // (avoids stale module-level binding across Next.js dev HMR cycles).

@@ -248,3 +248,65 @@ export interface NarratorResponse {
   points_of_interest:  PointOfInterest[];
   codex_entries:       CodexEntry[];
 }
+
+// ---------------------------------------------------------------------------
+// World Assets — permanent constitution of every named entity
+// ---------------------------------------------------------------------------
+
+export enum AssetCategory {
+  LOCATION  = "LOCATION",
+  CHARACTER = "CHARACTER",
+  FACTION   = "FACTION",
+  ITEM      = "ITEM",
+  LORE      = "LORE",
+  BESTIARY  = "BESTIARY",
+}
+
+export interface WorldAssetConstitution {
+  // LOCATION fields
+  physical_description?: string;
+  atmosphere?:           string;
+  size?:                 string;
+  faction_affiliation?:  string;
+  key_landmarks?:        string[];
+  available_services?:   string[];
+
+  // CHARACTER fields
+  appearance?:           string;
+  personality?:          string;
+  role?:                 string;
+  faction?:              string;
+  speech_patterns?:      string;
+  initial_relationship?: string;
+
+  // FACTION fields
+  ideology?:               string;
+  territory?:              string;
+  relationship_to_others?: string;
+
+  // CREATURE / BESTIARY fields
+  behavior?:               string;
+  habitat?:                string;
+  threat_level?:           string;
+
+  // ITEM fields
+  item_type?:        string;
+  item_description?: string;
+
+  // LORE fields
+  lore_content?: string;
+
+  // Shared
+  notes?: string;
+}
+
+export interface WorldAsset {
+  id:                  string;
+  category:            AssetCategory;
+  name:                string;
+  constitution:        WorldAssetConstitution;
+  significance:        "NOTABLE" | "MAJOR";
+  first_seen_location: string;
+  session_id:          string;
+  created_at:          string;
+}

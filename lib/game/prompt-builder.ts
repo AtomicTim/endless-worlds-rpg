@@ -1,5 +1,11 @@
 import { Genre, ActionType, LocationStatus } from "@/types/game";
-import type { MasterState, ParsedAction, ResolutionResult } from "@/types/game";
+import type {
+  MasterState,
+  ParsedAction,
+  ResolutionResult,
+  WorldAsset,
+  WorldAssetConstitution,
+} from "@/types/game";
 import { getEquippedLoadout } from "@/lib/game/state-utils";
 import { GENRE_CONFIGS } from "@/lib/game/genre-config";
 
@@ -180,6 +186,19 @@ These responses are ALWAYS wrong:
 - Any response that ends with the player having done nothing
 If an action truly makes no sense given the location, briefly acknowledge it and then give the player something they CAN do.
 
+WORLD ASSET CONSTITUTION:
+When you introduce a significant named entity for the first time (named location, named character, named faction, named creature, unique item), you are creating a permanent game asset.
+
+Include it in codex_entries with a thorough description covering the relevant constitution fields. This description becomes immutable — it will be injected into all future prompts as fact.
+
+Write constitutions that are:
+- Specific and distinctive (not generic fantasy/sci-fi tropes)
+- Internally consistent with the world established so far
+- Rich enough to support future interactions
+- Original (no recognizable IP)
+
+If a world asset appears in ESTABLISHED WORLD ASSETS in the user prompt, your description of it must be 100% consistent with what is already recorded. You may ADD new details but never CONTRADICT existing ones.
+
 MOVE ACTIONS — ABSOLUTE RULE:
 When the action_type is MOVE and movement_mandatory is true in the narrative context, the player has ALREADY moved — the logic engine updated their location before you were called. Your ONLY job is to describe the journey and arrival.
 
@@ -328,11 +347,74 @@ const LOW_SANITY_THRESHOLD = 30;
  * Narrator needs into a single structured block. Conditionally appends ASCII
  * art / low-sanity instructions.
  */
+function formatAssetConstitution(c: WorldAssetConstitution): string[] {
+  // Render only the fields that are actually populated, in a stable order, so
+  // the prompt stays compact when assets have sparse data.
+  const order: Array<keyof WorldAssetConstitution> = [
+    "physical_description",
+    "atmosphere",
+    "size",
+    "faction_affiliation",
+    "key_landmarks",
+    "available_services",
+    "appearance",
+    "personality",
+    "role",
+    "faction",
+    "speech_patterns",
+    "initial_relationship",
+    "ideology",
+    "territory",
+    "relationship_to_others",
+    "behavior",
+    "habitat",
+    "threat_level",
+    "item_type",
+    "item_description",
+    "lore_content",
+    "notes",
+  ];
+  const out: string[] = [];
+  for (const key of order) {
+    const v = c[key];
+    if (v === undefined || v === null) continue;
+    if (Array.isArray(v)) {
+      if (v.length === 0) continue;
+      out.push(`  ${key}: ${v.join(", ")}`);
+    } else if (typeof v === "string") {
+      if (!v.trim()) continue;
+      out.push(`  ${key}: ${v}`);
+    }
+  }
+  return out;
+}
+
+function buildEstablishedAssetsBlock(assets: WorldAsset[]): string {
+  if (!assets || assets.length === 0) return "";
+  const lines: string[] = [
+    "══════════════════════════════",
+    "ESTABLISHED WORLD ASSETS (immutable facts — never contradict these)",
+  ];
+  for (const a of assets) {
+    lines.push("");
+    lines.push(`[${a.category}] — ${a.name}:`);
+    const fields = formatAssetConstitution(a.constitution);
+    if (fields.length > 0) {
+      lines.push(...fields);
+    } else {
+      lines.push("  (no additional details recorded)");
+    }
+  }
+  lines.push("══════════════════════════════");
+  return lines.join("\n");
+}
+
 export function buildNarratorUserPrompt(
   result: ResolutionResult,
   state: MasterState,
   lastNarrativeText?: string | null,
-  action?: ParsedAction | null
+  action?: ParsedAction | null,
+  locationAssets?: WorldAsset[] | null
 ): string {
   const { metadata, player_state, world_state, log_book } = state;
   const { name, background, attributes, health, max_health, sanity, max_sanity } = player_state;
@@ -386,6 +468,9 @@ export function buildNarratorUserPrompt(
     "══════════════════════════════",
   ];
 
+  // ── Established world assets (immutable facts) ─────────────────────────────
+  const assetsBlock = buildEstablishedAssetsBlock(locationAssets ?? []);
+
   // ── Scene context block ────────────────────────────────────────────────────
   const sceneLines: string[] = [];
   if (isArriving) {
@@ -407,6 +492,7 @@ export function buildNarratorUserPrompt(
   // ── Main body ──────────────────────────────────────────────────────────────
   const lines: string[] = [
     ...headerLines,
+    ...(assetsBlock ? ["", assetsBlock] : []),
     ...(sceneLines.length > 0 ? ["", ...sceneLines] : []),
     "",
     `ACTION TYPE: ${actionType}`,

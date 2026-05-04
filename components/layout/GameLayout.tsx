@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Menu, X } from "lucide-react";
+import Link from "next/link";
+import { Menu, X, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { Genre } from "@/types/game";
@@ -63,6 +64,16 @@ export function GameLayout({
 
         {/* Right side */}
         <div className="flex items-center gap-2">
+          <Link href="/game/codex" aria-label="Open codex">
+            <Button
+              variant="ghost"
+              size="icon"
+              style={{ color: "var(--color-primary)" }}
+              title="Codex"
+            >
+              <BookOpen className="size-5" />
+            </Button>
+          </Link>
           <UserMenu />
           {/* Mobile sidebar toggle */}
           <Button

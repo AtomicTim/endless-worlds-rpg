@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { MasterState } from "@/types/game";
+import type { MasterState, WorldAsset } from "@/types/game";
 
 // ── Message types ─────────────────────────────────────────────────────────────
 
@@ -43,6 +43,7 @@ interface GameStore {
   currentAsciiArt:   string | null;
   lastNarrativeText: string | null;
   artCache:          Record<string, string>;
+  locationAssets:    WorldAsset[];
 
   setMasterState:       (state: MasterState) => void;
   addMessage:           (message: StoryMessage) => void;
@@ -51,6 +52,7 @@ interface GameStore {
   clearMessages:        () => void;
   setLastNarrativeText: (text: string) => void;
   setArtCache:          (locationId: string, svg: string) => void;
+  setLocationAssets:    (assets: WorldAsset[]) => void;
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -61,6 +63,7 @@ export const useGameStore = create<GameStore>((set) => ({
   currentAsciiArt:   null,
   lastNarrativeText: null,
   artCache:          {},
+  locationAssets:    [],
 
   setMasterState:       (state) => set({ masterState: state }),
   addMessage:           (message) => set((s) => ({ messages: [...s.messages, message] })),
@@ -71,4 +74,5 @@ export const useGameStore = create<GameStore>((set) => ({
   setLastNarrativeText: (text) => set({ lastNarrativeText: text }),
   setArtCache:          (locationId, svg) =>
     set((s) => ({ artCache: { ...s.artCache, [locationId]: svg } })),
+  setLocationAssets:    (assets) => set({ locationAssets: assets }),
 }));

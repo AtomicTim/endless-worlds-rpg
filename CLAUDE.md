@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 3.7
+**Version:** 3.8
 **Status:** Active Development — MVP Core Loop Complete
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -20,9 +20,9 @@
 | Patch B | CONTAINER items, SVG art engine, dialogue prefix | ✅ Complete |
 | Location fix | State machine, ARRIVING/PRESENT, action authority | ✅ Complete |
 | Day 13.5 | World Asset System + Lore Codex | ✅ Complete |
-| Pre-Day 13 fixes | Codex dedup, dialogue color, SVG→world asset link | ✅ Complete |
-| Pre-Day 13 fixes B | Dialogue text parsing, SVG debug, NPC name visibility | ⏳ Pending |
-| 13 | Log Book & Save System | ⏳ Pending |
+| Pre-Day 13 fixes A | Codex dedup, dialogue color, SVG→world asset link | ✅ Complete |
+| Pre-Day 13 fixes B | Dialogue parsing, SVG debug, NPC name visibility | ✅ Complete |
+| 13 | Log Book & Save System | 🔄 In Progress |
 | 14 | MVP Playtest & Bug Fix | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
@@ -31,9 +31,8 @@
 ### Supabase Tables (all applied ✅)
 - `profiles`, `game_sessions`, `characters`, `world_states`, `log_books`, `npcs`, `subscriptions`, `community_templates`, `user_preferences`
 - `art_cache` — SVG art per location+session
-- `world_assets` — immutable entity constitutions + svg_content column
+- `world_assets` — constitutions + svg_content + name_known columns
 - `codex` — lore encyclopedia entries
-- `world_assets.name_known` column — ⏳ migration 006 pending
 
 ---
 
@@ -67,80 +66,53 @@ narratorState always merges world_state delta before narrator call.
 
 ## 🎯 Main Narrative Thread (Day 17-18)
 
-Every new campaign generates a hidden **World Seed** — a set of facts the player doesn't know yet that drive the main story:
-
-**World Seed components:**
-- A central conflict or threat (faction rising, entity awakening, resource war)
-- A goal state (defeat leader, find artifact, reach location, uncover truth)
-- 3-5 breadcrumb events planted organically in the world
-- An opening hook in the first scene that hints at the larger story
-
-**How it works:**
-- Generated at game start alongside world/character creation
-- Stored in metadata as `main_quest` (sealed — player never sees raw data)
-- Narrator knows the destination and plants clues naturally over time
-- Player can follow the thread OR free-roam — both are always valid
-- Win conditions vary by genre: narrative resolution, faction victory, survival, discovery
-
-**Implementation slot:** Day 17-18, after NPC dialogue (Day 15) and trading (Day 16) are in place — those systems make the main quest feel alive.
+Every new campaign generates a hidden **World Seed**:
+- Central conflict/threat, goal state, 3-5 organic breadcrumbs, opening hook
+- Stored in metadata.main_quest (sealed from player)
+- Narrator plants clues naturally — player can follow or free-roam
+- Win conditions: narrative resolution, faction victory, survival, discovery
+- Implemented Day 17-18 after NPC dialogue (15) and trading (16)
 
 ---
 
 ## 🎭 NPC Dialogue Window + Portraits (Day 15)
 
-Full NPC dialogue system planned for Day 15:
-- **SVG portrait** generated on first NPC encounter (FRONT_PORTRAIT type, async)
-- **Dedicated dialogue modal/overlay** containing:
-  * NPC portrait (left side)
-  * NPC name or placeholder if identity unknown
-  * Formatted dialogue text
-  * 3-4 AI-generated response options (Charisma-gated where appropriate)
-  * "Type your own" input option
-- Portrait cached in `world_assets.svg_content` for that NPC
-- Portrait and name update when player learns NPC's true identity
+- SVG portrait (FRONT_PORTRAIT) generated on first NPC encounter, async
+- Dedicated dialogue modal: portrait + name/placeholder + dialogue + 3-4 response options + free input
+- Portrait cached in world_assets.svg_content
+- Name/portrait updates when true identity revealed via updateAssetNameRevealed()
 
 ---
 
-## 🕵️ NPC Identity System (Day 15)
+## 🕵️ NPC Identity System
 
-NPCs have a `name_known` field (default: false for CHARACTERs).
-
-**Before name is learned:**
-- Codex shows descriptive placeholder: "Chrome-Eyed Shopkeeper", "Scarred Wasteland Guard"
-- Dialogue window shows placeholder name
-- Constitution stores `true_name` for internal use
-
-**After name is learned** (through dialogue, documents, other NPCs):
-- `updateAssetNameRevealed(sessionId, assetId, trueName)` called
-- Codex entry, dialogue window, and all future references update to real name
-- Unknown characters show "?" suffix and "Identity unknown" badge in codex
-
-Migration 006 adds `name_known boolean DEFAULT true` to world_assets, then sets false for all CHARACTER rows.
+- `name_known: boolean` on world_assets (false for CHARACTER, true for others)
+- Before name learned: descriptive placeholder ("Chrome-Eyed Shopkeeper"), "?" suffix in codex
+- After name learned: updateAssetNameRevealed() updates world_assets + codex
+- Narrator prompt includes NPC NAMES section with placeholder instructions
 
 ---
 
 ## SVG Art Engine — Future Improvement Options (Phase 3)
 
-Current SVG generation is functional but visually rough. Options deferred to Phase 3 (Day 25+):
-- **Option A:** Richer prompts (~30-40% improvement, still blocky)
-- **Option B:** SVG template system (consistent composition, medium effort)
-- **Option C:** External image API — Replicate/Stability AI (~$0.002-0.005/image, dramatic quality)
-- **Option D:** Pre-made CC0 sprite library (zero cost, polished, less unique)
-- **Recommended for launch:** Option B + D combined. Deferred to Phase 3.
+- **Option A:** Richer prompts | **Option B:** SVG templates | **Option C:** External API (~$0.002-0.005/img) | **Option D:** CC0 sprite library
+- **Recommended:** Option B + D combined. Deferred to Phase 3 (Day 25+).
 
 ---
 
 ## Key Deliverables Log
 
-### Pre-Day 13 Fixes B (pending)
-- Dialogue text parsing: only quoted speech in accent color, prose stays normal
-- SVG backfill debug: session_id verification, race condition retry
-- NPC name visibility: name_known field, placeholder names, updateAssetNameRevealed()
-- Migration 006: name_known column
+### Pre-Day 13 Fixes B (confirmed on main)
+- `StoryFeed.tsx`: parseDialogueText() — quoted speech in accent/italic, prose stays normal
+- `SceneArt.tsx`: sessionId guard, detailed logging, .catch() on updateWorldAssetSvg
+- `useGameLoop.ts`: tryLinkSvgToAsset() helper, 2-second delayed retry for race condition
+- `types/game.ts`: WorldAsset.name_known boolean
+- `lib/game/codex.ts`: saveWorldAsset sets name_known=false for CHARACTER, updateAssetNameRevealed()
+- `prompt-builder.ts`: NPC NAMES section in narrator system prompt
+- `codex/page.tsx`: "Name ?" + "Identity Unknown" badge for unknown characters
+- `supabase/migrations/006_world_assets_name_known.sql` — applied ✅
 
-### Pre-Day 13 Fixes A (confirmed on main)
-- normalizeAssetId(), dialogue accent styling, SVG→world asset link, migration 005 applied
-
+### Pre-Day 13 Fixes A — normalizeAssetId, accent styling, SVG link, migration 005 applied
 ### Day 13.5 — world_assets + codex tables, constitution injection, codex browser
 ### Location Fix — LocationStatus PRESENT/ARRIVING, narratorState always fresh
 ### Patch B — CONTAINER, SVG art engine, dialogue prefix
@@ -157,8 +129,8 @@ Current SVG generation is functional but visually rough. Options deferred to Pha
 - LOCATION RULE: state authoritative, history is backstory
 - ACTION RULE: plausible actions always attempted
 - WORLD ASSET RULE: constitutions injected as immutable facts
-- DIALOGUE FORMAT: "NPC Name: 'speech'" pattern — prose around quotes stays normal color
-- MAIN QUEST: narrator plants breadcrumbs from World Seed without revealing them explicitly
+- DIALOGUE FORMAT: "NPC Name: 'speech'" — prose stays normal color, quotes in accent italic
+- NPC NAMES: placeholder until introduced, true_name in constitution always
 - Narrator never generates art
 
 ---
@@ -176,10 +148,9 @@ Current SVG generation is functional but visually rough. Options deferred to Pha
 
 | System | When | Description |
 | --- | --- | --- |
-| Pre-Day 13 fixes B | Now | Dialogue parsing, SVG debug, NPC identity |
 | Log Book + Save System | Day 13 | LogBook sidebar, dashboard, Save & Exit |
 | MVP Playtest | Day 14 | Full playtest, Phase 1 complete |
-| NPC Dialogue + Portraits | Day 15 | Dialogue modal, SVG portraits, identity reveal, Charisma gates |
+| NPC Dialogue + Portraits | Day 15 | Dialogue modal, SVG portraits, identity reveal |
 | NPC Trading | Day 16 | Merchant NPCs, buy/sell UI |
 | Main Narrative Thread | Day 17-18 | World Seed, main quest, breadcrumbs, win conditions |
 | Art Engine Overhaul | Phase 3 (Day 25+) | Template + CC0 sprite approach |
@@ -189,7 +160,7 @@ Current SVG generation is functional but visually rough. Options deferred to Pha
 ## 1. Core Philosophy
 
 - **Hybrid Authority Model:** Code is Source of Truth. AI is the Narrator.
-- **World Assets are permanent.** Write-once constitutions + separate SVG backfill.
+- **World Assets are permanent.** Write-once constitutions + SVG + identity reveal.
 - **Movement is absolute.** Players always arrive.
 - **Location is authoritative state.** current_location_id is always correct.
 - **Actions are permitted by default.** Narrator describes, never gatekeeps.
@@ -288,4 +259,4 @@ Workflow: Claude Code pushes → `git pull` + restart own server → report to C
 
 ---
 
-*Last updated: Session 28 — V3.7: Vision expanded to truly endless RPG. Main Narrative Thread designed (Day 17-18). NPC portrait + dialogue window designed (Day 15). NPC identity system documented. Pre-Day 13 fixes B pending.*
+*Last updated: Session 29 — V3.8: Pre-Day 13 fixes B complete, migration 006 applied. Day 13 testing starting.*

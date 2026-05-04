@@ -319,14 +319,19 @@ export function useGameLoop() {
       // ── 3. Resolve action ──────────────────────────────────────────────────
       const resolution = resolveAction(parsedAction, state);
 
-      // ── 3b. Roll feedback ──────────────────────────────────────────────────
+      // ── 4. Apply state_delta ───────────────────────────────────────────────
+      let updatedState = applyStateDelta(state, resolution.state_delta);
+
+      // ── 4b. Roll feedback (feed + log book) ────────────────────────────────
+      // The roll line goes into both the live story feed AND the persistent
+      // log book — stat checks are mechanically meaningful events that
+      // belong in the journal. Runs after step 4 so updatedState exists for
+      // persistLogEntry.
       const rollMsg = buildRollFeedback(resolution);
       if (rollMsg) {
         store.addMessage(makeMessage("SYSTEM", rollMsg));
+        updatedState = persistLogEntry(updatedState, LogEntryType.COMBAT, rollMsg);
       }
-
-      // ── 4. Apply state_delta ───────────────────────────────────────────────
-      let updatedState = applyStateDelta(state, resolution.state_delta);
 
       // ── 4b. Fast path — inventory management actions skip the Narrator ─────
       if (!isNarrativeAction(parsedAction, state)) {
@@ -599,22 +604,29 @@ export function useGameLoop() {
             useGameStore.getState().updateMessagesNpcName(placeholderName, reveal.true_name);
           }
 
-          // FIX 3: If the dialogue modal is currently anchored to this NPC's
-          // placeholder name, push the revealed true name into the modal so
-          // the header swaps from "Hooded Stranger" → "Kira Vale" immediately.
+          // FIX (modal name reveal): When a reveal lands, push the true name
+          // into the dialogue modal if EITHER the active NPC name matches
+          // the placeholder OR the active registry/asset key matches the
+          // revealed asset. Two-channel match avoids race conditions where
+          // currentDialogueNpc has already drifted but currentDialogueNpcKey
+          // is still pinned to the same asset.
           {
             const gs = useGameStore.getState();
-            if (
-              gs.currentDialogueNpc &&
-              placeholderName &&
-              gs.currentDialogueNpc.toLowerCase() === placeholderName.toLowerCase()
-            ) {
+            const isActiveNpc =
+              (gs.currentDialogueNpc !== null &&
+               placeholderName !== "" &&
+               gs.currentDialogueNpc.toLowerCase() === placeholderName.toLowerCase()) ||
+              (gs.currentDialogueNpcKey !== null &&
+               gs.currentDialogueNpcKey === effectiveAssetId);
+
+            if (isActiveNpc && gs.currentDialogueOptions.length > 0) {
               gs.setDialogueOptions(
                 gs.currentDialogueOptions,
                 reveal.true_name,
-                gs.currentNpcPortrait,
-                gs.currentDialogueNpcKey
+                gs.currentNpcPortrait ?? null,
+                gs.currentDialogueNpcKey ?? effectiveAssetId
               );
+              console.log("[GameLoop/7d] Modal header updated to:", reveal.true_name);
             }
           }
         }

@@ -540,9 +540,11 @@ function resolveDialogue(action: ParsedAction, state: MasterState, opts: Resolve
       }
       break;
     case "curious":
-      // PER check would require a "hidden info" signal we don't have here yet.
-      // Leaving this as no-check until the narrator surfaces a hidden flag.
-      void perception;
+      // Curious tone always fires a Perception check — investigative speech
+      // can succeed or fail to draw out information regardless of whether
+      // the resolver has an explicit "hidden info" signal.
+      statChecked = "perception";
+      modifier    = getAttributeModifier(perception);
       break;
     case "friendly":
     case "neutral":
@@ -560,13 +562,19 @@ function resolveDialogue(action: ParsedAction, state: MasterState, opts: Resolve
   };
 
   if (statChecked !== null) {
-    // FIX 2: ensure every required field for the feed roll-feedback line is
-    // present in narrative_context — buildRollFeedback() bails on missing roll.
-    const roll    = rollD20(opts.seed);                  // d20 result
-    const total   = roll + modifier;                     // roll + ability mod
-    const success = total >= difficulty;                 // pass/fail vs DC
+    // Every required field for buildRollFeedback() and the narrator's
+    // STAT CHECK block lives in narrative_context here:
+    //   stat_checked   - lowercase: 'charisma' | 'strength' | 'perception'
+    //   roll           - d20 result via rollD20(opts.seed)
+    //   modifier       - getAttributeModifier(<stat>)
+    //   total          - roll + modifier
+    //   difficulty     - trust-scaled (and +2 for deception)
+    //   success        - total >= difficulty
+    //   charisma_check - true only when stat_checked === 'charisma' (legacy alias)
+    const roll    = rollD20(opts.seed);
+    const total   = roll + modifier;
+    const success = total >= difficulty;
     Object.assign(checkContext, {
-      // Backward-compat alias so older UI checks (charisma_check) still light up.
       charisma_check:    statChecked === "charisma",
       stat_check_active: true,
       roll,
@@ -576,16 +584,15 @@ function resolveDialogue(action: ParsedAction, state: MasterState, opts: Resolve
       success,
       tone,
     });
-    // Debug breadcrumb so the browser console confirms the check fired with
-    // all expected fields populated.
-    console.log("[resolveDialogue] stat check:", {
-      tone,
-      stat_checked: statChecked,
+    // Verification log — confirms every field downstream consumers expect.
+    console.log("[resolveDialogue] stat check fields:", {
+      stat_checked:    statChecked,
       roll,
       modifier,
       total,
       difficulty,
       success,
+      charisma_check:  statChecked === "charisma",
     });
   }
 

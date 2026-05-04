@@ -75,17 +75,17 @@ function persistLogEntry(state: MasterState, type: LogEntryType, content: string
 }
 
 /**
- * Fire-and-forget: immediately persist just the log_book.entries to the DB so
- * they survive a hard page refresh without waiting for the 10-action auto-save.
- * Entries should be in newest-first order (same as masterState.log_book.entries).
+ * Fire-and-forget: immediately persist the full log_book (entries +
+ * recent_messages) to the DB so both survive a hard page refresh without
+ * waiting for the 10-action auto-save.
  */
-function saveLogEntriesAsync(sessionId: string, entries: import("@/types/game").LogEntry[]): void {
+function saveLogEntriesAsync(sessionId: string, logBook: import("@/types/game").LogBook): void {
   void (async () => {
     try {
       await fetch("/api/game/log-entries", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ sessionId, entries }),
+        body:    JSON.stringify({ sessionId, logBook }),
       });
     } catch {
       // Silently swallow — this is best-effort; the 10-action auto-save is the fallback.
@@ -641,15 +641,17 @@ export function useGameLoop() {
             timestamp: m.timestamp instanceof Date ? m.timestamp.toISOString() : String(m.timestamp),
             metadata:  m.metadata,
           }));
+        console.log("[GameLoop/9b] recent_messages captured:", recent.length, recent.map((m) => m.type));
         updatedState = {
           ...updatedState,
           log_book: { ...updatedState.log_book, recent_messages: recent },
         };
       }
 
-      // Fire-and-forget: persist log entries immediately after every narrative
-      // action so they survive a hard refresh without the 10-action auto-save.
-      saveLogEntriesAsync(updatedState.metadata.session_id, updatedState.log_book.entries);
+      // Fire-and-forget: persist the full log_book (entries + recent_messages)
+      // immediately after every narrative action so both survive a hard refresh
+      // without waiting for the 10-action auto-save.
+      saveLogEntriesAsync(updatedState.metadata.session_id, updatedState.log_book);
 
       // Bump last_played so the session sorts correctly on reload.
       updatedState = {

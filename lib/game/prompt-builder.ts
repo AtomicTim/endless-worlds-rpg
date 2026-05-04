@@ -574,7 +574,23 @@ export function buildNarratorUserPrompt(
 
   let prompt = lines.join("\n");
 
-  // EXAMINE / INTERACT — remind the narrator the target exists and pin its exact label.
+  // Object confirmed by resolver — prepend undeniable hard-fact block at the
+  // very top of the prompt so it is the first thing the model reads.
+  if (result.narrative_context.object_confirmed === true) {
+    const objName = String(result.narrative_context.object_name ?? "the target");
+    const confirmation = [
+      `⚠️ CONFIRMED OBJECT: '${objName}' EXISTS RIGHT NOW.`,
+      `The Logic Resolver has confirmed this object is present at the player's location.`,
+      `This is not a prompt suggestion — it is a hard game fact.`,
+      `Your response MUST describe the player interacting with '${objName}'.`,
+      `Any response that denies, questions, or redirects away from this object is WRONG and breaks the game.`,
+      `══════════════════════════════`,
+      ``,
+    ].join("\n");
+    prompt = confirmation + prompt;
+  }
+
+  // EXAMINE / INTERACT — also append the target pinning reminder at the bottom.
   if (
     action?.action_type === ActionType.EXAMINE ||
     action?.action_type === ActionType.INTERACT

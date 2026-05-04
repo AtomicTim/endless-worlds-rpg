@@ -177,6 +177,12 @@ function resolveExamine(action: ParsedAction, state: MasterState): ResolutionRes
       current_location_id: current,
       target,
       relevant_flags:      relevantFlags,
+      // Resolver-confirmed object existence — prevents narrator from denying it.
+      ...(target ? {
+        object_confirmed:       true,
+        object_name:            action.primary_target,
+        object_exists_message:  "This object exists. The player is interacting with it right now. Do not deny its existence.",
+      } : {}),
     },
   };
 }
@@ -230,6 +236,10 @@ function resolveInteract(action: ParsedAction, state: MasterState): ResolutionRe
       target,
       flag_set:       completeFlag,
       relevant_flags: pickFlagsRelatedTo(newFlags, target),
+      // Resolver-confirmed object existence — prevents narrator from denying it.
+      object_confirmed:       true,
+      object_name:            action.primary_target ?? target,
+      object_exists_message:  "This object exists. The player is interacting with it right now. Do not deny its existence.",
     },
   };
 }

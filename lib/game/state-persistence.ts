@@ -1,5 +1,5 @@
 import type { Database, Json } from "@/types/database";
-import type { MasterState, LogEntry } from "@/types/game";
+import type { MasterState, LogBook } from "@/types/game";
 import type { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type DbClient = Awaited<ReturnType<typeof createServerSupabaseClient>>;
@@ -45,14 +45,14 @@ export async function loadMasterState(
 }
 
 /**
- * Targeted patch: replaces only log_book.entries in the stored master_state.
- * Uses a read-modify-write pattern — two DB calls but avoids sending the full
- * state blob from the client on every action.
+ * Targeted patch: replaces the entire log_book (entries + recent_messages) in
+ * the stored master_state. Uses a read-modify-write pattern — two DB calls but
+ * avoids sending the full state blob from the client on every action.
  */
 export async function patchLogEntries(
   client: DbClient,
   sessionId: string,
-  entries: LogEntry[]
+  logBook: LogBook
 ): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error: fetchErr } = await (client.from("game_sessions") as any)
@@ -65,7 +65,7 @@ export async function patchLogEntries(
   const current = data.master_state as unknown as MasterState;
   const patched: MasterState = {
     ...current,
-    log_book: { ...current.log_book, entries },
+    log_book: logBook,
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

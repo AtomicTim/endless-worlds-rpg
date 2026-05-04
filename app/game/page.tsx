@@ -91,6 +91,7 @@ export default function GamePage() {
 
       // ── Restore recent narrative messages from the previous session ──────────
       // Gives the player context to continue without re-reading the entire log.
+      console.log("[GamePage] loaded recent_messages:", state.log_book?.recent_messages?.length ?? 0, state.log_book?.recent_messages);
       const recentMsgs = state.log_book?.recent_messages ?? [];
       if (recentMsgs.length > 0) {
         store.addMessage(makeMessage("SYSTEM", "— Resuming your adventure —"));

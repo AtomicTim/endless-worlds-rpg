@@ -13,6 +13,7 @@ import type { MasterState } from "@/types/game";
 import { createClient } from "@/lib/supabase/client";
 import { useGameStore, makeMessage } from "@/lib/stores/game-store";
 import { useGameLoop } from "@/hooks/useGameLoop";
+import { getWorldAssetsForLocation } from "@/lib/game/codex";
 
 const WORLD_NAMES: Record<Genre, string> = {
   [Genre.FANTASY]:             "Realm",
@@ -77,6 +78,15 @@ export default function GamePage() {
         `You are ${state.player_state.name}, a ${state.player_state.background} in the ${worldName}. ` +
         `Your adventure begins at ${state.world_state.current_location_id}. What do you do?`;
       store.addMessage(makeMessage("SYSTEM", opening));
+
+      // Load any previously-established world assets for the current location
+      // so the very first narrator call this session sees them as fact.
+      void getWorldAssetsForLocation(
+        state.metadata.session_id,
+        state.world_state.current_location_id
+      ).then((assets) => {
+        useGameStore.getState().setLocationAssets(assets);
+      });
 
       setSessionChecked(true);
     }

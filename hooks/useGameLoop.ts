@@ -7,10 +7,10 @@ import { resolveAction } from "@/lib/game/logic-resolver";
 import { narrateAction } from "@/lib/game/narrator";
 import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory } from "@/lib/game/state-utils";
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
-import { saveCodexEntry } from "@/lib/game/codex";
+import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation } from "@/lib/game/codex";
 import { generateArt, getSceneType } from "@/lib/game/art-generator";
-import { ActionType, ItemType, LogEntryType } from "@/types/game";
-import type { MasterState, ParsedAction, ResolutionResult } from "@/types/game";
+import { ActionType, AssetCategory, ItemType, LocationStatus, LogEntryType } from "@/types/game";
+import type { MasterState, ParsedAction, ResolutionResult, WorldAsset } from "@/types/game";
 
 const MAX_INPUT_LENGTH = 500;
 
@@ -257,7 +257,8 @@ export function useGameLoop() {
 
       // ── 5. Narrate ─────────────────────────────────────────────────────────
       store.setProcessing(true, "Narrating...");
-      const lastNarrative = useGameStore.getState().lastNarrativeText;
+      const lastNarrative   = useGameStore.getState().lastNarrativeText;
+      const locationAssets  = useGameStore.getState().locationAssets;
 
       // Always give the narrator the most current world_state (including
       // location_status from the resolution) so it never infers location
@@ -271,7 +272,13 @@ export function useGameLoop() {
 
       let narratorResponse;
       try {
-        narratorResponse = await narrateAction(resolution, narratorState, lastNarrative, parsedAction);
+        narratorResponse = await narrateAction(
+          resolution,
+          narratorState,
+          lastNarrative,
+          parsedAction,
+          locationAssets
+        );
       } catch {
         // Narrator failed — still save the resolved state so the action sticks.
         store.addMessage(
@@ -325,17 +332,62 @@ export function useGameLoop() {
       }
 
       // ── 7b. Process codex_entries — only NOTABLE/MAJOR are saved ──────────
+      // Both saveCodexEntry and saveWorldAsset are fire-and-forget: they
+      // upsert with ignoreDuplicates so first-introduction is law, and any
+      // failures are logged inside the helpers without crashing the loop.
+      const sessionId = updatedState.metadata.session_id;
+      const currentLocationId = updatedState.world_state.current_location_id;
       for (const entry of narratorResponse.codex_entries) {
-        if (entry.significance === "NOTABLE" || entry.significance === "MAJOR") {
-          saveCodexEntry(entry);
-          if (entry.significance === "MAJOR") {
-            updatedState = addLogEntry(
-              updatedState,
-              LogEntryType.DISCOVERY,
-              `New codex entry: ${entry.name} — ${entry.description}`
-            );
-          }
+        if (entry.significance !== "NOTABLE" && entry.significance !== "MAJOR") continue;
+
+        // Codex (player-facing encyclopedia row).
+        try {
+          void saveCodexEntry(sessionId, entry);
+        } catch (err) {
+          console.error("[useGameLoop] saveCodexEntry threw", err);
         }
+
+        // World asset (immutable narrator constitution).
+        const assetCategory: AssetCategory =
+          (Object.values(AssetCategory) as string[]).includes(entry.category)
+            ? (entry.category as AssetCategory)
+            : AssetCategory.LORE;
+        const asset: WorldAsset = {
+          id:                  entry.id,
+          category:            assetCategory,
+          name:                entry.name,
+          constitution:        { notes: entry.description },
+          significance:        entry.significance,
+          first_seen_location: currentLocationId,
+          session_id:          sessionId,
+          created_at:          new Date().toISOString(),
+        };
+        try {
+          void saveWorldAsset(sessionId, asset);
+        } catch (err) {
+          console.error("[useGameLoop] saveWorldAsset threw", err);
+        }
+
+        if (entry.significance === "MAJOR") {
+          updatedState = addLogEntry(
+            updatedState,
+            LogEntryType.DISCOVERY,
+            `New codex entry: ${entry.name} — ${entry.description}`
+          );
+        }
+      }
+
+      // ── 7c. After ARRIVING — refresh location assets for the next call ────
+      // Fire-and-forget: when it lands, it populates the Zustand store so the
+      // next narrator call sees ESTABLISHED WORLD ASSETS injected as fact.
+      const arrivedAt =
+        resolution.state_delta.world_state?.location_status === LocationStatus.ARRIVING
+          ? resolution.state_delta.world_state.current_location_id ?? null
+          : null;
+      if (arrivedAt) {
+        void getWorldAssetsForLocation(sessionId, arrivedAt).then((assets) => {
+          useGameStore.getState().setLocationAssets(assets);
+        });
       }
 
       // ── 8. Merge new NPCs into registry ────────────────────────────────────

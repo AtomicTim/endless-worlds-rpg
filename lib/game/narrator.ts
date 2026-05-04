@@ -7,6 +7,7 @@ import type {
   ParsedAction,
   PointOfInterest,
   ResolutionResult,
+  WorldAsset,
 } from "@/types/game";
 import { ItemType, ItemRarity } from "@/types/game";
 
@@ -207,7 +208,8 @@ export async function narrateAction(
   result: ResolutionResult,
   state: MasterState,
   lastNarrativeText?: string | null,
-  action?: ParsedAction | null
+  action?: ParsedAction | null,
+  locationAssets?: WorldAsset[] | null
 ): Promise<NarratorResponse> {
   let response: Response;
   try {
@@ -219,6 +221,7 @@ export async function narrateAction(
         masterState:      state,
         ...(lastNarrativeText ? { lastNarrativeText } : {}),
         ...(action ? { action } : {}),
+        ...(locationAssets && locationAssets.length > 0 ? { locationAssets } : {}),
       }),
     });
   } catch (err) {

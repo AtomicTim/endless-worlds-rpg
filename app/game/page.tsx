@@ -26,6 +26,12 @@ const WORLD_NAMES: Record<Genre, string> = {
   [Genre.POST_APOCALYPTIC]:    "Wasteland",
 };
 
+// Module-level memo of the last session id we successfully loaded. Survives
+// component unmount/remount so that SPA navigation back into /game can be
+// distinguished from a genuine session switch (the Zustand store also
+// preserves masterState across mounts; both signals must match for SPA nav).
+let lastLoadedSessionId: string | null = null;
+
 export default function GamePage() {
   const router = useRouter();
   const initRef    = useRef(false);
@@ -48,6 +54,24 @@ export default function GamePage() {
       // Read search param without useSearchParams() to avoid Suspense requirement.
       const params        = new URLSearchParams(window.location.search);
       const sessionIdParam = params.get("session_id");
+
+      // ── SPA navigation short-circuit ───────────────────────────────────────
+      // If the Zustand store already has a session loaded AND it matches both
+      // the module-level memo and the URL param, this is a tab-switch back
+      // into /game (e.g. from /game/codex). Don't wipe dialogue / messages /
+      // log book — just refresh ephemeral caches and bail.
+      const earlyStore        = useGameStore.getState();
+      const existingSessionId = earlyStore.masterState?.metadata.session_id ?? null;
+      const queryMatches      = !sessionIdParam || sessionIdParam === existingSessionId;
+      if (
+        existingSessionId &&
+        existingSessionId === lastLoadedSessionId &&
+        queryMatches
+      ) {
+        earlyStore.clearTransientState();
+        setSessionChecked(true);
+        return;
+      }
 
       const supabase = createClient();
       const {
@@ -130,6 +154,9 @@ export default function GamePage() {
         useGameStore.getState().setLocationAssets(assets);
       });
 
+      // Memoize the session id at module level so the SPA-nav check above can
+      // recognise this session on the next mount.
+      lastLoadedSessionId = state.metadata.session_id;
       setSessionChecked(true);
     }
 

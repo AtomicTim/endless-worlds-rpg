@@ -125,8 +125,11 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
   }
 
   // ── Disposition badge ───────────────────────────────────────────────────────
-  const disposition = trustScore !== null ? getNpcDisposition(trustScore) : null;
-  const dispStyle   = disposition ? DISPOSITION_STYLES[disposition] : null;
+  // Always render a badge — fall back to neutral (trust 50) when the NPC
+  // isn't in the registry yet so the player never sees a "missing" UI gap.
+  const effectiveTrust = trustScore ?? 50;
+  const disposition    = getNpcDisposition(effectiveTrust);
+  const dispStyle      = DISPOSITION_STYLES[disposition] ?? DISPOSITION_STYLES.neutral;
 
   // ── Expanded modal ──────────────────────────────────────────────────────────
   return (
@@ -183,19 +186,18 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
           {npcName ?? "???"}
         </p>
 
-        {/* Disposition indicator */}
-        {disposition && dispStyle && (
-          <span
-            className="flex items-center gap-1 rounded-sm px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider"
-            style={{
-              color:           dispStyle.color,
-              backgroundColor: `color-mix(in srgb, ${dispStyle.color} 12%, transparent)`,
-            }}
-          >
-            <span aria-hidden>{dispStyle.icon}</span>
-            <span>{disposition}</span>
-          </span>
-        )}
+        {/* Disposition indicator — always shown, defaults to Neutral */}
+        <span
+          className="flex items-center gap-1 rounded-sm px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider"
+          style={{
+            color:           dispStyle.color,
+            backgroundColor: `color-mix(in srgb, ${dispStyle.color} 12%, transparent)`,
+          }}
+          title={`Trust ${effectiveTrust}/100`}
+        >
+          <span aria-hidden>{dispStyle.icon}</span>
+          <span>{disposition}</span>
+        </span>
 
         {/* Walk away — fully clears the modal */}
         <button

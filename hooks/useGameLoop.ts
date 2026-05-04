@@ -5,7 +5,7 @@ import { useGameStore, makeMessage, type StoryMessage } from "@/lib/stores/game-
 import { parseIntent, IntentParserError } from "@/lib/game/intent-parser";
 import { resolveAction } from "@/lib/game/logic-resolver";
 import { narrateAction } from "@/lib/game/narrator";
-import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory, updateNPCTrust, findNpcInRegistry } from "@/lib/game/state-utils";
+import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory, updateNPCTrust, findNpcInRegistry, seedNpcRegistry } from "@/lib/game/state-utils";
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
 import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, updateWorldAssetSvg, updateAssetNameRevealed } from "@/lib/game/codex";
 import { generateArt, generateNpcPortrait, getSceneType } from "@/lib/game/art-generator";
@@ -598,17 +598,51 @@ export function useGameLoop() {
           if (placeholderName) {
             useGameStore.getState().updateMessagesNpcName(placeholderName, reveal.true_name);
           }
+
+          // FIX 3: If the dialogue modal is currently anchored to this NPC's
+          // placeholder name, push the revealed true name into the modal so
+          // the header swaps from "Hooded Stranger" → "Kira Vale" immediately.
+          {
+            const gs = useGameStore.getState();
+            if (
+              gs.currentDialogueNpc &&
+              placeholderName &&
+              gs.currentDialogueNpc.toLowerCase() === placeholderName.toLowerCase()
+            ) {
+              gs.setDialogueOptions(
+                gs.currentDialogueOptions,
+                reveal.true_name,
+                gs.currentNpcPortrait,
+                gs.currentDialogueNpcKey
+              );
+            }
+          }
         }
       }
 
       // ── 7e. Trust changes from dialogue ──────────────────────────────────────
       // Resolve narrator-provided npc_key against whatever scheme the registry
-      // is actually using (snake_case, asset-id, or name match). Falls back to
-      // the literal key the narrator emitted when nothing matches.
+      // is actually using (snake_case, asset-id, or name match). Seed a default
+      // entry first if missing so the delta isn't silently dropped — common
+      // when the NPC was introduced via codex_entries without going through
+      // new_npcs.
       if (narratorResponse.trust_changes && narratorResponse.trust_changes.length > 0) {
         for (const tc of narratorResponse.trust_changes) {
           const found = findNpcInRegistry(updatedState.npc_registry, tc.npc_key);
           const key   = found?.key ?? tc.npc_key;
+          if (!found) {
+            const matchingAsset = useGameStore.getState().locationAssets.find(
+              (a) =>
+                a.category === AssetCategory.CHARACTER &&
+                (a.id === key || a.name.toLowerCase() === tc.npc_key.toLowerCase())
+            );
+            updatedState = seedNpcRegistry(
+              updatedState,
+              key,
+              matchingAsset?.name ?? tc.npc_key,
+              matchingAsset?.constitution.role
+            );
+          }
           updatedState = updateNPCTrust(updatedState, key, tc.delta);
         }
       }
@@ -706,8 +740,39 @@ export function useGameLoop() {
               );
               if (newNpc) {
                 npcRegistryKey = normalizeAssetId(AssetCategory.CHARACTER, newNpc.name);
+              } else {
+                // NPC is in locationAssets only — fall back to the asset-id
+                // form so we can seed below.
+                const matchingAsset = npcAsset
+                  ?? gsBefore.locationAssets.find(
+                    (a) =>
+                      a.category === AssetCategory.CHARACTER &&
+                      a.name.toLowerCase() === npcName.toLowerCase()
+                  );
+                if (matchingAsset) {
+                  npcRegistryKey = matchingAsset.id;
+                }
               }
             }
+          }
+
+          // FIX 1: when we have a key but no registry entry, seed a neutral
+          // default. Every NPC encountered in dialogue gets a registry entry
+          // on their first beat — guarantees disposition badge + stat checks
+          // always have a record to read from.
+          if (npcRegistryKey && npcName && !updatedState.npc_registry[npcRegistryKey]) {
+            const matchingAsset = gsBefore.locationAssets.find(
+              (a) =>
+                a.category === AssetCategory.CHARACTER &&
+                (a.id === npcRegistryKey || a.name.toLowerCase() === npcName.toLowerCase())
+            );
+            updatedState = seedNpcRegistry(
+              updatedState,
+              npcRegistryKey,
+              npcName,
+              matchingAsset?.constitution.role
+            );
+            console.log(`[GameLoop/7g] Seeded npc_registry entry for ${npcName} → ${npcRegistryKey}`);
           }
 
           store.setDialogueOptions(dialogueOpts, npcName, portrait, npcRegistryKey);

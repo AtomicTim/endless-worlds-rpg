@@ -74,8 +74,14 @@ interface GameStore {
   /** Toggle the modal between full and collapsed views without clearing options. */
   setDialogueModalCollapsed: (collapsed: boolean) => void;
   /** Wipe all per-session state so a fresh session loads with a clean slate.
-   *  Does NOT clear masterState — that is replaced by the caller right after. */
+   *  Does NOT clear masterState — that is replaced by the caller right after.
+   *  Use ONLY when switching to a different save slot. */
   clearSessionState:       () => void;
+  /** Lightweight reset for SPA navigation back to the same session. Clears
+   *  ephemeral caches that may be stale (artCache, lastNarrativeText,
+   *  currentAsciiArt) but PRESERVES dialogue modal state, log entries,
+   *  location assets, and messages — those remain valid across nav. */
+  clearTransientState:     () => void;
 
   persistedLogEntries: LogEntry[];
 }
@@ -163,5 +169,11 @@ export const useGameStore = create<GameStore>((set) => ({
       artCache:               {},
       lastNarrativeText:      null,
       currentAsciiArt:        null,
+    }),
+  clearTransientState: () =>
+    set({
+      artCache:          {},
+      lastNarrativeText: null,
+      currentAsciiArt:   null,
     }),
 }));

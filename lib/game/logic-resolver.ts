@@ -493,6 +493,13 @@ function resolveDialogue(action: ParsedAction, state: MasterState, opts: Resolve
     found:          !!found,
     resolved_key:   npcKey,
   });
+  // FIX 1: When the NPC isn't in the registry yet (first dialogue, or
+  // introduced via codex_entries only), proceed with neutral defaults rather
+  // than skipping the stat check. trustScore falls back to 50 below, which
+  // produces baseDifficulty=12. The stat check fires from `tone` regardless.
+  if (!found && action.primary_target) {
+    console.log("[resolveDialogue] NPC not in registry, using default difficulty=12");
+  }
 
   // Use the parser-supplied tone first; fall back to text heuristics so quoted
   // dialogue (which sometimes skips the tone slot) still routes correctly.

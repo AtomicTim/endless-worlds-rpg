@@ -95,6 +95,40 @@ export function getNpcDisposition(trustScore: number): string {
 }
 
 /**
+ * Seed a missing npc_registry entry with neutral defaults so subsequent
+ * lookups (trust changes, dialogue modal disposition, resolver difficulty)
+ * always find a record. No-op if the key already exists — never overwrites.
+ *
+ * Used when an NPC exists in locationAssets / world_assets but was never
+ * inserted into the registry (e.g. introduced through codex_entries only,
+ * or saved via an older code path that pre-dated registry seeding).
+ */
+export function seedNpcRegistry(
+  state: MasterState,
+  key: string,
+  fallbackName?: string,
+  fallbackRole?: string
+): MasterState {
+  if (state.npc_registry[key]) return state;
+  return {
+    ...state,
+    npc_registry: {
+      ...state.npc_registry,
+      [key]: {
+        id:                  key,
+        npc_key:             key,
+        name:                fallbackName ?? key,
+        role:                fallbackRole ?? "Unknown",
+        relationship_status: "neutral",
+        trust_score:         50,
+        memory_snippets:     [],
+        last_interaction:    new Date().toISOString(),
+      },
+    },
+  };
+}
+
+/**
  * Robust NPC lookup against npc_registry. The registry has historically been
  * keyed three ways:
  *   - direct (whatever the narrator emitted, e.g. "old_hermit")

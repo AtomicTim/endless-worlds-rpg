@@ -258,9 +258,20 @@ export function useGameLoop() {
       // ── 5. Narrate ─────────────────────────────────────────────────────────
       store.setProcessing(true, "Narrating...");
       const lastNarrative = useGameStore.getState().lastNarrativeText;
+
+      // Always give the narrator the most current world_state (including
+      // location_status from the resolution) so it never infers location
+      // from narrative history.
+      const narratorState: MasterState = resolution.state_delta.world_state
+        ? {
+            ...updatedState,
+            world_state: { ...updatedState.world_state, ...resolution.state_delta.world_state },
+          }
+        : updatedState;
+
       let narratorResponse;
       try {
-        narratorResponse = await narrateAction(resolution, updatedState, lastNarrative, parsedAction);
+        narratorResponse = await narrateAction(resolution, narratorState, lastNarrative, parsedAction);
       } catch {
         // Narrator failed — still save the resolved state so the action sticks.
         store.addMessage(

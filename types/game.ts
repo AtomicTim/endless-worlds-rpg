@@ -44,6 +44,11 @@ export enum ItemRarity {
   LEGENDARY = "LEGENDARY",
 }
 
+export enum LocationStatus {
+  PRESENT  = "PRESENT",   // player is here, acting within this location
+  ARRIVING = "ARRIVING",  // player just moved here this turn
+}
+
 export enum Difficulty {
   EASY      = "easy",
   NORMAL    = "normal",
@@ -130,6 +135,7 @@ export interface WorldState {
   current_location_id: string;
   visited_locations:   string[];
   flags:               Record<string, boolean | number | string>;
+  location_status:     LocationStatus;
 }
 
 // ---------------------------------------------------------------------------
@@ -202,10 +208,18 @@ export interface ParsedAction {
   confidence:       number;
 }
 
+export type StateDelta = {
+  metadata?:     Partial<Metadata>;
+  player_state?: Partial<PlayerState>;
+  world_state?:  Partial<WorldState>;
+  log_book?:     Partial<LogBook>;
+  npc_registry?: Record<string, NPCMemory>;
+};
+
 export interface ResolutionResult {
   success:            boolean;
   outcome_type:       string;
-  state_delta:        Partial<MasterState>;
+  state_delta:        StateDelta;
   narrative_context:  Record<string, unknown>;
 }
 

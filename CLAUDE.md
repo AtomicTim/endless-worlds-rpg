@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 4.4
+**Version:** 4.5
 **Status:** Active Development — Phase 1 MVP Nearly Complete
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -23,6 +23,7 @@
 | All pre-Day 13 fixes | Codex, dialogue, SVG, identity, name reveal, action authority | ✅ Complete |
 | 13 | Log Book & Save System | ✅ Complete |
 | LogBook fixes | Persistence, sort order, story restoration, POI labels | ✅ Complete |
+| Story/Object fixes | Feed restoration on reload, resolver-confirmed object existence | ✅ Complete |
 | 14 | MVP Playtest & Bug Fix | 🔄 In Progress |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
@@ -34,14 +35,16 @@
 - `world_assets` — constitutions + svg_content + name_known
 - `codex` — lore encyclopedia entries
 
-### LogBook & Feed Architecture (post-fix — commit eb06437)
-- `persistedLogEntries` in Zustand — oldest-first, display reversed for newest-at-top
-- `patchLogEntries()` — immediate DB save after every log entry (survives hard refresh)
-- `POST /api/game/log-entries` — dedicated route for log persistence
-- `LogBook.tsx` — `[...entries].reverse()` for display only, newest at top
-- `LogBook.recent_messages` — last 8 NARRATIVE/DIALOGUE messages saved to state
-- On reload: "— Resuming your adventure —" separator + restored messages at 80% opacity
-- POI LABEL INTEGRITY rule in narrator prompt — exact target name honored, no synonyms
+### Object Existence Architecture (commit 3de7b31)
+- `resolveExamine()` and `resolveInteract()` always return success=true with `object_confirmed: true`, `object_name`, `object_exists_message` in narrative_context
+- `buildNarratorUserPrompt()` prepends a hard-fact confirmed object block at the very top when object_confirmed=true — first thing the narrator reads
+- Two-layer guarantee: resolver confirms at code level + narrator prompt receives as undeniable fact
+
+### Story Feed Restoration Architecture
+- `patchLogEntries` saves full LogBook (entries + recent_messages) to DB
+- `recent_messages` = last 8 NARRATIVE/DIALOGUE messages, saved on every action
+- On reload: "— Resuming your adventure —" separator + restored messages (80% opacity) + welcome line
+- Debug logs: `[GameLoop/9b]` and `[GamePage]` for tracing
 
 ---
 
@@ -60,7 +63,7 @@ MOVE always succeeds. Only block: world flag `<location_id>_locked: true`.
 Plausible actions always attempted. Narrator describes outcomes only.
 
 ### 5. Objects Mentioned Exist
-If narrator described it, player can interact with it. POI labels are exact — no synonyms, no renaming. Includes journals, books, notes, signs, documents.
+If narrator described it, player can interact with it. EXAMINE/INTERACT resolver confirms existence at code level — narrator receives as undeniable hard fact. POI labels exact — no synonyms.
 
 ---
 
@@ -85,9 +88,6 @@ name_known=false for CHARACTER. looksLikePlaceholder() 2+ word match. revealed_n
 ## 💎 Item Value System (Day 16)
 Every item has sell value + lore blurb + optional dialogue unlock.
 
-## ⚠️ Known Narrator Issue
-Occasional LORE object blocking. POI label integrity added but monitor during playtest.
-
 ---
 
 ## SVG Art Engine — Future (Phase 3)
@@ -102,8 +102,7 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 - **Tier 3** (80-120 words): ARRIVING at NEW location, major moments
 - GOLDEN RULE: honor action, yes-and
 - MOVE: always arrives
-- EXAMINE/INTERACT/READ: always resolves
-- POI LABEL INTEGRITY: exact target name used, no synonyms
+- EXAMINE/INTERACT: resolver confirms object_confirmed=true, prepended as first prompt fact
 - WORLD ASSET: constitutions as facts
 - DIALOGUE: "NPC: 'speech'" quoted in accent/italic
 - log_summary: 12-word max terse fragment
@@ -116,7 +115,7 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 - **NARRATIVE PATH**: MOVE, ATTACK, INTERACT, EXAMINE, DIALOGUE, USE_ITEM(CONSUMABLE), search CONTAINER
 - **DIALOGUE**: quoted → instant, no AI
 - **MOVE**: always MOVE_SUCCESS
-- **EXAMINE/INTERACT/READ**: always resolves
+- **EXAMINE/INTERACT**: always success=true, object_confirmed prepended to narrator
 
 ---
 
@@ -136,7 +135,7 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 
 - Hybrid Authority: Code = Truth, AI = Narrator
 - World Assets permanent, Movement absolute, Objects mentioned exist
-- POI labels exact — no synonyms or renaming
+- EXAMINE/INTERACT confirmed at resolver level — narrator cannot deny
 - Actions permitted by default, Location authoritative
 - Every item has value, Every campaign has a purpose
 - Truly endless — AI generates on demand
@@ -200,4 +199,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 35 — V4.4: All persistence, sort order, story restoration, POI label fixes complete. Day 14 playtest ready.*
+*Last updated: Session 36 — V4.5: Object existence confirmed at resolver level. Story feed restoration complete. Day 14 playtest ready.*

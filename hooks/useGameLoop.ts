@@ -75,6 +75,25 @@ function persistLogEntry(state: MasterState, type: LogEntryType, content: string
 }
 
 /**
+ * Fire-and-forget: immediately persist world_state to the DB after a MOVE or
+ * any action that mutates world flags. Ensures current_location_id and flag
+ * changes survive a hard refresh without waiting for the 10-action auto-save.
+ */
+function saveWorldStateAsync(sessionId: string, worldState: import("@/types/game").WorldState): void {
+  void (async () => {
+    try {
+      await fetch("/api/game/world-state", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ sessionId, worldState }),
+      });
+    } catch {
+      // Silently swallow — best-effort; the 10-action auto-save is the fallback.
+    }
+  })();
+}
+
+/**
  * Fire-and-forget: immediately persist the full log_book (entries +
  * recent_messages) to the DB so both survive a hard page refresh without
  * waiting for the 10-action auto-save.
@@ -646,6 +665,16 @@ export function useGameLoop() {
           ...updatedState,
           log_book: { ...updatedState.log_book, recent_messages: recent },
         };
+      }
+
+      // Fire-and-forget: persist world_state immediately after MOVE or any
+      // action that mutated world flags (locked doors, discovered secrets, etc.).
+      // Prevents current_location_id and flag changes from being lost on reload.
+      {
+        const wsKeys = Object.keys(resolution.state_delta?.world_state ?? {});
+        if (wsKeys.some((k) => k !== "location_status")) {
+          saveWorldStateAsync(updatedState.metadata.session_id, updatedState.world_state);
+        }
       }
 
       // Fire-and-forget: persist the full log_book (entries + recent_messages)

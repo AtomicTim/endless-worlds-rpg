@@ -1,5 +1,5 @@
 import type { Database, Json } from "@/types/database";
-import type { MasterState, LogBook } from "@/types/game";
+import type { MasterState, LogBook, WorldState } from "@/types/game";
 import type { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type DbClient = Awaited<ReturnType<typeof createServerSupabaseClient>>;
@@ -66,6 +66,36 @@ export async function patchLogEntries(
   const patched: MasterState = {
     ...current,
     log_book: logBook,
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (client.from("game_sessions") as any)
+    .update({ master_state: patched as unknown as Json })
+    .eq("id", sessionId);
+}
+
+/**
+ * Targeted patch: replaces world_state in the stored master_state.
+ * Used for immediate persistence after MOVE (current_location_id,
+ * visited_locations) and any action that mutates world flags.
+ */
+export async function patchWorldState(
+  client: DbClient,
+  sessionId: string,
+  worldState: WorldState
+): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error: fetchErr } = await (client.from("game_sessions") as any)
+    .select("master_state")
+    .eq("id", sessionId)
+    .single() as { data: { master_state: Json } | null; error: unknown };
+
+  if (fetchErr || !data) return; // session not found — silently skip
+
+  const current = data.master_state as unknown as MasterState;
+  const patched: MasterState = {
+    ...current,
+    world_state: worldState,
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

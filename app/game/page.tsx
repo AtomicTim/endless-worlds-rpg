@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useGameStore, makeMessage } from "@/lib/stores/game-store";
 import { useGameLoop } from "@/hooks/useGameLoop";
 import { getWorldAssetsForLocation } from "@/lib/game/codex";
+import { formatLocationId } from "@/lib/game/location-formatter";
 
 const WORLD_NAMES: Record<Genre, string> = {
   [Genre.FANTASY]:             "Realm",
@@ -93,7 +94,9 @@ export default function GamePage() {
       // Gives the player context to continue without re-reading the entire log.
       console.log("[GamePage] loaded recent_messages:", state.log_book?.recent_messages?.length ?? 0, state.log_book?.recent_messages);
       const recentMsgs = state.log_book?.recent_messages ?? [];
+
       if (recentMsgs.length > 0) {
+        // Resuming — show separator + restored messages only, no extra welcome line.
         store.addMessage(makeMessage("SYSTEM", "— Resuming your adventure —"));
         for (const m of recentMsgs) {
           store.addMessage({
@@ -104,14 +107,15 @@ export default function GamePage() {
             metadata:  { ...(m.metadata ?? {}), restored: true },
           });
         }
+      } else {
+        // Fresh session — show the opening welcome message.
+        const worldName    = WORLD_NAMES[state.metadata.genre] ?? "World";
+        const locationName = formatLocationId(state.world_state.current_location_id);
+        store.addMessage(makeMessage("SYSTEM",
+          `You are ${state.player_state.name}, a ${state.player_state.background} in the ${worldName}. ` +
+          `Your adventure begins at ${locationName}. What do you do?`
+        ));
       }
-
-      const worldName = WORLD_NAMES[state.metadata.genre] ?? "World";
-      const opening = recentMsgs.length > 0
-        ? `You are ${state.player_state.name} — currently at ${state.world_state.current_location_id}. What do you do?`
-        : `You are ${state.player_state.name}, a ${state.player_state.background} in the ${worldName}. ` +
-          `Your adventure begins at ${state.world_state.current_location_id}. What do you do?`;
-      store.addMessage(makeMessage("SYSTEM", opening));
 
       // Preload established world assets so the first narrator call sees them.
       void getWorldAssetsForLocation(

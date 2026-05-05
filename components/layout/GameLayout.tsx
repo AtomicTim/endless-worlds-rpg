@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Menu, X, BookOpen, Save } from "lucide-react";
+import { Menu, X, BookOpen, Save, Map as MapIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { VerbosityToggle } from "@/components/game/VerbosityToggle";
@@ -19,9 +19,13 @@ const GENRE_LABELS: Partial<Record<Genre, string>> = {
 };
 
 interface GameLayoutProps {
-  genre?: Genre;
+  genre?:    Genre;
   mainPanel: React.ReactNode;
-  sidebar: React.ReactNode;
+  sidebar:   React.ReactNode;
+  /** Day 19F — optional left-side map panel. Renders inside its own
+   *  sliding aside; visibility is driven by the store's `mapPanelOpen`
+   *  flag so any component (header button, ESC key) can toggle it. */
+  mapPanel?: React.ReactNode;
 }
 
 type SaveState = "idle" | "saving" | "saved";
@@ -30,10 +34,14 @@ export function GameLayout({
   genre = Genre.FANTASY,
   mainPanel,
   sidebar,
+  mapPanel,
 }: GameLayoutProps) {
   const router        = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [saveState,   setSaveState]   = useState<SaveState>("idle");
+  const mapPanelOpen   = useGameStore((s) => s.mapPanelOpen);
+  const toggleMapPanel = useGameStore((s) => s.toggleMapPanel);
+  const setMapPanelOpen = useGameStore((s) => s.setMapPanelOpen);
   const genreLabel = GENRE_LABELS[genre] ?? (genre as string);
 
   // ── Save & Exit ───────────────────────────────────────────────────────────
@@ -126,6 +134,29 @@ export function GameLayout({
             {saveLabel}
           </button>
 
+          {/* Day 19F — Map panel toggle. Only shown when the page provides
+              a mapPanel slot, so other layouts (e.g. dashboard) don't get
+              a stray icon. */}
+          {mapPanel && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleMapPanel}
+              aria-label={mapPanelOpen ? "Close map" : "Open map"}
+              title={mapPanelOpen ? "Close map" : "Open map"}
+              style={{
+                color: mapPanelOpen
+                  ? "var(--color-primary)"
+                  : "color-mix(in srgb, var(--color-primary) 70%, transparent)",
+                backgroundColor: mapPanelOpen
+                  ? "color-mix(in srgb, var(--color-primary) 12%, transparent)"
+                  : "transparent",
+              }}
+            >
+              <MapIcon className="size-5" />
+            </Button>
+          )}
+
           {/* Codex */}
           <Link href="/game/codex" aria-label="Open codex">
             <Button
@@ -156,6 +187,62 @@ export function GameLayout({
 
       {/* ── Content row ─────────────────────────────────────────── */}
       <div className="relative flex flex-1 overflow-hidden">
+        {/* Day 19F — Left-side map panel. Slides in over the main panel
+            on mobile, takes its own column on md+. Mirrors the right-side
+            sidebar's translate-x animation pattern but anchored left. */}
+        {mapPanel && (
+          <>
+            {/* Mobile backdrop — separate from the right sidebar's so the
+                two can be toggled independently. */}
+            {mapPanelOpen && (
+              <div
+                className="fixed inset-0 z-10 bg-black/60 md:hidden"
+                onClick={() => setMapPanelOpen(false)}
+              />
+            )}
+            <aside
+              className={[
+                "fixed left-0 top-14 z-20 h-[calc(100vh-3.5rem)] w-80",
+                "md:relative md:top-auto md:z-auto md:h-auto",
+                "transition-transform duration-300 ease-in-out",
+                mapPanelOpen
+                  ? "translate-x-0 md:w-80 md:max-w-[320px] md:min-w-[280px]"
+                  : "-translate-x-full md:w-0 md:min-w-0 md:max-w-0 md:overflow-hidden",
+              ].join(" ")}
+              style={{
+                borderRight:     "1px solid var(--color-border)",
+                backgroundColor: "var(--color-bg)",
+              }}
+              aria-hidden={!mapPanelOpen}
+            >
+              {/* Mobile close row — mirrors the right sidebar's pattern. */}
+              <div
+                className="flex items-center justify-between px-3 py-2 md:hidden"
+                style={{ borderBottom: "1px solid var(--color-border)" }}
+              >
+                <span
+                  className="text-[10px] tracking-wider"
+                  style={{ color: "var(--color-muted)" }}
+                >
+                  WORLD MAP
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-6"
+                  onClick={() => setMapPanelOpen(false)}
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
+
+              <div className="h-full md:h-full">
+                {mapPanel}
+              </div>
+            </aside>
+          </>
+        )}
+
         {/* Main panel */}
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {mainPanel}

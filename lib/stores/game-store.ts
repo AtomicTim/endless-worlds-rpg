@@ -62,6 +62,10 @@ interface GameStore {
    *  store initialisation; setVerbosity() persists it back. */
   verbosity:              "terse" | "standard" | "rich";
 
+  // ── Day 19F — Map panel ────────────────────────────────────────────────────
+  /** Whether the three-tier WorldMap sidebar panel is currently open. */
+  mapPanelOpen:           boolean;
+
   setMasterState:          (state: MasterState) => void;
   addMessage:              (message: StoryMessage) => void;
   setProcessing:           (isProcessing: boolean, step?: string) => void;
@@ -85,6 +89,11 @@ interface GameStore {
   setTradeItems:           (items: Item[]) => void;
   /** Narrator response-length toggle. Persists to localStorage. */
   setVerbosity:            (v: "terse" | "standard" | "rich") => void;
+  /** Toggle the WorldMap sidebar panel open/closed. */
+  toggleMapPanel:          () => void;
+  /** Imperatively set the map panel state — used by the layout's mobile
+   *  backdrop and ESC handler. */
+  setMapPanelOpen:         (open: boolean) => void;
   /** Wipe all per-session state so a fresh session loads with a clean slate.
    *  Does NOT clear masterState — that is replaced by the caller right after.
    *  Use ONLY when switching to a different save slot. */
@@ -128,6 +137,7 @@ export const useGameStore = create<GameStore>((set) => ({
   dialogueModalCollapsed: false,
   currentTradeItems:      [],
   verbosity:              loadVerbosity(),
+  mapPanelOpen:           false,
 
   setMasterState:       (state) => set({ masterState: state }),
   addMessage:           (message) => set((s) => ({ messages: [...s.messages, message] })),
@@ -186,6 +196,8 @@ export const useGameStore = create<GameStore>((set) => ({
     saveVerbosity(v);
     set({ verbosity: v });
   },
+  toggleMapPanel:  () => set((s) => ({ mapPanelOpen: !s.mapPanelOpen })),
+  setMapPanelOpen: (open) => set({ mapPanelOpen: open }),
   clearSessionState: () => {
     // Day 19D — drop any cached regional bibles so a switch between save
     // slots never serves stale region data to a fresh campaign.
@@ -202,6 +214,7 @@ export const useGameStore = create<GameStore>((set) => ({
       currentTradeItems:      [],
       locationAssets:         [],
       lastNarrativeText:      null,
+      mapPanelOpen:           false,
     });
   },
   clearTransientState: () =>

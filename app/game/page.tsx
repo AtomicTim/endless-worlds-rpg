@@ -11,6 +11,7 @@ import { SceneArt } from "@/components/game/SceneArt";
 import { CharacterSheet } from "@/components/game/sidebar/CharacterSheet";
 import { InventoryPanel } from "@/components/game/sidebar/InventoryPanel";
 import { LogBook } from "@/components/game/sidebar/LogBook";
+import { WorldMap } from "@/components/game/WorldMap";
 import { AssetCategory, Genre } from "@/types/game";
 import type { MasterState } from "@/types/game";
 import { createClient } from "@/lib/supabase/client";
@@ -39,8 +40,9 @@ export default function GamePage() {
   const inputBarRef = useRef<InputBarHandle>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
 
-  const masterState   = useGameStore((s) => s.masterState);
-  const messages      = useGameStore((s) => s.messages);
+  const masterState    = useGameStore((s) => s.masterState);
+  const messages       = useGameStore((s) => s.messages);
+  const locationAssets = useGameStore((s) => s.locationAssets);
 
   const { submitAction, isProcessing, processingStep, buyItem, sellItem } = useGameLoop();
 
@@ -248,6 +250,16 @@ export default function GamePage() {
           <InventoryPanel onSubmit={(input) => { void submitAction(input); }} />
           <LogBook />
         </>
+      }
+      mapPanel={
+        masterState && masterState.world_graph ? (
+          <WorldMap
+            masterState={masterState}
+            worldGraph={masterState.world_graph}
+            locationAssets={locationAssets}
+            onNavigate={(input) => { void submitAction(input); }}
+          />
+        ) : null
       }
     />
   );

@@ -129,6 +129,17 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
       .join(", ");
   }
 
+  // SMALL FIX 2: include "Worth: N CCY" in the compact slot tooltip so the
+  // player sees value on hover without expanding the detail card.
+  function slotTooltip(item: Item | null): string {
+    if (!item) return "";
+    const lines = [item.name];
+    if (typeof item.value === "number" && item.value > 0) {
+      lines.push(`Worth: ${item.value} ${currencyLbl}`);
+    }
+    return lines.join("\n");
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
@@ -183,7 +194,7 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
                 onDragOver={(e) => { e.preventDefault(); setDragOverKey(key); }}
                 onDragLeave={() => setDragOverKey(null)}
                 onDrop={(e) => handleDropOnEquipSlot(e, key, accepts)}
-                title={item?.name ?? `${label} slot (empty)`}
+                title={item ? slotTooltip(item) : `${label} slot (empty)`}
               >
                 <span
                   style={{
@@ -248,7 +259,7 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
               onDragEnd={handleDragEnd}
               onMouseEnter={(e) => { if (!item) e.currentTarget.style.borderColor = "var(--color-muted)"; }}
               onMouseLeave={(e) => { if (!item) e.currentTarget.style.borderColor = "var(--color-border)"; }}
-              title={item?.name}
+              title={slotTooltip(item)}
             >
               {item && (
                 <div className="relative flex flex-col items-center justify-center">

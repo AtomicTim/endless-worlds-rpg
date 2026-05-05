@@ -636,8 +636,47 @@ export function buildNarratorUserPrompt(
     "══════════════════════════════",
   ];
 
+  // ── Day 17 — WORLD FACTS block from the seed ───────────────────────────────
+  // Establishes the named world / factions / locations as immutable facts BEFORE
+  // any per-asset constitution, so the narrator can reference the world by name
+  // even when the player hasn't visited the relevant assets yet.
+  const seed = metadata.world_seed;
+  const worldFactLines: string[] = [];
+  if (seed) {
+    worldFactLines.push(
+      "══════════════════════════════",
+      "WORLD FACTS (established before play began — immutable)",
+      `World: ${seed.world_name}${seed.world_tagline ? ` — ${seed.world_tagline}` : ""}`,
+    );
+    if (seed.factions?.length > 0) {
+      const factionLine = seed.factions
+        .map((f) => `${f.name} (${f.disposition})`)
+        .join(", ");
+      worldFactLines.push(`Factions: ${factionLine}`);
+    }
+    const seedLocs = [seed.starting_location, ...(seed.known_locations ?? [])]
+      .filter(Boolean)
+      .map((l) => l.name);
+    if (seedLocs.length > 0) {
+      worldFactLines.push(`Known locations: ${seedLocs.join(", ")}`);
+    }
+    worldFactLines.push("══════════════════════════════");
+  }
+
   // ── Established world assets (immutable facts) ─────────────────────────────
-  const assetsBlock = buildEstablishedAssetsBlock(locationAssets ?? []);
+  // Re-order locationAssets so the asset matching the current location is FIRST.
+  // This ensures the narrator reads the destination's constitution before
+  // anything else when describing a MOVE.
+  const orderedAssets = (() => {
+    const all = locationAssets ?? [];
+    if (all.length <= 1) return all;
+    const currentIdx = all.findIndex(
+      (a) => a.first_seen_location === world_state.current_location_id
+    );
+    if (currentIdx <= 0) return all;
+    return [all[currentIdx], ...all.slice(0, currentIdx), ...all.slice(currentIdx + 1)];
+  })();
+  const assetsBlock = buildEstablishedAssetsBlock(orderedAssets);
 
   // ── Scene context block ────────────────────────────────────────────────────
   const sceneLines: string[] = [];
@@ -660,6 +699,7 @@ export function buildNarratorUserPrompt(
   // ── Main body ──────────────────────────────────────────────────────────────
   const lines: string[] = [
     ...headerLines,
+    ...(worldFactLines.length > 0 ? ["", ...worldFactLines] : []),
     ...(assetsBlock ? ["", assetsBlock] : []),
     ...(sceneLines.length > 0 ? ["", ...sceneLines] : []),
     "",

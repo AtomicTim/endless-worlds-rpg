@@ -188,6 +188,81 @@ export interface NPCMemory {
 // Metadata
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Day 17 — World Seed (the world skeleton generated at character creation)
+// ---------------------------------------------------------------------------
+
+export interface SeedLocation {
+  /** Normalized slug used as both world_assets.asset_id and current_location_id. */
+  id:           string;
+  /** Display name e.g. "The Iron Gate Tavern". */
+  name:         string;
+  type:         "tavern" | "settlement" | "wilderness" | "dungeon"
+              | "market" | "stronghold" | "ruin" | "port" | "other";
+  /** 2-3 sentences of structural facts. */
+  description:  string;
+  /** Faction id (when one controls this place). */
+  faction_id?:  string;
+  /** Other location ids this connects to — used by the narrator for hints. */
+  connected_to?: string[];
+}
+
+export interface SeedNPC {
+  /** Normalized slug e.g. "innkeeper_marta". */
+  id:          string;
+  /** Display name — known from session start (no placeholder). */
+  name:        string;
+  /** Short role descriptor — "innkeeper", "merchant", "quest_giver", etc. */
+  role:        string;
+  /** Where the NPC is found. Matches a SeedLocation id. */
+  location_id: string;
+  /** 1-2 sentences capturing the NPC's voice and motivation. */
+  personality: string;
+  /** Quest hooks or world facts this NPC can share (used by the narrator). */
+  knows_about?: string[];
+  is_merchant?: boolean;
+}
+
+export interface SeedQuest {
+  /** Internal label — the player never sees this. */
+  title:           string;
+  /** The opening hint the narrator should plant in the first scene. */
+  hook:            string;
+  /** Who or what the conflict involves. */
+  antagonist:      string;
+  /** What resolving the quest requires. */
+  goal:            string;
+  /** 3-5 hints to surface naturally over time. */
+  breadcrumbs:     string[];
+  /** What constitutes completing the quest. */
+  win_condition:   string;
+}
+
+export interface SeedFaction {
+  id:           string;
+  name:         string;
+  disposition: "ally" | "neutral" | "enemy";
+  /** Locations this faction controls — free text or comma-separated names. */
+  territory:    string;
+}
+
+export interface WorldSeed {
+  /** World identity. */
+  world_name:        string;
+  /** One evocative sentence describing the world. */
+  world_tagline:     string;
+  /** Fully pre-seeded starting area. */
+  starting_location: SeedLocation;
+  /** 2-3 additional named locations connected to the start. */
+  known_locations:   SeedLocation[];
+  /** 3+ key NPCs in the starting area. */
+  key_npcs:          SeedNPC[];
+  /** Sealed main quest the player gradually discovers. */
+  main_quest:        SeedQuest;
+  /** 2+ world factions. */
+  factions:          SeedFaction[];
+}
+
 export interface Metadata {
   genre:       Genre;
   tone:        string;
@@ -195,6 +270,8 @@ export interface Metadata {
   session_id:  string;
   created_at:  string;
   last_played: string;
+  /** Day 17 — pre-generated world skeleton, immutable for the session. */
+  world_seed?: WorldSeed;
 }
 
 // ---------------------------------------------------------------------------

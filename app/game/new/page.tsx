@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Genre } from "@/types/game";
 import type { Attributes } from "@/types/game";
+import { generateWorldSeed } from "@/lib/game/world-seed-generator";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -273,6 +274,7 @@ export default function NewGamePage() {
   const [hoveredAttr, setHoveredAttr]             = useState<keyof Attributes | null>(null);
   const [selectedBackground, setSelectedBackground] = useState<string | null>(null);
   const [isLoading, setIsLoading]                 = useState(false);
+  const [loadingMessage, setLoadingMessage]       = useState("Creating character...");
   const [submitError, setSubmitError]             = useState("");
 
   const genre      = GENRES.find((g) => g.id === selectedGenre) ?? null;
@@ -328,9 +330,11 @@ export default function NewGamePage() {
   async function handleSubmit() {
     if (!selectedGenre || !selectedBackground || remainingPoints !== 0) return;
     setIsLoading(true);
+    setLoadingMessage("Creating character...");
     setSubmitError("");
 
     try {
+      // ── Step 1: create the session (default starting location, empty world). ──
       const res = await fetch("/api/game/new", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -346,6 +350,33 @@ export default function NewGamePage() {
         const data = await res.json() as { error?: string };
         setSubmitError(data.error ?? "Failed to create game. Please try again.");
         return;
+      }
+
+      const { sessionId } = await res.json() as { sessionId: string };
+
+      // ── Step 2: generate the world skeleton (Day 17). ───────────────────────
+      // Separate Claude call — produces locations, NPCs, main quest, factions.
+      // Falls back to a hardcoded genre seed on any failure so the wizard
+      // never blocks on AI errors.
+      setLoadingMessage("Generating your world...");
+      const worldSeed = await generateWorldSeed(
+        selectedGenre,
+        characterName.trim(),
+        selectedBackground
+      );
+
+      // ── Step 3: persist seed + pre-populate world_assets server-side. ──────
+      setLoadingMessage("Establishing world facts...");
+      const applyRes = await fetch("/api/game/apply-world-seed", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ sessionId, worldSeed }),
+      });
+      if (!applyRes.ok) {
+        // Non-fatal — the player can still play with the empty default world,
+        // but warn so the issue is visible.
+        const data = await applyRes.json() as { error?: string };
+        console.warn("[wizard] apply-world-seed failed:", data.error);
       }
 
       router.push("/game");
@@ -689,7 +720,7 @@ export default function NewGamePage() {
                 className="mt-6 text-center text-sm font-bold tracking-widest"
                 style={{ color: "var(--color-primary)" }}
               >
-                Entering the {worldName}
+                {loadingMessage}
                 <span className="cursor-blink">▋</span>
               </p>
             )}

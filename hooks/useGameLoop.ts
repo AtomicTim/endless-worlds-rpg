@@ -9,6 +9,7 @@ import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory, upda
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
 import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, updateWorldAssetSvg, updateAssetNameRevealed } from "@/lib/game/codex";
 import { generateArt, generateNpcPortrait, getSceneType } from "@/lib/game/art-generator";
+import { generateLocationStub } from "@/lib/game/location-stub-generator";
 import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { Item, MasterState, ParsedAction, ResolutionResult, StoredMessage, WorldAsset } from "@/types/game";
 
@@ -440,6 +441,51 @@ export function useGameLoop() {
       if (resolution.outcome_type === "MOVE_SUCCESS") {
         const newLocationId = updatedState.world_state.current_location_id;
         const artSessionId  = updatedState.metadata.session_id;
+
+        // Day 17 — generate a location stub when MOVING to a place that has no
+        // LOCATION asset yet. Fire-and-forget: the stub may not arrive before
+        // the narrator runs THIS turn, but it locks in the canonical name /
+        // type / faction so all FUTURE visits see consistent established facts.
+        // saveWorldAsset uses ignoreDuplicates, so racing narrator codex_entries
+        // never overwrite each other — first write wins.
+        {
+          const liveAssets = useGameStore.getState().locationAssets;
+          const stubAssetId = `location_${newLocationId}`;
+          const exists = liveAssets.find(
+            (a) =>
+              a.category === AssetCategory.LOCATION &&
+              (a.id === stubAssetId || a.first_seen_location === newLocationId)
+          );
+          if (!exists) {
+            void generateLocationStub(
+              parsedAction.primary_target ?? newLocationId,
+              state.world_state.current_location_id,
+              state.metadata.world_seed,
+              state.metadata.genre
+            ).then(async (stub) => {
+              const asset: WorldAsset = {
+                id:                  `location_${stub.id}`,
+                category:            AssetCategory.LOCATION,
+                name:                stub.name,
+                constitution: {
+                  physical_description: stub.description,
+                  ...(stub.faction_id ? { faction_affiliation: stub.faction_id } : {}),
+                  notes: `type=${stub.type}`,
+                },
+                significance:        "NOTABLE",
+                first_seen_location: stub.id,
+                session_id:          artSessionId,
+                name_known:          true,
+                created_at:          new Date().toISOString(),
+              };
+              await saveWorldAsset(artSessionId, asset);
+              const refreshed = await getWorldAssetsForLocation(artSessionId, newLocationId);
+              useGameStore.getState().setLocationAssets(refreshed);
+              console.log(`[GameLoop/7] Location stub saved: ${stub.name} (${stub.id})`);
+            });
+          }
+        }
+
         const cached = useGameStore.getState().artCache[newLocationId];
         if (!cached) {
           const genre = String(updatedState.metadata.genre);
@@ -878,6 +924,10 @@ export function useGameLoop() {
               : null
           );
         } else if (!isDialogueAction) {
+          // SMALL FIX 1: covers EVERY non-DIALOGUE action. MOVE, ATTACK,
+          // EXAMINE, INTERACT, USE_ITEM, CUSTOM (e.g. "I leave and find
+          // someone else") all set isDialogueAction=false → modal clears.
+          // The player walking away ends the conversation, as it should.
           store.clearDialogueOptions();
         }
       }

@@ -11,6 +11,7 @@ import type {
   ParsedAction,
   ResolutionResult,
   WorldAsset,
+  WorldConsistencyDocument,
 } from "@/types/game";
 
 const FALLBACK_RESPONSE: NarratorResponse = {
@@ -34,12 +35,14 @@ export async function POST(request: NextRequest) {
 
   // ── Body validation ────────────────────────────────────────────────────────
   let body: {
-    resolutionResult?:  ResolutionResult;
-    masterState?:       MasterState;
-    lastNarrativeText?: string;
-    action?:            ParsedAction;
-    locationAssets?:    WorldAsset[];
-    verbosity?:         "terse" | "standard" | "rich";
+    resolutionResult?:    ResolutionResult;
+    masterState?:         MasterState;
+    lastNarrativeText?:   string;
+    action?:              ParsedAction;
+    locationAssets?:      WorldAsset[];
+    verbosity?:           "terse" | "standard" | "rich";
+    /** Day 19A — World Consistency Document. Optional for backward compat. */
+    world_consistency?:   WorldConsistencyDocument;
   };
   try {
     body = await request.json();
@@ -47,7 +50,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { resolutionResult, masterState, lastNarrativeText, action, locationAssets, verbosity } = body;
+  const {
+    resolutionResult,
+    masterState,
+    lastNarrativeText,
+    action,
+    locationAssets,
+    verbosity,
+    world_consistency,
+  } = body;
   if (!resolutionResult || !masterState) {
     return NextResponse.json(
       { error: "Missing resolutionResult or masterState" },
@@ -67,13 +78,21 @@ export async function POST(request: NextRequest) {
   // callers keep behaving identically.
   const validVerbosity: "terse" | "standard" | "rich" =
     verbosity === "terse" || verbosity === "rich" ? verbosity : "standard";
-  const systemPrompt = buildNarratorSystemPrompt(masterState, validVerbosity);
+
+  // Day 19A — WCD precedence: explicit body field wins, then the embedded
+  // copy in masterState.metadata.world_consistency. Old saves with neither
+  // produce undefined and the prompt builders behave as before.
+  const wcd: WorldConsistencyDocument | undefined =
+    world_consistency ?? masterState.metadata.world_consistency;
+
+  const systemPrompt = buildNarratorSystemPrompt(masterState, validVerbosity, wcd);
   const userPrompt   = buildNarratorUserPrompt(
     resolutionResult,
     masterState,
     lastNarrativeText,
     action,
-    safeAssets
+    safeAssets,
+    wcd,
   );
 
   // Instantiate per-request so the apiKey is read from process.env at call time

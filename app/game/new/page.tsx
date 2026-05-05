@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Genre } from "@/types/game";
-import type { Attributes } from "@/types/game";
+import type { Attributes, WorldConsistencyDocument } from "@/types/game";
 import { generateWorldSeed } from "@/lib/game/world-seed-generator";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -354,23 +354,57 @@ export default function NewGamePage() {
 
       const { sessionId } = await res.json() as { sessionId: string };
 
-      // ── Step 2: generate the world skeleton (Day 17). ───────────────────────
-      // Separate Claude call — produces locations, NPCs, main quest, factions.
-      // Falls back to a hardcoded genre seed on any failure so the wizard
-      // never blocks on AI errors.
+      // ── Step 2 (Day 19A): generate the World Consistency Document. ─────────
+      // Layer 0 of the new generation architecture. WCD is a separate AI
+      // call from the world seed; it produces the absolute facts of this
+      // world (landmarks, factions, rules, atmosphere) that every later
+      // AI prompt will be constrained by. Failure here is non-fatal —
+      // the seed generation just runs without WCD context.
+      setLoadingMessage("Establishing world laws...");
+      let wcd: WorldConsistencyDocument | undefined;
+      try {
+        const wcdRes = await fetch("/api/game/generate-wcd", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({
+            genre:            selectedGenre,
+            character_name:   characterName.trim(),
+            character_class:  selectedBackground,
+          }),
+        });
+        if (wcdRes.ok) {
+          const data = await wcdRes.json() as { wcd?: WorldConsistencyDocument };
+          wcd = data.wcd;
+        } else {
+          const data = await wcdRes.json() as { error?: string };
+          console.warn("[wizard] generate-wcd failed (non-fatal):", data.error);
+        }
+      } catch (err) {
+        console.warn("[wizard] generate-wcd threw (non-fatal):", err);
+      }
+
+      // ── Step 3: generate the world skeleton (Day 17, WCD-constrained when
+      // available). Separate Claude call — produces locations, NPCs, main
+      // quest, factions. Falls back to a hardcoded genre seed on any failure
+      // so the wizard never blocks on AI errors.
       setLoadingMessage("Generating your world...");
       const worldSeed = await generateWorldSeed(
         selectedGenre,
         characterName.trim(),
-        selectedBackground
+        selectedBackground,
+        wcd,
       );
 
-      // ── Step 3: persist seed + pre-populate world_assets server-side. ──────
+      // ── Step 4: persist seed + WCD + pre-populate world_assets. ────────────
       setLoadingMessage("Establishing world facts...");
       const applyRes = await fetch("/api/game/apply-world-seed", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ sessionId, worldSeed }),
+        body:    JSON.stringify({
+          sessionId,
+          worldSeed,
+          ...(wcd ? { wcd } : {}),
+        }),
       });
       if (!applyRes.ok) {
         // Non-fatal — the player can still play with the empty default world,

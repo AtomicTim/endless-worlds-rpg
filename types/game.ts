@@ -241,6 +241,50 @@ export interface NPCMemory {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
+// Day 19A — World Consistency Document (WCD)
+// Layer 0: Generated once, injected everywhere, never modified.
+// The constitution of the world — absolute facts every AI call must obey.
+// ---------------------------------------------------------------------------
+
+export interface WorldLandmark {
+  id:                 string;
+  name:               string;
+  type:               "settlement" | "stronghold" | "wilderness" | "dungeon" | "ruin" | "geographic";
+  grid_position:      { x: number; y: number };
+  /** How widely known the landmark is — drives which NPCs may reference it. */
+  known_by:           "everyone" | "locals" | "scholars";
+  /** What common folk know — 1-2 sentences. */
+  public_description: string;
+  is_region_origin:   boolean;
+  region_id?:         string;
+}
+
+export interface WorldFaction {
+  id:                    string;
+  name:                  string;
+  /** Free text — e.g. "controls the northern forests". */
+  territory:             string;
+  /** Public reputation — 1 sentence. */
+  public_reputation:     string;
+  disposition_to_player: "allied" | "neutral" | "hostile" | "unknown";
+}
+
+export interface WorldConsistencyDocument {
+  world_name:    string;
+  world_tagline: string;
+  /** 1-2 sentences of tonal truth. */
+  atmosphere:    string;
+  landmarks:     WorldLandmark[];
+  factions:      WorldFaction[];
+  /** Universal truths — plain sentences. */
+  world_rules:   string[];
+  /** Total grid width/height (40 means 40x40). */
+  grid_size:     number;
+  /** Starting region centre (typically {x:0, y:0}). */
+  world_origin:  { x: number; y: number };
+}
+
+// ---------------------------------------------------------------------------
 // Day 17 — World Seed (the world skeleton generated at character creation)
 // ---------------------------------------------------------------------------
 
@@ -330,6 +374,10 @@ export interface Metadata {
   last_played: string;
   /** Day 17 — pre-generated world skeleton, immutable for the session. */
   world_seed?: WorldSeed;
+  /** Day 19A — World Consistency Document. Layer 0 of the new generation
+   *  architecture: generated once at character creation, injected as the
+   *  first block of every AI prompt, and never modified afterwards. */
+  world_consistency?: WorldConsistencyDocument;
 }
 
 // ---------------------------------------------------------------------------

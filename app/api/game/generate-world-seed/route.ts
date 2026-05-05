@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { Genre } from "@/types/game";
-import type { WorldSeed } from "@/types/game";
+import type { WorldConsistencyDocument, WorldSeed } from "@/types/game";
 import { fallbackWorldSeed } from "@/lib/game/world-seed-generator-fallback";
+import { formatWcdBlock } from "@/lib/game/prompt-builder";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -145,6 +146,10 @@ interface RequestBody {
   genre?:               Genre;
   characterName?:       string;
   characterBackground?: string;
+  /** Day 19A — World Consistency Document. When provided, the seed
+   *  generation is constrained to be consistent with the WCD's landmarks,
+   *  factions, and rules. */
+  wcd?:                 WorldConsistencyDocument;
 }
 
 export async function POST(request: NextRequest) {
@@ -161,7 +166,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { genre, characterName, characterBackground } = body;
+  const { genre, characterName, characterBackground, wcd } = body;
   if (!genre || !characterName || !characterBackground) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
@@ -169,13 +174,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid genre" }, { status: 400 });
   }
 
+  // Day 19A — when a WCD is supplied, prepend it to the user prompt so the
+  // seed generation respects landmarks, factions, and world rules.
+  const wcdPrefix = wcd ? `${formatWcdBlock(wcd)}\n\n` : "";
+  const userPrompt = wcdPrefix + buildUserPrompt(genre, characterName, characterBackground);
+
   try {
     const message = await anthropic.messages.create({
       model:      "claude-sonnet-4-20250514",
       max_tokens: 4096,
       system:     buildSystemPrompt(genre),
       messages: [
-        { role: "user", content: buildUserPrompt(genre, characterName, characterBackground) },
+        { role: "user", content: userPrompt },
       ],
     });
 

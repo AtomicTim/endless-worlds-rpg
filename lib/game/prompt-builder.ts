@@ -5,6 +5,7 @@ import type {
   ResolutionResult,
   WorldAsset,
   WorldAssetConstitution,
+  WorldConsistencyDocument,
 } from "@/types/game";
 import { getEquippedLoadout, getNpcDisposition, findNpcInRegistry } from "@/lib/game/state-utils";
 import { GENRE_CONFIGS } from "@/lib/game/genre-config";
@@ -156,6 +157,44 @@ export function getNarratorPersonality(genre: Genre): string {
  */
 export type Verbosity = "terse" | "standard" | "rich";
 
+/**
+ * Day 19A — Format the World Consistency Document as a prompt block.
+ * Exported so /api/game/generate-world-seed can prepend the same block
+ * verbatim to its own prompt (Step 4 of Day 19A).
+ *
+ * Returns "" when wcd is undefined so callers can unconditionally
+ * concatenate without null checks.
+ */
+export function formatWcdBlock(wcd: WorldConsistencyDocument | undefined): string {
+  if (!wcd) return "";
+  const sep = "═══════════════════════════════════════════════════════════════";
+  const lines: string[] = [];
+  lines.push(sep);
+  lines.push("WORLD CONSISTENCY DOCUMENT — ABSOLUTE FACTS");
+  lines.push(sep);
+  lines.push(`World: ${wcd.world_name} — ${wcd.world_tagline}`);
+  lines.push(wcd.atmosphere);
+  lines.push("");
+  lines.push("Landmarks (every inhabitant knows these exist):");
+  for (const lm of wcd.landmarks ?? []) {
+    lines.push(`- ${lm.name} (${lm.known_by}): ${lm.public_description}`);
+  }
+  lines.push("");
+  lines.push("Factions:");
+  for (const f of wcd.factions ?? []) {
+    lines.push(`- ${f.name}: ${f.territory}. ${f.public_reputation}. Disposition to player: ${f.disposition_to_player}.`);
+  }
+  lines.push("");
+  lines.push("World Rules (universal truths — never contradict these):");
+  for (const r of wcd.world_rules ?? []) {
+    lines.push(`- ${r}`);
+  }
+  lines.push("");
+  lines.push("YOU MUST NEVER contradict this document. These facts exist regardless of what the player has discovered. NPCs know about landmarks according to their known_by level: everyone knows 'everyone' landmarks, only locals know 'locals' ones, only scholars know 'scholars' ones.");
+  lines.push(sep);
+  return lines.join("\n");
+}
+
 const VERBOSITY_BLOCKS: Record<Verbosity, string> = {
   terse:    `\n\nRESPONSE LENGTH — TERSE:
 Routine actions: 1-2 sentences. Movement: 1-2 sentences.
@@ -170,7 +209,11 @@ Full atmospheric prose. NPC: 4-6 sentences.
 New location: 6-8 sentences. Major moments: 8-12.`,
 };
 
-export function buildNarratorSystemPrompt(state: MasterState, verbosity: Verbosity = "standard"): string {
+export function buildNarratorSystemPrompt(
+  state: MasterState,
+  verbosity: Verbosity = "standard",
+  wcd?: WorldConsistencyDocument
+): string {
   const { genre, tone } = state.metadata;
   const personality = getNarratorPersonality(genre);
   const soundList   = SOUND_IDS.join(" | ");
@@ -178,7 +221,13 @@ export function buildNarratorSystemPrompt(state: MasterState, verbosity: Verbosi
     .map((t) => `${t.name} (${t.type}, ${t.rarity})`)
     .join(", ");
 
-  return `CRITICAL OUTPUT FIELD — revealed_npc_names:
+  // Day 19A — World Consistency Document is the absolute first block.
+  // Empty string when no WCD is set yet (old saves, fresh sessions before
+  // generate-wcd has run). Trailing newline ensures the next block is
+  // visually separated.
+  const wcdPrefix = wcd ? `${formatWcdBlock(wcd)}\n\n` : "";
+
+  return `${wcdPrefix}CRITICAL OUTPUT FIELD — revealed_npc_names:
 When an NPC says their name in this response — in any form
 ('I am X', 'My name is X', 'Call me X', 'They call me X', 'The name's X',
 'They call me X around here', or any equivalent self-introduction) —
@@ -598,8 +647,14 @@ export function buildNarratorUserPrompt(
   state: MasterState,
   lastNarrativeText?: string | null,
   action?: ParsedAction | null,
-  locationAssets?: WorldAsset[] | null
+  locationAssets?: WorldAsset[] | null,
+  // Day 19A — WCD is consumed by buildNarratorSystemPrompt; accepted here
+  // for symmetric plumbing through the route. Reserved for future use
+  // (e.g. landmark hints in turn-specific prompts). Reference it via
+  // void to silence unused-var lint without disabling the rule.
+  wcd?: WorldConsistencyDocument
 ): string {
+  void wcd;
   const { metadata, player_state, world_state, log_book } = state;
   const { name, background, attributes, health, max_health, sanity, max_sanity } = player_state;
 

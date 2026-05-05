@@ -300,7 +300,11 @@ export async function narrateAction(
   lastNarrativeText?: string | null,
   action?: ParsedAction | null,
   locationAssets?: WorldAsset[] | null,
-  verbosity?: "terse" | "standard" | "rich"
+  verbosity?: "terse" | "standard" | "rich",
+  // Day 19A — Optional WCD; the route also reads it from
+  // state.metadata.world_consistency, but threading it explicitly makes
+  // the call site self-documenting and lets future callers override it.
+  wcd?: import("@/types/game").WorldConsistencyDocument
 ): Promise<NarratorResponse> {
   let response: Response;
   try {
@@ -314,6 +318,7 @@ export async function narrateAction(
         ...(action ? { action } : {}),
         ...(locationAssets && locationAssets.length > 0 ? { locationAssets } : {}),
         ...(verbosity ? { verbosity } : {}),
+        ...(wcd ? { world_consistency: wcd } : {}),
       }),
     });
   } catch (err) {

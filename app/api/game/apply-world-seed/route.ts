@@ -7,6 +7,7 @@ import type {
   SeedLocation,
   SeedNPC,
   WorldAsset,
+  WorldConsistencyDocument,
   WorldGraph,
   WorldNode,
   WorldSeed,
@@ -31,6 +32,10 @@ import type {
 interface RequestBody {
   sessionId?: string;
   worldSeed?: WorldSeed;
+  /** Day 19A — World Consistency Document. When provided, gets persisted
+   *  into masterState.metadata.world_consistency as part of the same
+   *  atomic master_state patch that writes the world_seed. */
+  wcd?:       WorldConsistencyDocument;
 }
 
 function locationToAsset(
@@ -97,7 +102,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { sessionId, worldSeed } = body;
+  const { sessionId, worldSeed, wcd } = body;
   if (!sessionId || !worldSeed) {
     return NextResponse.json({ error: "Missing sessionId or worldSeed" }, { status: 400 });
   }
@@ -243,11 +248,13 @@ export async function POST(request: NextRequest) {
   };
 
   // ── 5. Patch master_state with seed + graph + starting location ────────────
+  // Day 19A — also persist the WCD into metadata when supplied.
   const patched: MasterState = {
     ...current,
     metadata: {
       ...current.metadata,
       world_seed: worldSeed,
+      ...(wcd ? { world_consistency: wcd } : {}),
     },
     world_state: {
       ...current.world_state,
@@ -264,9 +271,11 @@ export async function POST(request: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: updateErr } = await (supabase.from("game_sessions") as any)
     .update({
-      master_state: patched as unknown as Json,
-      world_seed:   worldSeed as unknown as Json,
-      world_graph:  worldGraph as unknown as Json,
+      master_state:       patched as unknown as Json,
+      world_seed:         worldSeed as unknown as Json,
+      world_graph:        worldGraph as unknown as Json,
+      // Day 19A — mirror to dedicated column too (migration 009).
+      ...(wcd ? { world_consistency: wcd as unknown as Json } : {}),
     })
     .eq("id", sessionId)
     .eq("user_id", user.id);

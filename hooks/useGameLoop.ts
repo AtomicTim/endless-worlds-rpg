@@ -527,6 +527,10 @@ export function useGameLoop() {
 
       // Day 18 — read player's verbosity preference from the store.
       const currentVerbosity = useGameStore.getState().verbosity;
+      // Day 19A — pull the World Consistency Document straight from state
+      // metadata so every narrator call carries the absolute facts. Old
+      // saves without a WCD pass undefined — narrate route handles it.
+      const wcd = narratorState.metadata.world_consistency;
 
       let narratorResponse;
       try {
@@ -536,7 +540,8 @@ export function useGameLoop() {
           lastNarrative,
           parsedAction,
           locationAssets,
-          currentVerbosity
+          currentVerbosity,
+          wcd,
         );
       } catch {
         // Narrator failed — still save the resolved state so the action sticks.

@@ -1,5 +1,5 @@
 import { Genre } from "@/types/game";
-import type { WorldSeed } from "@/types/game";
+import type { WorldConsistencyDocument, WorldSeed } from "@/types/game";
 import { fallbackWorldSeed } from "@/lib/game/world-seed-generator-fallback";
 
 /**
@@ -17,13 +17,22 @@ import { fallbackWorldSeed } from "@/lib/game/world-seed-generator-fallback";
 export async function generateWorldSeed(
   genre: Genre,
   characterName: string,
-  characterBackground: string
+  characterBackground: string,
+  // Day 19A — Optional WCD. When provided, the route prepends it to the
+  // generation prompt so the resulting WorldSeed respects the WCD's
+  // landmarks, factions, and rules.
+  wcd?: WorldConsistencyDocument
 ): Promise<WorldSeed> {
   try {
     const response = await fetch("/api/game/generate-world-seed", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ genre, characterName, characterBackground }),
+      body:    JSON.stringify({
+        genre,
+        characterName,
+        characterBackground,
+        ...(wcd ? { wcd } : {}),
+      }),
     });
 
     if (!response.ok) {

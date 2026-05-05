@@ -561,6 +561,12 @@ export interface Metadata {
    *  game_sessions.world_bible (jsonb column) for analytics + Phase 2
    *  region expansion lookups. */
   main_quest?: MainQuest;
+  /** Day 19D — Pre-generated WorldBible. Mirrored from the
+   *  game_sessions.world_bible jsonb column so the game loop can match
+   *  WORLD_EXPLORE destinations against adjacent_regions without an extra
+   *  DB roundtrip per move. The bible itself never changes after Day 19B
+   *  applied it; only world_state and visited_locations evolve. */
+  world_bible?: WorldBible;
 }
 
 // ---------------------------------------------------------------------------

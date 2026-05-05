@@ -10,8 +10,15 @@ import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/
 import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, normalizeLocationId, updateAssetNameRevealed } from "@/lib/game/codex";
 import { generateLocationStub } from "@/lib/game/location-stub-generator";
 import { findAmbientResponse } from "@/lib/game/ambient-objects";
+import {
+  matchRegionOutline,
+  getCachedRegionalBible,
+  cacheRegionalBible,
+  pregenerateRegionalBible,
+  invalidateRegionalBibleCache,
+} from "@/lib/game/regional-bible-cache";
 import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
-import type { Item, MasterState, ParsedAction, ResolutionResult, StoredMessage, WorldAsset, WorldNode } from "@/types/game";
+import type { Item, MasterState, ParsedAction, RegionBible, RegionOutline, ResolutionResult, StoredMessage, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
 
 const MAX_INPUT_LENGTH  = 500;
 const AUTO_SAVE_INTERVAL = 10;
@@ -539,6 +546,169 @@ export function useGameLoop() {
         }
       }
 
+      // ── 4d. Day 19D — WORLD_EXPLORE → Regional Bible expansion ─────────────
+      // Before the narrator runs, see if this WORLD_EXPLORE matches an
+      // outline from the WorldBible's adjacent_regions. If so, generate
+      // (or fetch from cache) a full RegionBible, apply it on the server
+      // side, and swap the player into the new region's settlement node.
+      // The narrator then runs with ARRIVING context describing the real
+      // settlement instead of a stub-named placeholder.
+      //
+      // Falls through to the legacy stub-gen path (step 7-C) when:
+      //   - the move isn't WORLD_EXPLORE
+      //   - the world_bible isn't in metadata (legacy save)
+      //   - no outline matched (truly unknown destination)
+      //   - the network fetch fails (graceful degrade)
+      const moveTypeForRegion =
+        typeof resolution.narrative_context.move_type === "string"
+          ? resolution.narrative_context.move_type
+          : null;
+      if (
+        moveTypeForRegion === "WORLD_EXPLORE" &&
+        updatedState.world_graph &&
+        updatedState.metadata.world_bible
+      ) {
+        const wb        = updatedState.metadata.world_bible;
+        const wcdRegion = updatedState.metadata.world_consistency;
+        const target    =
+          parsedAction.primary_target ??
+          (typeof resolution.narrative_context.destination_hint === "string"
+            ? resolution.narrative_context.destination_hint
+            : null);
+        const matchedOutline = matchRegionOutline(wb.adjacent_regions, target);
+
+        if (matchedOutline && wcdRegion) {
+          const sessionId = updatedState.metadata.session_id;
+          const fromId    = String(
+            resolution.narrative_context.from_node_id ??
+              updatedState.world_graph.current_node_id
+          );
+          const fromNode  = updatedState.world_graph.nodes[fromId];
+          const fromName  = fromNode?.name ?? wb.starting_region.name;
+
+          // Status line in the feed so the player knows the world is
+          // expanding under them. Removed as soon as application returns.
+          const enteringMsg = makeMessage(
+            "SYSTEM",
+            `Entering ${matchedOutline.name}...`
+          );
+          store.addMessage(enteringMsg);
+          store.setProcessing(true, `Entering ${matchedOutline.name}...`);
+
+          // Names of every region the player already knows about — keeps
+          // the model from re-using one when fleshing out a new outline.
+          const existingRegionNames = [
+            wb.starting_region.name,
+            ...wb.adjacent_regions
+              .filter((r) => r.id !== matchedOutline.id)
+              .map((r) => r.name),
+          ];
+
+          // Cache hit short-circuits the AI call entirely (~5s saved).
+          const cached = getCachedRegionalBible(sessionId, matchedOutline.id);
+          let regionBible: RegionBible | null = cached;
+
+          if (!regionBible) {
+            try {
+              const genRes = await fetch("/api/game/generate-regional-bible", {
+                method:  "POST",
+                headers: { "Content-Type": "application/json" },
+                body:    JSON.stringify({
+                  session_id:            sessionId,
+                  outline:               matchedOutline,
+                  origin_region_name:    fromName,
+                  direction_from_origin: matchedOutline.direction_from_start,
+                  genre:                 updatedState.metadata.genre,
+                  wcd:                   wcdRegion,
+                  existing_region_names: existingRegionNames,
+                }),
+              });
+              if (genRes.ok) {
+                const data = await genRes.json() as { bible?: RegionBible };
+                regionBible = data.bible ?? null;
+                if (regionBible) {
+                  cacheRegionalBible(sessionId, matchedOutline.id, regionBible);
+                }
+              } else {
+                console.warn(
+                  "[GameLoop/4d] generate-regional-bible failed:",
+                  await genRes.text()
+                );
+              }
+            } catch (err) {
+              console.warn("[GameLoop/4d] generate-regional-bible threw:", err);
+            }
+          } else {
+            console.log(
+              `[GameLoop/4d] Cache hit for region: ${matchedOutline.name}`
+            );
+          }
+
+          if (regionBible) {
+            try {
+              const applyRes = await fetch("/api/game/apply-regional-bible", {
+                method:  "POST",
+                headers: { "Content-Type": "application/json" },
+                body:    JSON.stringify({
+                  session_id:           sessionId,
+                  bible:                regionBible,
+                  origin_node_id:       fromId,
+                  existing_world_graph: updatedState.world_graph,
+                }),
+              });
+              if (applyRes.ok) {
+                const applied = await applyRes.json() as {
+                  starting_node_id?:    string;
+                  updated_world_graph?: WorldGraph;
+                };
+                if (applied.starting_node_id && applied.updated_world_graph) {
+                  // Swap the player into the new settlement node and replace
+                  // the graph in one step so the narrator's ARRIVING context
+                  // reflects the real region from the very first beat.
+                  const newGraph = {
+                    ...applied.updated_world_graph,
+                    current_node_id: applied.starting_node_id,
+                  };
+                  updatedState = {
+                    ...updatedState,
+                    world_state: {
+                      ...updatedState.world_state,
+                      current_location_id: applied.starting_node_id,
+                      current_node_id:     applied.starting_node_id,
+                      visited_locations: Array.from(
+                        new Set([
+                          ...(updatedState.world_state.visited_locations ?? []),
+                          applied.starting_node_id,
+                        ])
+                      ),
+                    },
+                    world_graph: newGraph,
+                  };
+                  // Refresh locationAssets for the new settlement node so
+                  // later steps (narrator, highlight) see real Tier 1 data.
+                  void getWorldAssetsForLocation(sessionId, applied.starting_node_id).then(
+                    (assets) => useGameStore.getState().setLocationAssets(assets)
+                  );
+                  console.log(
+                    `[GameLoop/4d] RegionBible applied: ${regionBible.name} → ${applied.starting_node_id}`
+                  );
+                }
+              } else {
+                console.warn(
+                  "[GameLoop/4d] apply-regional-bible failed:",
+                  await applyRes.text()
+                );
+              }
+            } catch (err) {
+              console.warn("[GameLoop/4d] apply-regional-bible threw:", err);
+            }
+          }
+          // Either way, the "Entering..." status is no longer accurate —
+          // narration takes over from here.
+          store.setProcessing(true, "Narrating...");
+        }
+      }
+
       // ── 5. Narrate ─────────────────────────────────────────────────────────
       store.setProcessing(true, "Narrating...");
       const lastNarrative      = useGameStore.getState().lastNarrativeText;
@@ -648,6 +818,51 @@ export function useGameLoop() {
         )
       );
       store.setLastNarrativeText(narratorResponse.narrative_text);
+
+      // ── 6b. Day 19D — Background pre-generation of adjacent regions ────────
+      // When the narrator's response hints toward an undiscovered region
+      // (mentions its direction or its name), kick off a void fetch to
+      // warm the regional bible cache. By the time the player actually
+      // crosses into that region, the bible is usually ready and the
+      // "Entering ${name}..." indicator never appears. Best-effort —
+      // failures are silently ignored, and a real WORLD_EXPLORE will
+      // still fall back to a synchronous fetch with a visible spinner.
+      const wbForPregen   = updatedState.metadata.world_bible;
+      const wcdForPregen  = updatedState.metadata.world_consistency;
+      const sessionForPregen = updatedState.metadata.session_id;
+      if (
+        wbForPregen &&
+        wcdForPregen &&
+        narratorResponse.narrative_text &&
+        wbForPregen.adjacent_regions.length > 0
+      ) {
+        const narrText = narratorResponse.narrative_text.toLowerCase();
+        const existingNames = wbForPregen.adjacent_regions.map((r) => r.name);
+        const originName = (() => {
+          const g = updatedState.world_graph;
+          const id = g?.current_node_id ?? updatedState.world_state.current_node_id ?? "";
+          return g?.nodes[id]?.name ?? wbForPregen.starting_region.name;
+        })();
+        for (const outline of wbForPregen.adjacent_regions) {
+          const dir   = (outline.direction_from_start ?? "").toLowerCase();
+          const name  = outline.name.toLowerCase();
+          const hinted =
+            (dir.length > 2 && narrText.includes(dir)) ||
+            (name.length > 3 && narrText.includes(name));
+          if (!hinted) continue;
+          // existingRegionNames excludes the outline itself so the model
+          // doesn't get confused into reusing its own placeholder name.
+          pregenerateRegionalBible({
+            sessionId:           sessionForPregen,
+            outline,
+            originRegionName:    originName,
+            directionFromOrigin: outline.direction_from_start,
+            genre:               updatedState.metadata.genre,
+            wcd:                 wcdForPregen,
+            existingRegionNames: existingNames.filter((n) => n !== outline.name),
+          });
+        }
+      }
 
       // ── 7. Day 18 — Move dispatch + Art engine ───────────────────────────────
       // The resolver tags every move with a move_type in narrative_context.

@@ -263,6 +263,10 @@ export async function POST(request: NextRequest) {
       ...current.metadata,
       world_consistency: wcdNarrowed,
       main_quest:        bibleNarrowed.main_quest,
+      // Day 19D — mirror the bible into metadata so the game loop can
+      // match WORLD_EXPLORE destinations against adjacent_regions without
+      // an extra fetch on every move.
+      world_bible:       bibleNarrowed,
     },
     world_state: {
       ...current.world_state,

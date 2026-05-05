@@ -186,7 +186,12 @@ export const useGameStore = create<GameStore>((set) => ({
     saveVerbosity(v);
     set({ verbosity: v });
   },
-  clearSessionState: () =>
+  clearSessionState: () => {
+    // Day 19D — drop any cached regional bibles so a switch between save
+    // slots never serves stale region data to a fresh campaign.
+    void import("@/lib/game/regional-bible-cache").then(
+      (m) => m.invalidateRegionalBibleCache()
+    );
     set({
       persistedLogEntries:    [],
       currentDialogueOptions: [],
@@ -197,7 +202,8 @@ export const useGameStore = create<GameStore>((set) => ({
       currentTradeItems:      [],
       locationAssets:         [],
       lastNarrativeText:      null,
-    }),
+    });
+  },
   clearTransientState: () =>
     set({
       lastNarrativeText: null,

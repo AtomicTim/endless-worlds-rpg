@@ -4,24 +4,10 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { Genre } from "@/types/game";
 import type { WorldConsistencyDocument } from "@/types/game";
 
-/**
- * Day 19A — Generate the World Consistency Document.
- *
- * Layer 0 of the new generation architecture. A single Claude call produces
- * the world's absolute facts: name, atmosphere, landmarks, factions, and
- * universal rules. Stored in masterState.metadata.world_consistency and
- * injected into every subsequent AI prompt.
- *
- * One retry on parse failure. Validation enforces required fields and
- * exact array lengths (5 landmarks, 3 factions, 6 rules) per the
- * world-generation-architecture spec.
- */
-
 interface RequestBody {
   genre?:             Genre;
   character_name?:    string;
   character_class?:   string;
-  /** Optional extra context from the character creation wizard. */
   creation_choices?:  string;
 }
 
@@ -43,11 +29,11 @@ function buildUserPrompt(body: Required<Omit<RequestBody, "creation_choices">> &
     "- world_name: a unique evocative name for this world (not Earth)",
     "- world_tagline: one atmospheric sentence capturing the world's essence",
     "- atmosphere: 1-2 sentences of tonal and sensory truth about this world",
-    "- landmarks: exactly 5 named landmarks the inhabitants know about. Include: 1 distant threat or evil (north or northeast, grid position 15-20 units from origin), 1 major geographic feature (mountain range, sea, desert, etc.), 1 famous settlement or trade hub (5-10 units from origin), 1 mysterious or legendary place, 1 ruined or fallen place. Each landmark must have all WorldLandmark fields.",
-    "- factions: exactly 3 factions with distinct territories and agendas. Each must have all WorldFaction fields.",
+    "- landmarks: exactly 5 named landmarks the inhabitants know about. Include: 1 distant threat or evil (north or northeast, grid position 15-20 units from origin), 1 major geographic feature (mountain range, sea, desert, etc.), 1 famous settlement or trade hub (5-10 units from origin), 1 mysterious or legendary place, 1 ruined or fallen place. Each landmark must have all WorldLandmark fields: id (slug), name, type, grid_position {x,y}, known_by (everyone/locals/scholars), public_description (1-2 sentences), is_region_origin (boolean).",
+    "- factions: exactly 3 factions with distinct territories and agendas. Each must have all WorldFaction fields: id (slug), name, territory, public_reputation (1 sentence), disposition_to_player (allied/neutral/hostile/unknown).",
     "- world_rules: exactly 6 universal truths as plain sentences. Cover: resource scarcity, climate or environment, magic or technology rules, a cultural norm, a danger unique to this world, and one surprising truth.",
     "- grid_size: 40",
-    "- world_origin: x 0, y 0",
+    "- world_origin: {\"x\": 0, \"y\": 0}",
     "",
     "Make it feel original and specific to this genre and character. Avoid generic clichés. Be creative and unexpected.",
   ].join("\n");
@@ -68,74 +54,112 @@ function stripJsonFences(raw: string): string {
 }
 
 /**
- * Pre-validation pass that derives missing mechanical fields from
- * present data instead of failing outright on AI omissions. The
- * model reliably names landmarks and factions but sometimes skips
- * id slugs, default flags, or geometry — none of which are creative
- * decisions, so it's safe (and cheaper) to fill them ourselves.
+ * Pre-validation normalization: derives or defaults ALL mechanical fields
+ * that the AI might omit. Creative content (names, descriptions) is never
+ * invented here — only structural fields with clear safe defaults.
  */
 function normalizeWcd(parsed: unknown): unknown {
   if (!parsed || typeof parsed !== "object") return parsed;
   const o = parsed as Record<string, unknown>;
 
-  // Normalize landmarks: derive id from name if missing
+  // Normalize landmarks
   if (Array.isArray(o.landmarks)) {
-    o.landmarks = o.landmarks.map((lm: unknown) => {
+    o.landmarks = o.landmarks.map((lm: unknown, idx: number) => {
       if (!lm || typeof lm !== "object") return lm;
       const l = { ...(lm as Record<string, unknown>) };
-      // Derive id from name if missing or empty
-      if (!l.id || typeof l.id !== "string" || !(l.id as string).trim()) {
-        l.id = typeof l.name === "string"
-          ? l.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")
-          : "landmark_" + Math.random().toString(36).slice(2, 7);
+
+      // Ensure name exists before deriving anything from it
+      if (!l.name || typeof l.name !== "string" || !(l.name as string).trim()) {
+        l.name = `Unnamed Landmark ${idx + 1}`;
       }
-      // Default is_region_origin if missing
+
+      // Derive id from name if missing
+      if (!l.id || typeof l.id !== "string" || !(l.id as string).trim()) {
+        l.id = (l.name as string).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+      }
+
+      // Default public_description from name if missing
+      if (!l.public_description || typeof l.public_description !== "string" || !(l.public_description as string).trim()) {
+        // Try alternate field names the AI sometimes uses
+        const alt = l.description || l.lore || l.notes;
+        l.public_description = (typeof alt === "string" && alt.trim())
+          ? alt.trim()
+          : `A notable landmark known as ${l.name}.`;
+      }
+
+      // Default is_region_origin
       if (typeof l.is_region_origin !== "boolean") {
         l.is_region_origin = false;
       }
-      // Default grid_position if missing or malformed
+
+      // Default grid_position
       if (!l.grid_position || typeof l.grid_position !== "object") {
         l.grid_position = { x: 0, y: 0 };
+      } else {
+        const gp = l.grid_position as Record<string, unknown>;
+        if (typeof gp.x !== "number") gp.x = 0;
+        if (typeof gp.y !== "number") gp.y = 0;
       }
-      // Default known_by if missing
-      if (!l.known_by || !["everyone", "locals", "scholars"].includes(l.known_by as string)) {
+
+      // Default known_by
+      if (!l.known_by || !VALID_KNOWN_BY.has(l.known_by as string)) {
         l.known_by = "everyone";
       }
-      // Default type if invalid
-      const validTypes = ["settlement", "stronghold", "wilderness", "dungeon", "ruin", "geographic"];
-      if (!l.type || !validTypes.includes(l.type as string)) {
+
+      // Default type
+      if (!l.type || !VALID_LANDMARK_TYPES.has(l.type as string)) {
         l.type = "geographic";
       }
+
       return l;
     });
   }
 
-  // Normalize factions: derive id from name if missing
+  // Normalize factions
   if (Array.isArray(o.factions)) {
-    o.factions = o.factions.map((f: unknown) => {
+    o.factions = o.factions.map((f: unknown, idx: number) => {
       if (!f || typeof f !== "object") return f;
       const faction = { ...(f as Record<string, unknown>) };
-      if (!faction.id || typeof faction.id !== "string" || !(faction.id as string).trim()) {
-        faction.id = typeof faction.name === "string"
-          ? faction.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")
-          : "faction_" + Math.random().toString(36).slice(2, 7);
+
+      if (!faction.name || typeof faction.name !== "string" || !(faction.name as string).trim()) {
+        faction.name = `Unnamed Faction ${idx + 1}`;
       }
-      if (!faction.disposition_to_player ||
-          !["allied", "neutral", "hostile", "unknown"].includes(faction.disposition_to_player as string)) {
+
+      if (!faction.id || typeof faction.id !== "string" || !(faction.id as string).trim()) {
+        faction.id = (faction.name as string).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+      }
+
+      if (!faction.territory || typeof faction.territory !== "string" || !(faction.territory as string).trim()) {
+        faction.territory = "Unknown territory";
+      }
+
+      if (!faction.public_reputation || typeof faction.public_reputation !== "string" || !(faction.public_reputation as string).trim()) {
+        const alt = faction.reputation || faction.description || faction.notes;
+        faction.public_reputation = (typeof alt === "string" && alt.trim())
+          ? alt.trim()
+          : `The ${faction.name} are a faction of unknown reputation.`;
+      }
+
+      if (!faction.disposition_to_player || !VALID_DISPOSITIONS.has(faction.disposition_to_player as string)) {
         faction.disposition_to_player = "neutral";
       }
+
       return faction;
     });
   }
 
-  // Ensure grid_size is a number
+  // Ensure grid_size
   if (typeof o.grid_size !== "number") {
     o.grid_size = 40;
   }
 
-  // Ensure world_origin has x and y
+  // Ensure world_origin
   if (!o.world_origin || typeof o.world_origin !== "object") {
     o.world_origin = { x: 0, y: 0 };
+  } else {
+    const wo = o.world_origin as Record<string, unknown>;
+    if (typeof wo.x !== "number") wo.x = 0;
+    if (typeof wo.y !== "number") wo.y = 0;
   }
 
   return o;
@@ -180,9 +204,6 @@ function validateWcd(parsed: unknown): { ok: true; wcd: WorldConsistencyDocument
   if (typeof o.world_tagline !== "string" || !o.world_tagline.trim()) return { ok: false, error: "world_tagline missing" };
   if (typeof o.atmosphere !== "string" || !o.atmosphere.trim()) return { ok: false, error: "atmosphere missing" };
 
-  // Counts relaxed from "exactly 5/3/6" to "at least 3/2/3" — the AI
-  // commonly produces 4 landmarks or 4 rules and the game functions
-  // identically. Hard floors stay so we never accept an empty WCD.
   if (!Array.isArray(o.landmarks) || o.landmarks.length < 3) {
     return { ok: false, error: `landmarks must be array of at least 3 (got ${Array.isArray(o.landmarks) ? o.landmarks.length : "non-array"})` };
   }
@@ -260,7 +281,6 @@ export async function POST(request: NextRequest) {
     creation_choices,
   });
 
-  // Per-request client so the API key is read fresh from process.env.
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   let parsed: unknown;
@@ -271,7 +291,6 @@ export async function POST(request: NextRequest) {
       parsed = JSON.parse(stripJsonFences(rawText));
     } catch (err) {
       parseError = err instanceof Error ? err.message : "JSON parse failed";
-      // One retry with stricter instruction.
       const retryPrompt = userPrompt + "\n\nReturn ONLY the JSON object, nothing else. No markdown.";
       const retryRaw = await callClaude(anthropic, retryPrompt);
       try {
@@ -291,8 +310,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Normalize before validation — derives missing mechanical fields
-  // (ids, defaults) rather than failing on AI omissions.
   const normalized = normalizeWcd(parsed);
   const validated = validateWcd(normalized);
   if (!validated.ok) {

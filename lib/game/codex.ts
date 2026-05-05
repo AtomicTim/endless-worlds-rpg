@@ -110,14 +110,58 @@ export function looksLikePlaceholder(name: string): boolean {
 // ── ID normalisation ──────────────────────────────────────────────────────────
 
 /**
+ * Strips a leading article ("the_", "a_", "an_") from a snake_case slug.
+ * Used to canonicalize LOCATION ids so "The Wanderer's Rest" and
+ * "Wanderer's Rest" produce the same asset id and current_location_id.
+ */
+function stripArticles(slug: string): string {
+  return slug.replace(/^(the|a|an)_/, "");
+}
+
+/**
+ * Lowercases, drops punctuation, collapses whitespace and underscore runs.
+ * Underscores in the input are PRESERVED (so snake_case ids pass through
+ * unchanged) — only true punctuation is stripped.
+ */
+function toSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s_]/g, "")  // strip punctuation but keep underscores
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_");          // collapse runs of underscores
+}
+
+/**
+ * Canonical, prefix-less location id used in world_state.current_location_id
+ * and visited_locations. Lowercases, replaces non-alphanumeric runs with
+ * underscores, and strips leading articles so the narrator's various
+ * descriptions of the same place collapse to one slug.
+ *
+ *   normalizeLocationId("The Wanderer's Rest inn") → "wanderers_rest_inn"
+ *   normalizeLocationId("heavy oak door")          → "heavy_oak_door"
+ *   normalizeLocationId("fantasy_tavern_01")       → "fantasy_tavern_01"
+ */
+export function normalizeLocationId(name: string): string {
+  return stripArticles(toSlug(name));
+}
+
+/**
  * Derives a canonical, deterministic asset ID from category + name so that the
  * same real-world entity always maps to the same DB row even when the Narrator
  * generates a slightly different slug across calls.
  *
- * e.g. normalizeAssetId("CHARACTER", "Old Ezra") → "character_old_ezra"
+ * For LOCATION assets, leading articles are stripped so "The X" and "X"
+ * collapse to a single id.
+ *
+ * e.g. normalizeAssetId("CHARACTER", "Old Ezra")  → "character_old_ezra"
+ *      normalizeAssetId("LOCATION",  "The Tavern") → "location_tavern"
  */
 export function normalizeAssetId(category: string, name: string): string {
-  const slug   = name.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim().replace(/\s+/g, "_");
+  let slug = toSlug(name);
+  if (category === "LOCATION") {
+    slug = stripArticles(slug);
+  }
   const prefix = (
     {
       CHARACTER: "character",

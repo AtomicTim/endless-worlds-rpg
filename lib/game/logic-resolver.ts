@@ -2,6 +2,7 @@ import { ActionType, ItemType, LocationStatus } from "@/types/game";
 import type { ActiveBuff, Attributes, MasterState, ParsedAction, ResolutionResult } from "@/types/game";
 import { rollD20, rollD6, getAttributeModifier } from "./dice";
 import { equipItem, unequipItem, updateHealth, updateSanity, findNpcInRegistry } from "./state-utils";
+import { normalizeLocationId } from "./codex";
 
 // ── Tunables ──────────────────────────────────────────────────────────────────
 
@@ -53,8 +54,13 @@ function normalizeKey(s: string): string {
 // ── MOVE ──────────────────────────────────────────────────────────────────────
 
 function resolveMove(action: ParsedAction, state: MasterState): ResolutionResult {
-  const target  = action.primary_target?.trim() ?? "";
-  const current = state.world_state.current_location_id;
+  // Normalize the player's stated destination ("The Wanderer's Rest inn",
+  // "heavy oak door") into a canonical slug so current_location_id /
+  // visited_locations stay consistent across re-references and the same
+  // location never produces two distinct ids.
+  const rawTarget = action.primary_target?.trim() ?? "";
+  const target    = rawTarget ? normalizeLocationId(rawTarget) : "";
+  const current   = state.world_state.current_location_id;
 
   if (!target) {
     return {

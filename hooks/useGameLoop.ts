@@ -630,6 +630,16 @@ export function useGameLoop() {
           // is still pinned to the same asset.
           {
             const gs = useGameStore.getState();
+            // Visibility log — confirms whether the key channel matches the
+            // narrator's emitted asset_id. After the FIX (key prefix) above,
+            // currentDialogueNpcKey is always "character_<slug>" so this
+            // should true-up when the narrator returns the same asset_id.
+            console.log(
+              "[GameLoop/7d] two-channel check:",
+              "npcKey:", gs.currentDialogueNpcKey,
+              "effectiveAssetId:", effectiveAssetId,
+              "match:", gs.currentDialogueNpcKey === effectiveAssetId
+            );
             const isActiveNpc =
               (gs.currentDialogueNpc !== null &&
                placeholderName !== "" &&
@@ -755,42 +765,25 @@ export function useGameLoop() {
                   ? (gsBefore.artCache[npcAsset.id] ?? npcAsset.svg_content ?? null)
                   : null);
 
-          // Resolve the NPC's npc_registry key so the modal can read trust
-          // directly from masterState.npc_registry (authoritative source).
-          // Falls back to this turn's new_npcs entries — those will be merged
-          // into the registry in step 8 with the same normalized key.
-          let npcRegistryKey: string | null = null;
-          if (npcName) {
-            const inRegistry = findNpcInRegistry(updatedState.npc_registry, npcName);
-            if (inRegistry) {
-              npcRegistryKey = inRegistry.key;
-            } else {
-              const newNpc = narratorResponse.new_npcs.find(
-                (n) => n.name.toLowerCase() === npcName.toLowerCase()
-              );
-              if (newNpc) {
-                npcRegistryKey = normalizeAssetId(AssetCategory.CHARACTER, newNpc.name);
-              } else {
-                // NPC is in locationAssets only — fall back to the asset-id
-                // form so we can seed below.
-                const matchingAsset = npcAsset
-                  ?? gsBefore.locationAssets.find(
-                    (a) =>
-                      a.category === AssetCategory.CHARACTER &&
-                      a.name.toLowerCase() === npcName.toLowerCase()
-                  );
-                if (matchingAsset) {
-                  npcRegistryKey = matchingAsset.id;
-                }
-              }
-            }
-          }
+          // FIX (key prefix): currentDialogueNpcKey MUST always be the FULL
+          // canonical asset-id form ("character_<slug>") so it matches the
+          // narrator's revealed_npc_names asset_id in step 7d's two-channel
+          // check. Derive it directly from npcName via normalizeAssetId —
+          // findNpcInRegistry's prefix-strip fallback handles legacy
+          // unprefixed entries during downstream reads.
+          const npcRegistryKey: string | null = npcName
+            ? normalizeAssetId(AssetCategory.CHARACTER, npcName)
+            : null;
 
-          // FIX 1: when we have a key but no registry entry, seed a neutral
-          // default. Every NPC encountered in dialogue gets a registry entry
-          // on their first beat — guarantees disposition badge + stat checks
-          // always have a record to read from.
-          if (npcRegistryKey && npcName && !updatedState.npc_registry[npcRegistryKey]) {
+          // Seed a neutral entry when no variant of this key exists in the
+          // registry yet. findNpcInRegistry covers all historical schemes
+          // (raw, snake_case, prefixed, unprefixed) so we don't accidentally
+          // create a duplicate next to a legacy record.
+          if (
+            npcRegistryKey &&
+            npcName &&
+            !findNpcInRegistry(updatedState.npc_registry, npcRegistryKey)
+          ) {
             const matchingAsset = gsBefore.locationAssets.find(
               (a) =>
                 a.category === AssetCategory.CHARACTER &&

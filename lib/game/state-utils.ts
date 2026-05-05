@@ -163,6 +163,22 @@ export function findNpcInRegistry(
     return { key: assetKey, npc: registry[assetKey] };
   }
 
+  // 2b. Prefix-strip fallback — target was already "character_X", also try
+  // the unprefixed form. Covers older saved sessions where the registry was
+  // keyed without the "character_" prefix.
+  if (target.startsWith("character_")) {
+    const stripped = target.slice("character_".length);
+    if (registry[stripped]) {
+      return { key: stripped, npc: registry[stripped] };
+    }
+  }
+  if (normalized.startsWith("character_")) {
+    const stripped = normalized.slice("character_".length);
+    if (registry[stripped]) {
+      return { key: stripped, npc: registry[stripped] };
+    }
+  }
+
   // 3. Scan by display name (case-insensitive).
   const lowerTarget = target.toLowerCase();
   for (const [key, npc] of Object.entries(registry)) {

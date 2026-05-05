@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 5.6
+**Version:** 5.7
 **Status:** Active Development — Phase 2 In Progress
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -26,15 +26,15 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Latest Fixes (commit deaaafc)
-- `page.tsx`: `getWorldAssetsForLocation` preload confirmed + `[GamePage] Initial locationAssets loaded: N` log
-- `useGameLoop` step 7c: late-load fallback when locationAssets empty after any narrative action
-- Step 7g: npc_registry patched to store IMMEDIATELY after seeding (not waiting for step 10)
-- `intent-parser.ts`: dialogue_tone backstopped to 'neutral' when server returns none
-- `resolveDialogue`: tone logged before switch statement (`[resolveDialogue] tone: X`)
-- Stat check fields log now JSON.stringified for full visibility
-- `revealed_npc_names` hoisted to MANDATORY FIRST field in narrator prompt — lists all name-introduction phrasings, explicitly states MANDATORY when name revealed
-- `[GameLoop/7d] revealed_npc_names from narrator:` logged unconditionally after every narrator call
+### Latest Fixes (NPC key prefix + location normalization)
+- `findNpcInRegistry`: prefix-strip fallback — looks up both `character_X` and `X` forms
+- `useGameLoop` step 7g: npcRegistryKey always `normalizeAssetId(CHARACTER, name)` — canonical `character_<slug>` form stored in `currentDialogueNpcKey`
+- Seeding existence check uses `findNpcInRegistry` (honors all prefix variants)
+- `codex.ts`: `toSlug()`, `stripArticles()`, `normalizeLocationId()` helpers added
+- `normalizeAssetId` for LOCATION strips articles: "The Tavern" → "location_tavern"
+- `resolveMove`: destination normalized via `normalizeLocationId` before writing `current_location_id`
+- Two-channel match log: `[GameLoop/7d] two-channel check:` now logs on every reveal
+- Confirmed: narrator now correctly outputs `revealed_npc_names` with proper asset_ids
 
 ### Dialogue System — Complete Stat Check Matrix
 | Tone | Stat | Notes |
@@ -53,10 +53,10 @@
 Write-once constitution. `ignoreDuplicates: true`. SVG backfilled separately.
 
 ### 2. Movement Is Absolute
-MOVE always succeeds. World state saved immediately after every MOVE.
+MOVE always succeeds. `current_location_id` normalized via `normalizeLocationId()`.
 
 ### 3. Location Is Authoritative State
-`current_location_id` always correct. Saved immediately on MOVE.
+`current_location_id` always correct. Normalized slug. Saved immediately on MOVE.
 
 ### 4. Actions Are Permitted By Default
 Plausible actions always attempted. Narrator describes outcomes only.
@@ -78,11 +78,17 @@ All dialogue identical pipeline. NPC name passed directly. Stat checks fire from
 
 **NPC interaction model (authoritative sources):**
 - Constitution → `world_assets` (locked on first meeting)
-- Trust score → `npc_registry` (seeded at 50, immediately patched to store on seed)
+- Trust score → `npc_registry` (seeded at 50, keyed by `normalizeAssetId(CHARACTER, name)`)
+- Registry key → always full `character_<slug>` form via `normalizeAssetId`
+- `findNpcInRegistry` handles both prefixed and unprefixed lookups
 - Disposition → `getNpcDisposition(trustScore ?? 50)` — always renders
-- Name → `world_assets.name` (updates modal via two-channel reveal match)
-- Registry key → `normalizeAssetId(CHARACTER, name)`
-- locationAssets → loaded on page mount AND late-loaded if empty during session
+- Name → updates modal via two-channel match (name OR key)
+- locationAssets → loaded on page mount AND late-loaded fallback
+
+**Location ID model:**
+- All `current_location_id` values are normalized slugs via `normalizeLocationId()`
+- Articles stripped: "The Wanderer's Rest" → "wanderers_rest"
+- Consistent across narrator output, codex entries, and world_assets
 
 ---
 
@@ -108,15 +114,15 @@ Hidden World Seed: conflict + goal + 3-5 breadcrumbs + opening hook. Sealed in m
 ## 🎭 NPC Dialogue System (Complete)
 - NPC name passed directly, never re-extracted
 - seedNpcRegistry() on first encounter, immediately patches store
-- findNpcInRegistry() multi-strategy lookup
+- findNpcInRegistry() handles prefixed/unprefixed key variants
+- currentDialogueNpcKey always full `character_<slug>` canonical form
 - All 4 stat checks fire (CHA/STR/PER/INT), appear in feed + logbook
 - Disposition badge always renders (🟡 Neutral fallback)
-- Name reveal: MANDATORY in narrator prompt, modal updates via two-channel match
-- SPA navigation preserves dialogue (clearTransientState vs clearSessionState)
-- ACTIVE NPC CONTEXT injected for all dialogue
+- Name reveal: narrator outputs correctly, two-channel match with full canonical keys
+- SPA navigation preserves dialogue
 
 ## 🕵️ NPC Identity System
-- name_known=false for CHARACTER. revealed_npc_names MANDATORY when name shared.
+- name_known=false for CHARACTER. revealed_npc_names MANDATORY.
 
 ## 💎 Item Value System (Day 16)
 Every item: sell value + lore blurb + optional dialogue unlock. Merchant NPCs.
@@ -126,17 +132,12 @@ Full background/traits. Affects NPC reactions, starting state, faction rep.
 
 ---
 
-## SVG Art Engine — Future (Phase 3)
-Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
-
----
-
 ## Narrator Architecture
 
 **Pure interpreter of game state.**
-- `revealed_npc_names` MANDATORY FIRST field — hoisted above YOUR ROLE
+- `revealed_npc_names` MANDATORY FIRST field
 - YOUR ROLE block — three jobs, player blank-slate enforced
-- ACTIVE NPC CONTEXT (constitution + trust from npc_registry) for all DIALOGUE
+- ACTIVE NPC CONTEXT for all DIALOGUE
 - Tier 1/2/3 response lengths by action type
 - log_summary: 12-word max terse fragment
 
@@ -144,7 +145,7 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 
 ## Immediate Persistence Architecture
 - Log entries + recent_messages: after every narrative action
-- World state: after every MOVE or flag change
+- World state (normalized location ID): after every MOVE or flag change
 - npc_registry: immediately patched to store on seed
 - locationAssets: loaded on page mount + late-loaded fallback
 - Full state: every 10 actions
@@ -158,7 +159,7 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 | --- | --- | --- |
 | NPC Trading + Item Value | Day 16 | Merchants, buy/sell, item value + lore blurbs |
 | Main Narrative Thread | Day 17-18 | World Seed, main quest, breadcrumbs |
-| Combat System | Day 19 | Turn-based combat, enemy AI, loot |
+| Combat System | Day 19 | Turn-based, enemy AI, loot |
 | Skills & Abilities | Day 20 | Skill trees, attribute thresholds |
 | Character Background | Phase 3 | Traits, history, faction rep |
 | Art Engine Overhaul | Phase 3 (Day 25+) | Templates + CC0 sprites |
@@ -170,10 +171,9 @@ Option B (templates) + D (CC0 sprites). Deferred to Day 25+.
 - **Hybrid Authority:** Code = Truth, AI = pure interpreter
 - **AI has 3 roles only:** Generator → Bridge → Thread
 - **Player is blank slate:** AI never speaks for them or invents history
-- **NPC state from game state:** npc_registry seeded + immediately in store
+- **NPC state from game state:** canonical keys, registry always seeded
+- **Location IDs normalized:** articles stripped, consistent slugs
 - World Assets permanent, Movement absolute, Objects exist
-- Dialogue consistent: all stat checks fire, all appear in feed + logbook
-- Immediate persistence after every relevant action
 - Truly endless — AI generates on demand
 
 ---
@@ -235,4 +235,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 47 — V5.6: locationAssets page mount load, registry immediate store patch, revealed_npc_names mandatory. Day 16 starting.*
+*Last updated: Session 48 — V5.7: NPC key prefix canonical, location ID normalization, name reveal confirmed working. Day 16 starting.*

@@ -768,11 +768,14 @@ export function useGameLoop() {
           // FIX (key prefix): currentDialogueNpcKey MUST always be the FULL
           // canonical asset-id form ("character_<slug>") so it matches the
           // narrator's revealed_npc_names asset_id in step 7d's two-channel
-          // check. Derive it directly from npcName via normalizeAssetId —
-          // findNpcInRegistry's prefix-strip fallback handles legacy
-          // unprefixed entries during downstream reads.
-          const npcRegistryKey: string | null = npcName
-            ? normalizeAssetId(AssetCategory.CHARACTER, npcName)
+          // check. Derive it directly from effectiveNpcName (the resolved
+          // NPC name including the option-click fallback to existingNpc) so
+          // option-click beats — where parsedAction.primary_target is null
+          // and so npcName could collapse to null without the fallback —
+          // still produce a non-null key. findNpcInRegistry's prefix-strip
+          // fallback handles legacy unprefixed entries during reads.
+          const npcRegistryKey: string | null = effectiveNpcName
+            ? normalizeAssetId(AssetCategory.CHARACTER, effectiveNpcName)
             : null;
 
           // Seed a neutral entry when no variant of this key exists in the
@@ -812,6 +815,16 @@ export function useGameLoop() {
           }
 
           store.setDialogueOptions(dialogueOpts, npcName, portrait, npcRegistryKey);
+          // Verification log — confirms the canonical key actually reaches
+          // the store. After this lands, currentDialogueNpcKey should be the
+          // "character_<slug>" form matching the narrator's asset_id, so
+          // step 7d's two-channel match resolves on identity reveals.
+          console.log(
+            "[GameLoop/7g] setDialogueOptions called with npcKey:",
+            effectiveNpcName
+              ? normalizeAssetId(AssetCategory.CHARACTER, effectiveNpcName)
+              : null
+          );
         } else if (!isDialogueAction) {
           store.clearDialogueOptions();
         }

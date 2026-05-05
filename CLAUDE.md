@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 6.2
+**Version:** 6.3
 **Status:** Active Development — Phase 2 In Progress
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Day:** Day 18 — Main Narrative Thread
+**Current Day:** Day 18 — Main Narrative Thread + Verbosity + Feed Visuals
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -21,40 +21,65 @@
 | Narrator simplification | Text+tone only, game code derives mechanics | ✅ Complete |
 | 16 | NPC Trading + Item Value | ✅ Complete |
 | 17 | World Seed + Location Stub Generator | ✅ Complete |
-| Codex encounter fix | Populates on player encounter, not at seed time | ✅ Complete |
-| 18 | Main Narrative Thread | 🔄 In Progress |
+| World Graph | Persistent connected location graph | ✅ Complete |
+| 18 | Narrative Thread + Verbosity + Feed Visuals | 🔄 In Progress |
 | 19+ | Combat, Skills, Factions | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Codex Encounter Fix (commit cccf092)
-Two-table model now enforced in code:
-- `world_assets` = narrator's bible — pre-seeded, never shown to player directly
-- `codex` = player's journal — populated only through actual play
+### World Graph Architecture (commit 1434ec0 — 86/86 tests, clean build)
 
-Location codex entry: fires in step 7c on ARRIVING, reads from world_asset constitution
-NPC codex entry: fires in step 7g on first dialogue (seedNpcRegistry signal), reads from world_asset
-Both use `ignoreDuplicates: true` — safe to call on every encounter, created exactly once
+**The core problem it solves:** Location fragmentation, duplicate codex entries, NPC dialogue jumping, sub-area spawning new worlds.
+
+**How it works:**
+- World Seed generates a fully-connected graph with explicit node IDs, connections, map positions, and NPC assignments
+- Every location is a `WorldNode` with permanent ID, connections[], npc_ids[], and map_position
+- Move classifier categorizes every MOVE before the resolver runs:
+  - `GRAPH_NAVIGATE` — known connection, instant deterministic navigation
+  - `INTERNAL_DESCRIBE` — sub-area language ("go to the bar"), no location change
+  - `ZONE_EXPAND` — new sub-area within expandable zone, creates child node
+  - `WORLD_EXPLORE` — genuinely new territory, creates new zone node
+- NPCs are assigned to graph nodes — narrator receives NPCS PRESENT block, cannot invent extras
+- Legacy fallback for old saves (no graph) with log warning
+
+**Migrations applied:** 008_world_graph.sql ✅
+- `game_sessions.world_graph jsonb`
+- `world_states.current_node_id text`
+
+### Two-Table Model (enforced)
+- `world_assets` = narrator's bible — pre-seeded, AI constitution source
+- `codex` = player's journal — written on first encounter only
 
 ---
 
-## 🎮 The Three-Layer World Model
+## 🗺️ World Graph Architecture
 
-**Layer 1 — World Seed (Day 17 ✅):**
-- Generated at game start before player's first action
-- Starting location + 2-3 connected locations + 3 key NPCs (names known from start)
-- Main quest with 5 breadcrumbs, 2 factions
-- Writes to `world_assets` ONLY — codex is empty until player explores
+**WorldNode:**
+```
+id, name, type (zone|sub_location), zone_id,
+is_expandable, connections[], npc_ids[], item_ids[],
+asset_id, discovered, map_position {x,y}
+```
 
-**Layer 2 — Location Stub Generator (Day 17 ✅):**
-- Fires on MOVE_SUCCESS to unknown location (before narrator)
-- Structural stub locked as world_asset immediately
-- Narrator describes the stub — never invents the name
-- Codex entry written on player's first ARRIVING
+**Move Classification (move-classifier.ts):**
+```
+GRAPH_NAVIGATE   → known connection, load node assets directly
+INTERNAL_DESCRIBE → in-room sub-area, narrator describes, no move
+ZONE_EXPAND      → new child node within expandable zone
+WORLD_EXPLORE    → new zone, bidirectional connection added
+```
 
-**Layer 3 — Game Engine:**
-- Stat checks, dice, outcomes, currency, inventory, flags, trust scores
+**NPC Placement:**
+- NPCs assigned to graph nodes at seed time
+- Narrator receives exact NPC list for current node
+- Dialogue context anchors to node's NPC list
+- No NPC invented outside the node's assigned list
+
+**Map (Future):**
+- graph.nodes have map_position {x,y}
+- Discovered nodes fill in procedurally as player explores
+- Enables fog-of-war map in Phase 3
 
 ---
 
@@ -63,47 +88,61 @@ Both use `ignoreDuplicates: true` — safe to call on every encounter, created e
 ### 1. World Assets Are Permanent
 Write-once constitution. `ignoreDuplicates: true`. SVG backfilled separately.
 
-### 2. Movement Is Absolute
-MOVE always succeeds. `current_location_id` normalized via `normalizeLocationId()`.
+### 2. Movement Is Graph-Based
+MOVE always succeeds. Move classifier determines type before resolver runs.
+`current_node_id` is the single source of truth for player location.
 
 ### 3. Location Is Authoritative State
-`current_location_id` always correct. Normalized slug. Saved immediately on MOVE.
+`current_node_id` always correct. Saved immediately on real moves.
+`INTERNAL_DESCRIBE` moves do NOT update location.
 
 ### 4. Actions Are Permitted By Default
 Plausible actions always attempted. Narrator describes outcomes only.
 
 ### 5. Objects Mentioned Exist
-EXAMINE/INTERACT resolver confirms object_confirmed=true. Prepended as first narrator fact.
+EXAMINE/INTERACT resolver confirms object_confirmed=true.
 
 ### 6. Dialogue Is Consistent
-All dialogue identical pipeline. Tone → stat check (game code). Badge shows real player stat.
+NPC context anchored to current graph node's npc_ids.
+Tone → stat check (game code). Badge shows real player stat.
 
 ### 7. The AI Has Exactly Three Roles
 **Generator:** Invents sensory detail within World Seed guardrails. Locked immediately.
-**Bridge:** Describes mechanical outcomes as prose. Never decides outcomes.
-**Thread:** Plants quest breadcrumbs from SeedQuest. Never forces or blocks.
+**Bridge:** Describes mechanical outcomes. Never decides outcomes or invents NPCs.
+**Thread:** Plants quest breadcrumbs. Never forces or blocks.
 
 ---
 
-## 🌱 World Seed System (Complete)
+## 🌱 World Generation System
 
-**At game start:** generateWorldSeed() → applyWorldSeed() → world_assets pre-populated, codex empty
-**On MOVE to new area:** generateLocationStub() → saveWorldAsset() → codex entry on first ARRIVING
-**On first NPC dialogue:** seedNpcRegistry() fires → codex entry written from world_asset constitution
-**Narrator receives:** WORLD FACTS block + ESTABLISHED WORLD ASSETS (current location first)
+**At game start:**
+1. `generateWorldSeed()` — AI generates world skeleton with connections, positions, NPC assignments
+2. `applyWorldSeed()` — writes world_assets + builds WorldGraph + sets starting node
+3. World is fully navigable before player's first action
+
+**On MOVE:**
+- `classifyMove()` runs first — determines GRAPH_NAVIGATE / INTERNAL_DESCRIBE / ZONE_EXPAND / WORLD_EXPLORE
+- GRAPH_NAVIGATE: load node assets by ID — deterministic, no ambiguity
+- ZONE_EXPAND: create sub_location node, link to parent zone
+- WORLD_EXPLORE: AI generates new zone node, add to graph bidirectionally
+- INTERNAL_DESCRIBE: narrator describes sub-area, location unchanged
+
+**On first NPC dialogue:**
+- `seedNpcRegistry()` — creates registry entry
+- Codex entry written from world_asset constitution
 
 ---
 
 ## 🎭 NPC Dialogue System (Complete)
+- NPCs assigned to graph nodes — narrator cannot invent extras
 - Tone → stat check (game code only), badge shows real player stat
 - justRevealedName prevents step 7g overwriting step 7d reveal
-- clearDialogueOptions() on MOVE and all non-dialogue actions
-- getWorldAssetsForLocation uses client-side filtering
+- clearDialogueOptions() on real moves and non-dialogue actions
+- NPC context switch when primary_target differs from currentDialogueNpc
 
 ## 💰 Trading System (Day 16 — Complete)
 - Merchant keyword detection → trade_available → items_for_sale
 - TradeModal: Buy full value, Sell 50%. Null-safe.
-- Item values by rarity. Slot tooltip shows "Worth: N [Currency]"
 
 ---
 
@@ -112,21 +151,21 @@ All dialogue identical pipeline. Tone → stat check (game code). Badge shows re
 **Narrator outputs: text + simple values. Game code derives: all mechanics.**
 
 Prompt structure (in order):
-1. WORLD FACTS block (world name, tagline, factions, known locations)
-2. ESTABLISHED WORLD ASSETS (current location first, then others)
-3. PLAYER STATE header (authoritative location, status)
-4. SCENE CONTEXT (ARRIVING/PRESENT)
-5. Resolution context, character stats, loadout, recent log
+1. WORLD FACTS block (world name, tagline, factions)
+2. NPCS PRESENT AT THIS LOCATION (from graph node npc_ids)
+3. ESTABLISHED WORLD ASSETS (current location first)
+4. PLAYER STATE header
+5. SCENE CONTEXT (move_type, ARRIVING/PRESENT)
+6. Resolution context, stats, loadout, recent log
 
 ---
 
 ## Immediate Persistence Architecture
 - Log entries + recent_messages: after every narrative action
-- World state: after every MOVE or flag change
+- World state + current_node_id: after every real MOVE
+- world_graph: after every node creation or discovery
 - npc_registry: immediately patched to store on seed
-- locationAssets: client-side filtered, loaded on mount + late-loaded
-- world_seed: stored in game_sessions.world_seed column
-- Codex: written on first encounter (location ARRIVING, NPC first dialogue)
+- locationAssets: loaded by node asset_id — deterministic
 - Full state: every 10 actions
 
 ---
@@ -135,31 +174,34 @@ Prompt structure (in order):
 
 | System | When | Description |
 | --- | --- | --- |
-| Main Narrative Thread | Day 18 | Breadcrumb injection, quest progress, win conditions |
+| Narrative Thread + Verbosity + Feed Visuals | Day 18 | Breadcrumbs, verbosity toggle, visual overhaul |
 | Combat System | Day 19 | Turn-based, enemy AI, loot |
 | Skills & Abilities | Day 20 | Skill trees, attribute thresholds |
 | Character Background | Phase 3 | Traits, history, faction rep |
+| Procedural Map | Phase 3 | Graph nodes → fog-of-war map |
 | Art Engine Overhaul | Phase 3 (Day 25+) | Templates + CC0 sprites |
 
 ---
 
 ## Supabase Tables (all applied ✅)
-- `profiles`, `game_sessions` (+world_seed), `characters`, `world_states`, `log_books`
-- `npcs`, `subscriptions`, `community_templates`, `user_preferences`
+- `profiles`, `game_sessions` (+world_seed, +world_graph), `characters`
+- `world_states` (+current_node_id), `log_books`, `npcs`
+- `subscriptions`, `community_templates`, `user_preferences`
 - `art_cache`, `world_assets` (+svg_content, +name_known), `codex`
-- Migrations 001-007 all applied
+- Migrations 001-008 all applied
 
 ---
 
 ## Core Philosophy
 
 - **Hybrid Authority:** Code = Truth, AI = narrator of code-owned facts
-- **Two-table model:** world_assets (engine bible) vs codex (player journal)
-- **Three-layer model:** World Seed → AI detail → permanent lock → narrator describes
+- **World Graph:** persistent connected nodes, deterministic navigation
+- **AI generates content once, engine owns it forever**
+- **Move classifier:** GRAPH_NAVIGATE / INTERNAL_DESCRIBE / ZONE_EXPAND / WORLD_EXPLORE
+- **NPCs belong to nodes** — never invented by narrator
 - **Narrator outputs text + simple values only**
 - **Codex populates through play, never pre-populated**
-- World Assets permanent, Movement absolute, Objects exist
-- Truly endless — procedurally generated at every layer
+- Truly endless — graph grows as player explores
 
 ---
 
@@ -220,4 +262,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 53 — V6.2: Two-table model enforced. Codex populates on encounter. Day 18 starting.*
+*Last updated: Session 54 — V6.3: World Graph architecture complete. Migration 008 applied. Day 18 starting.*

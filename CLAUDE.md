@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 6.4
+**Version:** 6.5
 **Status:** Active Development — Phase 2 In Progress
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Day:** Day 19 — Combat System
+**Current Day:** Day 19 — Main Narrative Thread + Combat System
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -23,42 +23,37 @@
 | 17 | World Seed + Location Stub Generator | ✅ Complete |
 | World Graph | Persistent connected location graph | ✅ Complete |
 | 18 | Graph fixes, verbosity, Direction 3 UI, art removal | ✅ Complete |
-| 19 | Combat System | 🔄 In Progress |
+| Systems Audit | 14 root-cause fixes across NPC/graph/asset pipeline | ✅ Complete |
+| 19 | Main Narrative Thread + Combat System | 🔄 In Progress |
 | 20+ | Skills, Factions, Background | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Day 18 Deliverables (commits 0c86697 + 4df0c08)
+### Systems Audit (commit db6e1c2 — 86/86 tests, clean build)
+Full audit of 14 root-cause issues. See /docs/audit-report-dialogue-systems.md
 
-**Graph fixes:**
-- TYPE_KEYWORDS map covering all 5 genres — type-based GRAPH_NAVIGATE matching
-- INTERNAL_DESCRIBE_PATTERNS expanded — vertical movement + interior areas all genres
-- NPC location guard — clears dialogue when active NPC not at current node
-- Empty-node narrator instruction — no invented characters when node has no NPCs
-- Stat check hard validation in resolveDialogue + null-path logging in buildRollFeedback
+**Fix J** — new_npcs are first-class world_assets: new step 7b-2 saves CHARACTER world_asset for every new_npc, patches locationAssets, merges registry. Step 8 block deleted.
 
-**Verbosity toggle:**
-- `verbosity: 'terse' | 'standard' | 'rich'` in game-store (localStorage-hydrated)
-- RESPONSE LENGTH block appended to narrator system prompt
-- VerbosityToggle component in GameLayout header (genre-primary active state)
+**Fix D** — discovered NPCs added to currentNode.npc_ids: `addNpcToCurrentNode` helper in state-utils. Called from step 7b (CHARACTER codex_entries) and step 7b-2 (new_npcs).
 
-**Direction 3 UI overhaul (all 5 genres):**
-- `components/game/genre-ui.ts` — single source of truth for genre colors, currency, HP labels
-- StoryFeed: arrival header (◈ Name with dividers), mono prose, NPC quote-blocks, stat-check receipts, system events
-- DialogueModal: accent-bar option buttons (4px tone bar), stat badge right, NPC name in genre primary
-- InventoryPanel, TradeModal, CharacterSheet: currency + HP labels from getGenreColors
-- Horror null currency hides currency display entirely
-- useGameLoop stamps metadata.locationName on MOVE_SUCCESS NARRATIVE messages
+**Fix C** — name_known guard in step 7d: hard-skips reveals targeting name_known === true assets. Pre-seeded NPCs are immune to narrator name overwrites.
 
-**Art system removed (commit 4df0c08):**
-- art-generator.ts deleted
-- /api/game/generate-art route deleted
-- artCache and currentAsciiArt removed from game-store
-- All [GameLoop/art] steps removed from useGameLoop
-- updateWorldAssetSvg removed from codex.ts
-- SceneArt.tsx replaced with genre-themed placeholder (location name + category)
-- svg_content column and art_cache table kept in DB for future reimplementation
+**Fix I** — no synthetic asset_id: reveal loop logs and skips when no real matchedAsset resolves. Fourth fallback tries normalizeAssetId(activeNpcName).
+
+**Fix A** — DIALOGUE narrator gets only the active NPC: step 5 filters locationAssets to active NPC's CHARACTER asset + all non-CHARACTER assets. prompt-builder suppresses NPCS PRESENT on DIALOGUE. ACTIVE NPC CONTEXT is the single source.
+
+**Fix B** — option tone flows modal → loop → resolver: DialogueModal.handleOption passes tone. submitAction accepts options.tone, applies TONE_MAP (aggressive→intimidating). Badge always matches the check that fires. clear() removed from handleOption — step 7g owns modal lifecycle.
+
+**Fix E+F** — pin primary_target from node NPCs: step 2b-2. Exactly one NPC at node → pin to them. Multiple NPCs + currentDialogueNpc in npc_ids → pin to active. Free-typed dialogue is now deterministic.
+
+**Fix K** — single canonical tone heuristic: new `lib/game/dialogue-tone.ts` exporting inferToneFromSpeech + DialogueTone. Both parse-intent route and resolver import it. Local duplicates deleted.
+
+**Fix L** — WORLD_EXPLORE node renamed to stub.name: stub callback patches world_graph.nodes[id].name via setMasterState. Graph and world_asset agree on identity.
+
+**Fix M** — step 2c comment refreshed: reframed as defensive sweep for stale-store edge cases.
+
+**Fix N** — codex write order fixed: 7b-2 runs BEFORE 7d/7g, so reveal lookups and codex writes find freshly-saved new_npcs in locationAssets.
 
 ---
 
@@ -88,14 +83,18 @@ Do NOT re-add any AI-based SVG or ASCII art generation.
 - Horror: mansion, street
 - Post-Apocalyptic: shelter, wasteland
 
-**NPC Placement:** NPCs assigned to graph nodes. Narrator receives NPCS PRESENT block. Cannot invent NPCs not in node.
+**NPC Placement (authoritative):**
+- Pre-seeded NPCs: assigned to nodes at world-seed time via npc_ids
+- Dynamic NPCs: added to currentNode.npc_ids on first encounter (step 7b-2 + addNpcToCurrentNode)
+- Narrator receives ONLY the active NPC's constitution for DIALOGUE actions
+- narrator cannot invent NPCs not in the RESPONDING CHARACTER block
 
 ---
 
 ## ⚡ FOUNDATIONAL RULES (Read Before Every Session)
 
 ### 1. World Assets Are Permanent
-Write-once constitution. `ignoreDuplicates: true`.
+Write-once constitution. `ignoreDuplicates: true`. svg_content kept but unused.
 
 ### 2. Movement Is Graph-Based
 Move classifier runs before resolver. `current_node_id` is single source of truth.
@@ -110,11 +109,15 @@ Plausible actions always attempted. Narrator describes outcomes only.
 EXAMINE/INTERACT resolver confirms object_confirmed=true.
 
 ### 6. Dialogue Is Consistent
-NPC context anchored to current node's npc_ids. Tone → stat check (game code). Badge shows real stat. NPC cleared when player leaves node.
+- Narrator receives ONLY the active NPC for DIALOGUE (single RESPONDING CHARACTER block)
+- Active NPC determined by game code: options.npcName → currentDialogueNpc → primary_target → graph node (single NPC)
+- Option tone is authoritative — passes through to resolver via forcedTone
+- Pre-seeded NPC names are immutable (name_known guard)
+- Every NPC (pre-seeded or dynamic) is in their node's npc_ids
 
 ### 7. The AI Has Exactly Three Roles
 **Generator:** Invents content within World Seed guardrails. Locked immediately.
-**Bridge:** Describes outcomes. Never invents NPCs or speaks for player.
+**Bridge:** Describes outcomes as the RESPONDING CHARACTER only. Never invents NPCs or speaks for player.
 **Thread:** Plants quest breadcrumbs. Never forces or blocks.
 
 ---
@@ -122,17 +125,20 @@ NPC context anchored to current node's npc_ids. Tone → stat check (game code).
 ## 🌱 World Generation System
 
 **At game start:** generateWorldSeed() → applyWorldSeed() → world_assets + WorldGraph pre-populated
-**On MOVE:** classifyMove() → GRAPH_NAVIGATE (deterministic) / ZONE_EXPAND / WORLD_EXPLORE
-**On first NPC dialogue:** seedNpcRegistry() + codex entry from world_asset
+**On MOVE:** classifyMove() → GRAPH_NAVIGATE / ZONE_EXPAND / WORLD_EXPLORE
+**On first NPC dialogue:** seedNpcRegistry() + codex entry + addNpcToCurrentNode()
+**new_npcs:** saved as world_assets in step 7b-2 BEFORE step 7g/7d runs
 
 ---
 
-## 🎭 NPC Dialogue System (Complete)
-- NPCs assigned to graph nodes — narrator cannot invent extras
-- Tone → stat check (game code only), badge shows real current stat
-- NPC cleared from dialogue when player moves to node without them
-- justRevealedName prevents step 7g overwriting step 7d reveal
-- All stat check fields validated; null path logged
+## 🎭 NPC Dialogue System (Audited and Fixed)
+- Narrator gets EXACTLY ONE active NPC for DIALOGUE — no roster
+- Option tone flows modal → submitAction(forcedTone) → resolver
+- Badge always matches the check that fires
+- Pre-seeded NPC names immune to narrator reveals (name_known guard)
+- Dynamic NPCs added to graph node npc_ids on first encounter
+- Free-typed dialogue pinned to node NPC when deterministic
+- clear() removed from DialogueModal.handleOption — step 7g owns lifecycle
 
 ## 💰 Trading System (Day 16 — Complete)
 - Merchant keyword detection → trade_available → items_for_sale
@@ -141,9 +147,8 @@ NPC context anchored to current node's npc_ids. Tone → stat check (game code).
 
 ## 🎨 UI System (Direction 3 — Complete)
 - genre-ui.ts: getGenreColors(genre) — single source of truth
-- All accent colors, HP labels, currency labels derive from GENRE_CONFIGS
-- StoryFeed: arrival headers, NPC quote-blocks, stat-check receipts, system events
-- DialogueModal: accent-bar buttons by tone color
+- StoryFeed: arrival headers, NPC quote-blocks, stat-check receipts
+- DialogueModal: accent-bar buttons by tone, stat badge matches resolver
 - VerbosityToggle: Terse / Standard / Rich in header
 
 ---
@@ -152,13 +157,21 @@ NPC context anchored to current node's npc_ids. Tone → stat check (game code).
 
 **Narrator outputs: text + simple values. Game code derives: all mechanics.**
 
+For DIALOGUE actions:
+- locationAssets filtered to: active NPC CHARACTER asset + all non-CHARACTER assets
+- RESPONDING CHARACTER block replaces NPCS PRESENT
+- Narrator writes ONLY from the named responding character
+
+For non-DIALOGUE actions:
+- Full locationAssets passed (NPCS PRESENT block active)
+
 Prompt structure (in order):
 1. WORLD FACTS block
-2. NPCS PRESENT AT THIS LOCATION (from graph node npc_ids)
+2. NPCS PRESENT (non-DIALOGUE) OR RESPONDING CHARACTER (DIALOGUE)
 3. ESTABLISHED WORLD ASSETS (current location first)
 4. PLAYER STATE header
 5. SCENE CONTEXT (move_type, ARRIVING/PRESENT)
-6. VERBOSITY block (last — terse/standard/rich)
+6. VERBOSITY block (last)
 
 ---
 
@@ -172,13 +185,17 @@ Prompt structure (in order):
 | friendly | none | none | green #22aa44 |
 | neutral | none | none | slate #334455 |
 
+Tone mapping (option → ParsedAction): aggressive → intimidating, others pass through.
+Single canonical heuristic: lib/game/dialogue-tone.ts (used by both parse-intent and resolver).
+
 ---
 
 ## Immediate Persistence Architecture
 - Log entries + recent_messages: after every narrative action
 - World state + current_node_id: after every real MOVE
-- world_graph: after every node creation or discovery
+- world_graph: after every node creation, discovery, or npc_ids update
 - npc_registry: immediately patched to store on seed
+- new_npcs: saved as world_assets in step 7b-2 before step 7g
 - locationAssets: loaded by node asset_id — deterministic
 - Full state: every 10 actions
 
@@ -188,6 +205,7 @@ Prompt structure (in order):
 
 | System | When | Description |
 | --- | --- | --- |
+| Main Narrative Thread | Day 19 | Breadcrumb injection from world seed, quest progress |
 | Combat System | Day 19 | Turn-based, enemy AI, loot |
 | Skills & Abilities | Day 20 | Skill trees, attribute thresholds |
 | Character Background | Phase 3 | Traits, history, faction rep |
@@ -208,10 +226,13 @@ Prompt structure (in order):
 
 - **Hybrid Authority:** Code = Truth, AI = narrator of code-owned facts
 - **World Graph:** persistent nodes, deterministic navigation, NPCs belong to nodes
+- **Narrator isolation:** DIALOGUE gets exactly one NPC — never a roster
+- **Option tone is authoritative:** badge always matches what fires
+- **Pre-seeded names are immutable:** name_known guard enforced
+- **Dynamic NPCs are first-class:** world_asset + npc_ids + codex on first encounter
 - **Three-layer model:** World Seed → AI detail → permanent lock → narrator describes
 - **Narrator outputs text + simple values only**
 - **Genre-aware UI:** all colors, labels, currency from GENRE_CONFIGS via genre-ui.ts
-- **Art deferred:** placeholder panel, DB columns preserved, clean reimplementation later
 
 ---
 
@@ -272,4 +293,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 55 — V6.4: Day 18 complete. Graph type matching, UI Direction 3 all genres, verbosity toggle, art system cleanly removed. Day 19 starting.*
+*Last updated: Session 56 — V6.5: Systems audit complete. 14 root-cause fixes. NPC isolation, graph npc_ids, tone passthrough, name_known guard, new_npcs as world_assets. Day 19 starting.*

@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 5.7
+**Version:** 5.8
 **Status:** Active Development — Phase 2 In Progress
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -18,32 +18,57 @@
 | 1–14 | Phase 1 MVP | ✅ Complete |
 | 15 | NPC Dialogue + Portraits | ✅ Complete |
 | 15.5 | Dialogue consistency + integrity patch | ✅ Complete |
-| All dialogue fixes | Registry, stat checks, disposition, SPA nav, name reveal | ✅ Complete |
+| Narrator simplification | Text+tone only, game code derives all mechanics | ✅ Complete |
 | 16 | NPC Trading + Item Value | 🔄 In Progress |
-| 17-18 | Main Narrative Thread | ⏳ Pending |
+| 17-18 | Main Narrative Thread + World Seed | ⏳ Pending |
 | 19+ | Combat, Skills, Factions | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Latest Fixes (NPC key prefix + location normalization)
-- `findNpcInRegistry`: prefix-strip fallback — looks up both `character_X` and `X` forms
-- `useGameLoop` step 7g: npcRegistryKey always `normalizeAssetId(CHARACTER, name)` — canonical `character_<slug>` form stored in `currentDialogueNpcKey`
-- Seeding existence check uses `findNpcInRegistry` (honors all prefix variants)
-- `codex.ts`: `toSlug()`, `stripArticles()`, `normalizeLocationId()` helpers added
-- `normalizeAssetId` for LOCATION strips articles: "The Tavern" → "location_tavern"
-- `resolveMove`: destination normalized via `normalizeLocationId` before writing `current_location_id`
-- Two-channel match log: `[GameLoop/7d] two-channel check:` now logs on every reveal
-- Confirmed: narrator now correctly outputs `revealed_npc_names` with proper asset_ids
+### Narrator Simplification (commit a0fecc5 — 86/86 tests, clean build)
 
-### Dialogue System — Complete Stat Check Matrix
+**The core architectural principle now enforced in code:**
+The narrator outputs narrative text and simple values only.
+The game engine derives all structured mechanics from those values.
+
+Specific changes:
+- `revealed_npc_names`: narrator outputs `{ true_name }` only — no asset_id
+  - Game code derives asset_id via 3-step lookup: name match → constitution.true_name → active NPC fallback
+- `dialogue_options`: removed `stat_check` entirely — narrator outputs `{ id, text, tone }` only
+  - `getToneBadge(tone, attributes)` in DialogueModal derives badge from player's actual current stats
+  - Badge shows real value: "💬 CHA 12" not narrator's guess
+- `forcedStatCheck` removed entirely — tone classification is the single source of truth
+- Modal timing fix: step 7d computes `activeNpcName` from `options?.npcName ?? gs.currentDialogueNpc ?? parsedAction.primary_target` — independent of store timing
+
+### Dialogue System — Stat Check Matrix (tone → check, game code only)
 | Tone | Stat | Notes |
 | --- | --- | --- |
-| persuasive | CHA | charisma_check=true also set |
-| deceptive | CHA | +2 difficulty vs persuasive |
-| intimidating | STR | falls back to CHA if STR < 10 |
-| curious | PER | investigative speech |
+| persuasive | CHA | |
+| deceptive | CHA | +2 difficulty |
+| aggressive/intimidating | STR | falls back to CHA if STR < 10 |
+| curious | PER | |
 | friendly/neutral | none | no check |
+
+---
+
+## 🎮 The Three-Layer World Model
+
+**Layer 1 — World Seed (Day 17-18):** Engine pre-generates macro facts before player arrives:
+- Overarching conflict, factions, major settlements, main quest antagonist
+- Planted as seeds — player discovers them, they were always there
+
+**Layer 2 — AI Asset Generation (current):** On first encounter, narrator invents:
+- Specific location details, NPC appearance/personality, item descriptions
+- These are immediately locked as permanent game assets (write-once)
+- AI stays within World Seed guardrails once those exist
+
+**Layer 3 — Game Engine (always):** Owns all mechanical state:
+- Stat checks, dice rolls, outcomes
+- Trust scores, flags, inventory
+- Location IDs, asset keys, relationships
+
+The AI narrates Layer 1 and 2 facts. It never owns them.
 
 ---
 
@@ -65,30 +90,28 @@ Plausible actions always attempted. Narrator describes outcomes only.
 EXAMINE/INTERACT resolver confirms object_confirmed=true. Prepended as first narrator fact.
 
 ### 6. Dialogue Is Consistent
-All dialogue identical pipeline. NPC name passed directly. Stat checks fire from tone. All appear in feed AND logbook.
+All dialogue identical pipeline. Tone → stat check (game code). Badge shows real player stat.
 
 ### 7. The AI Has Exactly Three Roles
-**Generator:** Creates assets on first encounter. Immutable after.
-**Bridge:** Describes results of player actions. Never speaks for the player or invents history.
-**Thread:** Plants subtle story breadcrumbs. Never forces or blocks.
+**Generator:** Invents content on first encounter. Locked immediately. Stays within seed guardrails.
+**Bridge:** Describes mechanical outcomes as narrative prose. Never decides outcomes.
+**Thread:** Plants story breadcrumbs. Never forces or blocks.
 
 ---
 
 ## 🎮 Game System Architecture
 
 **NPC interaction model (authoritative sources):**
-- Constitution → `world_assets` (locked on first meeting)
-- Trust score → `npc_registry` (seeded at 50, keyed by `normalizeAssetId(CHARACTER, name)`)
-- Registry key → always full `character_<slug>` form via `normalizeAssetId`
-- `findNpcInRegistry` handles both prefixed and unprefixed lookups
+- Constitution → `world_assets` (locked on first meeting, AI-generated content)
+- Trust score → `npc_registry` (seeded at 50, updated by trust_changes)
 - Disposition → `getNpcDisposition(trustScore ?? 50)` — always renders
-- Name → updates modal via two-channel match (name OR key)
-- locationAssets → loaded on page mount AND late-loaded fallback
+- Registry key → `normalizeAssetId(CHARACTER, name)` — canonical `character_<slug>`
+- findNpcInRegistry → handles both prefixed/unprefixed variants
+- Name reveal → step 7d computes key from action context, not store timing
 
 **Location ID model:**
-- All `current_location_id` values are normalized slugs via `normalizeLocationId()`
-- Articles stripped: "The Wanderer's Rest" → "wanderers_rest"
-- Consistent across narrator output, codex entries, and world_assets
+- Normalized slugs via `normalizeLocationId()` — articles stripped
+- Consistent across narrator, codex, world_assets
 
 ---
 
@@ -96,6 +119,9 @@ All dialogue identical pipeline. NPC name passed directly. Stat checks fire from
 
 ### Character Background System (Phase 3)
 Background traits in player_state, injected into narrator. Affects NPC reactions, rep.
+
+### World Seed (Day 17-18)
+Pre-generates macro world facts before player arrives. AI fills detail within those guardrails.
 
 ---
 
@@ -108,44 +134,40 @@ ARRIVING — just moved here. lastNarrativeText = "DEPARTED SCENE (backstory)"
 
 ---
 
-## 🎯 Main Narrative Thread (Day 17-18)
-Hidden World Seed: conflict + goal + 3-5 breadcrumbs + opening hook. Sealed in metadata.main_quest.
-
 ## 🎭 NPC Dialogue System (Complete)
-- NPC name passed directly, never re-extracted
-- seedNpcRegistry() on first encounter, immediately patches store
-- findNpcInRegistry() handles prefixed/unprefixed key variants
-- currentDialogueNpcKey always full `character_<slug>` canonical form
-- All 4 stat checks fire (CHA/STR/PER/INT), appear in feed + logbook
-- Disposition badge always renders (🟡 Neutral fallback)
-- Name reveal: narrator outputs correctly, two-channel match with full canonical keys
-- SPA navigation preserves dialogue
+- Narrator outputs: narrative text + `{ id, text, tone }` options + `{ true_name }` reveals
+- Game code derives: asset IDs, stat checks, badges, difficulty scaling
+- Badge shows player's actual stat ("💬 CHA 12") — always accurate
+- Modal timing: computes npcKey from action context, not store
+- Disposition badge: always renders (🟡 Neutral fallback)
+- SPA navigation preserves dialogue state
 
 ## 🕵️ NPC Identity System
-- name_known=false for CHARACTER. revealed_npc_names MANDATORY.
+- name_known=false for CHARACTER by default
+- revealed_npc_names: `{ true_name }` only — game code finds matching asset
 
 ## 💎 Item Value System (Day 16)
 Every item: sell value + lore blurb + optional dialogue unlock. Merchant NPCs.
-
-## 🎒 Character Background System (Phase 3)
-Full background/traits. Affects NPC reactions, starting state, faction rep.
 
 ---
 
 ## Narrator Architecture
 
-**Pure interpreter of game state.**
-- `revealed_npc_names` MANDATORY FIRST field
-- YOUR ROLE block — three jobs, player blank-slate enforced
-- ACTIVE NPC CONTEXT for all DIALOGUE
+**Narrator outputs: text + simple values. Game code derives: all mechanics.**
+
+- Narrative text, log_summary, sound_id — narrator owned
+- `{ true_name }` for name reveals — narrator outputs, game code maps to asset
+- `{ id, text, tone }` for dialogue options — narrator outputs, game code derives check
+- Asset IDs, stat checks, difficulty, roll results — game code only, never narrator
+- YOUR ROLE block FIRST — three jobs, player blank-slate enforced
+- ACTIVE NPC CONTEXT injected for all DIALOGUE (constitution + trust)
 - Tier 1/2/3 response lengths by action type
-- log_summary: 12-word max terse fragment
 
 ---
 
 ## Immediate Persistence Architecture
 - Log entries + recent_messages: after every narrative action
-- World state (normalized location ID): after every MOVE or flag change
+- World state: after every MOVE or flag change
 - npc_registry: immediately patched to store on seed
 - locationAssets: loaded on page mount + late-loaded fallback
 - Full state: every 10 actions
@@ -158,7 +180,7 @@ Full background/traits. Affects NPC reactions, starting state, faction rep.
 | System | When | Description |
 | --- | --- | --- |
 | NPC Trading + Item Value | Day 16 | Merchants, buy/sell, item value + lore blurbs |
-| Main Narrative Thread | Day 17-18 | World Seed, main quest, breadcrumbs |
+| Main Narrative Thread + World Seed | Day 17-18 | Macro world facts, main quest, breadcrumbs |
 | Combat System | Day 19 | Turn-based, enemy AI, loot |
 | Skills & Abilities | Day 20 | Skill trees, attribute thresholds |
 | Character Background | Phase 3 | Traits, history, faction rep |
@@ -168,13 +190,14 @@ Full background/traits. Affects NPC reactions, starting state, faction rep.
 
 ## Core Philosophy
 
-- **Hybrid Authority:** Code = Truth, AI = pure interpreter
-- **AI has 3 roles only:** Generator → Bridge → Thread
-- **Player is blank slate:** AI never speaks for them or invents history
-- **NPC state from game state:** canonical keys, registry always seeded
-- **Location IDs normalized:** articles stripped, consistent slugs
+- **Hybrid Authority:** Code = Truth, AI = narrator of code-owned facts
+- **AI generates detail, engine generates structure**
+- **World Seed → AI detail → permanent lock → narrator describes**
+- **AI has 3 roles:** Generator (within guardrails) → Bridge → Thread
+- **Player is blank slate:** AI never speaks for them or invents their history
+- **Narrator outputs text + simple values only — never structured game data**
 - World Assets permanent, Movement absolute, Objects exist
-- Truly endless — AI generates on demand
+- Truly endless — procedurally generated at every layer
 
 ---
 
@@ -235,4 +258,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 48 — V5.7: NPC key prefix canonical, location ID normalization, name reveal confirmed working. Day 16 starting.*
+*Last updated: Session 49 — V5.8: Narrator simplification complete. Text+tone only. Game code derives all mechanics. Three-layer world model documented. Day 16 starting.*

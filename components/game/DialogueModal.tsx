@@ -9,8 +9,11 @@ import { getGenreColors, TONE_BAR_COLORS } from "./genre-ui";
 
 interface DialogueModalProps {
   /** Submit a player line. Includes the active NPC name so the game loop can
-   *  pin primary_target without relying on the Intent Parser to extract it. */
-  onSubmit:     (input: string, options?: { npcName?: string }) => void;
+   *  pin primary_target without relying on the Intent Parser to extract it.
+   *  Also includes the option's tone (for option-click submits) so the
+   *  resolver fires the EXACT check the badge advertised — never the
+   *  re-classified speech tone. */
+  onSubmit:     (input: string, options?: { npcName?: string; tone?: DialogueOption["tone"] }) => void;
   onFocusInput: () => void;
 }
 
@@ -91,10 +94,15 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
   if (options.length === 0) return null;
 
   // Both submit paths pass the stored NPC name so the game loop can pin
-  // primary_target without re-extracting it from speech.
+  // primary_target without re-extracting it from speech. Issue B: the
+  // option's tone is ALSO passed so resolveDialogue fires exactly the
+  // check the player saw on the badge.
   const handleOption = (option: DialogueOption) => {
     clear();
-    onSubmit(`"${option.text}"`, npcName ? { npcName } : undefined);
+    onSubmit(`"${option.text}"`, {
+      ...(npcName ? { npcName } : {}),
+      tone: option.tone,
+    });
   };
 
   const handleTypeOwn = () => {

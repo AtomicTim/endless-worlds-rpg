@@ -4,6 +4,8 @@ import { rollD20, rollD6, getAttributeModifier } from "./dice";
 import { equipItem, unequipItem, updateHealth, updateSanity, findNpcInRegistry } from "./state-utils";
 import { normalizeLocationId } from "./codex";
 import { classifyMove } from "./move-classifier";
+// Issue K — single canonical tone heuristic shared with parse-intent.
+import { inferToneFromSpeech, type DialogueTone } from "./dialogue-tone";
 
 // ── Tunables ──────────────────────────────────────────────────────────────────
 
@@ -595,24 +597,7 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
 }
 
 // ── DIALOGUE ──────────────────────────────────────────────────────────────────
-
-// Fallback tone-from-text classifier — used when ParsedAction.dialogue_tone
-// isn't set (e.g. older callers, or actions where the parser couldn't infer it).
-const PERSUADE_WORDS    = ["persuade", "persuasion", "convince", "beg", "plead", "charm", "bargain"];
-const INTIMIDATE_WORDS  = ["intimidate", "intimidation", "threaten", "threat", "bully", "scare"];
-const DECEIVE_WORDS     = ["deceive", "deception", "lie", "bluff", "trick", "manipulate", "cheat", "seduce"];
-
-type DialogueTone = "friendly" | "persuasive" | "deceptive" | "intimidating" | "curious" | "neutral";
-
-function inferToneFromText(text: string): DialogueTone {
-  const lower = text.toLowerCase();
-  if (INTIMIDATE_WORDS.some((k) => lower.includes(k))) return "intimidating";
-  if (DECEIVE_WORDS.some((k) => lower.includes(k)))    return "deceptive";
-  if (PERSUADE_WORDS.some((k) => lower.includes(k)))   return "persuasive";
-  if (lower.includes("?") || /\b(what|how|why|where|when|who)\b/.test(lower)) return "curious";
-  if (/\b(thank|thanks|hello|hi|please|kind|wonderful|nice)\b/.test(lower)) return "friendly";
-  return "neutral";
-}
+// Tone fallback uses inferToneFromSpeech (Issue K) — imported at top.
 
 /**
  * Maps NPC trust score → base difficulty for dialogue-driven stat checks.
@@ -651,7 +636,7 @@ function resolveDialogue(action: ParsedAction, state: MasterState, opts: Resolve
   // Use the parser-supplied tone first; fall back to text heuristics so quoted
   // dialogue (which sometimes skips the tone slot) still routes correctly.
   const tone: DialogueTone =
-    action.dialogue_tone ?? inferToneFromText(action.inferred_intent);
+    action.dialogue_tone ?? inferToneFromSpeech(action.inferred_intent);
 
   // Visibility log — confirms the resolver received a tone for this beat
   // and shows what the parser produced before any fallback heuristic ran.

@@ -4,39 +4,13 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { buildIntentParserPrompt, buildIntentParserContext } from "@/lib/game/prompt-builder";
 import { ActionType } from "@/types/game";
 import type { MasterState, ParsedAction } from "@/types/game";
+import { inferToneFromSpeech, type DialogueTone } from "@/lib/game/dialogue-tone";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const DIALOGUE_TONES = new Set<string>([
   "friendly", "persuasive", "deceptive", "intimidating", "curious", "neutral",
 ]);
-
-type DialogueTone = NonNullable<ParsedAction["dialogue_tone"]>;
-
-/**
- * Heuristic tone classifier for the dialogue fast-path (quoted input that
- * skips Claude). Inspects the player's actual speech for tonal markers.
- * Falls back to "neutral" when no markers match.
- */
-function inferToneFromSpeech(speech: string): DialogueTone {
-  const lower = speech.toLowerCase();
-  if (/\b(threat|kill|hurt|burn|destroy|crush|shoot|stab|swear|or else|don't make me|i'll make you|i will end)\b/.test(lower)) {
-    return "intimidating";
-  }
-  if (/\b(lie|trick|fool|fake|pretend|swear i didn't|i don't know anything|wasn't me|never met)\b/.test(lower)) {
-    return "deceptive";
-  }
-  if (/\b(persuade|convince|please believe|trust me|i promise|let me explain|deal|bargain|reward|in return)\b/.test(lower)) {
-    return "persuasive";
-  }
-  if (lower.includes("?") || /^(what|how|why|where|when|who|which|do you|did you|have you|is it|are you|tell me)\b/.test(lower)) {
-    return "curious";
-  }
-  if (/\b(thank you|thanks|hello|hi|please|kind|wonderful|appreciate|good day|greetings|nice to)\b/.test(lower)) {
-    return "friendly";
-  }
-  return "neutral";
-}
 
 function makeFallback(input: string): ParsedAction {
   return {

@@ -5,7 +5,7 @@ import { useGameStore, makeMessage, type StoryMessage } from "@/lib/stores/game-
 import { parseIntent, IntentParserError } from "@/lib/game/intent-parser";
 import { resolveAction } from "@/lib/game/logic-resolver";
 import { narrateAction } from "@/lib/game/narrator";
-import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory, updateNPCTrust, findNpcInRegistry, seedNpcRegistry } from "@/lib/game/state-utils";
+import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory, updateNPCTrust, findNpcInRegistry, seedNpcRegistry, addNpcToCurrentNode } from "@/lib/game/state-utils";
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
 import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, normalizeLocationId, updateAssetNameRevealed } from "@/lib/game/codex";
 import { generateLocationStub } from "@/lib/game/location-stub-generator";
@@ -270,7 +270,10 @@ export function useGameLoop() {
   const isProcessing   = useGameStore((s) => s.isProcessing);
   const processingStep = useGameStore((s) => s.processingStep);
 
-  const submitAction = useCallback(async (input: string, options?: { npcName?: string }) => {
+  const submitAction = useCallback(async (
+    input: string,
+    options?: { npcName?: string; tone?: "friendly" | "aggressive" | "curious" | "deceptive" }
+  ) => {
     const store = useGameStore.getState();
 
     // BUG FIX 1: track whether step 7d revealed a true name this beat. If it
@@ -321,23 +324,101 @@ export function useGameLoop() {
         store.setProcessing(true, "The world responds...");
       }
 
-      // ── 2b. NPC name override ──────────────────────────────────────────────
+      // ── 2b. NPC name + tone override ───────────────────────────────────────
       // When the caller provides an authoritative NPC name (e.g. dialogue
       // modal click, or InputBar submit while a dialogue is active), pin
-      // primary_target to that name for DIALOGUE actions. This sidesteps the
-      // Intent Parser ever having to extract an NPC name from quoted speech —
-      // the name is whatever the game state says it is.
-      if (options?.npcName && parsedAction.action_type === ActionType.DIALOGUE) {
-        parsedAction = { ...parsedAction, primary_target: options.npcName };
+      // primary_target to that name for DIALOGUE actions. The Intent Parser
+      // never has to extract an NPC name from quoted speech.
+      //
+      // Issue B: also pin dialogue_tone from the option's tone so the
+      // resolver fires the SAME check the badge advertised. The four
+      // DialogueOption tones map to ParsedAction tones:
+      //   aggressive → intimidating  (STR check)
+      //   curious    → curious       (PER check)
+      //   deceptive  → deceptive     (CHA check at +2 difficulty)
+      //   friendly   → friendly      (no check)
+      if (parsedAction.action_type === ActionType.DIALOGUE) {
+        const overrides: Partial<ParsedAction> = {};
+        if (options?.npcName) {
+          overrides.primary_target = options.npcName;
+        }
+        if (options?.tone) {
+          const TONE_MAP: Record<typeof options.tone & string, NonNullable<ParsedAction["dialogue_tone"]>> = {
+            aggressive: "intimidating",
+            curious:    "curious",
+            deceptive:  "deceptive",
+            friendly:   "friendly",
+          };
+          overrides.dialogue_tone = TONE_MAP[options.tone];
+        }
+        if (Object.keys(overrides).length > 0) {
+          parsedAction = { ...parsedAction, ...overrides };
+        }
       }
 
-      // ── 2c. BUG FIX 3: NPC location guard for free-typed quoted dialogue ──
-      // When the player free-types quoted speech and the active dialogue NPC
-      // isn't actually at the current node anymore (player walked away in a
-      // previous beat, or seed re-applied), clear the modal so we don't
-      // summon them from the previous location.
+      // ── 2b-2. Issues E + F — pin primary_target from the current node ────
+      // Free-typed quoted dialogue (`"Hello"`) reaches the parse-intent
+      // fast-path with no primary_target. The narrator must NOT pick which
+      // NPC responds — the game determines that from the graph:
+      //
+      //   1. If exactly one NPC is at the current node → talk to them.
+      //   2. If multiple NPCs are present and the player has an active
+      //      dialogue NPC who is in this node → continue with them.
+      //   3. Otherwise leave primary_target undefined and let the narrator
+      //      describe ambient sounds (the empty-NPC prompt block fires).
+      if (
+        parsedAction.action_type === ActionType.DIALOGUE &&
+        !parsedAction.primary_target
+      ) {
+        const graph2 = state.world_graph;
+        const node2  = graph2?.nodes[graph2.current_node_id];
+        if (node2) {
+          const presentNpcAssets = node2.npc_ids
+            .map((id) =>
+              useGameStore.getState().locationAssets.find((a) => a.id === id)
+            )
+            .filter((a): a is WorldAsset =>
+              !!a && a.category === AssetCategory.CHARACTER
+            );
+          if (presentNpcAssets.length === 1) {
+            parsedAction = {
+              ...parsedAction,
+              primary_target: presentNpcAssets[0].name,
+            };
+            console.log(
+              "[GameLoop/2b-2] Pinned primary_target to sole NPC at node:",
+              presentNpcAssets[0].name
+            );
+          } else if (presentNpcAssets.length > 1) {
+            const activeNpcName = useGameStore.getState().currentDialogueNpc;
+            if (activeNpcName) {
+              const activeIsHere = presentNpcAssets.some(
+                (a) => a.name.toLowerCase() === activeNpcName.toLowerCase()
+              );
+              if (activeIsHere) {
+                parsedAction = {
+                  ...parsedAction,
+                  primary_target: activeNpcName,
+                };
+                console.log(
+                  "[GameLoop/2b-2] Pinned primary_target to active NPC at node:",
+                  activeNpcName
+                );
+              }
+            }
+          }
+        }
+      }
+
+      // ── 2c. Defensive NPC location guard ─────────────────────────────────
+      // After step 2b-2 (Issues E+F) pinned primary_target from the graph,
+      // this guard is mostly redundant — but it still serves as a final
+      // sweep for the rare case where currentDialogueNpc lingers from a
+      // location the player has since left (e.g. modal reopened from stale
+      // store state after a long pause). Keep it as a safety net; it
+      // no-ops when the NPC IS at the current node.
       if (parsedAction.action_type === ActionType.DIALOGUE) {
-        const graph2      = state.world_graph;
+        const graph2       = state.world_graph;
         const currentNode2 = graph2?.nodes[graph2.current_node_id];
         const gsBefore     = useGameStore.getState();
         if (currentNode2 && gsBefore.currentDialogueNpc) {
@@ -405,8 +486,34 @@ export function useGameLoop() {
 
       // ── 5. Narrate ─────────────────────────────────────────────────────────
       store.setProcessing(true, "Narrating...");
-      const lastNarrative   = useGameStore.getState().lastNarrativeText;
-      const locationAssets  = useGameStore.getState().locationAssets;
+      const lastNarrative      = useGameStore.getState().lastNarrativeText;
+      const allLocationAssets  = useGameStore.getState().locationAssets;
+
+      // Issue A: for DIALOGUE actions, the narrator must receive ONLY the
+      // active NPC's CHARACTER constitution — never the full roster of
+      // people at the location. Non-CHARACTER assets (locations, factions,
+      // items, lore) still flow through so the setting/context stays rich.
+      // Falls back to the unfiltered list when we can't resolve the active
+      // NPC (defensive — non-DIALOGUE actions are unaffected).
+      const isDialogueForFilter =
+        parsedAction.action_type === ActionType.DIALOGUE;
+      const activeNpcForFilter =
+        parsedAction.primary_target ?? null;
+      const locationAssets: WorldAsset[] = (() => {
+        if (!isDialogueForFilter || !activeNpcForFilter) return allLocationAssets;
+        const activeKey = normalizeAssetId(AssetCategory.CHARACTER, activeNpcForFilter);
+        const activeAsset = allLocationAssets.find(
+          (a) =>
+            a.category === AssetCategory.CHARACTER &&
+            (a.id === activeKey || a.name.toLowerCase() === activeNpcForFilter.toLowerCase())
+        );
+        if (!activeAsset) return allLocationAssets;
+        // Keep every non-CHARACTER asset, plus only the resolved active NPC.
+        return [
+          ...allLocationAssets.filter((a) => a.category !== AssetCategory.CHARACTER),
+          activeAsset,
+        ];
+      })();
 
       // Always give the narrator the most current world_state (including
       // location_status from the resolution) so it never infers location
@@ -679,6 +786,37 @@ export function useGameLoop() {
               await saveWorldAsset(artSessionId, asset);
               const refreshed = await getWorldAssetsForLocation(artSessionId, newLocationId);
               useGameStore.getState().setLocationAssets(refreshed);
+
+              // Issue L: the graph node was created earlier with a player-
+              // derived fallback name; the stub generator just produced the
+              // canonical name. Patch the node name (and category, since the
+              // stub knows the location's type) so the graph and the
+              // world_asset agree on one canonical identity.
+              const liveMaster = useGameStore.getState().masterState;
+              if (liveMaster?.world_graph) {
+                const liveGraph = liveMaster.world_graph;
+                const liveNode  = liveGraph.nodes[newLocationId];
+                if (liveNode && (liveNode.name !== stub.name || liveNode.category !== stub.type)) {
+                  useGameStore.getState().setMasterState({
+                    ...liveMaster,
+                    world_graph: {
+                      ...liveGraph,
+                      nodes: {
+                        ...liveGraph.nodes,
+                        [newLocationId]: {
+                          ...liveNode,
+                          name:     stub.name,
+                          category: stub.type,
+                        },
+                      },
+                    },
+                  });
+                  console.log(
+                    `[GameLoop/7] WORLD_EXPLORE node renamed: ${liveNode.name} → ${stub.name} (category=${stub.type})`
+                  );
+                }
+              }
+
               console.log(`[GameLoop/7] WORLD_EXPLORE stub saved: ${stub.name} (${stub.id})`);
             });
           }
@@ -777,12 +915,81 @@ export function useGameLoop() {
           console.error("[useGameLoop] saveWorldAsset threw", err);
         }
 
+        // Issue D: every CHARACTER asset whose first_seen_location is the
+        // node we're at right now belongs in that node's npc_ids list. The
+        // location guard, NPCS PRESENT block, and step 7g's filtering all
+        // depend on this list staying authoritative.
+        if (assetCategory === AssetCategory.CHARACTER) {
+          updatedState = addNpcToCurrentNode(updatedState, asset.id);
+        }
+
         if (entry.significance === "MAJOR") {
           updatedState = persistLogEntry(
             updatedState,
             LogEntryType.DISCOVERY,
             `New codex entry: ${entry.name} — ${entry.description}`
           );
+        }
+      }
+
+      // ── 7b-2. Issues J + D + N ─────────────────────────────────────────────
+      // Every NPC the narrator introduces via new_npcs becomes a first-class
+      // world_asset (J), gets pushed into the current node's npc_ids (D),
+      // and is committed BEFORE step 7d / 7g so the codex and reveal
+      // lookups in those steps find a real matching asset (N).
+      //
+      // The new asset is also patched optimistically into the store's
+      // locationAssets so the same-turn lookups don't have to wait for a
+      // DB roundtrip. saveWorldAsset uses ignoreDuplicates so idempotent.
+      if (narratorResponse.new_npcs.length > 0) {
+        const merged                    = { ...updatedState.npc_registry };
+        const optimisticAssets: WorldAsset[] = [];
+        for (const npc of narratorResponse.new_npcs) {
+          const standardKey = normalizeAssetId(AssetCategory.CHARACTER, npc.name);
+
+          // Registry entry — same shape the old step 8 produced.
+          merged[standardKey] = {
+            ...npc,
+            npc_key:         standardKey,
+            trust_score:     typeof npc.trust_score === "number" ? npc.trust_score : 50,
+            memory_snippets: Array.isArray(npc.memory_snippets) ? npc.memory_snippets : [],
+          };
+
+          // World asset — narrator-introduced NPCs always carry a real name,
+          // so name_known starts true. Constitution carries the role; later
+          // narrator codex_entries can extend the notes via ignoreDuplicates'd
+          // upserts (first wins; subsequent calls no-op).
+          const npcAsset: WorldAsset = {
+            id:                  standardKey,
+            category:            AssetCategory.CHARACTER,
+            name:                npc.name,
+            constitution: {
+              role:  typeof npc.role === "string" ? npc.role : "",
+              notes: `Introduced via narrator new_npcs at ${currentLocationId}.`,
+            },
+            significance:        "NOTABLE",
+            first_seen_location: currentLocationId,
+            session_id:          sessionId,
+            created_at:          new Date().toISOString(),
+            name_known:          true,
+          };
+          optimisticAssets.push(npcAsset);
+
+          // Persist DB row — fire-and-forget, write-once.
+          void saveWorldAsset(sessionId, npcAsset);
+
+          // Push asset_id into the current graph node's npc_ids list.
+          updatedState = addNpcToCurrentNode(updatedState, standardKey);
+        }
+
+        updatedState = { ...updatedState, npc_registry: merged };
+
+        // Optimistic locationAssets patch so this turn's later steps see them.
+        const liveAssets = useGameStore.getState().locationAssets;
+        const liveIds    = new Set(liveAssets.map((a) => a.id));
+        const additions  = optimisticAssets.filter((a) => !liveIds.has(a.id));
+        if (additions.length > 0) {
+          useGameStore.getState().setLocationAssets([...liveAssets, ...additions]);
         }
       }
 
@@ -873,8 +1080,10 @@ export function useGameLoop() {
           //   1. CHARACTER asset whose name already equals the revealed name.
           //   2. CHARACTER asset whose constitution.true_name matches
           //      (placeholder asset where the narrator pre-recorded the name).
-          //   3. CHARACTER asset matching the active dialogue NPC by name —
-          //      most likely candidate when the player is mid-conversation.
+          //   3. CHARACTER asset matching the active dialogue NPC by name.
+          //   4. NEW (Issue I + N): CHARACTER asset matching the active dialogue
+          //      NPC's registry key — covers freshly-saved new_npcs that may
+          //      not yet match by display name.
           let matchedAsset =
             currentAssets.find(
               (a) =>
@@ -901,16 +1110,50 @@ export function useGameLoop() {
               ) ?? null;
           }
 
-          // Derive the effective asset_id from whichever asset we matched, or
-          // fall back to normalizing the active NPC name (placeholder), or as
-          // a last resort the revealed name itself.
-          const effectiveAssetId =
-            matchedAsset?.id ??
-            (activeNpcName
-              ? normalizeAssetId(AssetCategory.CHARACTER, activeNpcName)
-              : normalizeAssetId(AssetCategory.CHARACTER, trueName));
+          if (!matchedAsset && activeNpcName) {
+            // Issue I: try the canonical asset_id form too — the narrator might
+            // refer to an NPC by a slightly different display name spelling but
+            // the asset_id (slug) still matches.
+            const activeKey = normalizeAssetId(AssetCategory.CHARACTER, activeNpcName);
+            matchedAsset =
+              currentAssets.find(
+                (a) => a.category === AssetCategory.CHARACTER && a.id === activeKey
+              ) ?? null;
+          }
 
-          const placeholderName = matchedAsset?.name ?? activeNpcName ?? "";
+          // Issue I: never synthesize an asset_id. If the reveal targets a
+          // character we can't find in locationAssets, the narrator is
+          // hallucinating — log and skip. Don't write to DB or store.
+          if (!matchedAsset) {
+            console.warn(
+              "[GameLoop/7d] Reveal target not in locationAssets — ignoring",
+              { trueName, activeNpcName }
+            );
+            continue;
+          }
+
+          // Issue C: pre-seeded NPCs (and any NPC whose name was already
+          // known) are immune to "reveals". The constitution is write-once.
+          // Skip when the asset is already known AND the names disagree.
+          // Same-name reveals are no-ops anyway; let them fall through but
+          // suppress side effects.
+          const alreadyKnown = matchedAsset.name_known === true;
+          const sameName     =
+            matchedAsset.name.toLowerCase() === trueName.toLowerCase();
+          if (alreadyKnown && !sameName) {
+            console.warn(
+              "[GameLoop/7d] Ignoring reveal for already-known NPC",
+              { id: matchedAsset.id, currentName: matchedAsset.name, attempted: trueName }
+            );
+            continue;
+          }
+          if (alreadyKnown && sameName) {
+            // Already matches — nothing to do. Skip the DB / store writes.
+            continue;
+          }
+
+          const effectiveAssetId = matchedAsset.id;
+          const placeholderName  = matchedAsset.name;
 
           // Persist to DB — fire-and-forget.
           void updateAssetNameRevealed(sessionId, effectiveAssetId, trueName);
@@ -1236,23 +1479,7 @@ export function useGameLoop() {
         }
       }
 
-      if (narratorResponse.new_npcs.length > 0) {
-        // Always key freshly-introduced NPCs by normalizeAssetId(CHARACTER, name).
-        // This matches the locationAssets / world_assets ID format and the
-        // disposition-lookup path used by the Dialogue Modal. trust_score
-        // defaults to 50 (neutral) when missing, memory_snippets to [].
-        const merged = { ...updatedState.npc_registry };
-        for (const npc of narratorResponse.new_npcs) {
-          const standardKey = normalizeAssetId(AssetCategory.CHARACTER, npc.name);
-          merged[standardKey] = {
-            ...npc,
-            npc_key:         standardKey,
-            trust_score:     typeof npc.trust_score === "number" ? npc.trust_score : 50,
-            memory_snippets: Array.isArray(npc.memory_snippets) ? npc.memory_snippets : [],
-          };
-        }
-        updatedState = { ...updatedState, npc_registry: merged };
-      }
+      // (new_npcs handling moved to step 7b-2 — Issues J + D + N.)
 
       // ── 9. Append a structured log entry for this beat ────────────────────
       // Extract first sentence (up to 120 chars) as fallback for log content.

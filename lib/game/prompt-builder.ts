@@ -656,10 +656,17 @@ export function buildNarratorUserPrompt(
   // When a world_graph exists, the current node tells us exactly which NPCs
   // are HERE. Inject them as a hard constraint so the narrator can't invent
   // people who aren't in the graph.
+  //
+  // Issue A: for DIALOGUE actions, the ACTIVE NPC CONTEXT block (further
+  // down) already names the single resolved NPC and gives their full
+  // constitution. The roster-style NPCS PRESENT block is redundant and could
+  // tempt the narrator to write dialogue for a different character — skip
+  // it entirely on DIALOGUE actions.
   const npcPresentLines: string[] = [];
   const graph        = state.world_graph;
   const currentNode  = graph?.nodes[graph.current_node_id ?? state.world_state.current_node_id ?? ""];
-  if (currentNode && (locationAssets ?? []).length > 0) {
+  const isDialogueAction = action?.action_type === ActionType.DIALOGUE;
+  if (currentNode && (locationAssets ?? []).length > 0 && !isDialogueAction) {
     const presentAssets = currentNode.npc_ids
       .map((id) => (locationAssets ?? []).find((a) => a.id === id))
       .filter((a): a is WorldAsset => !!a && a.category === AssetCategory.CHARACTER);

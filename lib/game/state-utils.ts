@@ -95,6 +95,35 @@ export function getNpcDisposition(trustScore: number): string {
 }
 
 /**
+ * Append a CHARACTER asset_id to the current World Graph node's npc_ids
+ * list. No-op if no graph exists, no current node, or the id is already
+ * present. Used after every dynamically-introduced NPC (narrator new_npcs
+ * or CHARACTER codex_entries) so future visits to the node see the NPC
+ * via NPCS PRESENT and the location guard recognises them.
+ */
+export function addNpcToCurrentNode(state: MasterState, npcAssetId: string): MasterState {
+  const graph = state.world_graph;
+  if (!graph) return state;
+  const nodeId = graph.current_node_id;
+  const node   = graph.nodes[nodeId];
+  if (!node) return state;
+  if (node.npc_ids.includes(npcAssetId)) return state;
+  return {
+    ...state,
+    world_graph: {
+      ...graph,
+      nodes: {
+        ...graph.nodes,
+        [nodeId]: {
+          ...node,
+          npc_ids: [...node.npc_ids, npcAssetId],
+        },
+      },
+    },
+  };
+}
+
+/**
  * Seed a missing npc_registry entry with neutral defaults so subsequent
  * lookups (trust changes, dialogue modal disposition, resolver difficulty)
  * always find a record. No-op if the key already exists — never overwrites.

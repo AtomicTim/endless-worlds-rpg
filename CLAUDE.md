@@ -1,14 +1,14 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 7.5
-**Status:** Active Development — World Generation Redesign
+**Version:** 7.6
+**Status:** Active Development — World Generation Redesign Complete
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Day 19F — Three-Tier Map Component
+**Current Phase:** Testing 19A-19F, then Day 20 — Combat System
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -22,46 +22,51 @@
 | 19C | Ambient Object System | ✅ Complete |
 | 19D | Regional Bible (Phase 2) | ✅ Complete |
 | 19E | Narrator Constraints + Highlight Overhaul | ✅ Complete |
-| 19F | Three-Tier Map Component | 🔄 In Progress |
-| 20+ | Combat, Skills, Background | ⏳ Pending |
+| 19F | Three-Tier Map Component | ✅ Complete |
+| 20 | Combat System | ⏳ Pending |
+| 21+ | Skills, Background, Factions | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Day 19E Deliverables (commit 3fdf5f6 — 86/86 tests, clean build)
-- prompt-builder: YOUR ROLE AND HARD RULES block (5 subsections A-E) immediately after WCD block
-- TIER 1 OBJECTS block injected into user prompt from key_landmarks
-- NPCS PRESENT tightened: graph-resolved only, "ONLY characters available", empty-roster fallback
-- /lib/game/highlights.ts (new): buildExactHighlights() + findExactHighlights() — whole-word, longest-phrase, overlap-drop
-- StoryFeed: exact highlight matching replaces old POI substring scanner
-- poi-colors.ts + InteractionPopover: LANDMARK type added (muted gold, info-only popover)
-- NarratorResponse.revealed_npc_names removed from types + narrator parser
-- useGameLoop step 7d (165 lines) deleted — reveal pipeline gone
-- codex.ts: updateAssetNameRevealed() deleted
-- codex page: identityUnknown always false, LOCATION assets only
+### Day 19F Deliverables (commit 41e4e7f — 86/86 tests, clean build, +7.4kB)
+- /lib/game/map-colors.ts — 28 location types across all 5 genres, MAP_CURRENT_GLOW/UNDISCOVERED/LANDMARK/NPC_DOT constants, getNodeColor()
+- /components/game/map/WorldMapTier1.tsx — 24px world grid, auto-pan to player zone, WCD landmark diamonds, undiscovered outlines, pulsing amber crosshair
+- /components/game/map/WorldMapTier2.tsx — 48px regional view, SVG connection lines, NPC dots with overflow badge, exit arrows to adjacent regions
+- /components/game/map/WorldMapTier3.tsx — 56px local layout, deterministic seeded jitter (mulberry32 PRNG), ambient grey filler blocks, region exit buttons
+- /components/game/WorldMap.tsx — tier container, breadcrumb nav (World › Region › Node), 🌍/🗺/📍 tier buttons, auto-syncs on player move
+- game-store: mapPanelOpen boolean + toggleMapPanel() + setMapPanelOpen(), cleared on clearSessionState
+- GameLayout: map toggle button, left-side sliding panel (320px), mobile backdrop, desktop w-0 collapse
+- app/game/page.tsx: WorldMap wired into mapPanel slot, null for legacy saves without world_graph
 
 ---
 
-## 🏗️ Architecture — Complete
+## 🏗️ Architecture — World Generation Complete ✅
 
 ### Four Layers ✅
-**Layer 0 — WCD** — world_consistency jsonb, injected first in all AI calls
-**Layer 1 — WorldBible** — world_bible jsonb, starting region + outlines + main quest
-**Layer 2 — RegionBible** — on-demand, background pre-generation, deduplication cache
-**Layer 3 — Narrator** — hard rules enforced, exact Tier 1 references, no reveal pipeline
+**Layer 0 — WCD** — world_consistency jsonb, formatWcdBlock() injected first in all AI calls
+**Layer 1 — WorldBible** — world_bible jsonb, starting region + outlines + main quest, 5-step wizard
+**Layer 2 — RegionBible** — on-demand, deduplication cache, background pre-generation, matchRegionOutline 3-pass fuzzy
+**Layer 3 — Narrator** — YOUR ROLE HARD RULES enforced, Tier 1 object injection, NPCS PRESENT from graph npc_ids
 
 ### Three-Tier Object System ✅
-**Tier 1** — AI-generated LocationObjects, key_landmarks, highlighted exact-match
-**Tier 2** — ambient-objects.ts (27 types, all genres), instant response, no narrator
-**Tier 3** — narrator ambient instruction, 1-2 sentences, nothing disappears
+**Tier 1** — AI LocationObjects → key_landmarks → exact highlight → EXAMINE action
+**Tier 2** — ambient-objects.ts (27 types, all genres) → instant response → no narrator, no highlight
+**Tier 3** — narrator ambient instruction → 1-2 sentences → nothing disappears
 
 ### Highlight System ✅
-- buildExactHighlights(): Tier 1 objects (ITEM), NPCs in npc_ids (NPC), connected nodes (LOCATION), WCD landmarks (LANDMARK)
-- findExactHighlights(): whole-word case-insensitive, longer phrase wins, no overlaps
-- Click behavior: ITEM→EXAMINE, NPC→DIALOGUE, LOCATION→MOVE, LANDMARK→info popover
+- buildExactHighlights(): Tier 1 objects (ITEM/amber), NPCs in npc_ids (NPC/genre primary), connected nodes (LOCATION/blue-grey), WCD landmarks (LANDMARK/muted gold)
+- findExactHighlights(): whole-word, longest-phrase-wins, no overlaps
+- Click: ITEM→EXAMINE, NPC→DIALOGUE, LOCATION→MOVE, LANDMARK→info popover
+
+### Three-Tier Map ✅
+**Tier 1 — World:** 40x40 grid, WCD landmarks as ◆, region colored blocks, undiscovered outlines
+**Tier 2 — Regional:** 48px nodes, SVG connections, NPC dots, exit arrows
+**Tier 3 — Local:** 56px sub-locations, deterministic filler blocks, NPC dots at home_location_id
+Breadcrumb nav, 🌍/🗺/📍 toggles, toggleable sidebar panel
 
 ### NPC Rules ✅
-Real name from birth. name_known always true. No reveal pipeline. No placeholders.
+Real name from birth. name_known always true. No reveal pipeline. No placeholders. Introduce atmospherically then name in same paragraph.
 
 ---
 
@@ -99,35 +104,8 @@ Tier 1 objects, NPC names, connected location names, WCD landmarks. Exact whole-
 
 ---
 
-## 🗺️ Three-Tier Map System (Day 19F)
-
-**Tier 1 — World Map (40x40 grid):**
-Viewport centered on player, scrollable. WCD landmarks as diamond markers before discovery.
-Region blocks colored by type. Current region pulsing.
-
-**Tier 2 — Regional Map:**
-One region. Nodes as colored squares. NPC dots at home locations. Exit arrows.
-
-**Tier 3 — Local Map:**
-Settlement/dungeon layout. Code-generated positioning. Notable sub-locations as colored blocks.
-Non-notable buildings as small grey filler blocks. NPCs as static dots at home_location_id.
-
-Breadcrumb nav: World > Region > Location. Default tier by context.
-Toggleable sidebar panel in game header.
-
-**Map colors by location type (all genres):**
-settlement_hub/tavern: #1d4ed8 blue | market/shop: #a16207 amber | smithy/workshop: #7c2d12 dark red
-wilderness: #15803d green | dungeon: #6b7280 grey | stronghold: #7c2d12 dark red
-port/docks: #0e7490 teal | ruin: #78716c stone
-Cyberpunk: bar #831843 | corp #1e1b4b | slum #78350f | data-hub #0e7490
-Space Opera: station #4c1d95 | ship #1e3a5f | colony #14532d
-Horror: mansion #1f2937 | asylum #374151
-Post-Apoc: shelter #7f1d1d | wasteland #92400e
-
----
-
 ## 🎭 NPC Dialogue System ✅
-- RESPONDING CHARACTER block only for DIALOGUE
+- RESPONDING CHARACTER only for DIALOGUE
 - Option tone: modal → submitAction(forcedTone) → resolver
 - Badge always matches check. Real names from birth.
 - Failed checks = evasion, never absence.
@@ -139,27 +117,25 @@ Post-Apoc: shelter #7f1d1d | wasteland #92400e
 
 ## Narrator Architecture ✅
 
-For DIALOGUE: WCD → YOUR ROLE HARD RULES → RESPONDING CHARACTER → TIER 1 OBJECTS → ESTABLISHED WORLD ASSETS → SCENE CONTEXT → VERBOSITY
-For non-DIALOGUE: WCD → YOUR ROLE HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → ESTABLISHED WORLD ASSETS → SCENE CONTEXT → VERBOSITY
+Prompt order for DIALOGUE:
+WCD → YOUR ROLE HARD RULES (5 sections A-E) → RESPONDING CHARACTER → TIER 1 OBJECTS → ESTABLISHED WORLD ASSETS → SCENE CONTEXT → VERBOSITY
 
-Hard rules: exact names, Tier 1 only, failed=evasion, RESPONDING CHARACTER only, WCD absolute, no invented NPCs/objects.
+Prompt order for non-DIALOGUE:
+WCD → YOUR ROLE HARD RULES → NPCS PRESENT (graph npc_ids only) → TIER 1 OBJECTS → ESTABLISHED WORLD ASSETS → SCENE CONTEXT → VERBOSITY
+
+Hard rules: exact names, Tier 1 only in descriptions, failed=evasion never absence, RESPONDING CHARACTER only, WCD absolute, no invented NPCs or objects.
 
 ---
 
-## Implementation Sequence
+## Planned Systems (Post-19F)
 
-### 19A ✅ — WCD (08322b6)
-### 19B ✅ — WorldBible types + routes + wizard (d5b41b0)
-### 19C ✅ — Ambient Object System (4e7ab6f)
-### 19D ✅ — RegionBible + cache + WORLD_EXPLORE (bd9dbe3)
-### 19E ✅ — Narrator hard rules + exact highlights + reveal pipeline removed (3fdf5f6)
-### 19F 🔄 — Three-Tier Map Component
-- /components/game/WorldMap.tsx
-- Tier 1: WCD grid, landmark diamonds, region blocks, scrollable
-- Tier 2: region nodes, NPC dots at home, exit arrows
-- Tier 3: code-generated local layout, grey filler blocks, NPC dots
-- Breadcrumb navigation, toggleable sidebar
-- Real-time updates on discovery
+| System | When | Description |
+| --- | --- | --- |
+| Combat System | Day 20 | Turn-based, enemy AI, loot |
+| Skills & Abilities | Day 21 | Skill trees, attribute thresholds |
+| Main Narrative Thread | Day 22 | Breadcrumb injection from WorldBible |
+| Character Background | Phase 3 | Traits, history, faction rep |
+| Art System | Phase 3 | Static pixel art library + Replicate API |
 
 ---
 
@@ -172,12 +148,13 @@ Hard rules: exact names, Tier 1 only, failed=evasion, RESPONDING CHARACTER only,
 ## Core Philosophy
 - AI generates content once, engine owns it forever
 - WCD is the constitution — injected everywhere, never contradicted
-- Three object tiers: AI / templates / ambient narrator
-- Narrator describes, never generates — hard rules enforced
+- Three-layer generation: WCD → WorldBible → RegionBible
+- Three object tiers: Tier 1 (AI) / Tier 2 (templates) / Tier 3 (ambient narrator)
+- Narrator describes, never generates
 - Names permanent from birth — no reveal pipeline
 - Highlights exact Tier 1 matches only
 - Failed checks = evasion only
-- Three-tier map: World / Regional / Local
+- Three-tier map: World / Regional / Local, toggleable sidebar
 - DnD freedom: player can try anything, engine routes appropriately
 
 ---
@@ -237,4 +214,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 62 — V7.5: Day 19E complete. Narrator hard rules, exact highlights, reveal pipeline removed. Day 19F starting.*
+*Last updated: Session 63 — V7.6: Day 19F complete. Three-tier map, all 19A-19F done. Ready for testing then Day 20.*

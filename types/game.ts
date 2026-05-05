@@ -139,7 +139,55 @@ export interface WorldState {
   visited_locations:   string[];
   flags:               Record<string, boolean | number | string>;
   location_status:     LocationStatus;
+  /** Day 18 — World Graph node id (kept in sync with current_location_id when
+   *  a world_graph exists). Optional for backward compat with old saves. */
+  current_node_id?:    string;
 }
+
+// ---------------------------------------------------------------------------
+// Day 18 — World Graph (persistent connected location graph)
+// ---------------------------------------------------------------------------
+
+export interface WorldNode {
+  /** Permanent normalized slug — matches the location's bare id (NOT prefixed). */
+  id:             string;
+  /** Display name — permanent. */
+  name:           string;
+  /** Major area (zone) vs interior sub-area (sub_location). */
+  type:           "zone" | "sub_location";
+  /** Which zone this node belongs to. Self-id when type="zone". */
+  zone_id:        string;
+  /** May the narrator add new sub_locations under this zone via exploration? */
+  is_expandable:  boolean;
+  /** Ids of nodes directly reachable from this one. */
+  connections:    string[];
+  /** world_asset ids of NPCs assigned here ("character_<slug>"). */
+  npc_ids:        string[];
+  /** world_asset ids of items / objects placed here ("item_<slug>"). */
+  item_ids:       string[];
+  /** Matching world_asset id ("location_<slug>"). */
+  asset_id:       string;
+  /** Has the player visited this node? */
+  discovered:     boolean;
+  /** Relative position for map rendering. */
+  map_position:   { x: number; y: number };
+}
+
+export interface WorldGraph {
+  /** All nodes keyed by their bare id. */
+  nodes:             Record<string, WorldNode>;
+  /** Where the player is right now. */
+  current_node_id:   string;
+  /** Pinned reference for the campaign's starting node. */
+  starting_node_id:  string;
+}
+
+/** Classification produced by classifyMove() inside resolveMove. */
+export type MoveType =
+  | "GRAPH_NAVIGATE"      // known direct connection in the graph
+  | "ZONE_EXPAND"         // new sub_location within the current zone
+  | "WORLD_EXPLORE"       // genuinely new external destination
+  | "INTERNAL_DESCRIBE";  // sub-area language, no actual move
 
 // ---------------------------------------------------------------------------
 // Log Book
@@ -205,6 +253,12 @@ export interface SeedLocation {
   faction_id?:  string;
   /** Other location ids this connects to — used by the narrator for hints. */
   connected_to?: string[];
+  /** Day 18 — World Graph fields. Older seeds may omit these; apply-world-seed
+   *  fills sensible defaults so the graph still builds. */
+  connections?: string[];
+  is_expandable?: boolean;
+  map_position?: { x: number; y: number };
+  npc_ids?: string[];
 }
 
 export interface SeedNPC {
@@ -284,6 +338,10 @@ export interface MasterState {
   world_state:  WorldState;
   log_book:     LogBook;
   npc_registry: Record<string, NPCMemory>;
+  /** Day 18 — persistent connected location graph. Optional: old saves and
+   *  fresh sessions before world-seed application have no graph yet, in
+   *  which case the resolver and game loop fall back to legacy behaviour. */
+  world_graph?: WorldGraph;
 }
 
 // ---------------------------------------------------------------------------
@@ -299,6 +357,9 @@ export interface ParsedAction {
   confidence:       number;
   /** Tone classification — only set when action_type is DIALOGUE. */
   dialogue_tone?:   "friendly" | "persuasive" | "deceptive" | "intimidating" | "curious" | "neutral";
+  /** Day 18 — populated by the resolver when a world_graph exists, after
+   *  classifyMove() decides what kind of move this is. */
+  move_type?:       MoveType;
 }
 
 export type StateDelta = {

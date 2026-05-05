@@ -636,6 +636,41 @@ export function buildNarratorUserPrompt(
     "══════════════════════════════",
   ];
 
+  // ── Day 18 — NPCS PRESENT AT THIS LOCATION ─────────────────────────────────
+  // When a world_graph exists, the current node tells us exactly which NPCs
+  // are HERE. Inject them as a hard constraint so the narrator can't invent
+  // people who aren't in the graph.
+  const npcPresentLines: string[] = [];
+  const graph        = state.world_graph;
+  const currentNode  = graph?.nodes[graph.current_node_id ?? state.world_state.current_node_id ?? ""];
+  if (currentNode && (locationAssets ?? []).length > 0) {
+    const presentAssets = currentNode.npc_ids
+      .map((id) => (locationAssets ?? []).find((a) => a.id === id))
+      .filter((a): a is WorldAsset => !!a && a.category === AssetCategory.CHARACTER);
+    if (presentAssets.length > 0) {
+      npcPresentLines.push(
+        "══════════════════════════════",
+        "NPCS PRESENT AT THIS LOCATION (graph-confirmed):",
+      );
+      for (const npc of presentAssets) {
+        const role = typeof npc.constitution.role === "string" ? npc.constitution.role : "";
+        npcPresentLines.push(`- ${npc.name}${role ? ` (${role})` : ""}`);
+      }
+      npcPresentLines.push(
+        "Only these NPCs are available for interaction here.",
+        "Do not invent additional named characters at this location.",
+        "══════════════════════════════",
+      );
+    } else if (currentNode.npc_ids.length === 0) {
+      npcPresentLines.push(
+        "══════════════════════════════",
+        "NPCS PRESENT AT THIS LOCATION: none.",
+        "Do not invent named NPCs here unless the player explicitly enters dialogue.",
+        "══════════════════════════════",
+      );
+    }
+  }
+
   // ── Day 17 — WORLD FACTS block from the seed ───────────────────────────────
   // Establishes the named world / factions / locations as immutable facts BEFORE
   // any per-asset constitution, so the narrator can reference the world by name
@@ -700,6 +735,7 @@ export function buildNarratorUserPrompt(
   const lines: string[] = [
     ...headerLines,
     ...(worldFactLines.length > 0 ? ["", ...worldFactLines] : []),
+    ...(npcPresentLines.length > 0 ? ["", ...npcPresentLines] : []),
     ...(assetsBlock ? ["", assetsBlock] : []),
     ...(sceneLines.length > 0 ? ["", ...sceneLines] : []),
     "",
@@ -831,6 +867,26 @@ export function buildNarratorUserPrompt(
   }
   if (ctx.already_searched === true) {
     prompt += "\n\nCONTAINER ALREADY SEARCHED: The player has already searched this container. Describe it as empty, picked clean — nothing new to find. Set items_acquired to an empty array.";
+  }
+
+  // Day 18 — ZONE_EXPAND: a new sub_location within the current zone.
+  if (ctx.move_type === "ZONE_EXPAND") {
+    const hint = String(ctx.expand_hint ?? "a sub-area");
+    prompt += `\n\nZONE EXPAND: The player is exploring a NEW sub-area within the current zone — '${hint}'. ` +
+      "Describe their arrival in this sub-area as a fresh scene. " +
+      "Treat it as a new node within the same zone (still under the parent location's faction and authority). " +
+      "Do not introduce a different faction or radically different setting — this is the same place, just a different corner of it.";
+  }
+
+  // Day 18 — INTERNAL_DESCRIBE: player is referring to an in-room sub-area
+  // ("go to the bar"). This is NOT a real move. Describe the moment in
+  // place; do NOT relocate the player.
+  if (ctx.is_internal_description === true) {
+    const hint = String(ctx.sub_area_hint ?? "a part of the room");
+    prompt += `\n\nINTERNAL DESCRIBE: The player is referring to '${hint}' — an in-room sub-area, NOT a separate location. ` +
+      "Describe what they observe / do there as a beat WITHIN the current scene. " +
+      "Do NOT relocate the player. Do NOT treat this as a MOVE. " +
+      "Continue the current scene; the player has not left the room.";
   }
 
   // Day 16 — TRADE block fires when resolveInteract detects merchant keywords.

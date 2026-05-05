@@ -11,7 +11,7 @@ import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAss
 import { generateArt, generateNpcPortrait, getSceneType } from "@/lib/game/art-generator";
 import { generateLocationStub } from "@/lib/game/location-stub-generator";
 import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
-import type { Item, MasterState, ParsedAction, ResolutionResult, StoredMessage, WorldAsset } from "@/types/game";
+import type { Item, MasterState, ParsedAction, ResolutionResult, StoredMessage, WorldAsset, WorldNode } from "@/types/game";
 
 const MAX_INPUT_LENGTH  = 500;
 const AUTO_SAVE_INTERVAL = 10;
@@ -437,19 +437,172 @@ export function useGameLoop() {
       );
       store.setLastNarrativeText(narratorResponse.narrative_text);
 
-      // ── 7. Art engine — fire async on MOVE_SUCCESS (non-blocking) ────────
-      if (resolution.outcome_type === "MOVE_SUCCESS") {
+      // ── 7. Day 18 — Move dispatch + Art engine ───────────────────────────────
+      // The resolver tags every move with a move_type in narrative_context.
+      // Each branch handles graph maintenance differently:
+      //   GRAPH_NAVIGATE  → just refresh assets, mark node discovered, no stub
+      //   ZONE_EXPAND     → create a new sub_location node + asset
+      //   WORLD_EXPLORE   → existing stub generator + add new zone node
+      //   (legacy)        → MOVE_SUCCESS with no move_type — pre-graph saves
+      //   DESCRIBE_SUCCESS / INTERNAL_DESCRIBE → no location change, skip both
+      const moveType =
+        typeof resolution.narrative_context.move_type === "string"
+          ? resolution.narrative_context.move_type
+          : null;
+      const isLocationChange =
+        resolution.outcome_type === "MOVE_SUCCESS" ||
+        resolution.outcome_type === "ZONE_EXPAND";
+
+      if (isLocationChange) {
         const newLocationId = updatedState.world_state.current_location_id;
         const artSessionId  = updatedState.metadata.session_id;
 
-        // Day 17 — generate a location stub when MOVING to a place that has no
-        // LOCATION asset yet. Fire-and-forget: the stub may not arrive before
-        // the narrator runs THIS turn, but it locks in the canonical name /
-        // type / faction so all FUTURE visits see consistent established facts.
-        // saveWorldAsset uses ignoreDuplicates, so racing narrator codex_entries
-        // never overwrite each other — first write wins.
-        {
-          const liveAssets = useGameStore.getState().locationAssets;
+        // ── 7-A. GRAPH_NAVIGATE ─────────────────────────────────────────────
+        if (moveType === "GRAPH_NAVIGATE" && updatedState.world_graph) {
+          const graph = updatedState.world_graph;
+          const node  = graph.nodes[newLocationId];
+          if (node) {
+            const updatedNodes = node.discovered
+              ? graph.nodes
+              : { ...graph.nodes, [newLocationId]: { ...node, discovered: true } };
+            updatedState = {
+              ...updatedState,
+              world_graph: {
+                ...graph,
+                nodes:           updatedNodes,
+                current_node_id: newLocationId,
+              },
+            };
+          }
+          // No stub gen needed — known asset already exists. Step 7c will
+          // refresh locationAssets via the standard ARRIVING flow.
+        }
+
+        // ── 7-B. ZONE_EXPAND ────────────────────────────────────────────────
+        else if (moveType === "ZONE_EXPAND" && updatedState.world_graph) {
+          const graph        = updatedState.world_graph;
+          const parentNodeId = String(resolution.narrative_context.from_node_id ?? graph.current_node_id);
+          const parentNode   = graph.nodes[parentNodeId];
+          const expandHint   = String(resolution.narrative_context.expand_hint ?? newLocationId);
+          const subId        = newLocationId; // resolver already canonicalised it
+          const subName      = expandHint
+            .replace(/^(the|a|an)\s+/i, "")
+            .split(/\s+/)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(" ");
+
+          if (parentNode && !graph.nodes[subId]) {
+            const subNode: WorldNode = {
+              id:            subId,
+              name:          subName,
+              type:          "sub_location",
+              zone_id:       parentNode.zone_id,
+              is_expandable: false,
+              connections:   [parentNodeId],
+              npc_ids:       [],
+              item_ids:      [],
+              asset_id:      `location_${subId}`,
+              discovered:    true,
+              map_position: {
+                x: parentNode.map_position.x + (Math.random() * 0.5 - 0.25),
+                y: parentNode.map_position.y + (Math.random() * 0.5 - 0.25),
+              },
+            };
+            updatedState = {
+              ...updatedState,
+              world_graph: {
+                ...graph,
+                nodes: {
+                  ...graph.nodes,
+                  [subId]: subNode,
+                  [parentNodeId]: {
+                    ...parentNode,
+                    connections: parentNode.connections.includes(subId)
+                      ? parentNode.connections
+                      : [...parentNode.connections, subId],
+                  },
+                },
+                current_node_id: subId,
+              },
+            };
+
+            // Persist a world_asset for the new sub_location so the codex
+            // step 7c finds it on arrival. ignoreDuplicates makes it safe.
+            const subAsset: WorldAsset = {
+              id:                  `location_${subId}`,
+              category:            AssetCategory.LOCATION,
+              name:                subName,
+              constitution: {
+                physical_description: narratorResponse.narrative_text.slice(0, 280),
+                notes: `type=sub_location; parent_zone=${parentNode.zone_id}`,
+              },
+              significance:        "NOTABLE",
+              first_seen_location: subId,
+              session_id:          artSessionId,
+              name_known:          true,
+              created_at:          new Date().toISOString(),
+            };
+            void saveWorldAsset(artSessionId, subAsset).then(async () => {
+              const refreshed = await getWorldAssetsForLocation(artSessionId, subId);
+              useGameStore.getState().setLocationAssets(refreshed);
+            });
+            console.log(`[GameLoop/7] ZONE_EXPAND created sub_location: ${subName} (${subId})`);
+          }
+        }
+
+        // ── 7-C. WORLD_EXPLORE — stub gen + new zone node ───────────────────
+        else if (moveType === "WORLD_EXPLORE" && updatedState.world_graph) {
+          const graph    = updatedState.world_graph;
+          const fromId   = String(resolution.narrative_context.from_node_id ?? graph.current_node_id);
+          const fromNode = graph.nodes[fromId];
+
+          if (!graph.nodes[newLocationId]) {
+            const fallbackName = String(resolution.narrative_context.destination_hint ?? newLocationId)
+              .replace(/^(the|a|an)\s+/i, "")
+              .split(/\s+/)
+              .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+              .join(" ");
+            const newZoneNode: WorldNode = {
+              id:            newLocationId,
+              name:          fallbackName || newLocationId,
+              type:          "zone",
+              zone_id:       newLocationId,
+              is_expandable: true,
+              connections:   fromNode ? [fromId] : [],
+              npc_ids:       [],
+              item_ids:      [],
+              asset_id:      `location_${newLocationId}`,
+              discovered:    true,
+              map_position: fromNode
+                ? { x: fromNode.map_position.x + 1, y: fromNode.map_position.y }
+                : { x: 0, y: 0 },
+            };
+            updatedState = {
+              ...updatedState,
+              world_graph: {
+                ...graph,
+                nodes: {
+                  ...graph.nodes,
+                  [newLocationId]: newZoneNode,
+                  ...(fromNode
+                    ? {
+                        [fromId]: {
+                          ...fromNode,
+                          connections: fromNode.connections.includes(newLocationId)
+                            ? fromNode.connections
+                            : [...fromNode.connections, newLocationId],
+                        },
+                      }
+                    : {}),
+                },
+                current_node_id: newLocationId,
+              },
+            };
+          }
+
+          // Run the existing stub generator — it'll fill in narrator-quality
+          // structural facts and persist the world_asset.
+          const liveAssets  = useGameStore.getState().locationAssets;
           const stubAssetId = `location_${newLocationId}`;
           const exists = liveAssets.find(
             (a) =>
@@ -457,6 +610,46 @@ export function useGameLoop() {
               (a.id === stubAssetId || a.first_seen_location === newLocationId)
           );
           if (!exists) {
+            void generateLocationStub(
+              parsedAction.primary_target ?? newLocationId,
+              state.world_state.current_location_id,
+              state.metadata.world_seed,
+              state.metadata.genre
+            ).then(async (stub) => {
+              const asset: WorldAsset = {
+                id:                  `location_${stub.id}`,
+                category:            AssetCategory.LOCATION,
+                name:                stub.name,
+                constitution: {
+                  physical_description: stub.description,
+                  ...(stub.faction_id ? { faction_affiliation: stub.faction_id } : {}),
+                  notes: `type=${stub.type}`,
+                },
+                significance:        "NOTABLE",
+                first_seen_location: stub.id,
+                session_id:          artSessionId,
+                name_known:          true,
+                created_at:          new Date().toISOString(),
+              };
+              await saveWorldAsset(artSessionId, asset);
+              const refreshed = await getWorldAssetsForLocation(artSessionId, newLocationId);
+              useGameStore.getState().setLocationAssets(refreshed);
+              console.log(`[GameLoop/7] WORLD_EXPLORE stub saved: ${stub.name} (${stub.id})`);
+            });
+          }
+        }
+
+        // ── 7-D. Legacy MOVE_SUCCESS (no graph) ─────────────────────────────
+        else {
+          const liveAssets  = useGameStore.getState().locationAssets;
+          const stubAssetId = `location_${newLocationId}`;
+          const exists = liveAssets.find(
+            (a) =>
+              a.category === AssetCategory.LOCATION &&
+              (a.id === stubAssetId || a.first_seen_location === newLocationId)
+          );
+          if (!exists) {
+            console.log("[WorldGraph] No graph available, using legacy navigation");
             void generateLocationStub(
               parsedAction.primary_target ?? newLocationId,
               state.world_state.current_location_id,

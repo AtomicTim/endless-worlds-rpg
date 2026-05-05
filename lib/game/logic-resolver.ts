@@ -3,6 +3,7 @@ import type { ActiveBuff, Attributes, MasterState, ParsedAction, ResolutionResul
 import { rollD20, rollD6, getAttributeModifier } from "./dice";
 import { equipItem, unequipItem, updateHealth, updateSanity, findNpcInRegistry } from "./state-utils";
 import { normalizeLocationId } from "./codex";
+import { classifyMove } from "./move-classifier";
 
 // ── Tunables ──────────────────────────────────────────────────────────────────
 
@@ -54,10 +55,6 @@ function normalizeKey(s: string): string {
 // ── MOVE ──────────────────────────────────────────────────────────────────────
 
 function resolveMove(action: ParsedAction, state: MasterState): ResolutionResult {
-  // Normalize the player's stated destination ("The Wanderer's Rest inn",
-  // "heavy oak door") into a canonical slug so current_location_id /
-  // visited_locations stay consistent across re-references and the same
-  // location never produces two distinct ids.
   const rawTarget = action.primary_target?.trim() ?? "";
   const target    = rawTarget ? normalizeLocationId(rawTarget) : "";
   const current   = state.world_state.current_location_id;
@@ -93,10 +90,133 @@ function resolveMove(action: ParsedAction, state: MasterState): ResolutionResult
     };
   }
 
+  // ── Day 18 — World Graph branch ────────────────────────────────────────────
+  // When the session has a world_graph, the destination kind is decided by
+  // classifyMove(). Each kind produces a distinct outcome / state_delta so
+  // the game loop knows whether to nav, expand, explore, or do nothing.
+  const graph = state.world_graph;
+  if (graph) {
+    const currentNode = graph.nodes[graph.current_node_id];
+    if (currentNode) {
+      const classification = classifyMove(action, currentNode, graph);
+
+      // INTERNAL_DESCRIBE — sub-area phrasing, NO actual move.
+      if (classification.type === "INTERNAL_DESCRIBE") {
+        return {
+          success:      true,
+          outcome_type: "DESCRIBE_SUCCESS",
+          state_delta:  { world_state: PRESENT },
+          narrative_context: {
+            is_internal_description: true,
+            sub_area_hint:           rawTarget,
+            current_location_id:     current,
+            current_node_id:         currentNode.id,
+          },
+        };
+      }
+
+      // GRAPH_NAVIGATE — known direct connection.
+      if (classification.type === "GRAPH_NAVIGATE" && classification.target_node_id) {
+        const targetNode = graph.nodes[classification.target_node_id];
+        if (targetNode) {
+          const visited    = state.world_state.visited_locations;
+          const isVisit    = visited.includes(targetNode.id);
+          const newVisited = isVisit ? visited : [...visited, targetNode.id];
+          return {
+            success:      true,
+            outcome_type: "MOVE_SUCCESS",
+            state_delta: {
+              world_state: {
+                current_location_id: targetNode.id,
+                current_node_id:     targetNode.id,
+                visited_locations:   newVisited,
+                location_status:     LocationStatus.ARRIVING,
+              },
+            },
+            narrative_context: {
+              location_id:        targetNode.id,
+              from_location:      current,
+              from_node_id:       currentNode.id,
+              first_visit:        !targetNode.discovered,
+              movement_mandatory: true,
+              is_known_location:  true,
+              arriving_at:        targetNode.name,
+              npcs_present:       targetNode.npc_ids,
+              move_type:          "GRAPH_NAVIGATE",
+            },
+          };
+        }
+      }
+
+      // ZONE_EXPAND — sub-location within current zone, new node will be
+      // created in the game loop after the narrator describes it. We
+      // commit the canonical sub-location id eagerly so the standard
+      // ARRIVING flow (asset reload in step 7c, etc.) handles it.
+      if (classification.type === "ZONE_EXPAND") {
+        const hint        = classification.destination_hint ?? rawTarget;
+        const expandSlug  = normalizeLocationId(hint) || `${currentNode.id}_subarea`;
+        const visitedZ    = state.world_state.visited_locations;
+        const newVisitedZ = visitedZ.includes(expandSlug) ? visitedZ : [...visitedZ, expandSlug];
+        return {
+          success:      true,
+          outcome_type: "ZONE_EXPAND",
+          state_delta: {
+            world_state: {
+              current_location_id: expandSlug,
+              current_node_id:     expandSlug,
+              visited_locations:   newVisitedZ,
+              location_status:     LocationStatus.ARRIVING,
+            },
+          },
+          narrative_context: {
+            expand_hint:        hint,
+            expand_slug:        expandSlug,
+            parent_zone:        currentNode.zone_id,
+            from_node_id:       currentNode.id,
+            from_location:      current,
+            movement_mandatory: true,
+            move_type:          "ZONE_EXPAND",
+          },
+        };
+      }
+
+      // WORLD_EXPLORE — heading somewhere genuinely new.
+      const visitedW    = state.world_state.visited_locations;
+      const newVisitedW = visitedW.includes(target) ? visitedW : [...visitedW, target];
+      return {
+        success:      true,
+        outcome_type: "MOVE_SUCCESS",
+        state_delta: {
+          world_state: {
+            current_location_id: target,
+            current_node_id:     target,
+            visited_locations:   newVisitedW,
+            location_status:     LocationStatus.ARRIVING,
+          },
+        },
+        narrative_context: {
+          location_id:        target,
+          from_location:      current,
+          from_node_id:       currentNode.id,
+          first_visit:        true,
+          movement_mandatory: true,
+          is_known_location:  false,
+          destination_hint:   classification.destination_hint ?? rawTarget,
+          move_type:          "WORLD_EXPLORE",
+        },
+      };
+    }
+    // Fall through to legacy if current_node_id doesn't resolve — corrupted
+    // graph state shouldn't block the player.
+    console.warn("[resolveMove] world_graph present but current_node_id has no node — falling back to legacy");
+  }
+
+  // ── Legacy path — used when world_graph is undefined (old saves, fresh
+  // sessions before world-seed application, or fallback). Mirrors the
+  // pre-Day-18 behaviour exactly so existing tests keep passing.
   const visited    = state.world_state.visited_locations;
   const isVisit    = visited.includes(target);
   const newVisited = isVisit ? visited : [...visited, target];
-
   return {
     success: true,
     outcome_type: "MOVE_SUCCESS",

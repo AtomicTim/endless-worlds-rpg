@@ -32,6 +32,20 @@ Generate a world skeleton for the opening of this campaign:
 - ONE main_quest with a hook the player will encounter naturally and 5 breadcrumbs.
 - 2 factions with clear dispositions and territory.
 
+WORLD GRAPH STRUCTURE (Day 18) — every location must specify how it
+connects to the others so the player can navigate a real map:
+- starting_location.connections must include 2-3 of the known_location ids.
+- Every known_location.connections must include the starting_location id
+  (so the player can return) and may include other known_locations.
+- map_position is a relative {x, y} pair used by the map renderer:
+  starting_location is {x: 0, y: 0}; place neighbours at distance 1 in
+  logical directions (e.g. {x: 1, y: 0} east, {x: -1, y: 0} west,
+  {x: 0, y: 1} north, {x: 0, y: -1} south).
+- is_expandable: true for zones the player can wander into sub-areas of
+  (towns, settlements, large markets); false for tight discrete places
+  (single rooms, stretches of road, ruins).
+- npc_ids: list the SeedNPC ids whose location_id matches this location.
+
 Every id must be a snake_case slug (lowercase letters, numbers, underscores only).
 Names must be original and specific to this world — no Tolkien, Star Wars, etc.
 
@@ -45,7 +59,11 @@ Required JSON schema (return exactly this shape, fully populated):
     "type": "tavern|settlement|wilderness|dungeon|market|stronghold|ruin|port|other",
     "description": "2-3 sentences of structural facts",
     "faction_id": "optional snake_case faction id",
-    "connected_to": ["other_location_slug_1", "other_location_slug_2"]
+    "connected_to": ["other_location_slug_1", "other_location_slug_2"],
+    "connections": ["other_location_slug_1", "other_location_slug_2"],
+    "is_expandable": true,
+    "map_position": { "x": 0, "y": 0 },
+    "npc_ids": ["npc_slug_1", "npc_slug_2"]
   },
   "known_locations": [
     {
@@ -54,7 +72,11 @@ Required JSON schema (return exactly this shape, fully populated):
       "type": "...",
       "description": "...",
       "faction_id": "optional",
-      "connected_to": ["..."]
+      "connected_to": ["..."],
+      "connections": ["..."],
+      "is_expandable": false,
+      "map_position": { "x": 1, "y": 0 },
+      "npc_ids": []
     }
   ],
   "key_npcs": [

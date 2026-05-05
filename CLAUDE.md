@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 6.1
+**Version:** 6.2
 **Status:** Active Development — Phase 2 In Progress
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -21,24 +21,21 @@
 | Narrator simplification | Text+tone only, game code derives mechanics | ✅ Complete |
 | 16 | NPC Trading + Item Value | ✅ Complete |
 | 17 | World Seed + Location Stub Generator | ✅ Complete |
-| TradeModal fix | Null guard on currentTradeItems | ✅ Complete |
+| Codex encounter fix | Populates on player encounter, not at seed time | ✅ Complete |
 | 18 | Main Narrative Thread | 🔄 In Progress |
 | 19+ | Combat, Skills, Factions | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Day 17 Deliverables (commit a27de24 — 86/86 tests, clean build)
-- `WorldSeed` types: SeedLocation, SeedNPC, SeedQuest, SeedFaction
-- `/api/game/generate-world-seed` + `/api/game/apply-world-seed`
-- `/app/game/new` — progressive loading with world generation
-- `/api/game/generate-location-stub` — stub generator for new areas
-- `useGameLoop` step 7: MOVE_SUCCESS to unknown → stub → saveWorldAsset → refresh
-- `prompt-builder`: WORLD FACTS block, current location first in ESTABLISHED WORLD ASSETS
-- `supabase/migrations/007_world_seed.sql` — applied ✅
+### Codex Encounter Fix (commit cccf092)
+Two-table model now enforced in code:
+- `world_assets` = narrator's bible — pre-seeded, never shown to player directly
+- `codex` = player's journal — populated only through actual play
 
-### Post-Day 17 Fix (commit 211fb73)
-- `TradeModal.tsx`: `!tradeItems ||` guard — null-safe on init and after clearSessionState
+Location codex entry: fires in step 7c on ARRIVING, reads from world_asset constitution
+NPC codex entry: fires in step 7g on first dialogue (seedNpcRegistry signal), reads from world_asset
+Both use `ignoreDuplicates: true` — safe to call on every encounter, created exactly once
 
 ---
 
@@ -47,13 +44,14 @@
 **Layer 1 — World Seed (Day 17 ✅):**
 - Generated at game start before player's first action
 - Starting location + 2-3 connected locations + 3 key NPCs (names known from start)
-- Main quest with 5 breadcrumbs, 2 factions — all pre-seeded as world_assets
-- Fallback hardcoded seeds per genre if generation fails
+- Main quest with 5 breadcrumbs, 2 factions
+- Writes to `world_assets` ONLY — codex is empty until player explores
 
 **Layer 2 — Location Stub Generator (Day 17 ✅):**
 - Fires on MOVE_SUCCESS to unknown location (before narrator)
 - Structural stub locked as world_asset immediately
 - Narrator describes the stub — never invents the name
+- Codex entry written on player's first ARRIVING
 
 **Layer 3 — Game Engine:**
 - Stat checks, dice, outcomes, currency, inventory, flags, trust scores
@@ -89,10 +87,10 @@ All dialogue identical pipeline. Tone → stat check (game code). Badge shows re
 
 ## 🌱 World Seed System (Complete)
 
-**At game start:** generateWorldSeed() → applyWorldSeed() → world_assets pre-populated
-**On MOVE to new area:** generateLocationStub() → saveWorldAsset() → narrator receives as fact
+**At game start:** generateWorldSeed() → applyWorldSeed() → world_assets pre-populated, codex empty
+**On MOVE to new area:** generateLocationStub() → saveWorldAsset() → codex entry on first ARRIVING
+**On first NPC dialogue:** seedNpcRegistry() fires → codex entry written from world_asset constitution
 **Narrator receives:** WORLD FACTS block + ESTABLISHED WORLD ASSETS (current location first)
-**Result:** Narrator describes, never invents names
 
 ---
 
@@ -114,9 +112,9 @@ All dialogue identical pipeline. Tone → stat check (game code). Badge shows re
 **Narrator outputs: text + simple values. Game code derives: all mechanics.**
 
 Prompt structure (in order):
-1. WORLD FACTS block
-2. ESTABLISHED WORLD ASSETS (current location first)
-3. PLAYER STATE header
+1. WORLD FACTS block (world name, tagline, factions, known locations)
+2. ESTABLISHED WORLD ASSETS (current location first, then others)
+3. PLAYER STATE header (authoritative location, status)
 4. SCENE CONTEXT (ARRIVING/PRESENT)
 5. Resolution context, character stats, loadout, recent log
 
@@ -128,6 +126,7 @@ Prompt structure (in order):
 - npc_registry: immediately patched to store on seed
 - locationAssets: client-side filtered, loaded on mount + late-loaded
 - world_seed: stored in game_sessions.world_seed column
+- Codex: written on first encounter (location ARRIVING, NPC first dialogue)
 - Full state: every 10 actions
 
 ---
@@ -145,7 +144,8 @@ Prompt structure (in order):
 ---
 
 ## Supabase Tables (all applied ✅)
-- `profiles`, `game_sessions` (+world_seed), `characters`, `world_states`, `log_books`, `npcs`, `subscriptions`, `community_templates`, `user_preferences`
+- `profiles`, `game_sessions` (+world_seed), `characters`, `world_states`, `log_books`
+- `npcs`, `subscriptions`, `community_templates`, `user_preferences`
 - `art_cache`, `world_assets` (+svg_content, +name_known), `codex`
 - Migrations 001-007 all applied
 
@@ -154,9 +154,10 @@ Prompt structure (in order):
 ## Core Philosophy
 
 - **Hybrid Authority:** Code = Truth, AI = narrator of code-owned facts
+- **Two-table model:** world_assets (engine bible) vs codex (player journal)
 - **Three-layer model:** World Seed → AI detail → permanent lock → narrator describes
 - **Narrator outputs text + simple values only**
-- **World Seed pre-seeds structure; AI fills sensory detail; engine locks everything**
+- **Codex populates through play, never pre-populated**
 - World Assets permanent, Movement absolute, Objects exist
 - Truly endless — procedurally generated at every layer
 
@@ -219,4 +220,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 52 — V6.1: TradeModal null guard. Server starts clean. Day 18 ready.*
+*Last updated: Session 53 — V6.2: Two-table model enforced. Codex populates on encounter. Day 18 starting.*

@@ -67,6 +67,80 @@ function stripJsonFences(raw: string): string {
     .trim();
 }
 
+/**
+ * Pre-validation pass that derives missing mechanical fields from
+ * present data instead of failing outright on AI omissions. The
+ * model reliably names landmarks and factions but sometimes skips
+ * id slugs, default flags, or geometry — none of which are creative
+ * decisions, so it's safe (and cheaper) to fill them ourselves.
+ */
+function normalizeWcd(parsed: unknown): unknown {
+  if (!parsed || typeof parsed !== "object") return parsed;
+  const o = parsed as Record<string, unknown>;
+
+  // Normalize landmarks: derive id from name if missing
+  if (Array.isArray(o.landmarks)) {
+    o.landmarks = o.landmarks.map((lm: unknown) => {
+      if (!lm || typeof lm !== "object") return lm;
+      const l = { ...(lm as Record<string, unknown>) };
+      // Derive id from name if missing or empty
+      if (!l.id || typeof l.id !== "string" || !(l.id as string).trim()) {
+        l.id = typeof l.name === "string"
+          ? l.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")
+          : "landmark_" + Math.random().toString(36).slice(2, 7);
+      }
+      // Default is_region_origin if missing
+      if (typeof l.is_region_origin !== "boolean") {
+        l.is_region_origin = false;
+      }
+      // Default grid_position if missing or malformed
+      if (!l.grid_position || typeof l.grid_position !== "object") {
+        l.grid_position = { x: 0, y: 0 };
+      }
+      // Default known_by if missing
+      if (!l.known_by || !["everyone", "locals", "scholars"].includes(l.known_by as string)) {
+        l.known_by = "everyone";
+      }
+      // Default type if invalid
+      const validTypes = ["settlement", "stronghold", "wilderness", "dungeon", "ruin", "geographic"];
+      if (!l.type || !validTypes.includes(l.type as string)) {
+        l.type = "geographic";
+      }
+      return l;
+    });
+  }
+
+  // Normalize factions: derive id from name if missing
+  if (Array.isArray(o.factions)) {
+    o.factions = o.factions.map((f: unknown) => {
+      if (!f || typeof f !== "object") return f;
+      const faction = { ...(f as Record<string, unknown>) };
+      if (!faction.id || typeof faction.id !== "string" || !(faction.id as string).trim()) {
+        faction.id = typeof faction.name === "string"
+          ? faction.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")
+          : "faction_" + Math.random().toString(36).slice(2, 7);
+      }
+      if (!faction.disposition_to_player ||
+          !["allied", "neutral", "hostile", "unknown"].includes(faction.disposition_to_player as string)) {
+        faction.disposition_to_player = "neutral";
+      }
+      return faction;
+    });
+  }
+
+  // Ensure grid_size is a number
+  if (typeof o.grid_size !== "number") {
+    o.grid_size = 40;
+  }
+
+  // Ensure world_origin has x and y
+  if (!o.world_origin || typeof o.world_origin !== "object") {
+    o.world_origin = { x: 0, y: 0 };
+  }
+
+  return o;
+}
+
 function isFiniteNumber(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
 }
@@ -106,24 +180,27 @@ function validateWcd(parsed: unknown): { ok: true; wcd: WorldConsistencyDocument
   if (typeof o.world_tagline !== "string" || !o.world_tagline.trim()) return { ok: false, error: "world_tagline missing" };
   if (typeof o.atmosphere !== "string" || !o.atmosphere.trim()) return { ok: false, error: "atmosphere missing" };
 
-  if (!Array.isArray(o.landmarks) || o.landmarks.length !== 5) {
-    return { ok: false, error: `landmarks must be array of exactly 5 (got ${Array.isArray(o.landmarks) ? o.landmarks.length : "non-array"})` };
+  // Counts relaxed from "exactly 5/3/6" to "at least 3/2/3" — the AI
+  // commonly produces 4 landmarks or 4 rules and the game functions
+  // identically. Hard floors stay so we never accept an empty WCD.
+  if (!Array.isArray(o.landmarks) || o.landmarks.length < 3) {
+    return { ok: false, error: `landmarks must be array of at least 3 (got ${Array.isArray(o.landmarks) ? o.landmarks.length : "non-array"})` };
   }
   for (let i = 0; i < o.landmarks.length; i++) {
     const err = validateLandmark(o.landmarks[i]);
     if (err) return { ok: false, error: `landmarks[${i}]: ${err}` };
   }
 
-  if (!Array.isArray(o.factions) || o.factions.length !== 3) {
-    return { ok: false, error: `factions must be array of exactly 3 (got ${Array.isArray(o.factions) ? o.factions.length : "non-array"})` };
+  if (!Array.isArray(o.factions) || o.factions.length < 2) {
+    return { ok: false, error: `factions must be array of at least 2 (got ${Array.isArray(o.factions) ? o.factions.length : "non-array"})` };
   }
   for (let i = 0; i < o.factions.length; i++) {
     const err = validateFaction(o.factions[i]);
     if (err) return { ok: false, error: `factions[${i}]: ${err}` };
   }
 
-  if (!Array.isArray(o.world_rules) || o.world_rules.length !== 6) {
-    return { ok: false, error: `world_rules must be array of exactly 6 (got ${Array.isArray(o.world_rules) ? o.world_rules.length : "non-array"})` };
+  if (!Array.isArray(o.world_rules) || o.world_rules.length < 3) {
+    return { ok: false, error: `world_rules must be array of at least 3 (got ${Array.isArray(o.world_rules) ? o.world_rules.length : "non-array"})` };
   }
   for (let i = 0; i < o.world_rules.length; i++) {
     if (typeof o.world_rules[i] !== "string" || !(o.world_rules[i] as string).trim()) {
@@ -214,7 +291,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const validated = validateWcd(parsed);
+  // Normalize before validation — derives missing mechanical fields
+  // (ids, defaults) rather than failing on AI omissions.
+  const normalized = normalizeWcd(parsed);
+  const validated = validateWcd(normalized);
   if (!validated.ok) {
     return NextResponse.json(
       { error: `WCD validation failed: ${validated.error}` },

@@ -228,6 +228,48 @@ function normalizeWorldBible(parsed: unknown): unknown {
       region.npcs = alt ?? [];
     }
 
+    // Object-shaped containers: AI sometimes emits keyed dictionaries
+    // ({ "town_square": {...}, "inn": {...} }) instead of arrays. Flatten
+    // to Object.values() and stamp the dict key as the entry id when the
+    // entry doesn't carry one already.
+    if (
+      region.locations &&
+      !Array.isArray(region.locations) &&
+      typeof region.locations === "object"
+    ) {
+      const dict = region.locations as Record<string, unknown>;
+      region.locations = Object.entries(dict).map(([k, v]) => {
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          const inner = v as Record<string, unknown>;
+          if (!inner.id || typeof inner.id !== "string" || !(inner.id as string).trim()) {
+            return { ...inner, id: k };
+          }
+          return inner;
+        }
+        return v;
+      });
+      console.log("[WorldBible] Converted locations object to array");
+    }
+
+    if (
+      region.npcs &&
+      !Array.isArray(region.npcs) &&
+      typeof region.npcs === "object"
+    ) {
+      const dict = region.npcs as Record<string, unknown>;
+      region.npcs = Object.entries(dict).map(([k, v]) => {
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          const inner = v as Record<string, unknown>;
+          if (!inner.id || typeof inner.id !== "string" || !(inner.id as string).trim()) {
+            return { ...inner, id: k };
+          }
+          return inner;
+        }
+        return v;
+      });
+      console.log("[WorldBible] Converted npcs object to array");
+    }
+
     // exits: accept connections fallback
     if (!Array.isArray(region.exits)) {
       const alt = pickArray(region, ["exits", "connections"]);
@@ -453,12 +495,26 @@ export async function POST(request: NextRequest) {
   let parseError = "";
   try {
     const rawText = await callClaude(anthropic, userPrompt);
+    // Debug: dump head + tail of the raw response so we can see exactly
+    // what the AI emitted when normalization can't reach a valid shape.
+    console.log(
+      "[WorldBible] Raw response (first 2000 chars):",
+      rawText.substring(0, 2000)
+    );
+    console.log(
+      "[WorldBible] Raw response (last 500 chars):",
+      rawText.substring(Math.max(0, rawText.length - 500))
+    );
     try {
       parsed = JSON.parse(stripJsonFences(rawText));
     } catch (err) {
       parseError = err instanceof Error ? err.message : "JSON parse failed";
       const retryPrompt = userPrompt + "\n\nReturn ONLY the JSON object, nothing else. No markdown.";
       const retryRaw = await callClaude(anthropic, retryPrompt);
+      console.log(
+        "[WorldBible] Retry response (first 2000 chars):",
+        retryRaw.substring(0, 2000)
+      );
       try {
         parsed = JSON.parse(stripJsonFences(retryRaw));
       } catch (retryErr) {
@@ -492,10 +548,35 @@ export async function POST(request: NextRequest) {
   // Normalize before validation — maps AI field-name variants to the
   // canonical schema and fills missing mechanical fields with defaults.
   const normalized = normalizeWorldBible(parsed);
+
+  // Debug: log the post-normalization shape so we can see whether the
+  // various restructure paths actually landed locations / npcs in the
+  // canonical place before validateBible runs.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  console.log("[WorldBible] After normalization:", JSON.stringify({
+    hasStartingRegion: !!(normalized as any)?.starting_region,
+    locationsType:     typeof (normalized as any)?.starting_region?.locations,
+    locationsIsArray:  Array.isArray((normalized as any)?.starting_region?.locations),
+    locationsLength:   Array.isArray((normalized as any)?.starting_region?.locations)
+      ? (normalized as any).starting_region.locations.length
+      : "N/A",
+    startingRegionKeys: Object.keys((normalized as any)?.starting_region ?? {}),
+  }));
+
   const validated = validateBible(normalized);
   if (!validated.ok) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sr = (normalized as any)?.starting_region;
     return NextResponse.json(
-      { error: `WorldBible validation failed: ${validated.error}` },
+      {
+        error: `WorldBible validation failed: ${validated.error}`,
+        debug: {
+          topLevelKeys:       Object.keys(normalized as object),
+          startingRegionKeys: Object.keys(sr ?? {}),
+          locationsType:      typeof sr?.locations,
+          locationsValue:     JSON.stringify(sr?.locations)?.substring(0, 200),
+        },
+      },
       { status: 400 }
     );
   }

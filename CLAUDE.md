@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 7.6
+**Version:** 7.7
 **Status:** Active Development — World Generation Redesign Complete
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -29,15 +29,13 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Day 19F Deliverables (commit 41e4e7f — 86/86 tests, clean build, +7.4kB)
-- /lib/game/map-colors.ts — 28 location types across all 5 genres, MAP_CURRENT_GLOW/UNDISCOVERED/LANDMARK/NPC_DOT constants, getNodeColor()
-- /components/game/map/WorldMapTier1.tsx — 24px world grid, auto-pan to player zone, WCD landmark diamonds, undiscovered outlines, pulsing amber crosshair
-- /components/game/map/WorldMapTier2.tsx — 48px regional view, SVG connection lines, NPC dots with overflow badge, exit arrows to adjacent regions
-- /components/game/map/WorldMapTier3.tsx — 56px local layout, deterministic seeded jitter (mulberry32 PRNG), ambient grey filler blocks, region exit buttons
-- /components/game/WorldMap.tsx — tier container, breadcrumb nav (World › Region › Node), 🌍/🗺/📍 tier buttons, auto-syncs on player move
-- game-store: mapPanelOpen boolean + toggleMapPanel() + setMapPanelOpen(), cleared on clearSessionState
-- GameLayout: map toggle button, left-side sliding panel (320px), mobile backdrop, desktop w-0 collapse
-- app/game/page.tsx: WorldMap wired into mapPanel slot, null for legacy saves without world_graph
+### Post-19F Fixes (commit 88aacb1)
+- All 7 API routes migrated from deprecated claude-sonnet-4-20250514 → claude-sonnet-4-5
+- getAllWorldAssets(sessionId) added to codex.ts — no location filter fallback
+- page.tsx: location-filtered preload falls back to getAllWorldAssets when empty
+- apply-world-bible: logs Set current_location_id for debugging
+- WorldBible normalization: root-level restructure, aliased field lookup, object→array conversion
+- WorldBible skeleton prompt for reliable schema compliance
 
 ---
 
@@ -46,7 +44,7 @@
 ### Four Layers ✅
 **Layer 0 — WCD** — world_consistency jsonb, formatWcdBlock() injected first in all AI calls
 **Layer 1 — WorldBible** — world_bible jsonb, starting region + outlines + main quest, 5-step wizard
-**Layer 2 — RegionBible** — on-demand, deduplication cache, background pre-generation, matchRegionOutline 3-pass fuzzy
+**Layer 2 — RegionBible** — on-demand, deduplication cache, background pre-generation
 **Layer 3 — Narrator** — YOUR ROLE HARD RULES enforced, Tier 1 object injection, NPCS PRESENT from graph npc_ids
 
 ### Three-Tier Object System ✅
@@ -55,18 +53,21 @@
 **Tier 3** — narrator ambient instruction → 1-2 sentences → nothing disappears
 
 ### Highlight System ✅
-- buildExactHighlights(): Tier 1 objects (ITEM/amber), NPCs in npc_ids (NPC/genre primary), connected nodes (LOCATION/blue-grey), WCD landmarks (LANDMARK/muted gold)
+- buildExactHighlights(): Tier 1 objects (ITEM/amber), NPCs (NPC/genre primary), connected nodes (LOCATION/blue-grey), WCD landmarks (LANDMARK/muted gold)
 - findExactHighlights(): whole-word, longest-phrase-wins, no overlaps
 - Click: ITEM→EXAMINE, NPC→DIALOGUE, LOCATION→MOVE, LANDMARK→info popover
 
 ### Three-Tier Map ✅
-**Tier 1 — World:** 40x40 grid, WCD landmarks as ◆, region colored blocks, undiscovered outlines
+**Tier 1 — World:** 40x40 grid, WCD landmarks as ◆, region colored blocks
 **Tier 2 — Regional:** 48px nodes, SVG connections, NPC dots, exit arrows
 **Tier 3 — Local:** 56px sub-locations, deterministic filler blocks, NPC dots at home_location_id
 Breadcrumb nav, 🌍/🗺/📍 toggles, toggleable sidebar panel
 
 ### NPC Rules ✅
-Real name from birth. name_known always true. No reveal pipeline. No placeholders. Introduce atmospherically then name in same paragraph.
+Real name from birth. name_known always true. No reveal pipeline. No placeholders.
+
+### AI Model ✅
+All routes now use claude-sonnet-4-5 (migrated from deprecated claude-sonnet-4-20250514)
 
 ---
 
@@ -117,13 +118,10 @@ Tier 1 objects, NPC names, connected location names, WCD landmarks. Exact whole-
 
 ## Narrator Architecture ✅
 
-Prompt order for DIALOGUE:
-WCD → YOUR ROLE HARD RULES (5 sections A-E) → RESPONDING CHARACTER → TIER 1 OBJECTS → ESTABLISHED WORLD ASSETS → SCENE CONTEXT → VERBOSITY
+For DIALOGUE: WCD → YOUR ROLE HARD RULES → RESPONDING CHARACTER → TIER 1 OBJECTS → ESTABLISHED WORLD ASSETS → SCENE CONTEXT → VERBOSITY
+For non-DIALOGUE: WCD → YOUR ROLE HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → ESTABLISHED WORLD ASSETS → SCENE CONTEXT → VERBOSITY
 
-Prompt order for non-DIALOGUE:
-WCD → YOUR ROLE HARD RULES → NPCS PRESENT (graph npc_ids only) → TIER 1 OBJECTS → ESTABLISHED WORLD ASSETS → SCENE CONTEXT → VERBOSITY
-
-Hard rules: exact names, Tier 1 only in descriptions, failed=evasion never absence, RESPONDING CHARACTER only, WCD absolute, no invented NPCs or objects.
+Hard rules: exact names, Tier 1 only in descriptions, failed=evasion never absence, RESPONDING CHARACTER only, WCD absolute.
 
 ---
 
@@ -166,7 +164,7 @@ Hard rules: exact names, Tier 1 only in descriptions, failed=evasion never absen
 | Frontend | Next.js 14 (App Router) |
 | Styling | Tailwind CSS + shadcn/ui |
 | Database | Supabase |
-| AI | Claude API (claude-sonnet-4-20250514) |
+| AI | Claude API (claude-sonnet-4-5) |
 | Payments | Stripe |
 | Deploy | Vercel |
 | Audio | Howler.js |
@@ -214,4 +212,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 63 — V7.6: Day 19F complete. Three-tier map, all 19A-19F done. Ready for testing then Day 20.*
+*Last updated: Session 64 — V7.7: Model migrated to claude-sonnet-4-5, locationAssets fallback, WorldBible normalization hardened. Testing 19A-19F.*

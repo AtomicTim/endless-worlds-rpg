@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 6.3
+**Version:** 6.4
 **Status:** Active Development — Phase 2 In Progress
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Day:** Day 18 — Main Narrative Thread + Verbosity + Feed Visuals
+**Current Day:** Day 19 — Combat System
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -22,79 +22,86 @@
 | 16 | NPC Trading + Item Value | ✅ Complete |
 | 17 | World Seed + Location Stub Generator | ✅ Complete |
 | World Graph | Persistent connected location graph | ✅ Complete |
-| 18 | Narrative Thread + Verbosity + Feed Visuals | 🔄 In Progress |
-| 19+ | Combat, Skills, Factions | ⏳ Pending |
+| 18 | Graph fixes, verbosity, Direction 3 UI, art removal | ✅ Complete |
+| 19 | Combat System | 🔄 In Progress |
+| 20+ | Skills, Factions, Background | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### World Graph Architecture (commit 1434ec0 — 86/86 tests, clean build)
+### Day 18 Deliverables (commits 0c86697 + 4df0c08)
 
-**The core problem it solves:** Location fragmentation, duplicate codex entries, NPC dialogue jumping, sub-area spawning new worlds.
+**Graph fixes:**
+- TYPE_KEYWORDS map covering all 5 genres — type-based GRAPH_NAVIGATE matching
+- INTERNAL_DESCRIBE_PATTERNS expanded — vertical movement + interior areas all genres
+- NPC location guard — clears dialogue when active NPC not at current node
+- Empty-node narrator instruction — no invented characters when node has no NPCs
+- Stat check hard validation in resolveDialogue + null-path logging in buildRollFeedback
 
-**How it works:**
-- World Seed generates a fully-connected graph with explicit node IDs, connections, map positions, and NPC assignments
-- Every location is a `WorldNode` with permanent ID, connections[], npc_ids[], and map_position
-- Move classifier categorizes every MOVE before the resolver runs:
-  - `GRAPH_NAVIGATE` — known connection, instant deterministic navigation
-  - `INTERNAL_DESCRIBE` — sub-area language ("go to the bar"), no location change
-  - `ZONE_EXPAND` — new sub-area within expandable zone, creates child node
-  - `WORLD_EXPLORE` — genuinely new territory, creates new zone node
-- NPCs are assigned to graph nodes — narrator receives NPCS PRESENT block, cannot invent extras
-- Legacy fallback for old saves (no graph) with log warning
+**Verbosity toggle:**
+- `verbosity: 'terse' | 'standard' | 'rich'` in game-store (localStorage-hydrated)
+- RESPONSE LENGTH block appended to narrator system prompt
+- VerbosityToggle component in GameLayout header (genre-primary active state)
 
-**Migrations applied:** 008_world_graph.sql ✅
-- `game_sessions.world_graph jsonb`
-- `world_states.current_node_id text`
+**Direction 3 UI overhaul (all 5 genres):**
+- `components/game/genre-ui.ts` — single source of truth for genre colors, currency, HP labels
+- StoryFeed: arrival header (◈ Name with dividers), mono prose, NPC quote-blocks, stat-check receipts, system events
+- DialogueModal: accent-bar option buttons (4px tone bar), stat badge right, NPC name in genre primary
+- InventoryPanel, TradeModal, CharacterSheet: currency + HP labels from getGenreColors
+- Horror null currency hides currency display entirely
+- useGameLoop stamps metadata.locationName on MOVE_SUCCESS NARRATIVE messages
 
-### Two-Table Model (enforced)
-- `world_assets` = narrator's bible — pre-seeded, AI constitution source
-- `codex` = player's journal — written on first encounter only
+**Art system removed (commit 4df0c08):**
+- art-generator.ts deleted
+- /api/game/generate-art route deleted
+- artCache and currentAsciiArt removed from game-store
+- All [GameLoop/art] steps removed from useGameLoop
+- updateWorldAssetSvg removed from codex.ts
+- SceneArt.tsx replaced with genre-themed placeholder (location name + category)
+- svg_content column and art_cache table kept in DB for future reimplementation
+
+---
+
+## 🎨 Art System (Removed — To Be Reimplemented)
+
+SVG generation removed. SceneArt shows a placeholder panel with location name and type.
+Future options: static pixel art asset library (CC0) + Replicate API for premium tier.
+DB columns (svg_content, art_cache table) preserved for when art is reimplemented.
+Do NOT re-add any AI-based SVG or ASCII art generation.
 
 ---
 
 ## 🗺️ World Graph Architecture
 
-**WorldNode:**
-```
-id, name, type (zone|sub_location), zone_id,
-is_expandable, connections[], npc_ids[], item_ids[],
-asset_id, discovered, map_position {x,y}
-```
+**WorldNode:** id, name, type, zone_id, is_expandable, connections[], npc_ids[], asset_id, discovered, map_position, category?
 
 **Move Classification (move-classifier.ts):**
-```
-GRAPH_NAVIGATE   → known connection, load node assets directly
-INTERNAL_DESCRIBE → in-room sub-area, narrator describes, no move
-ZONE_EXPAND      → new child node within expandable zone
-WORLD_EXPLORE    → new zone, bidirectional connection added
-```
+- GRAPH_NAVIGATE → name match OR type-keyword match (single connection) — deterministic
+- INTERNAL_DESCRIBE → in-room/vertical sub-area, narrator describes, no location change
+- ZONE_EXPAND → new child node within expandable zone
+- WORLD_EXPLORE → new zone, bidirectional connection added
 
-**NPC Placement:**
-- NPCs assigned to graph nodes at seed time
-- Narrator receives exact NPC list for current node
-- Dialogue context anchors to node's NPC list
-- No NPC invented outside the node's assigned list
+**TYPE_KEYWORDS covers all genres:**
+- Fantasy: tavern, settlement, dungeon, stronghold, wilderness, market
+- Cyberpunk: data-hub, corp-zone, slum, bar
+- Space Opera: station, ship, colony
+- Horror: mansion, street
+- Post-Apocalyptic: shelter, wasteland
 
-**Map (Future):**
-- graph.nodes have map_position {x,y}
-- Discovered nodes fill in procedurally as player explores
-- Enables fog-of-war map in Phase 3
+**NPC Placement:** NPCs assigned to graph nodes. Narrator receives NPCS PRESENT block. Cannot invent NPCs not in node.
 
 ---
 
 ## ⚡ FOUNDATIONAL RULES (Read Before Every Session)
 
 ### 1. World Assets Are Permanent
-Write-once constitution. `ignoreDuplicates: true`. SVG backfilled separately.
+Write-once constitution. `ignoreDuplicates: true`.
 
 ### 2. Movement Is Graph-Based
-MOVE always succeeds. Move classifier determines type before resolver runs.
-`current_node_id` is the single source of truth for player location.
+Move classifier runs before resolver. `current_node_id` is single source of truth.
 
 ### 3. Location Is Authoritative State
-`current_node_id` always correct. Saved immediately on real moves.
-`INTERNAL_DESCRIBE` moves do NOT update location.
+`current_node_id` saved immediately on real moves. INTERNAL_DESCRIBE does NOT update location.
 
 ### 4. Actions Are Permitted By Default
 Plausible actions always attempted. Narrator describes outcomes only.
@@ -103,46 +110,41 @@ Plausible actions always attempted. Narrator describes outcomes only.
 EXAMINE/INTERACT resolver confirms object_confirmed=true.
 
 ### 6. Dialogue Is Consistent
-NPC context anchored to current graph node's npc_ids.
-Tone → stat check (game code). Badge shows real player stat.
+NPC context anchored to current node's npc_ids. Tone → stat check (game code). Badge shows real stat. NPC cleared when player leaves node.
 
 ### 7. The AI Has Exactly Three Roles
-**Generator:** Invents sensory detail within World Seed guardrails. Locked immediately.
-**Bridge:** Describes mechanical outcomes. Never decides outcomes or invents NPCs.
+**Generator:** Invents content within World Seed guardrails. Locked immediately.
+**Bridge:** Describes outcomes. Never invents NPCs or speaks for player.
 **Thread:** Plants quest breadcrumbs. Never forces or blocks.
 
 ---
 
 ## 🌱 World Generation System
 
-**At game start:**
-1. `generateWorldSeed()` — AI generates world skeleton with connections, positions, NPC assignments
-2. `applyWorldSeed()` — writes world_assets + builds WorldGraph + sets starting node
-3. World is fully navigable before player's first action
-
-**On MOVE:**
-- `classifyMove()` runs first — determines GRAPH_NAVIGATE / INTERNAL_DESCRIBE / ZONE_EXPAND / WORLD_EXPLORE
-- GRAPH_NAVIGATE: load node assets by ID — deterministic, no ambiguity
-- ZONE_EXPAND: create sub_location node, link to parent zone
-- WORLD_EXPLORE: AI generates new zone node, add to graph bidirectionally
-- INTERNAL_DESCRIBE: narrator describes sub-area, location unchanged
-
-**On first NPC dialogue:**
-- `seedNpcRegistry()` — creates registry entry
-- Codex entry written from world_asset constitution
+**At game start:** generateWorldSeed() → applyWorldSeed() → world_assets + WorldGraph pre-populated
+**On MOVE:** classifyMove() → GRAPH_NAVIGATE (deterministic) / ZONE_EXPAND / WORLD_EXPLORE
+**On first NPC dialogue:** seedNpcRegistry() + codex entry from world_asset
 
 ---
 
 ## 🎭 NPC Dialogue System (Complete)
 - NPCs assigned to graph nodes — narrator cannot invent extras
-- Tone → stat check (game code only), badge shows real player stat
+- Tone → stat check (game code only), badge shows real current stat
+- NPC cleared from dialogue when player moves to node without them
 - justRevealedName prevents step 7g overwriting step 7d reveal
-- clearDialogueOptions() on real moves and non-dialogue actions
-- NPC context switch when primary_target differs from currentDialogueNpc
+- All stat check fields validated; null path logged
 
 ## 💰 Trading System (Day 16 — Complete)
 - Merchant keyword detection → trade_available → items_for_sale
-- TradeModal: Buy full value, Sell 50%. Null-safe.
+- TradeModal: Buy full value, Sell 50%
+- Currency label from getGenreColors — genre-accurate everywhere
+
+## 🎨 UI System (Direction 3 — Complete)
+- genre-ui.ts: getGenreColors(genre) — single source of truth
+- All accent colors, HP labels, currency labels derive from GENRE_CONFIGS
+- StoryFeed: arrival headers, NPC quote-blocks, stat-check receipts, system events
+- DialogueModal: accent-bar buttons by tone color
+- VerbosityToggle: Terse / Standard / Rich in header
 
 ---
 
@@ -151,12 +153,24 @@ Tone → stat check (game code). Badge shows real player stat.
 **Narrator outputs: text + simple values. Game code derives: all mechanics.**
 
 Prompt structure (in order):
-1. WORLD FACTS block (world name, tagline, factions)
+1. WORLD FACTS block
 2. NPCS PRESENT AT THIS LOCATION (from graph node npc_ids)
 3. ESTABLISHED WORLD ASSETS (current location first)
 4. PLAYER STATE header
 5. SCENE CONTEXT (move_type, ARRIVING/PRESENT)
-6. Resolution context, stats, loadout, recent log
+6. VERBOSITY block (last — terse/standard/rich)
+
+---
+
+## Tone → Stat Check / Badge / Accent Bar Color
+| Tone | Stat | Badge | Accent Bar |
+| --- | --- | --- | --- |
+| persuasive | CHA | 💬 CHA | purple #8844cc |
+| deceptive | CHA +2 | 💬 CHA | yellow #aaaa22 |
+| aggressive/intimidating | STR | 💪 STR | red #cc4422 |
+| curious | PER | 👁 PER | blue #4488cc |
+| friendly | none | none | green #22aa44 |
+| neutral | none | none | slate #334455 |
 
 ---
 
@@ -174,20 +188,18 @@ Prompt structure (in order):
 
 | System | When | Description |
 | --- | --- | --- |
-| Narrative Thread + Verbosity + Feed Visuals | Day 18 | Breadcrumbs, verbosity toggle, visual overhaul |
 | Combat System | Day 19 | Turn-based, enemy AI, loot |
 | Skills & Abilities | Day 20 | Skill trees, attribute thresholds |
 | Character Background | Phase 3 | Traits, history, faction rep |
 | Procedural Map | Phase 3 | Graph nodes → fog-of-war map |
-| Art Engine Overhaul | Phase 3 (Day 25+) | Templates + CC0 sprites |
+| Art System | Phase 3 | Static pixel art library + Replicate API premium |
 
 ---
 
 ## Supabase Tables (all applied ✅)
 - `profiles`, `game_sessions` (+world_seed, +world_graph), `characters`
 - `world_states` (+current_node_id), `log_books`, `npcs`
-- `subscriptions`, `community_templates`, `user_preferences`
-- `art_cache`, `world_assets` (+svg_content, +name_known), `codex`
+- `art_cache` (kept, unused), `world_assets` (+svg_content kept, unused), `codex`
 - Migrations 001-008 all applied
 
 ---
@@ -195,13 +207,11 @@ Prompt structure (in order):
 ## Core Philosophy
 
 - **Hybrid Authority:** Code = Truth, AI = narrator of code-owned facts
-- **World Graph:** persistent connected nodes, deterministic navigation
-- **AI generates content once, engine owns it forever**
-- **Move classifier:** GRAPH_NAVIGATE / INTERNAL_DESCRIBE / ZONE_EXPAND / WORLD_EXPLORE
-- **NPCs belong to nodes** — never invented by narrator
+- **World Graph:** persistent nodes, deterministic navigation, NPCs belong to nodes
+- **Three-layer model:** World Seed → AI detail → permanent lock → narrator describes
 - **Narrator outputs text + simple values only**
-- **Codex populates through play, never pre-populated**
-- Truly endless — graph grows as player explores
+- **Genre-aware UI:** all colors, labels, currency from GENRE_CONFIGS via genre-ui.ts
+- **Art deferred:** placeholder panel, DB columns preserved, clean reimplementation later
 
 ---
 
@@ -222,13 +232,13 @@ Prompt structure (in order):
 
 ## Genre Definitions (Final — No Noir)
 
-| Genre | Tone | Palette | Currency | HP |
+| Genre | Tone | Primary | Currency | HP |
 | --- | --- | --- | --- | --- |
-| Fantasy | Epic, mythic | Amber/green | Gold | HP |
-| Cyberpunk | Terse, neon | Cyan/magenta | Credits | Integrity |
-| Horror/Lovecraftian | Cosmic dread | Green/purple | None | Sanity+HP |
-| Space Opera | Grand, operatic | Purple/silver | Stellar Units | Hull Integrity |
-| Post-Apocalyptic | Bleak, dark humor | Rust/ash | Caps | HP |
+| Fantasy | Epic, mythic | #f59e0b amber | Gold | HP |
+| Cyberpunk | Terse, neon | #22d3ee cyan | Credits | Integrity |
+| Horror/Lovecraftian | Cosmic dread | #84cc16 acid green | None | HP + Sanity |
+| Space Opera | Grand, operatic | #a855f7 purple | Stellar Units | Hull Integrity |
+| Post-Apocalyptic | Bleak, dark humor | #ea580c rust | Caps | HP |
 
 Future genres: Western, Pirate, Superhero, Dark Fantasy, Steampunk
 
@@ -241,7 +251,7 @@ Future genres: Western, Pirate, Superhero, Dark Fantasy, Steampunk
 | Genres | Fantasy | All 5 | All 5 + future |
 | Save Slots | 1 | 3 | Unlimited |
 | AI Actions/Day | 50 | Unlimited | Unlimited |
-| Art | Basic SVG | Enhanced | Enhanced + Custom |
+| Art | Placeholder | Static pixel art | Generated (Replicate) |
 | Templates | Browse | Browse + Play | Create + Share |
 | Export Log | ❌ | ✅ | ✅ |
 | Priority Speed | ❌ | ❌ | ✅ |
@@ -262,4 +272,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 54 — V6.3: World Graph architecture complete. Migration 008 applied. Day 18 starting.*
+*Last updated: Session 55 — V6.4: Day 18 complete. Graph type matching, UI Direction 3 all genres, verbosity toggle, art system cleanly removed. Day 19 starting.*

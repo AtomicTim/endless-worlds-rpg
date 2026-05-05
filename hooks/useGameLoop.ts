@@ -767,17 +767,25 @@ export function useGameLoop() {
               "match:", isActiveNpc
             );
 
-            if (isActiveNpc && gs.currentDialogueOptions.length > 0) {
-              gs.setDialogueOptions(
-                gs.currentDialogueOptions,
-                trueName,
-                gs.currentNpcPortrait ?? null,
-                gs.currentDialogueNpcKey ?? computedNpcKey ?? effectiveAssetId
-              );
-              console.log("[GameLoop/7d] Modal header updated to:", trueName);
-              // BUG FIX 1: pin the revealed name so step 7g doesn't overwrite
-              // it with the stale placeholder when it calls setDialogueOptions.
+            // FIX 3: pin the revealed name FIRST so any subsequent step that
+            // reads justRevealedName (notably step 7g's setDialogueOptions)
+            // sees the true name, not the stale placeholder. This must run
+            // even when there are no current dialogue options to update —
+            // the asset name update happened above and step 7g still needs
+            // to know about the reveal.
+            if (isActiveNpc) {
               justRevealedName = trueName;
+
+              const gs2 = useGameStore.getState();
+              if (gs2.currentDialogueOptions.length > 0) {
+                gs2.setDialogueOptions(
+                  gs2.currentDialogueOptions,
+                  trueName,
+                  gs2.currentNpcPortrait,
+                  gs2.currentDialogueNpcKey ?? computedNpcKey ?? effectiveAssetId
+                );
+                console.log("[GameLoop/7d] Modal updated to:", trueName);
+              }
             }
           }
         }
@@ -945,14 +953,35 @@ export function useGameLoop() {
             // NPC writes the codex entry from the world_asset's constitution.
             // ignoreDuplicates makes this idempotent — runs only when the
             // registry seed runs (i.e. truly the first beat with this NPC).
+            //
+            // FIX 2: pre-seeded NPCs may have first_seen_location pointing
+            // somewhere the current locationAssets snapshot doesn't include
+            // by direct name match. Broaden the lookup to also match on
+            // normalizeAssetId(asset.name) === npcRegistryKey so seed NPCs
+            // are reliably found even when their name slug differs slightly
+            // from what the player typed.
+            const liveAssets = useGameStore.getState().locationAssets;
             const npcCodexAsset =
-              matchingAsset
-              ?? useGameStore.getState().locationAssets.find(
+              // First try: name match (covers most cases including stubs).
+              liveAssets.find(
                 (a) =>
                   a.category === AssetCategory.CHARACTER &&
-                  (a.id === npcRegistryKey ||
-                   a.name.toLowerCase() === (effectiveNpcName ?? "").toLowerCase())
-              );
+                  effectiveNpcName !== null &&
+                  a.name.toLowerCase() === effectiveNpcName.toLowerCase()
+              )
+              // Second try: registry-key-normalized lookup. Catches pre-seeded
+              // NPCs whose stored asset.name spells slightly differently from
+              // what the player or narrator referred to them as.
+              ?? liveAssets.find(
+                (a) =>
+                  a.category === AssetCategory.CHARACTER &&
+                  normalizeAssetId(AssetCategory.CHARACTER, a.name) === npcRegistryKey
+              )
+              // Third try: matchingAsset from earlier in the seed block (it
+              // already searched by id and name so we won't re-find anything
+              // new, but keep it as a final fallback for completeness).
+              ?? matchingAsset;
+
             if (npcCodexAsset) {
               const c = npcCodexAsset.constitution;
               const description = [
@@ -971,6 +1000,13 @@ export function useGameLoop() {
                 first_seen_location: updatedState.world_state.current_location_id,
                 significance:        "NOTABLE",
               });
+              console.log("[GameLoop/7g] Codex entry written for NPC:", npcCodexAsset.name);
+            } else {
+              console.log(
+                "[GameLoop/7g] No world_asset found for NPC:",
+                effectiveNpcName,
+                "— codex entry skipped"
+              );
             }
           }
 

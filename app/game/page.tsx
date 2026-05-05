@@ -11,12 +11,12 @@ import { SceneArt } from "@/components/game/SceneArt";
 import { CharacterSheet } from "@/components/game/sidebar/CharacterSheet";
 import { InventoryPanel } from "@/components/game/sidebar/InventoryPanel";
 import { LogBook } from "@/components/game/sidebar/LogBook";
-import { Genre } from "@/types/game";
+import { AssetCategory, Genre } from "@/types/game";
 import type { MasterState } from "@/types/game";
 import { createClient } from "@/lib/supabase/client";
 import { useGameStore, makeMessage } from "@/lib/stores/game-store";
 import { useGameLoop } from "@/hooks/useGameLoop";
-import { getWorldAssetsForLocation } from "@/lib/game/codex";
+import { getWorldAssetsForLocation, normalizeLocationId, saveCodexEntry } from "@/lib/game/codex";
 import { formatLocationId } from "@/lib/game/location-formatter";
 
 const WORLD_NAMES: Record<Genre, string> = {
@@ -157,6 +157,37 @@ export default function GamePage() {
       ).then((assets) => {
         console.log("[GamePage] Initial locationAssets loaded:", assets.length);
         useGameStore.getState().setLocationAssets(assets);
+
+        // FIX 1 (Day 17): the player begins PRESENT, not ARRIVING, so step 7c
+        // in useGameLoop never fires for the starting location. Write the
+        // starting-location codex entry here on first load. saveCodexEntry's
+        // ignoreDuplicates makes this idempotent across reloads.
+        const sessionId   = state.metadata.session_id;
+        const startingId  = normalizeLocationId(state.world_state.current_location_id);
+        const startingAsset = assets.find(
+          (a) =>
+            a.category === AssetCategory.LOCATION &&
+            (a.id === startingId ||
+             a.id === `location_${startingId}` ||
+             normalizeLocationId(a.first_seen_location ?? "") === startingId)
+        );
+        if (startingAsset) {
+          const c = startingAsset.constitution;
+          const description =
+            (typeof c.physical_description === "string" && c.physical_description) ||
+            (typeof c.notes === "string" && c.notes) ||
+            (typeof c.atmosphere === "string" && c.atmosphere) ||
+            "Your starting location.";
+          void saveCodexEntry(sessionId, {
+            id:                  startingAsset.id,
+            category:            "LOCATION",
+            name:                startingAsset.name,
+            description,
+            first_seen_location: state.world_state.current_location_id,
+            significance:        "NOTABLE",
+          });
+          console.log("[GamePage] Starting-location codex entry queued:", startingAsset.name);
+        }
       });
 
       // Memoize the session id at module level so the SPA-nav check above can

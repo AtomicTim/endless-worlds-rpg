@@ -44,7 +44,7 @@ export function TradeModal({ onBuy, onSell }: TradeModalProps) {
   const npcName     = useGameStore((s) => s.currentDialogueNpc);
   const setItems    = useGameStore((s) => s.setTradeItems);
 
-  if (tradeItems.length === 0 || !masterState) return null;
+  if (!tradeItems || tradeItems.length === 0 || !masterState) return null;
 
   const genre        = masterState.metadata.genre;
   const currencyKey  = CURRENCY_KEYS[genre];

@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 5.8
+**Version:** 5.9
 **Status:** Active Development — Phase 2 In Progress
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Day:** Day 16 — NPC Trading + Item Value System
+**Current Day:** Day 17 — World Seed + Location Stub Generator
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -18,57 +18,45 @@
 | 1–14 | Phase 1 MVP | ✅ Complete |
 | 15 | NPC Dialogue + Portraits | ✅ Complete |
 | 15.5 | Dialogue consistency + integrity patch | ✅ Complete |
-| Narrator simplification | Text+tone only, game code derives all mechanics | ✅ Complete |
-| 16 | NPC Trading + Item Value | 🔄 In Progress |
-| 17-18 | Main Narrative Thread + World Seed | ⏳ Pending |
+| Narrator simplification | Text+tone only, game code derives mechanics | ✅ Complete |
+| 16 | NPC Trading + Item Value | ✅ Complete |
+| 17 | World Seed + Location Stub Generator | 🔄 In Progress |
+| 18 | Main Narrative Thread | ⏳ Pending |
 | 19+ | Combat, Skills, Factions | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Narrator Simplification (commit a0fecc5 — 86/86 tests, clean build)
+### Day 16 Deliverables (commit 7062c74 — 86/86 tests, clean build)
+- `Item.value?: number` — base sell value in genre currency
+- `NarratorResponse.items_for_sale?: Item[]` — merchant inventory
+- `prompt-builder`: items_acquired requires value field (rarity-scaled), TRADE INTERACTION block
+- `logic-resolver`: merchant keyword detection → `trade_available` in narrative_context
+- `game-store`: `currentTradeItems[]` + `setTradeItems`, cleared on session switch
+- `TradeModal.tsx`: two-column inline modal — merchant wares (Buy) + player inventory (Sell at 50%)
+- `InventoryPanel`: shows "Worth: N [Currency]" with 50% sell rate tooltip
+- `buyItem` / `sellItem` callbacks in useGameLoop — currency check, inventory mutation, DISCOVERY log
 
-**The core architectural principle now enforced in code:**
-The narrator outputs narrative text and simple values only.
-The game engine derives all structured mechanics from those values.
-
-Specific changes:
-- `revealed_npc_names`: narrator outputs `{ true_name }` only — no asset_id
-  - Game code derives asset_id via 3-step lookup: name match → constitution.true_name → active NPC fallback
-- `dialogue_options`: removed `stat_check` entirely — narrator outputs `{ id, text, tone }` only
-  - `getToneBadge(tone, attributes)` in DialogueModal derives badge from player's actual current stats
-  - Badge shows real value: "💬 CHA 12" not narrator's guess
-- `forcedStatCheck` removed entirely — tone classification is the single source of truth
-- Modal timing fix: step 7d computes `activeNpcName` from `options?.npcName ?? gs.currentDialogueNpc ?? parsedAction.primary_target` — independent of store timing
-
-### Dialogue System — Stat Check Matrix (tone → check, game code only)
-| Tone | Stat | Notes |
-| --- | --- | --- |
-| persuasive | CHA | |
-| deceptive | CHA | +2 difficulty |
-| aggressive/intimidating | STR | falls back to CHA if STR < 10 |
-| curious | PER | |
-| friendly/neutral | none | no check |
+### Bug Fixes (commit 7062c74)
+- Step 7g no longer overwrites step 7d name reveal: `justRevealedName` local variable, 7g checks it first
+- `getWorldAssetsForLocation`: client-side filtering replaces PostgREST `.or()` — handles apostrophes/spaces in slugs. Fetches all session assets, filters by exact + normalizeLocationId match.
 
 ---
 
 ## 🎮 The Three-Layer World Model
 
-**Layer 1 — World Seed (Day 17-18):** Engine pre-generates macro facts before player arrives:
-- Overarching conflict, factions, major settlements, main quest antagonist
-- Planted as seeds — player discovers them, they were always there
+**Layer 1 — World Seed (Day 17):** Engine pre-generates macro facts at game start:
+- Starting location with fixed name and key facts
+- 2-3 key NPCs with names, roles, personalities — locked before player acts
+- Overarching conflict, faction names, main quest hook
+- On-demand stub generation for new areas as player explores
 
-**Layer 2 — AI Asset Generation (current):** On first encounter, narrator invents:
-- Specific location details, NPC appearance/personality, item descriptions
-- These are immediately locked as permanent game assets (write-once)
-- AI stays within World Seed guardrails once those exist
+**Layer 2 — AI Asset Generation:** On first encounter, narrator invents within Layer 1 guardrails:
+- Sensory detail, minor NPC details, room contents, item descriptions
+- Immediately locked as permanent assets
 
-**Layer 3 — Game Engine (always):** Owns all mechanical state:
-- Stat checks, dice rolls, outcomes
-- Trust scores, flags, inventory
-- Location IDs, asset keys, relationships
-
-The AI narrates Layer 1 and 2 facts. It never owns them.
+**Layer 3 — Game Engine:** Owns all mechanical state:
+- Stat checks, dice, outcomes, currency, inventory, flags, trust scores
 
 ---
 
@@ -93,75 +81,39 @@ EXAMINE/INTERACT resolver confirms object_confirmed=true. Prepended as first nar
 All dialogue identical pipeline. Tone → stat check (game code). Badge shows real player stat.
 
 ### 7. The AI Has Exactly Three Roles
-**Generator:** Invents content on first encounter. Locked immediately. Stays within seed guardrails.
+**Generator:** Invents content on first encounter within World Seed guardrails. Locked immediately.
 **Bridge:** Describes mechanical outcomes as narrative prose. Never decides outcomes.
 **Thread:** Plants story breadcrumbs. Never forces or blocks.
 
 ---
 
-## 🎮 Game System Architecture
-
-**NPC interaction model (authoritative sources):**
-- Constitution → `world_assets` (locked on first meeting, AI-generated content)
-- Trust score → `npc_registry` (seeded at 50, updated by trust_changes)
-- Disposition → `getNpcDisposition(trustScore ?? 50)` — always renders
-- Registry key → `normalizeAssetId(CHARACTER, name)` — canonical `character_<slug>`
-- findNpcInRegistry → handles both prefixed/unprefixed variants
-- Name reveal → step 7d computes key from action context, not store timing
-
-**Location ID model:**
-- Normalized slugs via `normalizeLocationId()` — articles stripped
-- Consistent across narrator, codex, world_assets
-
----
-
-## 🔮 Future Systems
-
-### Character Background System (Phase 3)
-Background traits in player_state, injected into narrator. Affects NPC reactions, rep.
-
-### World Seed (Day 17-18)
-Pre-generates macro world facts before player arrives. AI fills detail within those guardrails.
-
----
-
-## Location State Machine
-
-```
-PRESENT  — in current location. lastNarrativeText = "CURRENT SCENE CONTEXT"
-ARRIVING — just moved here. lastNarrativeText = "DEPARTED SCENE (backstory)"
-```
-
----
-
 ## 🎭 NPC Dialogue System (Complete)
-- Narrator outputs: narrative text + `{ id, text, tone }` options + `{ true_name }` reveals
-- Game code derives: asset IDs, stat checks, badges, difficulty scaling
-- Badge shows player's actual stat ("💬 CHA 12") — always accurate
-- Modal timing: computes npcKey from action context, not store
-- Disposition badge: always renders (🟡 Neutral fallback)
-- SPA navigation preserves dialogue state
+- Tone → stat check derived by game code (not narrator)
+- `getToneBadge` shows player's actual current stat
+- `justRevealedName` prevents step 7g from overwriting step 7d reveal
+- `getWorldAssetsForLocation` uses client-side filtering — robust against slug variants
 
-## 🕵️ NPC Identity System
-- name_known=false for CHARACTER by default
-- revealed_npc_names: `{ true_name }` only — game code finds matching asset
+## 💰 Trading System (Day 16 — Complete)
+- Merchant keyword detection → `trade_available` → narrator generates `items_for_sale`
+- TradeModal: Buy at full value, Sell at 50%
+- Item values: Common 5-15, Uncommon 20-50, Rare 100-300, Legendary 500+
+- Currency display in CharacterSheet
 
-## 💎 Item Value System (Day 16)
-Every item: sell value + lore blurb + optional dialogue unlock. Merchant NPCs.
+## 🌱 World Seed System (Day 17 — IN PROGRESS)
+- Generates world skeleton at game start before first player action
+- On-demand stub generation for new areas
+- Fixes: double codex entries, narrator name inconsistency, locationAssets always 0
 
 ---
 
 ## Narrator Architecture
 
 **Narrator outputs: text + simple values. Game code derives: all mechanics.**
-
 - Narrative text, log_summary, sound_id — narrator owned
 - `{ true_name }` for name reveals — narrator outputs, game code maps to asset
-- `{ id, text, tone }` for dialogue options — narrator outputs, game code derives check
-- Asset IDs, stat checks, difficulty, roll results — game code only, never narrator
-- YOUR ROLE block FIRST — three jobs, player blank-slate enforced
-- ACTIVE NPC CONTEXT injected for all DIALOGUE (constitution + trust)
-- Tier 1/2/3 response lengths by action type
+- `{ id, text, tone }` for dialogue options — game code derives check and badge
+- `items_for_sale` — narrator generates when trade_available=true
+- Asset IDs, stat checks, difficulty, roll results — game code only
 
 ---
 
@@ -169,7 +121,7 @@ Every item: sell value + lore blurb + optional dialogue unlock. Merchant NPCs.
 - Log entries + recent_messages: after every narrative action
 - World state: after every MOVE or flag change
 - npc_registry: immediately patched to store on seed
-- locationAssets: loaded on page mount + late-loaded fallback
+- locationAssets: client-side filtered, loaded on mount + late-loaded fallback
 - Full state: every 10 actions
 - clearSessionState() on session switch, clearTransientState() on SPA nav
 
@@ -179,8 +131,8 @@ Every item: sell value + lore blurb + optional dialogue unlock. Merchant NPCs.
 
 | System | When | Description |
 | --- | --- | --- |
-| NPC Trading + Item Value | Day 16 | Merchants, buy/sell, item value + lore blurbs |
-| Main Narrative Thread + World Seed | Day 17-18 | Macro world facts, main quest, breadcrumbs |
+| World Seed + Stub Generator | Day 17 | Pre-seed world, on-demand area generation |
+| Main Narrative Thread | Day 18 | Main quest, breadcrumbs, win conditions |
 | Combat System | Day 19 | Turn-based, enemy AI, loot |
 | Skills & Abilities | Day 20 | Skill trees, attribute thresholds |
 | Character Background | Phase 3 | Traits, history, faction rep |
@@ -191,11 +143,9 @@ Every item: sell value + lore blurb + optional dialogue unlock. Merchant NPCs.
 ## Core Philosophy
 
 - **Hybrid Authority:** Code = Truth, AI = narrator of code-owned facts
-- **AI generates detail, engine generates structure**
-- **World Seed → AI detail → permanent lock → narrator describes**
-- **AI has 3 roles:** Generator (within guardrails) → Bridge → Thread
-- **Player is blank slate:** AI never speaks for them or invents their history
-- **Narrator outputs text + simple values only — never structured game data**
+- **Three-layer model:** World Seed → AI detail → permanent lock → narrator describes
+- **Narrator outputs text+simple values only — never structured game data**
+- **AI generates within guardrails, engine enforces permanence**
 - World Assets permanent, Movement absolute, Objects exist
 - Truly endless — procedurally generated at every layer
 
@@ -258,4 +208,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 49 — V5.8: Narrator simplification complete. Text+tone only. Game code derives all mechanics. Three-layer world model documented. Day 16 starting.*
+*Last updated: Session 50 — V5.9: Day 16 complete. Trading system, item values, name reveal fix, locationAssets fix. Day 17 starting.*

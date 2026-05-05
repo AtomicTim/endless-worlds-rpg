@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 5.9
+**Version:** 6.0
 **Status:** Active Development — Phase 2 In Progress
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Day:** Day 17 — World Seed + Location Stub Generator
+**Current Day:** Day 18 — Main Narrative Thread
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -20,42 +20,46 @@
 | 15.5 | Dialogue consistency + integrity patch | ✅ Complete |
 | Narrator simplification | Text+tone only, game code derives mechanics | ✅ Complete |
 | 16 | NPC Trading + Item Value | ✅ Complete |
-| 17 | World Seed + Location Stub Generator | 🔄 In Progress |
-| 18 | Main Narrative Thread | ⏳ Pending |
+| 17 | World Seed + Location Stub Generator | ✅ Complete |
+| 18 | Main Narrative Thread | 🔄 In Progress |
 | 19+ | Combat, Skills, Factions | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Day 16 Deliverables (commit 7062c74 — 86/86 tests, clean build)
-- `Item.value?: number` — base sell value in genre currency
-- `NarratorResponse.items_for_sale?: Item[]` — merchant inventory
-- `prompt-builder`: items_acquired requires value field (rarity-scaled), TRADE INTERACTION block
-- `logic-resolver`: merchant keyword detection → `trade_available` in narrative_context
-- `game-store`: `currentTradeItems[]` + `setTradeItems`, cleared on session switch
-- `TradeModal.tsx`: two-column inline modal — merchant wares (Buy) + player inventory (Sell at 50%)
-- `InventoryPanel`: shows "Worth: N [Currency]" with 50% sell rate tooltip
-- `buyItem` / `sellItem` callbacks in useGameLoop — currency check, inventory mutation, DISCOVERY log
+### Day 17 Deliverables (commit a27de24 — 86/86 tests, clean build)
+- `SeedLocation`, `SeedNPC`, `SeedQuest`, `SeedFaction`, `WorldSeed` types
+- `Metadata.world_seed?` in MasterState
+- `/api/game/generate-world-seed` — separate Sonnet call, genre-specific fallback seeds
+- `/api/game/apply-world-seed` — writes world_assets for all SeedLocations + SeedNPCs (name_known: true)
+- `/app/game/new` — progressive loading: "Creating character..." → "Generating your world..." → "Establishing world facts..."
+- `/api/game/generate-location-stub` + `location-stub-generator.ts` — lightweight Claude call for new areas
+- `useGameLoop` step 7: MOVE_SUCCESS to unknown location → stub → saveWorldAsset (write-once) → refresh locationAssets
+- `prompt-builder`: WORLD FACTS block prepended (world name, tagline, factions, known locations)
+- Current location's asset always first in ESTABLISHED WORLD ASSETS
+- `supabase/migrations/007_world_seed.sql` — applied ✅
 
-### Bug Fixes (commit 7062c74)
-- Step 7g no longer overwrites step 7d name reveal: `justRevealedName` local variable, 7g checks it first
-- `getWorldAssetsForLocation`: client-side filtering replaces PostgREST `.or()` — handles apostrophes/spaces in slugs. Fetches all session assets, filters by exact + normalizeLocationId match.
+### Small Fixes (commit a27de24)
+- MOVE/non-dialogue actions now reliably call clearDialogueOptions()
+- InventoryPanel slot tooltips show "Worth: N [Currency]"
 
 ---
 
 ## 🎮 The Three-Layer World Model
 
-**Layer 1 — World Seed (Day 17):** Engine pre-generates macro facts at game start:
-- Starting location with fixed name and key facts
-- 2-3 key NPCs with names, roles, personalities — locked before player acts
-- Overarching conflict, faction names, main quest hook
-- On-demand stub generation for new areas as player explores
+**Layer 1 — World Seed (Day 17 ✅):**
+- Generated at game start via separate Claude call before player's first action
+- Starting location, 2-3 connected locations, 3 key NPCs (names known from start)
+- Main quest with 5 breadcrumbs, 2 factions
+- All pre-seeded as world_assets before narrator ever runs
+- Fallback hardcoded seeds per genre if generation fails
 
-**Layer 2 — AI Asset Generation:** On first encounter, narrator invents within Layer 1 guardrails:
-- Sensory detail, minor NPC details, room contents, item descriptions
-- Immediately locked as permanent assets
+**Layer 2 — Location Stub Generator (Day 17 ✅):**
+- Fires on MOVE_SUCCESS to unknown location
+- Generates structural stub (id, name, type, description) before narrator runs
+- Locked as world_asset immediately — narrator describes, never invents name
 
-**Layer 3 — Game Engine:** Owns all mechanical state:
+**Layer 3 — Game Engine:**
 - Stat checks, dice, outcomes, currency, inventory, flags, trust scores
 
 ---
@@ -81,39 +85,45 @@ EXAMINE/INTERACT resolver confirms object_confirmed=true. Prepended as first nar
 All dialogue identical pipeline. Tone → stat check (game code). Badge shows real player stat.
 
 ### 7. The AI Has Exactly Three Roles
-**Generator:** Invents content on first encounter within World Seed guardrails. Locked immediately.
+**Generator:** Invents sensory detail within World Seed guardrails. Locked immediately.
 **Bridge:** Describes mechanical outcomes as narrative prose. Never decides outcomes.
-**Thread:** Plants story breadcrumbs. Never forces or blocks.
+**Thread:** Plants quest breadcrumbs from SeedQuest. Never forces or blocks.
+
+---
+
+## 🌱 World Seed System (Complete)
+
+**At game start:** `generateWorldSeed()` → `applyWorldSeed()` → world_assets pre-populated
+**On MOVE to new area:** `generateLocationStub()` → `saveWorldAsset()` → narrator receives as fact
+**Narrator receives:** WORLD FACTS block + ESTABLISHED WORLD ASSETS (current location first)
+**Result:** Narrator describes, never invents names — double codex entries eliminated
 
 ---
 
 ## 🎭 NPC Dialogue System (Complete)
-- Tone → stat check derived by game code (not narrator)
+- Tone → stat check (game code only)
 - `getToneBadge` shows player's actual current stat
 - `justRevealedName` prevents step 7g from overwriting step 7d reveal
-- `getWorldAssetsForLocation` uses client-side filtering — robust against slug variants
+- `clearDialogueOptions()` on MOVE and all non-dialogue actions
+- `getWorldAssetsForLocation` uses client-side filtering
 
 ## 💰 Trading System (Day 16 — Complete)
-- Merchant keyword detection → `trade_available` → narrator generates `items_for_sale`
+- Merchant keyword detection → `trade_available` → `items_for_sale`
 - TradeModal: Buy at full value, Sell at 50%
-- Item values: Common 5-15, Uncommon 20-50, Rare 100-300, Legendary 500+
-- Currency display in CharacterSheet
-
-## 🌱 World Seed System (Day 17 — IN PROGRESS)
-- Generates world skeleton at game start before first player action
-- On-demand stub generation for new areas
-- Fixes: double codex entries, narrator name inconsistency, locationAssets always 0
+- Item values by rarity. Tooltip shows "Worth: N [Currency]"
 
 ---
 
 ## Narrator Architecture
 
 **Narrator outputs: text + simple values. Game code derives: all mechanics.**
-- Narrative text, log_summary, sound_id — narrator owned
-- `{ true_name }` for name reveals — narrator outputs, game code maps to asset
-- `{ id, text, tone }` for dialogue options — game code derives check and badge
-- `items_for_sale` — narrator generates when trade_available=true
-- Asset IDs, stat checks, difficulty, roll results — game code only
+
+Prompt structure (in order):
+1. WORLD FACTS block (world name, tagline, factions, known locations)
+2. ESTABLISHED WORLD ASSETS (current location first, then others)
+3. PLAYER STATE header (authoritative location, status)
+4. SCENE CONTEXT (ARRIVING/PRESENT)
+5. Resolution context, character stats, equipped loadout, recent log
 
 ---
 
@@ -122,8 +132,8 @@ All dialogue identical pipeline. Tone → stat check (game code). Badge shows re
 - World state: after every MOVE or flag change
 - npc_registry: immediately patched to store on seed
 - locationAssets: client-side filtered, loaded on mount + late-loaded fallback
+- world_seed: stored in game_sessions.world_seed column
 - Full state: every 10 actions
-- clearSessionState() on session switch, clearTransientState() on SPA nav
 
 ---
 
@@ -131,8 +141,7 @@ All dialogue identical pipeline. Tone → stat check (game code). Badge shows re
 
 | System | When | Description |
 | --- | --- | --- |
-| World Seed + Stub Generator | Day 17 | Pre-seed world, on-demand area generation |
-| Main Narrative Thread | Day 18 | Main quest, breadcrumbs, win conditions |
+| Main Narrative Thread | Day 18 | Breadcrumb injection, quest progress tracking, win conditions |
 | Combat System | Day 19 | Turn-based, enemy AI, loot |
 | Skills & Abilities | Day 20 | Skill trees, attribute thresholds |
 | Character Background | Phase 3 | Traits, history, faction rep |
@@ -140,12 +149,19 @@ All dialogue identical pipeline. Tone → stat check (game code). Badge shows re
 
 ---
 
+## Supabase Tables (all applied ✅)
+- `profiles`, `game_sessions` (+world_seed column), `characters`, `world_states`, `log_books`, `npcs`, `subscriptions`, `community_templates`, `user_preferences`
+- `art_cache`, `world_assets` (+svg_content, +name_known), `codex`
+- Migrations 001-007 all applied
+
+---
+
 ## Core Philosophy
 
 - **Hybrid Authority:** Code = Truth, AI = narrator of code-owned facts
-- **Three-layer model:** World Seed → AI detail → permanent lock → narrator describes
-- **Narrator outputs text+simple values only — never structured game data**
-- **AI generates within guardrails, engine enforces permanence**
+- **Three-layer model:** World Seed → AI detail (within guardrails) → permanent lock → narrator describes
+- **Narrator outputs text+simple values only**
+- **World Seed pre-seeds structure; AI fills sensory detail; engine locks everything**
 - World Assets permanent, Movement absolute, Objects exist
 - Truly endless — procedurally generated at every layer
 
@@ -208,4 +224,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 50 — V5.9: Day 16 complete. Trading system, item values, name reveal fix, locationAssets fix. Day 17 starting.*
+*Last updated: Session 51 — V6.0: Day 17 complete. World Seed system, location stub generator, migration 007 applied. Day 18 starting.*

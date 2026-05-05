@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 7.4
+**Version:** 7.5
 **Status:** Active Development — World Generation Redesign
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Day 19E — Narrator Constraints + Highlight Overhaul
+**Current Phase:** Day 19F — Three-Tier Map Component
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -21,47 +21,46 @@
 | 19B | World Bible Redesign | ✅ Complete |
 | 19C | Ambient Object System | ✅ Complete |
 | 19D | Regional Bible (Phase 2) | ✅ Complete |
-| 19E | Narrator Constraints + Highlight Overhaul | 🔄 In Progress |
-| 19F | Three-Tier Map Component | ⏳ Pending |
+| 19E | Narrator Constraints + Highlight Overhaul | ✅ Complete |
+| 19F | Three-Tier Map Component | 🔄 In Progress |
 | 20+ | Combat, Skills, Background | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Day 19D Deliverables (commit bd9dbe3 — 86/86 tests, clean build)
-- /api/game/generate-regional-bible — WCD-seeded, scales from RegionOutline, real-name NPCs, ambient_type tags, return-direction wired
-- /api/game/apply-regional-bible — mirrors apply-world-bible, extends WorldGraph, strips placeholder outline node, bidirectional connections
-- /lib/game/regional-bible-cache.ts — module-level cache keyed by sessionId__outlineId, in-flight deduplication, matchRegionOutline 3-pass fuzzy matcher
-- Metadata.world_bible added to types/game.ts
-- apply-world-bible mirrors WorldBible into metadata.world_bible
-- useGameLoop step 4d — WORLD_EXPLORE uses RegionBible (generate + apply), falls back to stub generator on miss
-- useGameLoop step 6b — background pre-generation scans narrative text for direction tokens + region names
-- clearSessionState calls invalidateRegionalBibleCache()
+### Day 19E Deliverables (commit 3fdf5f6 — 86/86 tests, clean build)
+- prompt-builder: YOUR ROLE AND HARD RULES block (5 subsections A-E) immediately after WCD block
+- TIER 1 OBJECTS block injected into user prompt from key_landmarks
+- NPCS PRESENT tightened: graph-resolved only, "ONLY characters available", empty-roster fallback
+- /lib/game/highlights.ts (new): buildExactHighlights() + findExactHighlights() — whole-word, longest-phrase, overlap-drop
+- StoryFeed: exact highlight matching replaces old POI substring scanner
+- poi-colors.ts + InteractionPopover: LANDMARK type added (muted gold, info-only popover)
+- NarratorResponse.revealed_npc_names removed from types + narrator parser
+- useGameLoop step 7d (165 lines) deleted — reveal pipeline gone
+- codex.ts: updateAssetNameRevealed() deleted
+- codex page: identityUnknown always false, LOCATION assets only
 
 ---
 
-## 🏗️ Architecture Overview
+## 🏗️ Architecture — Complete
 
-**Full architecture:** /docs/world-generation-architecture.md
+### Four Layers ✅
+**Layer 0 — WCD** — world_consistency jsonb, injected first in all AI calls
+**Layer 1 — WorldBible** — world_bible jsonb, starting region + outlines + main quest
+**Layer 2 — RegionBible** — on-demand, background pre-generation, deduplication cache
+**Layer 3 — Narrator** — hard rules enforced, exact Tier 1 references, no reveal pipeline
 
-### Four Layers
-**Layer 0 — WCD ✅** — world_consistency jsonb, injected first in all AI calls
-**Layer 1 — WorldBible ✅** — world_bible jsonb, starting region + outlines + main quest
-**Layer 2 — RegionBible ✅** — on-demand with background pre-generation, cache with deduplication
-**Layer 3 — Narrator 🔄** — hard rules enforced, exact Tier 1 references only
+### Three-Tier Object System ✅
+**Tier 1** — AI-generated LocationObjects, key_landmarks, highlighted exact-match
+**Tier 2** — ambient-objects.ts (27 types, all genres), instant response, no narrator
+**Tier 3** — narrator ambient instruction, 1-2 sentences, nothing disappears
 
-### Three-Tier Object System
-**Tier 1 ✅** — AI-generated LocationObjects, tracked world_assets, highlighted in feed
-**Tier 2 ✅** — ambient-objects.ts templates (27 types, all genres), instant response, no narrator
-**Tier 3 ✅** — narrator ambient instruction, 1-2 sentences, nothing disappears
+### Highlight System ✅
+- buildExactHighlights(): Tier 1 objects (ITEM), NPCs in npc_ids (NPC), connected nodes (LOCATION), WCD landmarks (LANDMARK)
+- findExactHighlights(): whole-word case-insensitive, longer phrase wins, no overlaps
+- Click behavior: ITEM→EXAMINE, NPC→DIALOGUE, LOCATION→MOVE, LANDMARK→info popover
 
-### Location Hierarchy
-```
-Region → Settlement Node → Notable Sub-locations (3-6)
-       → Adjacent Region Outlines (undiscovered, pre-generated in background)
-```
-
-### NPC Rules
+### NPC Rules ✅
 Real name from birth. name_known always true. No reveal pipeline. No placeholders.
 
 ---
@@ -96,53 +95,71 @@ Injected first into every AI call. Nothing can contradict it.
 NEVER means NPC left or object doesn't exist.
 
 ### 10. Highlights Are Exact Tier 1 Matches
-Only Tier 1 object names, NPC names, connected location names. Exact string match only.
+Tier 1 objects, NPC names, connected location names, WCD landmarks. Exact whole-word match only.
 
 ---
 
-## 🎭 NPC Dialogue System
-- Narrator receives ONLY active NPC (RESPONDING CHARACTER block)
+## 🗺️ Three-Tier Map System (Day 19F)
+
+**Tier 1 — World Map (40x40 grid):**
+Viewport centered on player, scrollable. WCD landmarks as diamond markers before discovery.
+Region blocks colored by type. Current region pulsing.
+
+**Tier 2 — Regional Map:**
+One region. Nodes as colored squares. NPC dots at home locations. Exit arrows.
+
+**Tier 3 — Local Map:**
+Settlement/dungeon layout. Code-generated positioning. Notable sub-locations as colored blocks.
+Non-notable buildings as small grey filler blocks. NPCs as static dots at home_location_id.
+
+Breadcrumb nav: World > Region > Location. Default tier by context.
+Toggleable sidebar panel in game header.
+
+**Map colors by location type (all genres):**
+settlement_hub/tavern: #1d4ed8 blue | market/shop: #a16207 amber | smithy/workshop: #7c2d12 dark red
+wilderness: #15803d green | dungeon: #6b7280 grey | stronghold: #7c2d12 dark red
+port/docks: #0e7490 teal | ruin: #78716c stone
+Cyberpunk: bar #831843 | corp #1e1b4b | slum #78350f | data-hub #0e7490
+Space Opera: station #4c1d95 | ship #1e3a5f | colony #14532d
+Horror: mansion #1f2937 | asylum #374151
+Post-Apoc: shelter #7f1d1d | wasteland #92400e
+
+---
+
+## 🎭 NPC Dialogue System ✅
+- RESPONDING CHARACTER block only for DIALOGUE
 - Option tone: modal → submitAction(forcedTone) → resolver
-- Badge always matches the check that fires
-- No reveal pipeline — real names from birth
-- Failed checks = evasion, never absence
+- Badge always matches check. Real names from birth.
+- Failed checks = evasion, never absence.
 
-## 💰 Trading System (Day 16) — Complete
-## 🎨 UI System (Direction 3) — Complete
+## 💰 Trading System (Day 16) ✅
+## 🎨 UI System (Direction 3) ✅
 
 ---
 
-## Narrator Architecture
+## Narrator Architecture ✅
 
-For DIALOGUE: WCD → RESPONDING CHARACTER → Location (atmosphere + Tier 1 objects) → Player state → VERBOSITY
-For non-DIALOGUE: WCD → NPCS PRESENT → Location → Player state → VERBOSITY
+For DIALOGUE: WCD → YOUR ROLE HARD RULES → RESPONDING CHARACTER → TIER 1 OBJECTS → ESTABLISHED WORLD ASSETS → SCENE CONTEXT → VERBOSITY
+For non-DIALOGUE: WCD → YOUR ROLE HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → ESTABLISHED WORLD ASSETS → SCENE CONTEXT → VERBOSITY
 
-Hard narrator rules (enforced in ALL prompts):
-1. Use EXACT stored names for locations, NPCs, objects
-2. Only name Tier 1 objects (from key_landmarks) in descriptions
-3. Failed checks = evasion, never absence or disappearance
-4. Write only from RESPONDING CHARACTER for DIALOGUE
-5. WCD is absolute truth — never contradict it
+Hard rules: exact names, Tier 1 only, failed=evasion, RESPONDING CHARACTER only, WCD absolute, no invented NPCs/objects.
 
 ---
 
 ## Implementation Sequence
 
-### 19A ✅ — WCD (commit 08322b6)
-### 19B ✅ — WorldBible types + routes + wizard (commit d5b41b0)
-### 19C ✅ — Ambient Object System, Tier 2/3 routing (commit 4e7ab6f)
-### 19D ✅ — RegionBible routes + cache + WORLD_EXPLORE (commit bd9dbe3)
-### 19E 🔄 — Narrator Constraints + Highlight Overhaul
-- Hard narrator rules enforced in ALL system prompts (not just some)
-- Narrator receives current location's key_landmarks as exact object name list
-- Highlight rebuilt: exact match against Tier 1 object names, NPC names, connected location names
-- NPC reveal pipeline removed entirely (name_known always true for new NPCs)
-- Narrator told: do not introduce named NPCs not in NPCS PRESENT block
-
-### 19F — Three-Tier Map Component
-- /components/game/WorldMap.tsx — Tier 1/2/3 views, breadcrumb nav, toggleable sidebar
-- WCD landmarks as diamonds on World Map even before discovery
-- NPC dots at home_location_id on Local Map
+### 19A ✅ — WCD (08322b6)
+### 19B ✅ — WorldBible types + routes + wizard (d5b41b0)
+### 19C ✅ — Ambient Object System (4e7ab6f)
+### 19D ✅ — RegionBible + cache + WORLD_EXPLORE (bd9dbe3)
+### 19E ✅ — Narrator hard rules + exact highlights + reveal pipeline removed (3fdf5f6)
+### 19F 🔄 — Three-Tier Map Component
+- /components/game/WorldMap.tsx
+- Tier 1: WCD grid, landmark diamonds, region blocks, scrollable
+- Tier 2: region nodes, NPC dots at home, exit arrows
+- Tier 3: code-generated local layout, grey filler blocks, NPC dots
+- Breadcrumb navigation, toggleable sidebar
+- Real-time updates on discovery
 
 ---
 
@@ -155,11 +172,10 @@ Hard narrator rules (enforced in ALL prompts):
 ## Core Philosophy
 - AI generates content once, engine owns it forever
 - WCD is the constitution — injected everywhere, never contradicted
-- Three-layer generation: WCD → WorldBible → RegionBible
-- Three object tiers: Tier 1 (AI) / Tier 2 (templates) / Tier 3 (ambient narrator)
-- Narrator describes, never generates
-- Names are permanent from birth — no reveal pipeline
-- Highlights are exact Tier 1 matches only
+- Three object tiers: AI / templates / ambient narrator
+- Narrator describes, never generates — hard rules enforced
+- Names permanent from birth — no reveal pipeline
+- Highlights exact Tier 1 matches only
 - Failed checks = evasion only
 - Three-tier map: World / Regional / Local
 - DnD freedom: player can try anything, engine routes appropriately
@@ -221,4 +237,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 61 — V7.4: Day 19D complete. RegionBible routes, background pre-generation cache. Day 19E starting.*
+*Last updated: Session 62 — V7.5: Day 19E complete. Narrator hard rules, exact highlights, reveal pipeline removed. Day 19F starting.*

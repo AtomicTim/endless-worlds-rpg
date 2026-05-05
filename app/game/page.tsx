@@ -17,7 +17,7 @@ import type { MasterState } from "@/types/game";
 import { createClient } from "@/lib/supabase/client";
 import { useGameStore, makeMessage } from "@/lib/stores/game-store";
 import { useGameLoop } from "@/hooks/useGameLoop";
-import { getWorldAssetsForLocation, normalizeLocationId, saveCodexEntry } from "@/lib/game/codex";
+import { getAllWorldAssets, getWorldAssetsForLocation, normalizeLocationId, saveCodexEntry } from "@/lib/game/codex";
 import { formatLocationId } from "@/lib/game/location-formatter";
 
 const WORLD_NAMES: Record<Genre, string> = {
@@ -149,16 +149,43 @@ export default function GamePage() {
         ));
       }
 
+      // Debug: log the location identifiers we're about to query against so
+      // mismatches between current_location_id and first_seen_location are
+      // visible at the moment they bite.
+      console.log(
+        "[GamePage] current_location_id:",
+        state.world_state.current_location_id
+      );
+      console.log(
+        "[GamePage] current_node_id:",
+        state.world_state.current_node_id
+      );
+
       // Preload established world assets so the first narrator call sees
       // them. The player is PRESENT on session load, never ARRIVING — so
       // step 7c in useGameLoop won't trigger this; the page MUST seed
       // locationAssets here or the narrator runs blind for the first beat.
+      //
+      // Fallback: if the location-filtered query comes back empty (e.g.
+      // first_seen_location values don't match current_location_id after
+      // a fresh apply-world-bible), pull every asset for the session so
+      // the narrator and Tier 1 highlight system have something to read.
       void getWorldAssetsForLocation(
         state.metadata.session_id,
         state.world_state.current_location_id
-      ).then((assets) => {
-        console.log("[GamePage] Initial locationAssets loaded:", assets.length);
-        useGameStore.getState().setLocationAssets(assets);
+      ).then(async (assets) => {
+        if (assets.length === 0) {
+          const allAssets = await getAllWorldAssets(state.metadata.session_id);
+          console.log(
+            "[GamePage] Fallback: loaded all assets:",
+            allAssets.length
+          );
+          useGameStore.getState().setLocationAssets(allAssets);
+          assets = allAssets;
+        } else {
+          console.log("[GamePage] Initial locationAssets loaded:", assets.length);
+          useGameStore.getState().setLocationAssets(assets);
+        }
 
         // FIX 1 (Day 17): the player begins PRESENT, not ARRIVING, so step 7c
         // in useGameLoop never fires for the starting location. Write the

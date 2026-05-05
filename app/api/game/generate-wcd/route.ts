@@ -241,7 +241,7 @@ function validateWcd(parsed: unknown): { ok: true; wcd: WorldConsistencyDocument
 
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
   const message = await client.messages.create({
-    model:      "claude-sonnet-4-20250514",
+    model:      "claude-sonnet-4-5",
     max_tokens: 2000,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],

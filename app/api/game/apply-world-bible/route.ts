@@ -300,6 +300,10 @@ export async function POST(request: NextRequest) {
   }
 
   console.log(
+    "[apply-world-bible] Set current_location_id:",
+    startingNodeId
+  );
+  console.log(
     `[apply-world-bible] Applied: ${bibleNarrowed.starting_region.name}, ` +
     `${bibleNarrowed.starting_region.locations.length} locations, ` +
     `${bibleNarrowed.starting_region.npcs.length} NPCs, ` +

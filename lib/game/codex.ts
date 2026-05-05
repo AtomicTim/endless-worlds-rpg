@@ -300,6 +300,7 @@ export async function getWorldAssetsForLocation(
   sessionId: string,
   locationId: string
 ): Promise<WorldAsset[]> {
+  console.log("[getWorldAssetsForLocation] querying for:", sessionId, locationId);
   try {
     const supabase = createClient();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -322,6 +323,34 @@ export async function getWorldAssetsForLocation(
       .map(rowToWorldAsset);
   } catch (err) {
     console.error("[getWorldAssetsForLocation] unexpected", err);
+    return [];
+  }
+}
+
+/**
+ * Day 19+ — fallback fetch that returns every world_asset for a session
+ * with no location filtering. Used by the game page when the
+ * location-filtered query returns empty so the player never lands in
+ * a session with zero assets just because location ids didn't line up.
+ *
+ * Returns [] on any error so the caller can degrade gracefully.
+ */
+export async function getAllWorldAssets(
+  sessionId: string
+): Promise<WorldAsset[]> {
+  try {
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase.from("world_assets") as any)
+      .select("*")
+      .eq("session_id", sessionId);
+    if (error) {
+      console.error("[getAllWorldAssets]", error);
+      return [];
+    }
+    return (data as WorldAssetRow[] | null ?? []).map(rowToWorldAsset);
+  } catch (err) {
+    console.error("[getAllWorldAssets] unexpected", err);
     return [];
   }
 }

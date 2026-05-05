@@ -1,108 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Genre } from "@/types/game";
 import { useGameStore } from "@/lib/stores/game-store";
-import { generateArt, getSceneType } from "@/lib/game/art-generator";
-import { updateWorldAssetSvg, normalizeAssetId } from "@/lib/game/codex";
-import { AssetCategory } from "@/types/game";
+import { getGenreColors } from "./genre-ui";
 
 interface SceneArtProps {
+  /** Bare slug, e.g. "thornbridge_crossing". */
   locationId:   string;
+  /** Human-readable name shown in the panel. */
   locationName: string;
+  /** Genre passed as a string (legacy prop) — converted to enum below. */
   genre:        string;
-  description:  string;
+  /** Reserved for future use. */
+  description?: string;
+  /** Reserved for future use. */
   sessionId?:   string;
 }
 
 /**
- * Renders the SVG pixel-art scene for a given location. Reads from the
- * Zustand artCache for instant display on revisit; otherwise fires an async
- * fetch to /api/game/generate-art and shows a scan-line loading state until
- * the SVG arrives.
+ * Scene art panel — placeholder.
+ *
+ * The SVG generation pipeline was removed; this component now renders a
+ * simple genre-themed plate showing the active location name (and its
+ * type if it exists in the world graph). All accents come from
+ * GENRE_CONFIGS via getGenreColors so the panel themes correctly across
+ * all five genres.
  */
-export function SceneArt({
-  locationId,
-  locationName,
-  genre,
-  description,
-  sessionId,
-}: SceneArtProps) {
-  const cached           = useGameStore((s) => s.artCache[locationId]);
-  const setArtCache      = useGameStore((s) => s.setArtCache);
-  const setLocationAssets = useGameStore((s) => s.setLocationAssets);
-  const [loading, setLoading] = useState(!cached);
+export function SceneArt({ locationId, locationName, genre }: SceneArtProps) {
+  // Coerce the legacy string genre prop into the enum for the helper.
+  const genreEnum = (Object.values(Genre) as string[]).includes(genre)
+    ? (genre as Genre)
+    : Genre.FANTASY;
+  const colors    = getGenreColors(genreEnum);
 
-  useEffect(() => {
-    if (cached) {
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-
-    void (async () => {
-      const result = await generateArt({
-        location_id:   locationId,
-        location_name: locationName,
-        scene_type:    getSceneType(locationId),
-        genre,
-        description,
-        session_id:    sessionId,
-      });
-      if (cancelled) return;
-      if (result?.svg) {
-        setArtCache(locationId, result.svg);
-
-        // Backfill svg_content on the world asset for this location so the
-        // Codex page can display it. Only write if session is known and the
-        // asset exists without SVG already.
-        if (!sessionId) {
-          console.warn("[SceneArt] sessionId is undefined — cannot backfill SVG on world asset.");
-        } else {
-          const store         = useGameStore.getState();
-          const assetId       = normalizeAssetId(AssetCategory.LOCATION, locationName);
-          const matchingAsset = store.locationAssets.find(
-            (a) => a.category === AssetCategory.LOCATION && a.first_seen_location === locationId
-          );
-
-          console.log(
-            `[SceneArt] SVG ready for locationId=${locationId} session=${sessionId}`,
-            `matchingAsset=${matchingAsset?.id ?? "none"}`,
-            `locationAssets count=${store.locationAssets.length}`
-          );
-
-          if (!matchingAsset) {
-            console.warn(
-              `[SceneArt] No LOCATION world asset found for locationId=${locationId}` +
-              ` — asset may not be saved yet (race condition). GameLoop will retry.`
-            );
-          } else if (matchingAsset.svg_content) {
-            console.log(`[SceneArt] SVG already set on asset ${matchingAsset.id}, skipping.`);
-          } else {
-            const targetId = matchingAsset.id ?? assetId;
-            console.log(`[SceneArt] Calling updateWorldAssetSvg(session=${sessionId}, asset=${targetId})`);
-            void updateWorldAssetSvg(sessionId, targetId, result.svg)
-              .then(() => console.log(`[SceneArt] SVG backfill succeeded for asset ${targetId}`))
-              .catch((err) => console.error(`[SceneArt] SVG backfill failed for asset ${targetId}:`, err));
-            // Optimistically update the in-memory store so Codex page sees it
-            // without a full refetch.
-            setLocationAssets(
-              store.locationAssets.map((a) =>
-                a.id === matchingAsset.id ? { ...a, svg_content: result.svg } : a
-              )
-            );
-          }
-        }
-      }
-      setLoading(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locationId, locationName, genre, description, sessionId, cached, setArtCache]);
+  // Look up the current node's category (tavern / settlement / dungeon /
+  // etc.) when a world graph is loaded so the panel can show the place's
+  // type as a subtle subtitle. Falls back to nothing when no graph yet.
+  const locationType = useGameStore((s) => {
+    const graph = s.masterState?.world_graph;
+    if (!graph) return null;
+    const node = graph.nodes[locationId] ?? graph.nodes[graph.current_node_id];
+    return node?.category ?? null;
+  });
 
   return (
     <div
@@ -110,42 +49,44 @@ export function SceneArt({
       style={{ borderBottom: "1px solid var(--color-border)" }}
     >
       <div
-        className="mx-auto w-full max-w-[320px] overflow-hidden rounded-md"
+        className="mx-auto flex w-full max-w-[320px] flex-col items-center justify-center"
         style={{
-          aspectRatio:    "320 / 200",
-          border:         "1px solid color-mix(in srgb, var(--color-primary) 55%, var(--color-border))",
-          backgroundColor: "var(--color-bg)",
+          aspectRatio:     "320 / 200",
+          border:          `1px solid color-mix(in srgb, ${colors.primary} 55%, var(--color-border))`,
+          borderRadius:    6,
+          backgroundColor: `color-mix(in srgb, ${colors.primary} 4%, var(--color-bg))`,
+          fontFamily:      "var(--font-mono)",
+          padding:         "0.75rem",
         }}
       >
-        {cached ? (
+        <div
+          style={{
+            color:         colors.primary,
+            fontSize:      14,
+            fontWeight:    700,
+            letterSpacing: "0.04em",
+            textAlign:     "center",
+            lineHeight:    1.3,
+            wordBreak:     "break-word",
+          }}
+        >
+          {locationName}
+        </div>
+        {locationType && (
           <div
-            className="svg-fade-in h-full w-full"
-            style={{ imageRendering: "pixelated" }}
-            dangerouslySetInnerHTML={{ __html: ensureResponsiveSvg(cached) }}
-          />
-        ) : loading ? (
-          <div className="svg-loader h-full w-full" aria-label={`Generating art for ${locationName}`} />
-        ) : (
-          <div
-            className="flex h-full w-full items-center justify-center text-[10px] italic"
-            style={{ color: "var(--color-muted)" }}
+            style={{
+              marginTop:     6,
+              fontSize:      10,
+              color:         "var(--color-muted)",
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              textAlign:     "center",
+            }}
           >
-            Art unavailable
+            {locationType}
           </div>
         )}
       </div>
     </div>
   );
-}
-
-/**
- * Force the SVG to fill its container by adding/replacing width/height
- * attributes if the model omits them. The viewBox stays as authored.
- */
-function ensureResponsiveSvg(svg: string): string {
-  // Inject width="100%" height="100%" if absent.
-  let out = svg;
-  if (!/width\s*=/.test(out))  out = out.replace(/<svg\b/i, '<svg width="100%"');
-  if (!/height\s*=/.test(out)) out = out.replace(/<svg\b/i, '<svg height="100%"');
-  return out;
 }

@@ -229,7 +229,9 @@ export async function saveWorldAsset(
       first_seen_location: asset.first_seen_location,
       name_known:          nameKnown,
     };
-    if (asset.svg_content) row.svg_content = asset.svg_content;
+    // svg_content writes removed — art generation system is gone. The
+    // column remains in the schema for backward compatibility but is no
+    // longer populated.
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase.from("world_assets") as any).upsert(
@@ -241,32 +243,6 @@ export async function saveWorldAsset(
     }
   } catch (err) {
     console.error("[saveWorldAsset] unexpected", err);
-  }
-}
-
-/**
- * Update ONLY the svg_content of an existing world asset.
- * Uses .update() (not upsert) so it never overwrites the constitution.
- * Silently no-ops if the asset doesn't exist yet.
- */
-export async function updateWorldAssetSvg(
-  sessionId: string,
-  assetId:   string,
-  svgContent: string
-): Promise<void> {
-  try {
-    const supabase = createClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase.from("world_assets") as any)
-      .update({ svg_content: svgContent })
-      .eq("session_id", sessionId)
-      .eq("asset_id", assetId)
-      .is("svg_content", null);   // only write when not already set
-    if (error) {
-      console.error("[updateWorldAssetSvg]", error);
-    }
-  } catch (err) {
-    console.error("[updateWorldAssetSvg] unexpected", err);
   }
 }
 

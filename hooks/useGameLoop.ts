@@ -7,8 +7,7 @@ import { resolveAction } from "@/lib/game/logic-resolver";
 import { narrateAction } from "@/lib/game/narrator";
 import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory, updateNPCTrust, findNpcInRegistry, seedNpcRegistry } from "@/lib/game/state-utils";
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
-import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, normalizeLocationId, updateWorldAssetSvg, updateAssetNameRevealed } from "@/lib/game/codex";
-import { generateArt, generateNpcPortrait, getSceneType } from "@/lib/game/art-generator";
+import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, normalizeLocationId, updateAssetNameRevealed } from "@/lib/game/codex";
 import { generateLocationStub } from "@/lib/game/location-stub-generator";
 import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { Item, MasterState, ParsedAction, ResolutionResult, StoredMessage, WorldAsset, WorldNode } from "@/types/game";
@@ -725,55 +724,8 @@ export function useGameLoop() {
           }
         }
 
-        const cached = useGameStore.getState().artCache[newLocationId];
-        if (!cached) {
-          const genre = String(updatedState.metadata.genre);
-          const desc  = narratorResponse.narrative_text.slice(0, 200);
-          console.log(`[GameLoop/art] Generating art for ${newLocationId} (session=${artSessionId})`);
-
-          // Helper: try to link the generated SVG to the world asset.
-          // Returns true when the asset was found and the update was issued;
-          // false when the asset isn't in the store yet (race condition).
-          const tryLinkSvgToAsset = async (svg: string): Promise<boolean> => {
-            const store = useGameStore.getState();
-            const matching = store.locationAssets.find(
-              (a) => a.category === AssetCategory.LOCATION && a.first_seen_location === newLocationId
-            );
-            if (!matching) {
-              console.log(
-                `[GameLoop/art] LOCATION asset not in store yet for ${newLocationId}` +
-                ` (locationAssets=${store.locationAssets.length}) — will retry in 2s`
-              );
-              return false;
-            }
-            if (matching.svg_content) {
-              console.log(`[GameLoop/art] SVG already set on asset ${matching.id}, skipping backfill.`);
-              return true;
-            }
-            console.log(`[GameLoop/art] Linking SVG → asset ${matching.id} (session=${artSessionId})`);
-            await updateWorldAssetSvg(artSessionId, matching.id, svg);
-            return true;
-          };
-
-          // Fire and forget — art shows up when ready, never blocks the loop.
-          void generateArt({
-            location_id:   newLocationId,
-            location_name: newLocationId.replace(/_/g, " "),
-            scene_type:    getSceneType(newLocationId),
-            genre,
-            description:   desc,
-            session_id:    artSessionId,
-          }).then(async (res) => {
-            if (!res?.svg) return;
-            useGameStore.getState().setArtCache(newLocationId, res.svg);
-            // Attempt to backfill svg_content on the world asset. The asset
-            // is saved in step 7b (fire-and-forget), so it might not be in
-            // locationAssets yet if art finishes first. Retry once after 2s.
-            if (!(await tryLinkSvgToAsset(res.svg))) {
-              setTimeout(() => { void tryLinkSvgToAsset(res.svg!); }, 2000);
-            }
-          });
-        }
+        // Art generation removed — SceneArt now renders a genre-themed
+        // placeholder for any location. No SVG fetch, no cache, no backfill.
       }
 
       // ── 7b. Process codex_entries — only NOTABLE/MAJOR are saved ──────────
@@ -798,20 +750,13 @@ export function useGameLoop() {
             ? (entry.category as AssetCategory)
             : AssetCategory.LORE;
 
-        // For LOCATION assets introduced while ARRIVING, attach the cached SVG
-        // if it is already ready — otherwise the art-engine retry in step 7
-        // will backfill it once the asset lands in the store.
-        const isArrivingLocation =
+        // Art generation removed — no svg_content backfill. Just save the
+        // asset with its constitution and significance.
+        if (
           assetCategory === AssetCategory.LOCATION &&
-          resolution.state_delta.world_state?.location_status === LocationStatus.ARRIVING;
-        const cachedSvg = isArrivingLocation
-          ? useGameStore.getState().artCache[currentLocationId]
-          : undefined;
-        if (isArrivingLocation) {
-          console.log(
-            `[GameLoop/7b] Saving LOCATION asset for ${currentLocationId}` +
-            ` (session=${sessionId}, cachedSvg=${!!cachedSvg})`
-          );
+          resolution.state_delta.world_state?.location_status === LocationStatus.ARRIVING
+        ) {
+          console.log(`[GameLoop/7b] Saving LOCATION asset for ${currentLocationId} (session=${sessionId})`);
         }
 
         const asset: WorldAsset = {
@@ -825,7 +770,6 @@ export function useGameLoop() {
           created_at:          new Date().toISOString(),
           // CHARACTER assets default to name_known=false; all others are known.
           name_known:          assetCategory !== AssetCategory.CHARACTER,
-          ...(cachedSvg ? { svg_content: cachedSvg } : {}),
         };
         try {
           void saveWorldAsset(sessionId, asset);
@@ -1057,37 +1001,8 @@ export function useGameLoop() {
         }
       }
 
-      // ── 7f. NPC portrait generation (DIALOGUE or new NPC introduced) ─────────
-      // Fire-and-forget: generates a FRONT_PORTRAIT SVG for the NPC and stores it
-      // in artCache[npc.id]. Silently no-ops if the portrait already exists.
-      if (isDialogueAction || narratorResponse.new_npcs.length > 0) {
-        const npcTargetName = parsedAction.primary_target ?? null;
-        if (npcTargetName) {
-          const currentAssets = useGameStore.getState().locationAssets;
-          const npcAsset = currentAssets.find(
-            (a) =>
-              a.category === AssetCategory.CHARACTER &&
-              a.name.toLowerCase() === npcTargetName.toLowerCase()
-          ) ?? null;
-
-          if (npcAsset) {
-            const alreadyCached = !!npcAsset.svg_content || !!useGameStore.getState().artCache[npcAsset.id];
-            if (!alreadyCached) {
-              void generateNpcPortrait(npcAsset, String(updatedState.metadata.genre), sessionId)
-                .then(async (res) => {
-                  if (!res?.svg) return;
-                  useGameStore.getState().setArtCache(npcAsset.id, res.svg);
-                  // If the Dialogue Modal is still showing this NPC, update its portrait live.
-                  const gs = useGameStore.getState();
-                  if (gs.currentDialogueNpc === npcTargetName) {
-                    gs.setDialogueOptions(gs.currentDialogueOptions, npcTargetName, res.svg);
-                  }
-                  await updateWorldAssetSvg(sessionId, npcAsset.id, res.svg);
-                });
-            }
-          }
-        }
-      }
+      // 7f removed — NPC portrait generation is gone. The Dialogue Modal
+      // shows a silhouette placeholder when no portrait is set.
 
       // ── 7g. Dialogue options — store for the Dialogue Modal ──────────────────
       // Show after every DIALOGUE action; clear after any non-DIALOGUE action.
@@ -1133,12 +1048,14 @@ export function useGameLoop() {
           const npcName =
             justRevealedName
               ?? (continuingSameNpc ? existingNpc : effectiveNpcName);
+          // Portrait lookup is null after the art system removal — the modal
+          // shows a silhouette placeholder. Preserved across consecutive
+          // same-NPC turns purely so the existingPortrait wiring stays
+          // future-proof if a new portrait pipeline is added later.
           const portrait =
             continuingSameNpc && existingPortrait
               ? existingPortrait
-              : (npcAsset
-                  ? (gsBefore.artCache[npcAsset.id] ?? npcAsset.svg_content ?? null)
-                  : null);
+              : null;
 
           // FIX (key prefix): currentDialogueNpcKey MUST always be the FULL
           // canonical asset-id form ("character_<slug>") so it matches the

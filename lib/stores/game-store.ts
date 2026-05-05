@@ -40,9 +40,7 @@ interface GameStore {
   messages:          StoryMessage[];
   isProcessing:      boolean;
   processingStep:    string | null;
-  currentAsciiArt:   string | null;
   lastNarrativeText: string | null;
-  artCache:          Record<string, string>;
   locationAssets:    WorldAsset[];
 
   // ── Dialogue Modal ─────────────────────────────────────────────────────────
@@ -67,10 +65,8 @@ interface GameStore {
   setMasterState:          (state: MasterState) => void;
   addMessage:              (message: StoryMessage) => void;
   setProcessing:           (isProcessing: boolean, step?: string) => void;
-  setAsciiArt:             (art: string | null) => void;
   clearMessages:           () => void;
   setLastNarrativeText:    (text: string) => void;
-  setArtCache:             (locationId: string, svg: string) => void;
   setLocationAssets:       (assets: WorldAsset[]) => void;
   /** Update the npcName metadata on any DIALOGUE messages that still carry an old placeholder name. */
   updateMessagesNpcName:   (oldName: string, newName: string) => void;
@@ -94,9 +90,8 @@ interface GameStore {
    *  Use ONLY when switching to a different save slot. */
   clearSessionState:       () => void;
   /** Lightweight reset for SPA navigation back to the same session. Clears
-   *  ephemeral caches that may be stale (artCache, lastNarrativeText,
-   *  currentAsciiArt) but PRESERVES dialogue modal state, log entries,
-   *  location assets, and messages — those remain valid across nav. */
+   *  lastNarrativeText only — PRESERVES dialogue modal state, log entries,
+   *  location assets, and messages so navigating back doesn't wipe them. */
   clearTransientState:     () => void;
 
   persistedLogEntries: LogEntry[];
@@ -123,9 +118,7 @@ export const useGameStore = create<GameStore>((set) => ({
   messages:               [],
   isProcessing:           false,
   processingStep:         null,
-  currentAsciiArt:        null,
   lastNarrativeText:      null,
-  artCache:               {},
   locationAssets:         [],
   persistedLogEntries:    [],
   currentDialogueOptions: [],
@@ -140,11 +133,8 @@ export const useGameStore = create<GameStore>((set) => ({
   addMessage:           (message) => set((s) => ({ messages: [...s.messages, message] })),
   setProcessing:        (isProcessing, step) =>
     set({ isProcessing, processingStep: isProcessing ? step ?? null : null }),
-  setAsciiArt:          (art) => set({ currentAsciiArt: art }),
   clearMessages:        () => set({ messages: [] }),
   setLastNarrativeText: (text) => set({ lastNarrativeText: text }),
-  setArtCache:          (locationId, svg) =>
-    set((s) => ({ artCache: { ...s.artCache, [locationId]: svg } })),
   setLocationAssets:    (assets) => set({ locationAssets: assets }),
   updateMessagesNpcName: (oldName, newName) =>
     set((s) => ({
@@ -206,14 +196,10 @@ export const useGameStore = create<GameStore>((set) => ({
       dialogueModalCollapsed: false,
       currentTradeItems:      [],
       locationAssets:         [],
-      artCache:               {},
       lastNarrativeText:      null,
-      currentAsciiArt:        null,
     }),
   clearTransientState: () =>
     set({
-      artCache:          {},
       lastNarrativeText: null,
-      currentAsciiArt:   null,
     }),
 }));

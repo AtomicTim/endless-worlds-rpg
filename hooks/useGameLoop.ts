@@ -7,7 +7,7 @@ import { resolveAction } from "@/lib/game/logic-resolver";
 import { narrateAction } from "@/lib/game/narrator";
 import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory, updateNPCTrust, findNpcInRegistry, seedNpcRegistry, addNpcToCurrentNode } from "@/lib/game/state-utils";
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
-import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, normalizeLocationId, updateAssetNameRevealed } from "@/lib/game/codex";
+import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, normalizeLocationId } from "@/lib/game/codex";
 import { generateLocationStub } from "@/lib/game/location-stub-generator";
 import { findAmbientResponse } from "@/lib/game/ambient-objects";
 import {
@@ -283,11 +283,6 @@ export function useGameLoop() {
     options?: { npcName?: string; tone?: "friendly" | "aggressive" | "curious" | "deceptive" }
   ) => {
     const store = useGameStore.getState();
-
-    // BUG FIX 1: track whether step 7d revealed a true name this beat. If it
-    // did, step 7g must use that name in setDialogueOptions instead of the
-    // stale placeholder, otherwise step 7g's call overwrites step 7d's update.
-    let justRevealedName: string | null = null;
 
     // ── 1. Validate input ────────────────────────────────────────────────────
     const trimmed = input.trim();
@@ -1325,172 +1320,11 @@ export function useGameLoop() {
         }
       }
 
-      // ── 7d. Process revealed NPC names ───────────────────────────────────────
-      // When the narrator signals that the player learned a character's true
-      // identity this turn, persist the reveal and optimistically patch the
-      // Zustand locationAssets store so the codex UI reflects it immediately.
-      console.log(
-        "[GameLoop/7d] revealed_npc_names from narrator:",
-        JSON.stringify(narratorResponse.revealed_npc_names)
-      );
-      if (narratorResponse.revealed_npc_names && narratorResponse.revealed_npc_names.length > 0) {
-        // PART 1 (modal timing fix) + PART 2a (narrator simplification):
-        // Compute the active NPC name from the CURRENT action context
-        // (option-click override → previous-beat store value → primary_target).
-        // This is independent of step 7g's pending store update and is also
-        // what the game engine uses to resolve the asset_id since the
-        // narrator no longer emits one.
-        const gsBefore7d = useGameStore.getState();
-        const activeNpcName: string | null =
-          options?.npcName ??
-          gsBefore7d.currentDialogueNpc ??
-          parsedAction.primary_target ??
-          null;
-
-        for (const reveal of narratorResponse.revealed_npc_names) {
-          const trueName = reveal.true_name;
-          const currentAssets = useGameStore.getState().locationAssets;
-
-          // Asset resolution priority:
-          //   1. CHARACTER asset whose name already equals the revealed name.
-          //   2. CHARACTER asset whose constitution.true_name matches
-          //      (placeholder asset where the narrator pre-recorded the name).
-          //   3. CHARACTER asset matching the active dialogue NPC by name.
-          //   4. NEW (Issue I + N): CHARACTER asset matching the active dialogue
-          //      NPC's registry key — covers freshly-saved new_npcs that may
-          //      not yet match by display name.
-          let matchedAsset =
-            currentAssets.find(
-              (a) =>
-                a.category === AssetCategory.CHARACTER &&
-                a.name.toLowerCase() === trueName.toLowerCase()
-            ) ?? null;
-
-          if (!matchedAsset) {
-            matchedAsset =
-              currentAssets.find(
-                (a) =>
-                  a.category === AssetCategory.CHARACTER &&
-                  typeof a.constitution.true_name === "string" &&
-                  a.constitution.true_name.toLowerCase() === trueName.toLowerCase()
-              ) ?? null;
-          }
-
-          if (!matchedAsset && activeNpcName) {
-            matchedAsset =
-              currentAssets.find(
-                (a) =>
-                  a.category === AssetCategory.CHARACTER &&
-                  a.name.toLowerCase() === activeNpcName.toLowerCase()
-              ) ?? null;
-          }
-
-          if (!matchedAsset && activeNpcName) {
-            // Issue I: try the canonical asset_id form too — the narrator might
-            // refer to an NPC by a slightly different display name spelling but
-            // the asset_id (slug) still matches.
-            const activeKey = normalizeAssetId(AssetCategory.CHARACTER, activeNpcName);
-            matchedAsset =
-              currentAssets.find(
-                (a) => a.category === AssetCategory.CHARACTER && a.id === activeKey
-              ) ?? null;
-          }
-
-          // Issue I: never synthesize an asset_id. If the reveal targets a
-          // character we can't find in locationAssets, the narrator is
-          // hallucinating — log and skip. Don't write to DB or store.
-          if (!matchedAsset) {
-            console.warn(
-              "[GameLoop/7d] Reveal target not in locationAssets — ignoring",
-              { trueName, activeNpcName }
-            );
-            continue;
-          }
-
-          // Issue C: pre-seeded NPCs (and any NPC whose name was already
-          // known) are immune to "reveals". The constitution is write-once.
-          // Skip when the asset is already known AND the names disagree.
-          // Same-name reveals are no-ops anyway; let them fall through but
-          // suppress side effects.
-          const alreadyKnown = matchedAsset.name_known === true;
-          const sameName     =
-            matchedAsset.name.toLowerCase() === trueName.toLowerCase();
-          if (alreadyKnown && !sameName) {
-            console.warn(
-              "[GameLoop/7d] Ignoring reveal for already-known NPC",
-              { id: matchedAsset.id, currentName: matchedAsset.name, attempted: trueName }
-            );
-            continue;
-          }
-          if (alreadyKnown && sameName) {
-            // Already matches — nothing to do. Skip the DB / store writes.
-            continue;
-          }
-
-          const effectiveAssetId = matchedAsset.id;
-          const placeholderName  = matchedAsset.name;
-
-          // Persist to DB — fire-and-forget.
-          void updateAssetNameRevealed(sessionId, effectiveAssetId, trueName);
-
-          // Optimistic local patch of locationAssets.
-          const patched = currentAssets.map((a) =>
-            a.id === effectiveAssetId
-              ? { ...a, name: trueName, name_known: true }
-              : a
-          );
-          useGameStore.getState().setLocationAssets(patched);
-
-          // Update any DIALOGUE feed messages that still carry the placeholder.
-          if (placeholderName) {
-            useGameStore.getState().updateMessagesNpcName(placeholderName, trueName);
-          }
-
-          // PART 1 (modal timing): two-channel check uses a key COMPUTED from
-          // the active NPC name (independent of step 7g's pending store
-          // update), then ALSO honors the activeNpcName text channel for
-          // placeholder collisions. This works on beat 1 too.
-          {
-            const gs = useGameStore.getState();
-            const computedNpcKey = activeNpcName
-              ? normalizeAssetId(AssetCategory.CHARACTER, activeNpcName)
-              : null;
-            const isActiveNpc =
-              (!!activeNpcName &&
-               placeholderName !== "" &&
-               activeNpcName.toLowerCase() === placeholderName.toLowerCase()) ||
-              (!!computedNpcKey && computedNpcKey === effectiveAssetId);
-
-            console.log(
-              "[GameLoop/7d] two-channel check:",
-              "computedNpcKey:", computedNpcKey,
-              "effectiveAssetId:", effectiveAssetId,
-              "match:", isActiveNpc
-            );
-
-            // FIX 3: pin the revealed name FIRST so any subsequent step that
-            // reads justRevealedName (notably step 7g's setDialogueOptions)
-            // sees the true name, not the stale placeholder. This must run
-            // even when there are no current dialogue options to update —
-            // the asset name update happened above and step 7g still needs
-            // to know about the reveal.
-            if (isActiveNpc) {
-              justRevealedName = trueName;
-
-              const gs2 = useGameStore.getState();
-              if (gs2.currentDialogueOptions.length > 0) {
-                gs2.setDialogueOptions(
-                  gs2.currentDialogueOptions,
-                  trueName,
-                  gs2.currentNpcPortrait,
-                  gs2.currentDialogueNpcKey ?? computedNpcKey ?? effectiveAssetId
-                );
-                console.log("[GameLoop/7d] Modal updated to:", trueName);
-              }
-            }
-          }
-        }
-      }
+      // ── 7d. (REMOVED in Day 19E) NPC reveal pipeline ─────────────────────────
+      // All NPCs now have real names from birth (WorldBible / RegionBible).
+      // The narrator no longer emits revealed_npc_names; the asset's name is
+      // its display name from the moment it's written. Codex / dialogue UI
+      // read the name directly from locationAssets and never need a "reveal".
 
       // ── 7e. Trust changes from dialogue ──────────────────────────────────────
       // Resolve narrator-provided npc_key against whatever scheme the registry
@@ -1560,12 +1394,10 @@ export function useGameLoop() {
               ) ?? null
             : null;
 
-          // BUG FIX 1: if step 7d revealed a true name this beat, that's the
-          // authoritative current display name — use it instead of the stale
-          // placeholder that effectiveNpcName / existingNpc still hold.
-          const npcName =
-            justRevealedName
-              ?? (continuingSameNpc ? existingNpc : effectiveNpcName);
+          // Day 19E: reveal pipeline removed — NPCs have real names from
+          // birth, so the effective name is always the asset's current name
+          // (with same-NPC continuation falling back to the stored existing).
+          const npcName = continuingSameNpc ? existingNpc : effectiveNpcName;
           // Portrait lookup is null after the art system removal — the modal
           // shows a silhouette placeholder. Preserved across consecutive
           // same-NPC turns purely so the existingPortrait wiring stays
@@ -1575,15 +1407,14 @@ export function useGameLoop() {
               ? existingPortrait
               : null;
 
-          // FIX (key prefix): currentDialogueNpcKey MUST always be the FULL
-          // canonical asset-id form ("character_<slug>") so it matches the
-          // narrator's revealed_npc_names asset_id in step 7d's two-channel
-          // check. Derive it directly from effectiveNpcName (the resolved
-          // NPC name including the option-click fallback to existingNpc) so
-          // option-click beats — where parsedAction.primary_target is null
-          // and so npcName could collapse to null without the fallback —
-          // still produce a non-null key. findNpcInRegistry's prefix-strip
-          // fallback handles legacy unprefixed entries during reads.
+          // currentDialogueNpcKey MUST always be the FULL canonical
+          // asset-id form ("character_<slug>"). Derive it directly from
+          // effectiveNpcName (the resolved NPC name including the
+          // option-click fallback to existingNpc) so option-click beats —
+          // where parsedAction.primary_target is null and so npcName could
+          // collapse to null without the fallback — still produce a
+          // non-null key. findNpcInRegistry's prefix-strip fallback handles
+          // legacy unprefixed entries during reads.
           const npcRegistryKey: string | null = effectiveNpcName
             ? normalizeAssetId(AssetCategory.CHARACTER, effectiveNpcName)
             : null;

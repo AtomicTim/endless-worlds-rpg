@@ -45,6 +45,12 @@ const ACTIONS_BY_TYPE: Record<PointOfInterest["type"], ActionDef[]> = {
     { label: "Examine",  build: (l) => `examine ${l}` },
     { label: "Interact", build: (l) => `interact with ${l}` },
   ],
+  // Day 19E — WCD landmark: informational only. The popover header shows
+  // the public_description; no buttons because the player can't navigate
+  // to a landmark (they have to discover the region it sits in).
+  LANDMARK: [
+    { label: "Close", build: () => null },
+  ],
 };
 
 const POPOVER_WIDTH  = 280;

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
-import { getAllCodex, getWorldAssetsByCategory, normalizeAssetId, looksLikePlaceholder } from "@/lib/game/codex";
+import { getAllCodex, getWorldAssetsByCategory, normalizeAssetId } from "@/lib/game/codex";
 import { AssetCategory } from "@/types/game";
 import type { CodexEntry, MasterState, WorldAsset } from "@/types/game";
 import { useGameStore } from "@/lib/stores/game-store";
@@ -39,7 +39,6 @@ export default function CodexPage() {
   const [characterName, setCharacterName]             = useState<string>("");
   const [entries, setEntries]                         = useState<CodexEntry[]>([]);
   const [locationWorldAssets, setLocationWorldAssets] = useState<WorldAsset[]>([]);
-  const [characterWorldAssets, setCharacterWorldAssets] = useState<WorldAsset[]>([]);
   const [activeTab, setActiveTab]                     = useState<TabId>("LOCATION");
   const [selected, setSelected]                       = useState<CodexEntry | null>(null);
   const [loading, setLoading]                         = useState(true);
@@ -86,15 +85,16 @@ export default function CodexPage() {
 
       setCharacterName(charName);
 
-      const [all, locAssets, charAssets] = await Promise.all([
+      // Day 19E: stopped fetching CHARACTER assets here — the codex page
+      // no longer renders an "Identity Unknown" badge, so we don't need
+      // them. LOCATION assets still feed the location detail panel.
+      const [all, locAssets] = await Promise.all([
         getAllCodex(sessionId),
         getWorldAssetsByCategory(sessionId, AssetCategory.LOCATION),
-        getWorldAssetsByCategory(sessionId, AssetCategory.CHARACTER),
       ]);
       if (!cancelled) {
         setEntries(all);
         setLocationWorldAssets(locAssets);
-        setCharacterWorldAssets(charAssets);
         setLoading(false);
       }
     }
@@ -206,14 +206,11 @@ export default function CodexPage() {
               const isMajor = entry.significance === "MAJOR";
               const tab = TABS.find((t) => t.id === activeTab);
 
-              // Check name_known for CHARACTER entries
-              const charAsset =
-                entry.category === "CHARACTER"
-                  ? characterWorldAssets.find(
-                      (a) => a.id === normalizeAssetId("CHARACTER", entry.name)
-                    )
-                  : undefined;
-              const identityUnknown = charAsset?.name_known === false && looksLikePlaceholder(entry.name);
+              // Day 19E: NPCs have real names from generation, so the
+              // "Identity Unknown" badge is no longer shown. The lookup
+              // remains for forward-compat hooks but identityUnknown is
+              // pinned to false.
+              const identityUnknown = false;
 
               return (
                 <button
@@ -294,15 +291,10 @@ export default function CodexPage() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal header — resolves name_known for CHARACTER entries */}
+            {/* Modal header — Day 19E: identityUnknown is always false now
+                that NPCs have real names from generation. */}
             {(() => {
-              const modalCharAsset =
-                selected.category === "CHARACTER"
-                  ? characterWorldAssets.find(
-                      (a) => a.id === normalizeAssetId("CHARACTER", selected.name)
-                    )
-                  : undefined;
-              const modalIdentityUnknown = modalCharAsset?.name_known === false && looksLikePlaceholder(selected.name);
+              const modalIdentityUnknown = false;
               return (
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>

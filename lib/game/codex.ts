@@ -246,45 +246,8 @@ export async function saveWorldAsset(
   }
 }
 
-/**
- * Mark a CHARACTER asset's identity as revealed.
- * Updates both world_assets (name + name_known) and the matching codex entry
- * so the player-facing encyclopedia shows the true name immediately.
- * Called by the Day 15 NPC dialogue system when a character introduces
- * themselves by name.
- * Never throws — logs errors only.
- */
-export async function updateAssetNameRevealed(
-  sessionId: string,
-  assetId:   string,
-  trueName:  string
-): Promise<void> {
-  try {
-    const supabase = createClient();
-
-    // Update world_assets
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: assetErr } = await (supabase.from("world_assets") as any)
-      .update({ name: trueName, name_known: true })
-      .eq("session_id", sessionId)
-      .eq("asset_id", assetId);
-    if (assetErr) {
-      console.error("[updateAssetNameRevealed] world_assets update failed:", assetErr);
-    }
-
-    // Update codex entry (entry_id == assetId since both are normalizeAssetId output)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: codexErr } = await (supabase.from("codex") as any)
-      .update({ name: trueName })
-      .eq("session_id", sessionId)
-      .eq("entry_id", assetId);
-    if (codexErr) {
-      console.error("[updateAssetNameRevealed] codex update failed:", codexErr);
-    }
-  } catch (err) {
-    console.error("[updateAssetNameRevealed] unexpected", err);
-  }
-}
+// Day 19E: updateAssetNameRevealed removed — every NPC has a real name
+// from generation. Display names are written once and never change.
 
 /**
  * Upsert a codex entry. Codex rows are also write-once per (session, entry).

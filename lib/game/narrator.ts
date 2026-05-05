@@ -219,28 +219,10 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
       ? (parsed.codex_entries.map(normalizeCodex).filter(Boolean) as CodexEntry[])
       : [];
 
-    const revealed_npc_names = Array.isArray(parsed.revealed_npc_names)
-      ? (parsed.revealed_npc_names as unknown[]).reduce<Array<{ true_name: string }>>(
-          (acc, entry) => {
-            // Narrator only emits { true_name }. Game code derives asset_id
-            // from locationAssets context. Be tolerant — accept any object
-            // with a non-empty true_name string, ignore stale asset_id keys
-            // emitted by older prompts.
-            if (
-              entry &&
-              typeof entry === "object" &&
-              typeof (entry as Record<string, unknown>).true_name === "string" &&
-              ((entry as Record<string, unknown>).true_name as string).trim().length > 0
-            ) {
-              acc.push({
-                true_name: ((entry as Record<string, unknown>).true_name as string).trim(),
-              });
-            }
-            return acc;
-          },
-          []
-        )
-      : [];
+    // Day 19E: revealed_npc_names dropped — every NPC has a real name
+    // from generation, so the narrator no longer needs to signal a
+    // reveal. If older save / prompt traffic still emits this field we
+    // simply ignore it on the way through.
 
     const tierRaw = parsed.response_tier;
     const response_tier: 1 | 2 | 3 =
@@ -268,7 +250,6 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
       items_acquired,
       points_of_interest,
       codex_entries,
-      ...(revealed_npc_names.length > 0 ? { revealed_npc_names } : {}),
       ...(log_summary ? { log_summary } : {}),
       ...(dialogue_options.length > 0 ? { dialogue_options } : {}),
       ...(trust_changes.length > 0 ? { trust_changes } : {}),

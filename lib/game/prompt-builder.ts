@@ -227,55 +227,59 @@ export function buildNarratorSystemPrompt(
   // visually separated.
   const wcdPrefix = wcd ? `${formatWcdBlock(wcd)}\n\n` : "";
 
-  return `${wcdPrefix}CRITICAL OUTPUT FIELD — revealed_npc_names:
-When an NPC says their name in this response — in any form
-('I am X', 'My name is X', 'Call me X', 'They call me X', 'The name's X',
-'They call me X around here', or any equivalent self-introduction) —
-you MUST populate this array. This is not optional.
-The game system cannot update the character's name without it.
-
-Format: [{ true_name: 'Their Real Name' }]
-Just the name — nothing else. The game engine handles IDs.
-Example: [{ true_name: 'Marta Ironwood' }]
-
-If no name is revealed this turn: empty array []
-If a name IS revealed: populate it — this is MANDATORY
-
+  return `${wcdPrefix}YOUR ROLE AND HARD RULES — READ BEFORE ANYTHING ELSE
 ═══════════════════════════════════════════════════════════════
 
-YOUR ROLE — READ THIS BEFORE ANYTHING ELSE:
-You are a pure interpreter of game state. You have exactly three jobs:
+A — YOUR THREE JOBS:
 
-1. ASSET GENERATOR: On first encounter, describe new locations, NPCs, and items vividly so they become real world assets. Once described, they are locked. You never change them.
+1. DESCRIBE: Translate what just happened into vivid prose. Use the locked asset data you are given as ground truth.
+2. BRIDGE: Connect player actions to their outcomes. The game engine tells you what succeeded or failed — you describe it.
+3. THREAD: Occasionally weave subtle hints from the main quest breadcrumbs into your descriptions. Never force it. Never make it obvious.
 
-2. SCENE BRIDGE: Describe what happens when the player takes an action. The game engine tells you the outcome (success/failure, damage dealt, check passed/failed). You write the story around that outcome. You do NOT decide outcomes.
+You are a pure DESCRIBER, not a world generator. The world has already been built — your job is to bring it to life on the page.
 
-3. STORY THREAD: Occasionally weave subtle hints toward the main quest into your descriptions. Never force. Never block.
+B — WHAT YOU MUST NEVER DO:
 
-HARD LIMITS — violating these breaks the game:
+- NEVER invent or name a location that is not in ESTABLISHED WORLD ASSETS or the player's current location.
+- NEVER introduce a named NPC who is not in the NPCS PRESENT or RESPONDING CHARACTER blocks.
+- NEVER invent a named interactable object that is not in the TIER 1 OBJECTS list.
+- NEVER say an object disappeared, wasn't there, or the player cannot interact with it.
+- NEVER speak in the player's voice or attribute actions, memories, thoughts, feelings, or relationships to them that they did not explicitly state.
+- NEVER contradict the World Consistency Document.
+- NEVER say an NPC left, is unavailable, or is gone — a failed check means they are guarded or unhelpful, not absent.
 
-NEVER speak in the player's voice.
-NEVER attribute dialogue, thoughts, memories, or feelings to the player that they did not explicitly state.
-NEVER invent prior relationships between the player and any NPC — the player has no history unless stated in the game state or log book.
-NEVER have the player 'recognize' someone, 'remember' something, or 'know' something they didn't discover in this session.
+The player is always a blank-slate protagonist. Their past is ONLY what appears in the game log. Their knowledge is ONLY what they have discovered. Their relationships are ONLY what they have built.
 
-The player is always a blank-slate protagonist.
-Their past is ONLY what appears in the game log.
-Their knowledge is ONLY what they have discovered.
-Their relationships are ONLY what they have built.
+WRONG: "You recognize your old mentor, Gareth."
+WRONG: "As a former soldier, you know this tactic."
+WRONG: "Elara has been gone a long time." (she is in NPCS PRESENT)
+RIGHT: "An elderly man with winter-sky eyes watches you."
+RIGHT: "Elara meets your gaze without expression."
 
-WRONG: 'You recognize your old mentor, Gareth.'
-WRONG: 'As a former soldier, you know this tactic.'
-WRONG: 'You and Elara have always had a complicated history.'
-RIGHT: 'An elderly man with winter-sky eyes watches you.'
-RIGHT: 'The soldier's stance suggests military training.'
-RIGHT: 'Elara seems to recognize something in your face.'
+C — NAMES ARE PERMANENT:
+
+Every location, NPC, and object has an exact stored name. Use it verbatim.
+- WRONG: "the inn" when the location is "Korven's Inn".  RIGHT: "Korven's Inn".
+- WRONG: "the innkeeper" after introduction.  RIGHT: "Korven sets down his glass".
+
+D — TIER 1 OBJECTS ONLY IN DESCRIPTIONS:
+
+You will receive a TIER 1 OBJECTS list for the current location. These are the only named objects you should reference as specific interactable things.
+- You MAY describe ambient atmosphere freely — smells, sounds, general environment, weather, light.
+- You MAY NOT name specific objects as interactable unless they are in the Tier 1 list.
+- If the player tries to interact with something not in the list, the game engine has already routed that to a Tier 2 template or to you with a TIER 3 AMBIENT INTERACTION instruction. Follow those rules — never invent a new tracked object on your own.
+
+E — NPC INTRODUCTION RULE:
+
+Every NPC has a real name from the moment they appear in the game. When introducing them for the first time, describe their appearance in 1 sentence, then name them in the very next sentence. Never use a placeholder description as their name after introduction.
+
+EXAMPLE: "A broad-shouldered woman wipes down the bar with a rag. Mira Coldwater meets your gaze without expression."
 
 When writing NPC dialogue responses:
-- The NPC speaks based on their constitution + trust score
-- You do NOT write the player's reply
-- You do NOT put words in the player's mouth
-- You describe the NPC's reaction to what the player SAID (which is provided to you in the action context)
+- The NPC speaks based on their constitution + trust score.
+- You do NOT write the player's reply.
+- You do NOT put words in the player's mouth.
+- You describe the NPC's reaction to what the player SAID (which is provided to you in the action context).
 
 ═══════════════════════════════════════════════════════
 
@@ -353,26 +357,10 @@ Write constitutions that are:
 
 If a world asset appears in ESTABLISHED WORLD ASSETS in the user prompt, your description of it must be 100% consistent with what is already recorded. You may ADD new details but never CONTRADICT existing ones.
 
-NPC NAMES — how to name characters in codex_entries:
-When you introduce a CHARACTER for the first time, use a descriptive placeholder as their codex name UNLESS the character explicitly introduces themselves by name or is wearing a clearly visible name badge.
+NPC NAMES — every NPC has a real name from birth:
+When a CHARACTER appears in NPCS PRESENT or RESPONDING CHARACTER, their real name is locked. Use it. Never invent a placeholder description like "Hooded Figure" — the world bible already gave them a name.
 
-Good placeholder examples: "Chrome-Eyed Shopkeeper", "Scarred Wasteland Guard", "Hooded Figure in the Corner", "One-Armed Ferryman"
-Bad placeholders: "A Man", "Unknown Person", "NPC" — be specific and evocative.
-
-Always include the character's true name (if known) in the description field of the codex_entry, formatted as: "True name: [name]. [rest of description]"
-If the character's name is unknown even to you (the narrator), omit the true name line entirely.
-
-Characters who introduce themselves by name: use their real name directly in the codex_entry name field — no placeholder needed.
-
-WHEN THE PLAYER LEARNS A CHARACTER'S NAME:
-If, during this turn, a CHARACTER reveals their true name to the player (they introduce themselves, the player finds a name badge, reads a document, or any other in-world revelation), you MUST populate revealed_npc_names.
-
-Each entry contains a single field:
-- true_name: the character's actual name as revealed in the story.
-
-Just the name — nothing else. The game engine handles all asset-id derivation from the active dialogue context. Do NOT emit asset_id or any other field.
-
-Only populate revealed_npc_names when an identity is NEWLY REVEALED this turn. If the character's name was already known, leave revealed_npc_names empty.
+For codex_entries, always use the NPC's exact stored name (from the world asset / npcs list). Description should be 2-3 sentences covering appearance and role.
 
 MOVE ACTIONS — ABSOLUTE RULE:
 When the action_type is MOVE and movement_mandatory is true in the narrative context, the player has ALREADY moved — the logic engine updated their location before you were called. Your ONLY job is to describe the journey and arrival.
@@ -474,7 +462,6 @@ JSON OUTPUT — Respond ONLY with valid JSON matching this exact schema (no mark
   "items_acquired": [],
   "points_of_interest": [],
   "codex_entries": [],
-  "revealed_npc_names": [],
   "dialogue_options": [],
   "trust_changes": [],
   "items_for_sale": [],
@@ -539,12 +526,6 @@ dialogue_options entries MUST match this shape (NPC interactions only — empty 
 NO stat_check field. The game engine determines checks from tone:
 aggressive → STR, curious → PER, deceptive → CHA at +2 difficulty, friendly → no check.
 ALL options remain clickable regardless of the player's stats.
-
-revealed_npc_names entries MUST match this shape (only when a name is revealed this turn):
-{
-  "true_name": "Their Real Name"
-}
-Just the name — nothing else. No asset_id. The game engine resolves the asset from the active dialogue context.
 
 trust_changes entries MUST match this shape (only when a notable shift occurs):
 {
@@ -717,6 +698,10 @@ export function buildNarratorUserPrompt(
   // constitution. The roster-style NPCS PRESENT block is redundant and could
   // tempt the narrator to write dialogue for a different character — skip
   // it entirely on DIALOGUE actions.
+  // Day 19E: tightened wording — the roster is the ONLY set of characters
+  // the narrator may name at this location. Personality is included so the
+  // narrator can voice the NPC consistently without re-fetching their full
+  // constitution mid-paragraph.
   const npcPresentLines: string[] = [];
   const graph        = state.world_graph;
   const currentNode  = graph?.nodes[graph.current_node_id ?? state.world_state.current_node_id ?? ""];
@@ -728,22 +713,28 @@ export function buildNarratorUserPrompt(
     if (presentAssets.length > 0) {
       npcPresentLines.push(
         "══════════════════════════════",
-        "NPCS PRESENT AT THIS LOCATION (graph-confirmed):",
+        "NPCS PRESENT AT THIS LOCATION:",
       );
       for (const npc of presentAssets) {
-        const role = typeof npc.constitution.role === "string" ? npc.constitution.role : "";
-        npcPresentLines.push(`- ${npc.name}${role ? ` (${role})` : ""}`);
+        const role        = typeof npc.constitution.role === "string" ? npc.constitution.role : "";
+        const personality = typeof npc.constitution.personality === "string"
+          ? npc.constitution.personality.split(/\.\s+/)[0].trim()
+          : "";
+        npcPresentLines.push(
+          `- ${npc.name}${role ? ` (${role})` : ""}${personality ? `: ${personality}` : ""}`
+        );
       }
       npcPresentLines.push(
-        "Only these NPCs are available for interaction here.",
-        "Do not invent additional named characters at this location.",
+        "These are the ONLY characters available for interaction here.",
+        "Do NOT introduce or name any other characters at this location.",
         "══════════════════════════════",
       );
-    } else if (currentNode.npc_ids.length === 0) {
+    } else {
       npcPresentLines.push(
         "══════════════════════════════",
-        "NPCS PRESENT AT THIS LOCATION: none.",
-        "Do not invent named NPCs here unless the player explicitly enters dialogue.",
+        "NPCS PRESENT: None.",
+        "If the player speaks using quotes, describe ambient sounds or environment only.",
+        "Do not invent a character to respond.",
         "══════════════════════════════",
       );
     }
@@ -791,6 +782,38 @@ export function buildNarratorUserPrompt(
   })();
   const assetsBlock = buildEstablishedAssetsBlock(orderedAssets);
 
+  // ── Day 19E — TIER 1 OBJECTS at the current location ───────────────────────
+  // Pull the current location's world_asset and read its key_landmarks
+  // (Tier 1 object names). These are the only objects the narrator may name
+  // as specific interactable things. Tier 2 ambient objects and Tier 3
+  // freeform interactions are handled by other code paths.
+  const tier1Lines: string[] = [];
+  {
+    const all = locationAssets ?? [];
+    const currentLocAsset = all.find(
+      (a) =>
+        a.category === AssetCategory.LOCATION &&
+        (a.id === `location_${world_state.current_location_id}` ||
+          a.first_seen_location === world_state.current_location_id)
+    );
+    const landmarks = (currentLocAsset?.constitution.key_landmarks ?? [])
+      .filter((s) => typeof s === "string" && s.trim().length > 0);
+    if (landmarks.length > 0) {
+      tier1Lines.push(
+        "══════════════════════════════",
+        "TIER 1 OBJECTS — CURRENT LOCATION (the only named interactable objects here):",
+      );
+      for (const name of landmarks) {
+        tier1Lines.push(`- ${name}`);
+      }
+      tier1Lines.push(
+        "These are the only objects you should name as specific interactable things.",
+        "All other object interactions should be described as ambient atmosphere only.",
+        "══════════════════════════════",
+      );
+    }
+  }
+
   // ── Scene context block ────────────────────────────────────────────────────
   const sceneLines: string[] = [];
   if (isArriving) {
@@ -815,6 +838,7 @@ export function buildNarratorUserPrompt(
     ...(worldFactLines.length > 0 ? ["", ...worldFactLines] : []),
     ...(npcPresentLines.length > 0 ? ["", ...npcPresentLines] : []),
     ...(assetsBlock ? ["", assetsBlock] : []),
+    ...(tier1Lines.length > 0 ? ["", ...tier1Lines] : []),
     ...(sceneLines.length > 0 ? ["", ...sceneLines] : []),
     "",
     `ACTION TYPE: ${actionType}`,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { StoryMessage } from "@/lib/stores/game-store";
 import { useGameStore } from "@/lib/stores/game-store";
 import { Genre } from "@/types/game";
@@ -8,6 +8,12 @@ import type { PointOfInterest } from "@/types/game";
 import { InteractionPopover } from "./InteractionPopover";
 import { POI_COLORS } from "./poi-colors";
 import { getGenreColors } from "./genre-ui";
+import {
+  buildExactHighlights,
+  findExactHighlights,
+  type HighlightCandidate,
+  type HighlightMatch,
+} from "@/lib/game/highlights";
 
 // Re-export so existing import sites keep working.
 export type { StoryMessage } from "@/lib/stores/game-store";
@@ -40,6 +46,19 @@ export function StoryFeed({ messages, isLoading = false, onSubmit }: StoryFeedPr
   // and pass down so MessageEntry doesn't subscribe N times.
   const genre = useGameStore((s) => s.masterState?.metadata.genre) ?? Genre.FANTASY;
 
+  // Day 19E — exact-match highlight candidates computed from live state.
+  // Replaces narrator-emitted points_of_interest fuzzy scanning. Recomputed
+  // when masterState or locationAssets change (i.e. on every move/asset
+  // refresh) — earlier messages re-render with the candidates that exist
+  // RIGHT NOW; that's intentional, since highlights drive interactions
+  // available at the player's current node.
+  const masterState    = useGameStore((s) => s.masterState);
+  const locationAssets = useGameStore((s) => s.locationAssets);
+  const highlightCandidates = useMemo<HighlightCandidate[]>(() => {
+    if (!masterState) return [];
+    return buildExactHighlights(masterState, locationAssets);
+  }, [masterState, locationAssets]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
@@ -64,7 +83,13 @@ export function StoryFeed({ messages, isLoading = false, onSubmit }: StoryFeedPr
       style={{ fontFamily: "var(--font-mono)" }}
     >
       {messages.map((msg) => (
-        <MessageEntry key={msg.id} message={msg} onPoiClick={openPopover} genre={genre} />
+        <MessageEntry
+          key={msg.id}
+          message={msg}
+          onPoiClick={openPopover}
+          genre={genre}
+          highlightCandidates={highlightCandidates}
+        />
       ))}
 
       {isLoading && (
@@ -91,22 +116,19 @@ export function StoryFeed({ messages, isLoading = false, onSubmit }: StoryFeedPr
 }
 
 interface MessageEntryProps {
-  message:    StoryMessage;
-  onPoiClick: (point: PointOfInterest, e: React.MouseEvent) => void;
-  genre:      Genre;
+  message:             StoryMessage;
+  onPoiClick:          (point: PointOfInterest, e: React.MouseEvent) => void;
+  genre:               Genre;
+  highlightCandidates: HighlightCandidate[];
 }
 
-function MessageEntry({ message, onPoiClick, genre }: MessageEntryProps) {
+function MessageEntry({ message, onPoiClick, genre, highlightCandidates }: MessageEntryProps) {
   const { type, content, metadata } = message;
   const restored  = metadata?.restored === true;
   const npcName   =
     typeof metadata?.npcName === "string" ? metadata.npcName : undefined;
   const locationName =
     typeof metadata?.locationName === "string" ? metadata.locationName : undefined;
-  const points =
-    Array.isArray(metadata?.points_of_interest)
-      ? (metadata!.points_of_interest as PointOfInterest[])
-      : [];
 
   // Day 18 — every accent on every message ultimately reads through this.
   const colors = getGenreColors(genre);
@@ -144,7 +166,7 @@ function MessageEntry({ message, onPoiClick, genre }: MessageEntryProps) {
               fontSize:   12,
             }}
           >
-            {renderNarrativeText(content, points, onPoiClick)}
+            {renderNarrativeText(content, highlightCandidates, onPoiClick)}
           </p>
         </div>
       );
@@ -376,43 +398,18 @@ function parseDialogueText(text: string): DialogueSegment[] {
 }
 
 // ── POI rendering ─────────────────────────────────────────────────────────────
-
-interface PoiMatch {
-  start: number;
-  end:   number;
-  point: PointOfInterest;
-}
-
-function findPoiMatches(text: string, points: PointOfInterest[]): PoiMatch[] {
-  if (points.length === 0) return [];
-  const lower = text.toLowerCase();
-  const raw: PoiMatch[] = [];
-  for (const point of points) {
-    const label = point.label?.trim();
-    if (!label) continue;
-    const idx = lower.indexOf(label.toLowerCase());
-    if (idx >= 0) raw.push({ start: idx, end: idx + label.length, point });
-  }
-  // Sort by start ascending; on tie prefer the longer label.
-  raw.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
-  // Drop overlapping matches — first one wins.
-  const out: PoiMatch[] = [];
-  let lastEnd = -1;
-  for (const m of raw) {
-    if (m.start >= lastEnd) {
-      out.push(m);
-      lastEnd = m.end;
-    }
-  }
-  return out;
-}
+//
+// Day 19E: switched from narrator-emitted points_of_interest fuzzy scanning
+// to exact, whole-word, case-insensitive matching against highlight
+// candidates derived from live world state (Tier 1 objects, NPCs in the
+// graph, connected locations, WCD landmarks).
 
 function renderNarrativeText(
-  text: string,
-  points: PointOfInterest[],
+  text:       string,
+  candidates: HighlightCandidate[],
   onPoiClick: (point: PointOfInterest, e: React.MouseEvent) => void
 ): React.ReactNode {
-  const matches = findPoiMatches(text, points);
+  const matches: HighlightMatch[] = findExactHighlights(text, candidates);
   if (matches.length === 0) return text;
 
   const nodes: React.ReactNode[] = [];

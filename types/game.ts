@@ -620,7 +620,9 @@ export interface ResolutionResult {
 
 export interface PointOfInterest {
   label:       string;
-  type:        "LOCATION" | "NPC" | "CONTAINER" | "ITEM" | "HAZARD";
+  /** Day 19E: LANDMARK is informational only — clicking shows the WCD
+   *  landmark's public_description and never triggers a game action. */
+  type:        "LOCATION" | "NPC" | "CONTAINER" | "ITEM" | "HAZARD" | "LANDMARK";
   description: string;
 }
 
@@ -652,11 +654,6 @@ export interface NarratorResponse {
   items_acquired?:     Item[];
   points_of_interest:  PointOfInterest[];
   codex_entries:       CodexEntry[];
-  /** Populated when the player learns a CHARACTER's true identity this turn.
-   *  The narrator emits ONLY the true name — the game engine derives the
-   *  asset_id from locationAssets context (placeholder match, true_name
-   *  match in constitution, or normalizing the active NPC name). */
-  revealed_npc_names?: Array<{ true_name: string }>;
   /** Terse 12-word journal shorthand of the beat — used for LogBook STORY entries. */
   log_summary?:        string;
   /** 3-4 response options shown in the Dialogue Modal; only for NPC interactions. */

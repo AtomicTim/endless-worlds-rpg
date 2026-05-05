@@ -45,6 +45,11 @@ function locationToAsset(loc: LocationDefinition, sessionId: string): WorldAsset
       // Tier 1 object names — narrator reads this so it can describe the
       // place's prominent features without inventing new ones.
       key_landmarks:        loc.objects.map((o) => o.name),
+      // Day 19C — Tier 2 router key. The game loop reads this to decide
+      // whether an EXAMINE/INTERACT target maps to a built-in ambient
+      // template (instant response, no AI call). Empty string falls
+      // through to Tier 3 for legacy locations without an ambient_type.
+      ambient_type:         loc.ambient_type ?? "",
       available_services:   [],
     },
     significance:        loc.is_settlement_node ? "MAJOR" : "NOTABLE",

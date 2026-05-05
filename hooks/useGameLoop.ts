@@ -9,6 +9,7 @@ import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory, upda
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
 import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, normalizeLocationId, updateAssetNameRevealed } from "@/lib/game/codex";
 import { generateLocationStub } from "@/lib/game/location-stub-generator";
+import { findAmbientResponse } from "@/lib/game/ambient-objects";
 import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { Item, MasterState, ParsedAction, ResolutionResult, StoredMessage, WorldAsset, WorldNode } from "@/types/game";
 
@@ -482,6 +483,60 @@ export function useGameLoop() {
         await persistState(stamped, store.addMessage);
         store.setProcessing(false);
         return;
+      }
+
+      // ── 4c. Day 19C — Tier 2 ambient object short-circuit ──────────────────
+      // Before paying for a narrator call on EXAMINE/INTERACT, ask the
+      // ambient-objects library whether the target is a known template at
+      // this location. If it is, we return an instant flavour line and
+      // skip the narrator entirely — no AI call, no state change. The
+      // location's ambient_type lives on its world_asset constitution
+      // (written by apply-world-bible).
+      //
+      // Tier 1 (named LocationObjects) and Tier 3 (free interaction) are
+      // both still routed to the narrator — Tier 1 for rich responses,
+      // Tier 3 for the brief ambient instruction (added in prompt-builder).
+      if (
+        parsedAction.action_type === ActionType.EXAMINE ||
+        parsedAction.action_type === ActionType.INTERACT
+      ) {
+        const tier2Graph    = updatedState.world_graph;
+        const tier2NodeId   = tier2Graph?.current_node_id ?? updatedState.world_state.current_location_id;
+        const tier2Assets   = useGameStore.getState().locationAssets;
+        const tier2LocAsset = tier2Assets.find(
+          (a) =>
+            a.category === AssetCategory.LOCATION &&
+            (a.id === `location_${tier2NodeId}` || a.first_seen_location === tier2NodeId)
+        );
+        const ambientType =
+          typeof tier2LocAsset?.constitution.ambient_type === "string"
+            ? tier2LocAsset.constitution.ambient_type
+            : "";
+        const target =
+          parsedAction.primary_target ??
+          parsedAction.secondary_target ??
+          trimmed;
+        const ambientResponse = ambientType
+          ? findAmbientResponse(ambientType, target)
+          : null;
+
+        if (ambientResponse) {
+          store.addMessage(makeMessage("NARRATIVE", ambientResponse));
+          store.setLastNarrativeText(ambientResponse);
+          updatedState = persistLogEntry(
+            updatedState,
+            LogEntryType.STORY,
+            `Examined ${target} — nothing notable.`
+          );
+          const stamped: MasterState = {
+            ...updatedState,
+            metadata: { ...updatedState.metadata, last_played: new Date().toISOString() },
+          };
+          store.setMasterState(stamped);
+          await persistState(stamped, store.addMessage);
+          store.setProcessing(false);
+          return;
+        }
       }
 
       // ── 5. Narrate ─────────────────────────────────────────────────────────

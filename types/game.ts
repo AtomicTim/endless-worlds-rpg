@@ -683,6 +683,11 @@ export interface WorldAssetConstitution {
   faction_affiliation?:  string;
   key_landmarks?:        string[];
   available_services?:   string[];
+  /** Day 19C — Tier 2 ambient template lookup key (e.g. "tavern_common_room",
+   *  "smithy", "market_stall"). Drives the ambient-objects.ts router so
+   *  player interactions with non-Tier-1 objects get instant template
+   *  responses without an AI call. */
+  ambient_type?:         string;
 
   // CHARACTER fields
   appearance?:           string;

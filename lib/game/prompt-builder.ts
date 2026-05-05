@@ -929,12 +929,39 @@ export function buildNarratorUserPrompt(
   }
 
   // EXAMINE / INTERACT — also append the target pinning reminder at the bottom.
+  // Day 19C: split the instruction by tier. If the target matches a Tier 1
+  // LocationObject (its name appears in the current location asset's
+  // key_landmarks), keep the original "object EXISTS, use this exact name"
+  // pinning. If it doesn't match, the engine has already confirmed Tier 2
+  // missed (the game loop short-circuits on Tier 2 before calling the
+  // narrator) — so add the Tier 3 ambient instruction instead.
   if (
     action?.action_type === ActionType.EXAMINE ||
     action?.action_type === ActionType.INTERACT
   ) {
     const target = action.primary_target ?? action.secondary_target ?? "the target";
-    prompt += `\n\nINTERACTION TARGET: '${target}'\nThis object EXISTS in the current scene. You described it. Use this exact name when referring to it in your response. Do NOT substitute a synonym, rename it, or question its existence.`;
+    const targetLower = target.toLowerCase();
+
+    // Find the current location's world_asset, then its Tier 1 names.
+    const currentLocAsset = (locationAssets ?? []).find(
+      (a) =>
+        a.category === AssetCategory.LOCATION &&
+        (a.id === `location_${world_state.current_location_id}` ||
+          a.first_seen_location === world_state.current_location_id)
+    );
+    const tier1Names = (currentLocAsset?.constitution.key_landmarks ?? [])
+      .map((n) => n.toLowerCase())
+      .filter((n) => n.length > 0);
+
+    const isTier1 = tier1Names.some(
+      (n) => targetLower.includes(n) || n.includes(targetLower)
+    );
+
+    if (isTier1) {
+      prompt += `\n\nINTERACTION TARGET: '${target}'\nThis object EXISTS in the current scene. You described it. Use this exact name when referring to it in your response. Do NOT substitute a synonym, rename it, or question its existence.`;
+    } else {
+      prompt += `\n\nTIER 3 AMBIENT INTERACTION: The player tried to interact with "${target}". This is not a tracked game asset. Provide a brief atmospheric response of 1-2 sentences. Rules: Do not make this a game asset. Do not say it disappears or did not exist. Do not say the player cannot do this. Describe it as a mundane part of the environment. Keep it consistent with the location's atmosphere.`;
+    }
   }
 
   // CONTAINER search → instruct the Narrator to populate items_acquired.

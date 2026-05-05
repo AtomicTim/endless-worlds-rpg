@@ -285,6 +285,183 @@ export interface WorldConsistencyDocument {
 }
 
 // ---------------------------------------------------------------------------
+// Day 19B — World Bible (Layer 1 of the world generation architecture)
+// Replaces WorldSeed for new games. Generated once after the WCD, contains
+// fully-detailed starting region with named locations, real-name NPCs,
+// Tier 1 objects, adjacent region outlines, and the main quest.
+// Old WorldSeed remains for backward compatibility with legacy saves.
+// ---------------------------------------------------------------------------
+
+export interface LocationObject {
+  /** Normalized slug — permanent. */
+  id:                string;
+  /** Exact name the narrator must use — permanent. */
+  name:              string;
+  /** What it looks like — 1 sentence. */
+  description:       string;
+  /** When true, this object is highlighted in the story feed and
+   *  examining it produces a rich AI-narrated response. */
+  is_interactable:   boolean;
+  /** Optional item ID if the object contains something. */
+  contains_item_id?: string;
+  /** Optional lore text revealed when the player examines it. */
+  contains_lore?:    string;
+  is_locked?:        boolean;
+  /** Item ID required to unlock when is_locked is true. */
+  unlock_requires?:  string;
+  /** When true, examining this object delivers a quest breadcrumb. */
+  quest_relevance?:  boolean;
+}
+
+export interface LocationDefinition {
+  /** Normalized slug — permanent. */
+  id:                  string;
+  /** Display name — permanent. */
+  name:                string;
+  /** Same union as SeedLocation.type for backward compat with the
+   *  WorldGraph node category channel. */
+  type:                "tavern" | "settlement" | "wilderness" | "dungeon"
+                     | "market" | "stronghold" | "ruin" | "port" | "other";
+  grid_position:       { x: number; y: number };
+  region_id:           string;
+  /** True for the main arrival point of a settlement (one per region). */
+  is_settlement_node:  boolean;
+  /** True for sub-locations within a settlement (e.g. interior rooms). */
+  is_interior:         boolean;
+  /** Set on interior sub-locations to point at their containing place. */
+  parent_location_id?: string;
+  /** 2-3 sentences of sensory description — never contradicts the WCD. */
+  atmosphere:          string;
+  /** Bidirectional graph connections — IDs of other LocationDefinitions. */
+  connections:         string[];
+  /** IDs of NPCs that live / work here (NPCDefinition.id). */
+  npc_ids:             string[];
+  /** Tier 1 named interactable objects this location contains. */
+  objects:             LocationObject[];
+  /** Tier 2 ambient template lookup key — e.g. "tavern_common_room",
+   *  "smithy", "market_stall". Drives the Day 19C ambient response engine. */
+  ambient_type:        string;
+}
+
+export interface NPCDefinition {
+  /** "character_<slug>" — permanent asset id. */
+  id:                string;
+  /** Real name from generation, never a placeholder. */
+  name:              string;
+  /** LocationDefinition.id where they normally are. */
+  home_location_id:  string;
+  /** Role descriptor (innkeeper, merchant, guard, quest_giver, etc.). */
+  role:              string;
+  /** Brief archetype description. */
+  archetype:         string;
+  /** 1-2 sentences of physical description. */
+  appearance:        string;
+  /** Descriptive sentence with 2-3 defining traits. */
+  personality:       string;
+  /** How they talk — e.g. "clipped and military". */
+  speech_style:      string;
+  /** WCD faction id, when affiliated. */
+  faction_id?:       string;
+  /** WCD-consistent facts the NPC plausibly knows. */
+  knowledge:         string[];
+  /** "key" / "supporting" / "none". Optional. */
+  quest_relevance?:  string;
+  /** Index 0-4 of the breadcrumb this NPC can hint at. */
+  knows_breadcrumb?: number;
+  is_merchant?:      boolean;
+  /** What the merchant sells. */
+  speciality?:       string;
+  /** Starting trust score (0-100). */
+  default_trust:     number;
+}
+
+export interface RegionExit {
+  direction:        "north" | "south" | "east" | "west"
+                  | "northeast" | "northwest" | "southeast" | "southwest";
+  target_region_id: string;
+  /** Which location inside the region the exit is accessible from. */
+  from_location_id: string;
+  /** What the player sees looking that way — 1 sentence. */
+  description:      string;
+}
+
+export interface QuestBreadcrumb {
+  /** 0 through 4 — first breadcrumb is the starting hook delivery. */
+  index:             number;
+  /** The actual hint or discovery the player receives. */
+  content:           string;
+  delivery_method:   "npc_dialogue" | "discovered_object" | "environmental" | "overheard";
+  /** Location ID where this naturally fits. */
+  suggested_location: string;
+  /** NPC delivering the hint when delivery_method is "npc_dialogue". */
+  npc_id?:           string;
+  /** Object ID containing the hint when delivery_method is "discovered_object". */
+  object_id?:        string;
+}
+
+export interface MainQuest {
+  /** Internal label — the player never sees this. */
+  title:               string;
+  antagonist_name:     string;
+  /** Region or location ID where the antagonist is rooted. */
+  antagonist_location: string;
+  antagonist_faction?: string;
+  /** What completing the quest requires. */
+  goal:                string;
+  /** First hint planted in the starting scene. */
+  opening_hook:        string;
+  /** Exactly 5 breadcrumbs, escalating in danger and revelation. */
+  breadcrumbs:         QuestBreadcrumb[];
+  win_condition:       string;
+}
+
+export interface RegionOutline {
+  id:                   string;
+  name:                 string;
+  /** Region type — settlement_hub, wilderness, dungeon, port, ruin, stronghold, etc. */
+  type:                 string;
+  grid_centre:          { x: number; y: number };
+  direction_from_start: string;
+  distance:             "adjacent" | "near" | "far";
+  controlling_faction?: string;
+  /** 1 sentence of atmosphere, WCD-consistent. */
+  atmosphere_hint:      string;
+  /** How many NPCs to generate when this region is expanded into a RegionBible. */
+  key_npc_count:        number;
+  /** How many notable locations to generate on expansion. */
+  location_count:       number;
+  /** WCD landmark id when this region contains one. */
+  landmark_id?:         string;
+}
+
+export interface RegionBible {
+  id:                  string;
+  name:                string;
+  type:                string;
+  grid_centre:         { x: number; y: number };
+  /** How many cells this region spans on the world grid (typically 3-5). */
+  grid_radius:         number;
+  /** Region atmosphere — must not contradict the WCD. */
+  atmosphere:          string;
+  /** WCD faction id when one controls this region. */
+  controlling_faction?: string;
+  /** Includes the settlement node and all notable sub-locations. */
+  locations:           LocationDefinition[];
+  /** Every NPC in this region — real names from generation. */
+  npcs:                NPCDefinition[];
+  exits:               RegionExit[];
+}
+
+export interface WorldBible {
+  starting_region:  RegionBible;
+  /** Structural outlines of 3-5 adjacent regions. */
+  adjacent_regions: RegionOutline[];
+  main_quest:       MainQuest;
+  /** ISO timestamp. */
+  generated_at:     string;
+}
+
+// ---------------------------------------------------------------------------
 // Day 17 — World Seed (the world skeleton generated at character creation)
 // ---------------------------------------------------------------------------
 
@@ -378,6 +555,12 @@ export interface Metadata {
    *  architecture: generated once at character creation, injected as the
    *  first block of every AI prompt, and never modified afterwards. */
   world_consistency?: WorldConsistencyDocument;
+  /** Day 19B — Main quest from the WorldBible. Stored on metadata so the
+   *  game loop can plant breadcrumbs without re-fetching the full bible
+   *  every turn. The full WorldBible itself lives in
+   *  game_sessions.world_bible (jsonb column) for analytics + Phase 2
+   *  region expansion lookups. */
+  main_quest?: MainQuest;
 }
 
 // ---------------------------------------------------------------------------

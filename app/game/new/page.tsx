@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Genre } from "@/types/game";
-import type { Attributes, WorldConsistencyDocument } from "@/types/game";
-import { generateWorldSeed } from "@/lib/game/world-seed-generator";
+import type { Attributes, WorldBible, WorldConsistencyDocument } from "@/types/game";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -330,7 +329,7 @@ export default function NewGamePage() {
   async function handleSubmit() {
     if (!selectedGenre || !selectedBackground || remainingPoints !== 0) return;
     setIsLoading(true);
-    setLoadingMessage("Creating character...");
+    setLoadingMessage("Creating your character...");
     setSubmitError("");
 
     try {
@@ -355,11 +354,9 @@ export default function NewGamePage() {
       const { sessionId } = await res.json() as { sessionId: string };
 
       // ── Step 2 (Day 19A): generate the World Consistency Document. ─────────
-      // Layer 0 of the new generation architecture. WCD is a separate AI
-      // call from the world seed; it produces the absolute facts of this
-      // world (landmarks, factions, rules, atmosphere) that every later
-      // AI prompt will be constrained by. Failure here is non-fatal —
-      // the seed generation just runs without WCD context.
+      // Layer 0 of the generation architecture. WCD is the absolute facts
+      // of this world (landmarks, factions, rules, atmosphere) — every
+      // later AI call is constrained by it. Required for the bible flow.
       setLoadingMessage("Establishing world laws...");
       let wcd: WorldConsistencyDocument | undefined;
       try {
@@ -377,41 +374,73 @@ export default function NewGamePage() {
           wcd = data.wcd;
         } else {
           const data = await wcdRes.json() as { error?: string };
-          console.warn("[wizard] generate-wcd failed (non-fatal):", data.error);
+          console.warn("[wizard] generate-wcd failed:", data.error);
         }
       } catch (err) {
-        console.warn("[wizard] generate-wcd threw (non-fatal):", err);
+        console.warn("[wizard] generate-wcd threw:", err);
       }
 
-      // ── Step 3: generate the world skeleton (Day 17, WCD-constrained when
-      // available). Separate Claude call — produces locations, NPCs, main
-      // quest, factions. Falls back to a hardcoded genre seed on any failure
-      // so the wizard never blocks on AI errors.
-      setLoadingMessage("Generating your world...");
-      const worldSeed = await generateWorldSeed(
-        selectedGenre,
-        characterName.trim(),
-        selectedBackground,
-        wcd,
-      );
+      if (!wcd) {
+        setSubmitError("World generation failed (WCD). Please try again.");
+        return;
+      }
 
-      // ── Step 4: persist seed + WCD + pre-populate world_assets. ────────────
-      setLoadingMessage("Establishing world facts...");
-      const applyRes = await fetch("/api/game/apply-world-seed", {
+      // ── Step 3 (Day 19B): generate the World Bible (Layer 1). ──────────────
+      // Single Claude call seeded with the WCD. Produces the fully-detailed
+      // starting region — named locations, real-name NPCs, Tier 1 objects,
+      // adjacent region outlines, and the main quest with five breadcrumbs.
+      setLoadingMessage("Crafting your world...");
+      let bible: WorldBible | undefined;
+      try {
+        const bibleRes = await fetch("/api/game/generate-world-bible", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({
+            genre:            selectedGenre,
+            character_name:   characterName.trim(),
+            character_class:  selectedBackground,
+            wcd,
+          }),
+        });
+        if (bibleRes.ok) {
+          const data = await bibleRes.json() as { bible?: WorldBible };
+          bible = data.bible;
+        } else {
+          const data = await bibleRes.json() as { error?: string };
+          console.warn("[wizard] generate-world-bible failed:", data.error);
+        }
+      } catch (err) {
+        console.warn("[wizard] generate-world-bible threw:", err);
+      }
+
+      if (!bible) {
+        setSubmitError("World generation failed (bible). Please try again.");
+        return;
+      }
+
+      // ── Step 4 (Day 19B): persist bible + WCD + pre-populate world_assets. ─
+      // apply-world-bible builds the WorldGraph, writes every asset, and
+      // patches master_state with the starting location and main quest.
+      setLoadingMessage("Building your world...");
+      const applyRes = await fetch("/api/game/apply-world-bible", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
-          sessionId,
-          worldSeed,
-          ...(wcd ? { wcd } : {}),
+          session_id: sessionId,
+          bible,
+          wcd,
         }),
       });
       if (!applyRes.ok) {
-        // Non-fatal — the player can still play with the empty default world,
-        // but warn so the issue is visible.
         const data = await applyRes.json() as { error?: string };
-        console.warn("[wizard] apply-world-seed failed:", data.error);
+        console.warn("[wizard] apply-world-bible failed:", data.error);
+        setSubmitError(data.error ?? "Failed to apply world. Please try again.");
+        return;
       }
+
+      // ── Step 5: brief beat before the player drops into the game. ──────────
+      setLoadingMessage("Entering the world...");
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       router.push("/game");
     } catch {

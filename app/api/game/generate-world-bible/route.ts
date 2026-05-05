@@ -5,23 +5,10 @@ import { Genre } from "@/types/game";
 import type { WorldBible, WorldConsistencyDocument } from "@/types/game";
 import { formatWcdBlock } from "@/lib/game/prompt-builder";
 
-/**
- * Day 19B — Generate the World Bible (Layer 1 of world generation).
- *
- * Single Claude call seeded with the WCD as absolute facts. Produces a
- * fully-detailed starting region with named locations, real-name NPCs,
- * Tier 1 objects, plus structural outlines of adjacent regions and the
- * main quest with five breadcrumbs.
- *
- * One retry on parse failure. Validation enforces minimum array sizes
- * and the 5-breadcrumb invariant per the architecture spec.
- */
-
 interface RequestBody {
   genre?:           Genre;
   character_name?:  string;
   character_class?: string;
-  /** Required — the WCD constrains every facet of the bible. */
   wcd?:             WorldConsistencyDocument;
 }
 
@@ -47,40 +34,24 @@ function buildUserPrompt(
     "",
     "STARTING REGION — generate a settlement_hub:",
     "The starting region must have:",
-    "- 1 settlement node (the main arrival point — the central square, crossroads, or entry point of the settlement)",
-    "- 4-5 notable sub-locations within the settlement. Always include: 1 inn or tavern, 1 merchant or shop. Also include 2-3 of: smithy or workshop, temple or shrine or chapel, guild hall or civic building, garrison or guard post, market area, docks or port (if coastal), back alley or underground contact, genre-appropriate equivalent.",
-    "- Do NOT generate private homes or non-notable buildings.",
-    "- Each sub-location must have: id (normalized slug), name (permanent display name), type, grid_position (cluster within 1-2 cells of settlement node), is_interior: true, atmosphere (2-3 vivid sensory sentences), connections (bidirectional — each sub-location connects back to the settlement node at minimum), npc_ids (list of NPCs assigned here), objects (3-5 Tier 1 landmark objects — the meaningful, interactable things. Each object: id, name, description, is_interactable: true, and optionally contains_lore or quest_relevance).",
-    "- The settlement node itself: is_settlement_node: true, is_interior: false, connections to all sub-locations and at least 2 region exits.",
+    "- 1 settlement node (the main arrival point)",
+    "- 3-4 notable sub-locations (keep it tight — fewer, richer locations). Always include: 1 inn or tavern, 1 merchant or shop. Add 1-2 more: smithy, temple, guild hall, or garrison.",
+    "- Each sub-location: id (slug), name, type, grid_position, is_interior: true, atmosphere (2 sentences max), connections, npc_ids, objects (2-3 Tier 1 objects only — name, description, is_interactable: true), ambient_type.",
+    "- Settlement node: is_settlement_node: true, is_interior: false.",
     "",
-    "NPCS — generate 5-7 total for the starting region:",
-    "Every NPC must have a REAL NAME. No placeholders. No 'the innkeeper' or 'mysterious stranger' as names.",
-    "Required: at least 1 innkeeper or tavern owner, at least 1 merchant, at least 1 NPC relevant to the main quest (quest_relevance: key or supporting, knows_breadcrumb: 0).",
-    "Each NPC: id (character_[slug]), name, home_location_id, role, archetype, appearance (1-2 sentences), personality (descriptive sentence with 2-3 traits), speech_style (how they talk), knowledge (3-5 WCD-consistent facts this person plausibly knows), default_trust (40-60 for strangers, 65-80 for friendly locals).",
+    "NPCS — generate 4-5 total (keep it focused):",
+    "Every NPC must have a REAL NAME. Required: 1 innkeeper, 1 merchant, 1 quest-relevant NPC.",
+    "Each NPC: id (character_[slug]), name, home_location_id, role, archetype, appearance (1 sentence), personality (1 sentence), speech_style (3 words), knowledge (2-3 facts), default_trust (50).",
     "",
-    "ADJACENT REGIONS — generate 3-4 outlines:",
-    "Must be consistent with WCD landmarks and faction territories.",
-    "Include variety: at least 1 wilderness or natural area, 1 settlement or port, 1 dungeon or ruin or stronghold.",
-    "Grid centres must not overlap. Directions must be logical (north, south, east, west, or diagonals).",
-    "At least 1 must contain or border a WCD landmark (set landmark_id).",
+    "ADJACENT REGIONS — generate exactly 3 outlines (brief):",
+    "Each: id, name, type, grid_centre, direction_from_start, distance, atmosphere_hint (1 sentence), key_npc_count (2), location_count (3).",
     "",
-    "MAIN QUEST:",
-    "Antagonist must be consistent with WCD factions and their territories.",
-    "The opening_hook must be something the player can encounter in the starting region naturally.",
-    "Breadcrumb 0 must be deliverable by a starting region NPC or object — set npc_id or object_id.",
-    "Breadcrumbs 1-4 escalate in danger and revelation.",
-    "Each breadcrumb must feel like a natural discovery, never direct exposition.",
+    "MAIN QUEST (keep it brief):",
+    "antagonist_name, antagonist_location, goal (1 sentence), opening_hook (1 sentence).",
+    "breadcrumbs: exactly 3 entries. Each: index, content (1 sentence), delivery_method, suggested_location.",
     "",
-    "RULES (critical):",
-    "- Every NPC has a real name — no placeholders ever",
-    "- Every name is permanent and must be used consistently",
-    "- Atmosphere must not contradict the WCD",
-    "- NPC knowledge arrays must contain only WCD-consistent facts",
-    "- All location connections must be bidirectional",
-    "- Object names must be specific and evocative, not generic (not just 'shelf' or 'table')",
-    "- Objects with quest_relevance: true must relate to the main quest opening hook",
-    "",
-    "Respond with valid JSON matching the WorldBible schema exactly.",
+    "CRITICAL: Be concise. Every field should be short. The JSON must fit within the token limit.",
+    "Respond with valid JSON matching the WorldBible schema.",
   ].join("\n");
 }
 
@@ -99,21 +70,21 @@ function validateBible(parsed: unknown): { ok: true; bible: WorldBible } | { ok:
   const sr = o.starting_region as Record<string, unknown> | undefined;
   if (!sr || typeof sr !== "object") return { ok: false, error: "starting_region missing" };
   if (typeof sr.name !== "string" || !sr.name.trim()) return { ok: false, error: "starting_region.name missing" };
-  if (!Array.isArray(sr.locations) || sr.locations.length < 3) {
-    return { ok: false, error: `starting_region.locations must have at least 3 entries (got ${Array.isArray(sr.locations) ? sr.locations.length : "non-array"})` };
+  if (!Array.isArray(sr.locations) || sr.locations.length < 2) {
+    return { ok: false, error: `starting_region.locations must have at least 2 entries (got ${Array.isArray(sr.locations) ? sr.locations.length : "non-array"})` };
   }
-  if (!Array.isArray(sr.npcs) || sr.npcs.length < 4) {
-    return { ok: false, error: `starting_region.npcs must have at least 4 entries (got ${Array.isArray(sr.npcs) ? sr.npcs.length : "non-array"})` };
+  if (!Array.isArray(sr.npcs) || sr.npcs.length < 3) {
+    return { ok: false, error: `starting_region.npcs must have at least 3 entries (got ${Array.isArray(sr.npcs) ? sr.npcs.length : "non-array"})` };
   }
 
-  if (!Array.isArray(o.adjacent_regions) || o.adjacent_regions.length < 2) {
-    return { ok: false, error: `adjacent_regions must have at least 2 entries (got ${Array.isArray(o.adjacent_regions) ? o.adjacent_regions.length : "non-array"})` };
+  if (!Array.isArray(o.adjacent_regions) || o.adjacent_regions.length < 1) {
+    return { ok: false, error: `adjacent_regions must have at least 1 entry (got ${Array.isArray(o.adjacent_regions) ? o.adjacent_regions.length : "non-array"})` };
   }
 
   const mq = o.main_quest as Record<string, unknown> | undefined;
   if (!mq || typeof mq !== "object") return { ok: false, error: "main_quest missing" };
-  if (!Array.isArray(mq.breadcrumbs) || mq.breadcrumbs.length !== 5) {
-    return { ok: false, error: `main_quest.breadcrumbs must have exactly 5 entries (got ${Array.isArray(mq.breadcrumbs) ? mq.breadcrumbs.length : "non-array"})` };
+  if (!Array.isArray(mq.breadcrumbs) || mq.breadcrumbs.length < 2) {
+    return { ok: false, error: `main_quest.breadcrumbs must have at least 2 entries (got ${Array.isArray(mq.breadcrumbs) ? mq.breadcrumbs.length : "non-array"})` };
   }
 
   return { ok: true, bible: parsed as WorldBible };
@@ -122,7 +93,7 @@ function validateBible(parsed: unknown): { ok: true; bible: WorldBible } | { ok:
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
   const message = await client.messages.create({
     model:      "claude-sonnet-4-20250514",
-    max_tokens: 4000,
+    max_tokens: 8000,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });
@@ -156,7 +127,6 @@ export async function POST(request: NextRequest) {
 
   const userPrompt = buildUserPrompt(genre, character_name, character_class, wcd);
 
-  // Per-request client so the API key is read fresh each call.
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   let parsed: unknown;
@@ -194,7 +164,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Stamp generated_at if the model didn't supply one.
   const bible: WorldBible = {
     ...validated.bible,
     generated_at: validated.bible.generated_at || new Date().toISOString(),

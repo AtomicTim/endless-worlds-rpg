@@ -7,7 +7,7 @@ import { resolveAction } from "@/lib/game/logic-resolver";
 import { narrateAction } from "@/lib/game/narrator";
 import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory, updateNPCTrust, findNpcInRegistry, seedNpcRegistry } from "@/lib/game/state-utils";
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
-import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, updateWorldAssetSvg, updateAssetNameRevealed } from "@/lib/game/codex";
+import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, normalizeLocationId, updateWorldAssetSvg, updateAssetNameRevealed } from "@/lib/game/codex";
 import { generateArt, generateNpcPortrait, getSceneType } from "@/lib/game/art-generator";
 import { generateLocationStub } from "@/lib/game/location-stub-generator";
 import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
@@ -613,6 +613,36 @@ export function useGameLoop() {
       if (arrivedAt) {
         void getWorldAssetsForLocation(sessionId, arrivedAt).then((assets) => {
           useGameStore.getState().setLocationAssets(assets);
+
+          // Day 17 — codex populates from player ENCOUNTER, not seed time.
+          // On first arrival at any location with a world_asset (whether
+          // seeded or stub-generated), write the codex entry from the
+          // asset's constitution. saveCodexEntry uses ignoreDuplicates,
+          // so this is safe to call on every arrival; the entry is
+          // created exactly once.
+          const locationAsset = assets.find(
+            (a) =>
+              a.category === AssetCategory.LOCATION &&
+              (a.id === arrivedAt ||
+               a.id === `location_${arrivedAt}` ||
+               normalizeLocationId(a.first_seen_location ?? "") === arrivedAt)
+          );
+          if (locationAsset) {
+            const c = locationAsset.constitution;
+            const description =
+              (typeof c.physical_description === "string" && c.physical_description) ||
+              (typeof c.notes === "string" && c.notes) ||
+              (typeof c.atmosphere === "string" && c.atmosphere) ||
+              "A location in the world.";
+            void saveCodexEntry(sessionId, {
+              id:                  locationAsset.id,
+              category:            "LOCATION",
+              name:                locationAsset.name,
+              description,
+              first_seen_location: arrivedAt,
+              significance:        "NOTABLE",
+            });
+          }
         });
       } else {
         // Late-load fallback: if locationAssets is still empty at this point,
@@ -908,6 +938,38 @@ export function useGameLoop() {
               useGameStore.getState().setMasterState({
                 ...currentMaster,
                 npc_registry: updatedState.npc_registry,
+              });
+            }
+
+            // Day 17 — codex populates on encounter. First dialogue with this
+            // NPC writes the codex entry from the world_asset's constitution.
+            // ignoreDuplicates makes this idempotent — runs only when the
+            // registry seed runs (i.e. truly the first beat with this NPC).
+            const npcCodexAsset =
+              matchingAsset
+              ?? useGameStore.getState().locationAssets.find(
+                (a) =>
+                  a.category === AssetCategory.CHARACTER &&
+                  (a.id === npcRegistryKey ||
+                   a.name.toLowerCase() === (effectiveNpcName ?? "").toLowerCase())
+              );
+            if (npcCodexAsset) {
+              const c = npcCodexAsset.constitution;
+              const description = [
+                typeof c.role        === "string" ? c.role        : "",
+                typeof c.personality === "string" ? c.personality : "",
+                typeof c.notes       === "string" ? c.notes       : "",
+              ]
+                .map((s) => s.trim())
+                .filter(Boolean)
+                .join(" ");
+              void saveCodexEntry(sessionId, {
+                id:                  npcCodexAsset.id,
+                category:            "CHARACTER",
+                name:                npcCodexAsset.name,
+                description:         description || "A character encountered in the world.",
+                first_seen_location: updatedState.world_state.current_location_id,
+                significance:        "NOTABLE",
               });
             }
           }

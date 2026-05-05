@@ -430,9 +430,6 @@ When the current action is a DIALOGUE action type, OR an INTERACT with an NPC ta
 TRUST CHANGES — populate when dialogue meaningfully shifts a relationship:
 Populate trust_changes when this interaction notably affects how an NPC feels about the player. delta: +10 to +20 for very positive, -10 to -20 for hostile/deceptive, +5/-5 for mild shifts. Only include if something notable happened — not for every action. Use the NPC's npc_key (snake_case from the NPC registry or ESTABLISHED WORLD ASSETS).
 
-POINTS OF INTEREST — populate for TIER 2 and TIER 3 only:
-In the points_of_interest array, list 2-4 things from your narrative that the player can interact with. Only include things you actually mentioned in the narrative text. The label must be the EXACT phrase as written in your response. Types: LOCATION (a place to move to), NPC (a character), CONTAINER (searchable object), ITEM (takeable object), HAZARD (dangerous element).
-
 CODEX ENTRIES — for significant world discoveries only:
 Populate codex_entries ONLY for things that are:
 - Named characters or creatures (not 'a guard', but 'Captain Voss')
@@ -460,7 +457,6 @@ JSON OUTPUT — Respond ONLY with valid JSON matching this exact schema (no mark
   "sound_id": "string|null — one of: ${soundList}",
   "new_npcs": [],
   "items_acquired": [],
-  "points_of_interest": [],
   "codex_entries": [],
   "dialogue_options": [],
   "trust_changes": [],
@@ -499,13 +495,6 @@ Use rarity as guide: Common 5-15, Uncommon 20-50, Rare 100-300, Legendary 500+.
 Value reflects worth to a merchant, not sentimental value.
 
 items_for_sale entries use the SAME shape as items_acquired (id, name, type, rarity, description, effect, quantity, stackable, weight, value). Populate ONLY when the resolution context flags a TRADE INTERACTION — list 3-5 items the merchant has on offer with appropriate values. These items are NOT granted to the player; they are merchant inventory shown in the trade UI for the player to choose from.
-
-points_of_interest entries MUST match this shape:
-{
-  "label": "EXACT phrase as written in narrative_text",
-  "type": "LOCATION|NPC|CONTAINER|ITEM|HAZARD",
-  "description": "one sentence for the popover header"
-}
 
 codex_entries entries MUST match this shape:
 {
@@ -787,6 +776,12 @@ export function buildNarratorUserPrompt(
   // (Tier 1 object names). These are the only objects the narrator may name
   // as specific interactable things. Tier 2 ambient objects and Tier 3
   // freeform interactions are handled by other code paths.
+  //
+  // Audit Issue F fix: switched from prohibitive wording ("don't name
+  // anything else") to imperative ("USE THESE EXACT NAMES VERBATIM"). The
+  // narrator was previously free to write "the cracked fountain" instead
+  // of the locked "Cracked Memory Fountain" — the highlight matcher then
+  // found nothing because it does exact whole-word matches only.
   const tier1Lines: string[] = [];
   {
     const all = locationAssets ?? [];
@@ -801,14 +796,24 @@ export function buildNarratorUserPrompt(
     if (landmarks.length > 0) {
       tier1Lines.push(
         "══════════════════════════════",
-        "TIER 1 OBJECTS — CURRENT LOCATION (the only named interactable objects here):",
+        "TIER 1 OBJECTS — YOU MUST USE THESE EXACT NAMES VERBATIM:",
       );
       for (const name of landmarks) {
         tier1Lines.push(`- ${name}`);
       }
       tier1Lines.push(
-        "These are the only objects you should name as specific interactable things.",
-        "All other object interactions should be described as ambient atmosphere only.",
+        "",
+        "MANDATORY NAMING RULES:",
+        "- When describing or referencing any of the above objects, write the",
+        "  EXACT name as listed. Every word, every capital letter.",
+        "- Wrong: \"a cracked fountain\" or \"the memory fountain\".",
+        "- Right: \"the Cracked Memory Fountain\".",
+        "- The player's UI highlights ONLY exact name matches. If you write a",
+        "  synonym, abbreviation, or paraphrase, the object becomes invisible",
+        "  and uninteractable — the player cannot click it.",
+        "- Also use the exact NPC names from NPCS PRESENT verbatim. Never",
+        "  substitute a descriptor (\"the innkeeper\", \"the hooded man\") for",
+        "  a real name once the NPC has been introduced.",
         "══════════════════════════════",
       );
     }

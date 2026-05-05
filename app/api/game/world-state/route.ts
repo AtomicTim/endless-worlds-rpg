@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { patchWorldState } from "@/lib/game/state-persistence";
-import type { WorldState } from "@/types/game";
+import { patchWorldState, patchWorldGraph } from "@/lib/game/state-persistence";
+import type { WorldGraph, WorldState } from "@/types/game";
 
 export async function POST(request: NextRequest) {
   const supabase = await createServerSupabaseClient();
@@ -10,20 +10,40 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { sessionId?: string; worldState?: WorldState };
+  let body: { sessionId?: string; worldState?: WorldState; worldGraph?: WorldGraph };
   try {
-    body = await request.json() as { sessionId?: string; worldState?: WorldState };
+    body = await request.json() as {
+      sessionId?:  string;
+      worldState?: WorldState;
+      worldGraph?: WorldGraph;
+    };
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { sessionId, worldState } = body;
-  if (!sessionId || !worldState) {
-    return NextResponse.json({ error: "Missing sessionId or worldState" }, { status: 400 });
+  const { sessionId, worldState, worldGraph } = body;
+  if (!sessionId) {
+    return NextResponse.json({ error: "Missing sessionId" }, { status: 400 });
+  }
+  if (!worldState && !worldGraph) {
+    return NextResponse.json(
+      { error: "At least one of worldState or worldGraph is required" },
+      { status: 400 }
+    );
   }
 
+  // Audit Issue M fix: accept and persist worldGraph alongside worldState.
+  // Graph mutations (sub_location creation, npc_ids updates) used to wait
+  // for the 10-action auto-save before reaching the DB; with this route
+  // every mutation can persist immediately via the saveWorldGraphAsync
+  // helper in useGameLoop.
   try {
-    await patchWorldState(supabase, sessionId, worldState);
+    if (worldState) {
+      await patchWorldState(supabase, sessionId, worldState);
+    }
+    if (worldGraph) {
+      await patchWorldGraph(supabase, sessionId, worldGraph);
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Patch failed";
     return NextResponse.json({ error: message }, { status: 500 });

@@ -191,13 +191,21 @@ export default function GamePage() {
         // in useGameLoop never fires for the starting location. Write the
         // starting-location codex entry here on first load. saveCodexEntry's
         // ignoreDuplicates makes this idempotent across reloads.
+        //
+        // Audit Issue A fix: use the RAW current_location_id (no longer
+        // article-stripped) as the canonical key. apply-world-bible writes
+        // assets keyed by `location_<raw>` and first_seen_location: <raw>.
+        // We also tolerate the old stripped form via the third clause for
+        // backward compat with existing saves.
         const sessionId   = state.metadata.session_id;
-        const startingId  = normalizeLocationId(state.world_state.current_location_id);
+        const startingId  = state.world_state.current_location_id;
+        const startingAssetId = `location_${startingId}`;
         const startingAsset = assets.find(
           (a) =>
             a.category === AssetCategory.LOCATION &&
             (a.id === startingId ||
-             a.id === `location_${startingId}` ||
+             a.id === startingAssetId ||
+             a.first_seen_location === startingId ||
              normalizeLocationId(a.first_seen_location ?? "") === startingId)
         );
         if (startingAsset) {

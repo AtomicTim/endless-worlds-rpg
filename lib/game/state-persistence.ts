@@ -1,5 +1,5 @@
 import type { Database, Json } from "@/types/database";
-import type { MasterState, LogBook, WorldState } from "@/types/game";
+import type { MasterState, LogBook, WorldGraph, WorldState } from "@/types/game";
 import type { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type DbClient = Awaited<ReturnType<typeof createServerSupabaseClient>>;
@@ -101,6 +101,42 @@ export async function patchWorldState(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (client.from("game_sessions") as any)
     .update({ master_state: patched as unknown as Json })
+    .eq("id", sessionId);
+}
+
+/**
+ * Audit Issue M fix — targeted patch for the World Graph.
+ * Replaces world_graph in the stored master_state AND mirrors it to the
+ * dedicated `world_graph` jsonb column. Used by saveWorldGraphAsync in
+ * useGameLoop so graph mutations (ZONE_EXPAND, addNpcToCurrentNode,
+ * RegionBible application) persist immediately rather than waiting for
+ * the 10-action auto-save.
+ */
+export async function patchWorldGraph(
+  client: DbClient,
+  sessionId: string,
+  worldGraph: WorldGraph
+): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error: fetchErr } = await (client.from("game_sessions") as any)
+    .select("master_state")
+    .eq("id", sessionId)
+    .single() as { data: { master_state: Json } | null; error: unknown };
+
+  if (fetchErr || !data) return; // session not found — silently skip
+
+  const current = data.master_state as unknown as MasterState;
+  const patched: MasterState = {
+    ...current,
+    world_graph: worldGraph,
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (client.from("game_sessions") as any)
+    .update({
+      master_state: patched     as unknown as Json,
+      world_graph:  worldGraph  as unknown as Json,
+    })
     .eq("id", sessionId);
 }
 

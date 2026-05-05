@@ -134,22 +134,12 @@ function normalizeTrustChange(raw: unknown): { npc_key: string; delta: number; r
   };
 }
 
-const POI_TYPES = new Set(["LOCATION", "NPC", "CONTAINER", "ITEM", "HAZARD"]);
+// Audit Issue N fix: normalizePOI / POI_TYPES removed. The narrator no
+// longer emits points_of_interest — highlights are derived from world
+// state by buildExactHighlights instead.
+
 const CODEX_CATEGORIES = new Set(["LOCATION", "CHARACTER", "FACTION", "ITEM", "LORE", "BESTIARY"]);
 const CODEX_SIGNIFICANCE = new Set(["MINOR", "NOTABLE", "MAJOR"]);
-
-function normalizePOI(raw: unknown): PointOfInterest | null {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw as Record<string, unknown>;
-  if (typeof o.label !== "string" || !o.label.trim()) return null;
-  const t = typeof o.type === "string" ? o.type.toUpperCase() : "";
-  if (!POI_TYPES.has(t)) return null;
-  return {
-    label:       o.label,
-    type:        t as PointOfInterest["type"],
-    description: typeof o.description === "string" ? o.description : "",
-  };
-}
 
 function normalizeCodex(raw: unknown): CodexEntry | null {
   if (!raw || typeof raw !== "object") return null;
@@ -211,9 +201,12 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
       ? (parsed.items_for_sale.map(normalizeNarratorItem).filter(Boolean) as Item[])
       : [];
 
-    const points_of_interest = Array.isArray(parsed.points_of_interest)
-      ? (parsed.points_of_interest.map(normalizePOI).filter(Boolean) as PointOfInterest[])
-      : [];
+    // Audit Issue N fix: points_of_interest is no longer part of the
+    // narrator schema (highlights are computed deterministically from
+    // world state via buildExactHighlights). Tolerate stale traffic
+    // emitting it by silently ignoring; default to an empty array so
+    // downstream consumers that still read the field don't trip.
+    const points_of_interest: PointOfInterest[] = [];
 
     const codex_entries = Array.isArray(parsed.codex_entries)
       ? (parsed.codex_entries.map(normalizeCodex).filter(Boolean) as CodexEntry[])

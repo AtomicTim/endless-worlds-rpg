@@ -182,6 +182,43 @@ function resolveMove(action: ParsedAction, state: MasterState): ResolutionResult
         };
       }
 
+      // Audit Issue A fix (STEP D): before declaring WORLD_EXPLORE,
+      // try a final exact-id lookup against the live graph. Now that
+      // normalizeLocationId preserves articles, the player-typed
+      // "the wilderness" slugifies to "the_wilderness" — which IS the
+      // canonical id for any graph node WorldBible wrote. If that id
+      // resolves to an existing node, treat this as GRAPH_NAVIGATE so
+      // we never override a canonical id with a re-derived slug.
+      const directHit = graph.nodes[target];
+      if (directHit) {
+        const visitedH    = state.world_state.visited_locations;
+        const isVisitH    = visitedH.includes(directHit.id);
+        const newVisitedH = isVisitH ? visitedH : [...visitedH, directHit.id];
+        return {
+          success:      true,
+          outcome_type: "MOVE_SUCCESS",
+          state_delta: {
+            world_state: {
+              current_location_id: directHit.id,
+              current_node_id:     directHit.id,
+              visited_locations:   newVisitedH,
+              location_status:     LocationStatus.ARRIVING,
+            },
+          },
+          narrative_context: {
+            location_id:        directHit.id,
+            from_location:      current,
+            from_node_id:       currentNode.id,
+            first_visit:        !directHit.discovered,
+            movement_mandatory: true,
+            is_known_location:  true,
+            arriving_at:        directHit.name,
+            npcs_present:       directHit.npc_ids,
+            move_type:          "GRAPH_NAVIGATE",
+          },
+        };
+      }
+
       // WORLD_EXPLORE — heading somewhere genuinely new.
       const visitedW    = state.world_state.visited_locations;
       const newVisitedW = visitedW.includes(target) ? visitedW : [...visitedW, target];
@@ -670,14 +707,11 @@ function resolveDialogue(action: ParsedAction, state: MasterState, opts: Resolve
       difficulty  = baseDifficulty + 2; // deception is harder than honest persuasion
       break;
     case "intimidating":
-      // Low-STR characters intimidate verbally rather than physically.
-      if (strength >= 10) {
-        statChecked = "strength";
-        modifier    = getAttributeModifier(strength);
-      } else {
-        statChecked = "charisma";
-        modifier    = charismaModifier;
-      }
+      // Audit Issue B fix: intimidating ALWAYS rolls STR. Removed the
+      // STR>=10 guard that silently substituted CHA for low-STR
+      // characters and contradicted the badge UI / system prompt spec.
+      statChecked = "strength";
+      modifier    = getAttributeModifier(strength);
       break;
     case "curious":
       // Curious tone always fires a Perception check — investigative speech

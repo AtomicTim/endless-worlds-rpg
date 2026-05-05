@@ -136,6 +136,31 @@ function saveWorldStateAsync(sessionId: string, worldState: import("@/types/game
 }
 
 /**
+ * Audit Issue M fix — fire-and-forget world_graph persist.
+ * Mutations such as ZONE_EXPAND (new sub_location node), NPC arrivals
+ * (addNpcToCurrentNode), and RegionBible application used to wait for
+ * the 10-action auto-save before reaching the DB. Now any path that
+ * mutates world_graph can call this immediately so a hard reload
+ * doesn't lose the new node / npc_id link.
+ */
+function saveWorldGraphAsync(
+  sessionId: string,
+  worldGraph: import("@/types/game").WorldGraph
+): void {
+  void (async () => {
+    try {
+      await fetch("/api/game/world-state", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ sessionId, worldGraph }),
+      });
+    } catch {
+      // Silently swallow — best-effort; the 10-action auto-save is the fallback.
+    }
+  })();
+}
+
+/**
  * Fire-and-forget: immediately persist the full log_book (entries +
  * recent_messages) to the DB so both survive a hard page refresh without
  * waiting for the 10-action auto-save.
@@ -359,54 +384,79 @@ export function useGameLoop() {
         }
       }
 
-      // ── 2b-2. Issues E + F — pin primary_target from the current node ────
-      // Free-typed quoted dialogue (`"Hello"`) reaches the parse-intent
-      // fast-path with no primary_target. The narrator must NOT pick which
-      // NPC responds — the game determines that from the graph:
+      // ── 2b-2. Audit Issues C/G — pin primary_target from the current node
+      // The narrator must NOT pick which NPC responds — the game determines
+      // that from the graph. We override primary_target in two scenarios:
       //
-      //   1. If exactly one NPC is at the current node → talk to them.
-      //   2. If multiple NPCs are present and the player has an active
-      //      dialogue NPC who is in this node → continue with them.
-      //   3. Otherwise leave primary_target undefined and let the narrator
-      //      describe ambient sounds (the empty-NPC prompt block fires).
-      if (
-        parsedAction.action_type === ActionType.DIALOGUE &&
-        !parsedAction.primary_target
-      ) {
+      //   Case 1 (original): primary_target is null — quoted dialogue
+      //   reached the fast-path with no extracted target.
+      //
+      //   Case 2 (audit fix): primary_target is set BUT does not match any
+      //   CHARACTER asset present at the current node. The AI parser picked
+      //   a descriptor like "solitary figure" or "the hooded man" — without
+      //   intervention the narrator would invent a fresh NPC. We override
+      //   the descriptor with the real WorldBible NPC at this node.
+      //
+      // In both cases we resolve to:
+      //   - the sole NPC in the node, or
+      //   - the player's currentDialogueNpc when continuing a conversation
+      //     and that NPC is still at the node.
+      // Otherwise we leave primary_target as it was (Case 1: still null;
+      // Case 2: we don't have a confident substitute, so we stay out of
+      // the way and let the empty-NPC fallback fire downstream).
+      if (parsedAction.action_type === ActionType.DIALOGUE) {
         const graph2 = state.world_graph;
         const node2  = graph2?.nodes[graph2.current_node_id];
         if (node2) {
+          const liveAssets = useGameStore.getState().locationAssets;
           const presentNpcAssets = node2.npc_ids
-            .map((id) =>
-              useGameStore.getState().locationAssets.find((a) => a.id === id)
-            )
+            .map((id) => liveAssets.find((a) => a.id === id))
             .filter((a): a is WorldAsset =>
               !!a && a.category === AssetCategory.CHARACTER
             );
-          if (presentNpcAssets.length === 1) {
-            parsedAction = {
-              ...parsedAction,
-              primary_target: presentNpcAssets[0].name,
-            };
-            console.log(
-              "[GameLoop/2b-2] Pinned primary_target to sole NPC at node:",
-              presentNpcAssets[0].name
+
+          // Determine whether the existing primary_target already matches
+          // a CHARACTER asset present at the node — if so, we leave it.
+          const target = parsedAction.primary_target?.trim() ?? "";
+          const targetMatchesPresent =
+            target.length > 0 &&
+            presentNpcAssets.some(
+              (a) => a.name.toLowerCase() === target.toLowerCase()
             );
-          } else if (presentNpcAssets.length > 1) {
+
+          const shouldOverride = !target || !targetMatchesPresent;
+
+          if (shouldOverride && presentNpcAssets.length === 1) {
+            const real = presentNpcAssets[0].name;
+            if (target && !targetMatchesPresent) {
+              console.log(
+                `[GameLoop/2b-2] Redirected unmatched target '${target}' to node NPC: ${real}`
+              );
+            } else {
+              console.log(
+                "[GameLoop/2b-2] Pinned primary_target to sole NPC at node:",
+                real
+              );
+            }
+            parsedAction = { ...parsedAction, primary_target: real };
+          } else if (shouldOverride && presentNpcAssets.length > 1) {
             const activeNpcName = useGameStore.getState().currentDialogueNpc;
             if (activeNpcName) {
               const activeIsHere = presentNpcAssets.some(
                 (a) => a.name.toLowerCase() === activeNpcName.toLowerCase()
               );
               if (activeIsHere) {
-                parsedAction = {
-                  ...parsedAction,
-                  primary_target: activeNpcName,
-                };
-                console.log(
-                  "[GameLoop/2b-2] Pinned primary_target to active NPC at node:",
-                  activeNpcName
-                );
+                if (target && !targetMatchesPresent) {
+                  console.log(
+                    `[GameLoop/2b-2] Redirected unmatched target '${target}' to node NPC: ${activeNpcName}`
+                  );
+                } else {
+                  console.log(
+                    "[GameLoop/2b-2] Pinned primary_target to active NPC at node:",
+                    activeNpcName
+                  );
+                }
+                parsedAction = { ...parsedAction, primary_target: activeNpcName };
               }
             }
           }
@@ -452,13 +502,14 @@ export function useGameLoop() {
       if (rollMsg) {
         store.addMessage(makeMessage("SYSTEM", rollMsg));
         updatedState = persistLogEntry(updatedState, LogEntryType.COMBAT, rollMsg);
-      } else {
-        // BUG FIX 4c: trace silently dropped checks so we can see when a
-        // resolver populated stat_checked but failed to populate roll (or
-        // some other field), preventing buildRollFeedback from rendering.
-        console.log("[GameLoop/3b] No roll feedback. ctx:", {
-          roll:         resolution.narrative_context?.roll,
-          stat_checked: resolution.narrative_context?.stat_checked,
+      } else if (typeof resolution.narrative_context?.stat_checked === "string") {
+        // Audit Issue J fix: only warn when a stat check was actually
+        // expected (resolver set stat_checked) but the roll fields were
+        // silently dropped. Pre-fix this fired on every neutral action,
+        // polluting the console.
+        console.warn("[GameLoop/3b] stat_checked set but no roll populated — silent drop:", {
+          stat_checked: resolution.narrative_context.stat_checked,
+          roll:         resolution.narrative_context.roll,
           outcome_type: resolution.outcome_type,
         });
       }
@@ -684,6 +735,11 @@ export function useGameLoop() {
                   void getWorldAssetsForLocation(sessionId, applied.starting_node_id).then(
                     (assets) => useGameStore.getState().setLocationAssets(assets)
                   );
+                  // Audit Issue M fix: also fire a world_graph persist so a
+                  // hard reload doesn't lose the new region's nodes (the
+                  // route already persisted master_state — this is a
+                  // belt-and-braces patch for the dedicated jsonb column).
+                  saveWorldGraphAsync(sessionId, newGraph);
                   console.log(
                     `[GameLoop/4d] RegionBible applied: ${regionBible.name} → ${applied.starting_node_id}`
                   );
@@ -713,12 +769,22 @@ export function useGameLoop() {
       // active NPC's CHARACTER constitution — never the full roster of
       // people at the location. Non-CHARACTER assets (locations, factions,
       // items, lore) still flow through so the setting/context stays rich.
-      // Falls back to the unfiltered list when we can't resolve the active
-      // NPC (defensive — non-DIALOGUE actions are unaffected).
+      //
+      // Audit Issue P fix: previously when the active NPC name didn't
+      // match any CHARACTER asset (e.g. the player typed a descriptor
+      // that step 2b-2 also failed to resolve), this fell back to the
+      // FULL roster — exactly the wrong move on a DIALOGUE action,
+      // because the narrator then sees every NPC in the session and
+      // free-invents. New fallback: filter CHARACTERs to only those in
+      // the current node's npc_ids, so the narrator still sees the
+      // graph-confirmed cast for ambient context but can't pick a
+      // stranger to respond.
       const isDialogueForFilter =
         parsedAction.action_type === ActionType.DIALOGUE;
       const activeNpcForFilter =
         parsedAction.primary_target ?? null;
+      const currentNodeForFilter =
+        state.world_graph?.nodes[state.world_graph.current_node_id] ?? null;
       const locationAssets: WorldAsset[] = (() => {
         if (!isDialogueForFilter || !activeNpcForFilter) return allLocationAssets;
         const activeKey = normalizeAssetId(AssetCategory.CHARACTER, activeNpcForFilter);
@@ -727,12 +793,24 @@ export function useGameLoop() {
             a.category === AssetCategory.CHARACTER &&
             (a.id === activeKey || a.name.toLowerCase() === activeNpcForFilter.toLowerCase())
         );
-        if (!activeAsset) return allLocationAssets;
-        // Keep every non-CHARACTER asset, plus only the resolved active NPC.
-        return [
-          ...allLocationAssets.filter((a) => a.category !== AssetCategory.CHARACTER),
-          activeAsset,
-        ];
+        if (activeAsset) {
+          // Keep every non-CHARACTER asset, plus only the resolved active NPC.
+          return [
+            ...allLocationAssets.filter((a) => a.category !== AssetCategory.CHARACTER),
+            activeAsset,
+          ];
+        }
+        // Audit Issue P fallback: no asset matched. Restrict CHARACTERs to
+        // the current node's roster so the narrator can't reach for an
+        // off-stage NPC, and log the miss for observability.
+        const nodeNpcIds = new Set(currentNodeForFilter?.npc_ids ?? []);
+        console.warn(
+          "[GameLoop/5] DIALOGUE filter: no CHARACTER asset matched activeNpc — falling back to current node roster.",
+          { activeNpc: activeNpcForFilter, nodeNpcIds: Array.from(nodeNpcIds) }
+        );
+        return allLocationAssets.filter(
+          (a) => a.category !== AssetCategory.CHARACTER || nodeNpcIds.has(a.id)
+        );
       })();
 
       // Always give the narrator the most current world_state (including
@@ -841,9 +919,16 @@ export function useGameLoop() {
         for (const outline of wbForPregen.adjacent_regions) {
           const dir   = (outline.direction_from_start ?? "").toLowerCase();
           const name  = outline.name.toLowerCase();
-          const hinted =
-            (dir.length > 2 && narrText.includes(dir)) ||
-            (name.length > 3 && narrText.includes(name));
+          // Audit Issue T fix: tighten direction matching. Bare
+          // narrText.includes("north") matched ambient prose ("the wind
+          // from the north") and fired a fetch every turn. Require an
+          // explicit "to the <dir>" / "<dir>ward" phrase, OR a region
+          // name match — the name match alone is reliable enough.
+          const dirMatches =
+            dir.length > 2 &&
+            (narrText.includes(`to the ${dir}`) || narrText.includes(`${dir}ward`));
+          const nameMatches = name.length > 3 && narrText.includes(name);
+          const hinted = dirMatches || nameMatches;
           if (!hinted) continue;
           // existingRegionNames excludes the outline itself so the model
           // doesn't get confused into reusing its own placeholder name.
@@ -968,6 +1053,11 @@ export function useGameLoop() {
               const refreshed = await getWorldAssetsForLocation(artSessionId, subId);
               useGameStore.getState().setLocationAssets(refreshed);
             });
+            // Audit Issue M fix: persist the mutated graph immediately so a
+            // hard reload doesn't lose the new sub_location node.
+            if (updatedState.world_graph) {
+              saveWorldGraphAsync(artSessionId, updatedState.world_graph);
+            }
             console.log(`[GameLoop/7] ZONE_EXPAND created sub_location: ${subName} (${subId})`);
           }
         }
@@ -1261,6 +1351,13 @@ export function useGameLoop() {
         if (additions.length > 0) {
           useGameStore.getState().setLocationAssets([...liveAssets, ...additions]);
         }
+
+        // Audit Issue M fix: persist the mutated graph immediately so the
+        // new NPC's npc_ids entry survives a hard reload before the next
+        // 10-action auto-save.
+        if (updatedState.world_graph) {
+          saveWorldGraphAsync(sessionId, updatedState.world_graph);
+        }
       }
 
       // ── 7c. After ARRIVING — refresh location assets for the next call ────
@@ -1408,16 +1505,23 @@ export function useGameLoop() {
               : null;
 
           // currentDialogueNpcKey MUST always be the FULL canonical
-          // asset-id form ("character_<slug>"). Derive it directly from
-          // effectiveNpcName (the resolved NPC name including the
-          // option-click fallback to existingNpc) so option-click beats —
-          // where parsedAction.primary_target is null and so npcName could
-          // collapse to null without the fallback — still produce a
-          // non-null key. findNpcInRegistry's prefix-strip fallback handles
-          // legacy unprefixed entries during reads.
-          const npcRegistryKey: string | null = effectiveNpcName
-            ? normalizeAssetId(AssetCategory.CHARACTER, effectiveNpcName)
+          // asset-id form ("character_<slug>"). Audit Issue Q fix: prefer
+          // the actual stored asset.id whenever a CHARACTER asset matches
+          // by name — re-deriving the slug via normalizeAssetId can drift
+          // from the WorldBible's NPCDefinition.id (e.g. when the AI used
+          // unusual punctuation in the original id). Re-derivation stays
+          // as the fallback for genuinely new NPCs without an asset yet.
+          const matchByName = effectiveNpcName
+            ? gsBefore.locationAssets.find(
+                (a) =>
+                  a.category === AssetCategory.CHARACTER &&
+                  a.name.toLowerCase() === effectiveNpcName.toLowerCase()
+              )
             : null;
+          const npcRegistryKey: string | null = matchByName?.id
+            ?? (effectiveNpcName
+              ? normalizeAssetId(AssetCategory.CHARACTER, effectiveNpcName)
+              : null);
 
           // Seed a neutral entry when no variant of this key exists in the
           // registry yet. findNpcInRegistry covers all historical schemes
@@ -1466,6 +1570,23 @@ export function useGameLoop() {
             // are reliably found even when their name slug differs slightly
             // from what the player typed.
             const liveAssets = useGameStore.getState().locationAssets;
+            // Audit Issue H fix: add a fourth fallback that uses the
+            // current graph node's npc_ids when none of the name-based
+            // lookups matched. WorldBible NPCs with placeholder targets
+            // (Issue G symptom) reach this path with an effectiveNpcName
+            // that doesn't match any stored asset; the npc_ids list is
+            // the authoritative roster for the current node.
+            const currentGraphNode =
+              updatedState.world_graph?.nodes[updatedState.world_graph.current_node_id] ?? null;
+            const nodeNpcAsset =
+              (currentGraphNode?.npc_ids ?? [])
+                .map((id) =>
+                  liveAssets.find(
+                    (a) => a.id === id && a.category === AssetCategory.CHARACTER
+                  )
+                )
+                .find((a): a is WorldAsset => !!a) ?? null;
+
             const npcCodexAsset =
               // First try: name match (covers most cases including stubs).
               liveAssets.find(
@@ -1485,7 +1606,11 @@ export function useGameLoop() {
               // Third try: matchingAsset from earlier in the seed block (it
               // already searched by id and name so we won't re-find anything
               // new, but keep it as a final fallback for completeness).
-              ?? matchingAsset;
+              ?? matchingAsset
+              // Fourth try (audit fix): pick the first CHARACTER from the
+              // current node's npc_ids — works even when name matching is
+              // hopeless because the AI parser returned a descriptor.
+              ?? nodeNpcAsset;
 
             if (npcCodexAsset) {
               const c = npcCodexAsset.constitution;
@@ -1636,8 +1761,10 @@ export function useGameLoop() {
       // them in log_book.recent_messages so they can be restored on page reload.
       {
         const allMsgs = useGameStore.getState().messages;
-        const recent: StoredMessage[] = allMsgs
-          .filter((m) => m.type === "NARRATIVE" || m.type === "DIALOGUE")
+        const narrativeMsgs = allMsgs.filter(
+          (m) => m.type === "NARRATIVE" || m.type === "DIALOGUE"
+        );
+        const recent: StoredMessage[] = narrativeMsgs
           .slice(-8)
           .map((m) => ({
             id:        m.id,
@@ -1646,7 +1773,12 @@ export function useGameLoop() {
             timestamp: m.timestamp instanceof Date ? m.timestamp.toISOString() : String(m.timestamp),
             metadata:  m.metadata,
           }));
-        console.log("[GameLoop/9b] recent_messages captured:", recent.length, recent.map((m) => m.type));
+        // Audit Issue I fix: make the cap explicit in the log so
+        // "recent_messages: 8" no longer reads like a stuck counter.
+        // The 8-message window is the designed restoration replay.
+        console.log(
+          `[GameLoop/9b] recent_messages window (last 8 of ${narrativeMsgs.length}): ${recent.length}`
+        );
         updatedState = {
           ...updatedState,
           log_book: { ...updatedState.log_book, recent_messages: recent },

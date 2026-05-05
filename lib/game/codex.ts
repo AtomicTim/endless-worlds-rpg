@@ -110,15 +110,6 @@ export function looksLikePlaceholder(name: string): boolean {
 // ── ID normalisation ──────────────────────────────────────────────────────────
 
 /**
- * Strips a leading article ("the_", "a_", "an_") from a snake_case slug.
- * Used to canonicalize LOCATION ids so "The Wanderer's Rest" and
- * "Wanderer's Rest" produce the same asset id and current_location_id.
- */
-function stripArticles(slug: string): string {
-  return slug.replace(/^(the|a|an)_/, "");
-}
-
-/**
  * Lowercases, drops punctuation, collapses whitespace and underscore runs.
  * Underscores in the input are PRESERVED (so snake_case ids pass through
  * unchanged) — only true punctuation is stripped.
@@ -133,17 +124,18 @@ function toSlug(name: string): string {
 }
 
 /**
- * Canonical, prefix-less location id used in world_state.current_location_id
- * and visited_locations. Lowercases, replaces non-alphanumeric runs with
- * underscores, and strips leading articles so the narrator's various
- * descriptions of the same place collapse to one slug.
+ * Canonical location id used in world_state.current_location_id and
+ * visited_locations. Lowercases, replaces non-alphanumeric runs with
+ * underscores. Article prefixes (the_, a_, an_) are PRESERVED — the
+ * WorldBible's emitted id is the canonical form, so "The Lowered Gaze"
+ * stays as "the_lowered_gaze" all the way through.
  *
- *   normalizeLocationId("The Wanderer's Rest inn") → "wanderers_rest_inn"
- *   normalizeLocationId("heavy oak door")          → "heavy_oak_door"
- *   normalizeLocationId("fantasy_tavern_01")       → "fantasy_tavern_01"
+ * Audit Issue A fix: stripArticles removed. Two ID schemes used to coexist
+ * (raw with article vs stripped) and corrupted asset/graph lookups
+ * whenever the resolver normalized player input back into state.
  */
 export function normalizeLocationId(name: string): string {
-  return stripArticles(toSlug(name));
+  return toSlug(name);
 }
 
 /**
@@ -151,17 +143,15 @@ export function normalizeLocationId(name: string): string {
  * same real-world entity always maps to the same DB row even when the Narrator
  * generates a slightly different slug across calls.
  *
- * For LOCATION assets, leading articles are stripped so "The X" and "X"
- * collapse to a single id.
+ * Audit Issue A fix: LOCATION no longer strips leading articles. The
+ * WorldBible's settlement node id and apply-world-bible's asset id stay
+ * aligned with `location_<raw_slug>` end to end.
  *
  * e.g. normalizeAssetId("CHARACTER", "Old Ezra")  → "character_old_ezra"
- *      normalizeAssetId("LOCATION",  "The Tavern") → "location_tavern"
+ *      normalizeAssetId("LOCATION",  "The Tavern") → "location_the_tavern"
  */
 export function normalizeAssetId(category: string, name: string): string {
-  let slug = toSlug(name);
-  if (category === "LOCATION") {
-    slug = stripArticles(slug);
-  }
+  const slug = toSlug(name);
   const prefix = (
     {
       CHARACTER: "character",
@@ -313,12 +303,26 @@ export async function getWorldAssetsForLocation(
       return [];
     }
     const rows = (data as WorldAssetRow[] | null) ?? [];
+
+    // Audit Issue A fix: build a fallback id set for backward compat
+    // with old saves that wrote stripped (no-article) ids. The new
+    // canonical form preserves articles, but pre-existing rows may use
+    // either. Match on raw, plus the article-flipped variant.
+    const altLocationId = locationId.startsWith("the_")
+      ? locationId.slice(4)            // "the_lowered_gaze" → "lowered_gaze"
+      : `the_${locationId}`;           // "lowered_gaze"     → "the_lowered_gaze"
+
+    // Audit Issue U fix: CHARACTER pass-through is scoped to the same
+    // session_id (every row already shares the session id thanks to the
+    // outer .eq, but we keep the predicate explicit for clarity).
     return rows
       .filter((r) => {
-        if (r.category === "CHARACTER") return true;
+        if (r.category === "CHARACTER") return r.session_id === sessionId;
         if (!r.first_seen_location)     return false;
-        if (r.first_seen_location === locationId) return true;
-        return normalizeLocationId(r.first_seen_location) === locationId;
+        if (r.first_seen_location === locationId)    return true;
+        if (r.first_seen_location === altLocationId) return true;
+        const normalized = normalizeLocationId(r.first_seen_location);
+        return normalized === locationId || normalized === altLocationId;
       })
       .map(rowToWorldAsset);
   } catch (err) {

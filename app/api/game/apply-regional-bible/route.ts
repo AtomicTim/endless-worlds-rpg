@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { AssetCategory } from "@/types/game";
+import { AssetCategory, LocationStatus } from "@/types/game";
+import type { Json } from "@/types/database";
 import type {
   LocationDefinition,
+  MasterState,
   NPCDefinition,
   RegionBible,
   WorldAsset,
@@ -129,17 +131,22 @@ export async function POST(request: NextRequest) {
   const originNodeId       = origin_node_id;
   const existingGraph:     WorldGraph  = existing_world_graph;
 
-  // Verify ownership of the session.
+  // Audit Issue K fix: load the current master_state so we can patch
+  // it with the merged graph and current_location_id, then write the
+  // patched state back. Previously the route only persisted world_assets,
+  // which meant a reload before the next 10-action auto-save lost the
+  // entire region's graph nodes.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: row, error: fetchErr } = await (supabase.from("game_sessions") as any)
-    .select("id")
+    .select("id, master_state")
     .eq("id", sessionId)
     .eq("user_id", user.id)
-    .single() as { data: { id: string } | null; error: unknown };
+    .single() as { data: { id: string; master_state: Json } | null; error: unknown };
 
   if (fetchErr || !row) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
+  const currentMasterState = row.master_state as unknown as MasterState;
 
   // ── 1. Build all world_asset rows ──────────────────────────────────────────
   const locationAssets = bibleNarrowed.locations.map((l) => locationToAsset(l, sessionId));
@@ -187,8 +194,34 @@ export async function POST(request: NextRequest) {
   const startingNodeId = settlementNode.id;
 
   // ── 4. Build the new region's WorldNodes ───────────────────────────────────
+  // Audit Issue L / Area 2 fix: validate npc_ids against the bible's npcs[]
+  // and re-stitch via home_location_id when a location has zero valid ids.
+  const validNpcIds = new Set(bibleNarrowed.npcs.map((n) => n.id));
+
   const newNodes: Record<string, WorldNode> = {};
   for (const loc of bibleNarrowed.locations) {
+    const filteredNpcIds = loc.npc_ids.filter((id) => validNpcIds.has(id));
+    let finalNpcIds = filteredNpcIds;
+    if (filteredNpcIds.length === 0) {
+      const homeNpcs = bibleNarrowed.npcs
+        .filter((n) => n.home_location_id === loc.id)
+        .map((n) => n.id);
+      if (homeNpcs.length > 0) {
+        finalNpcIds = homeNpcs;
+        console.log(
+          `[apply-regional-bible] Re-stitched npc_ids via home_location_id for ${loc.id}:`,
+          homeNpcs
+        );
+      }
+    }
+    if (filteredNpcIds.length !== loc.npc_ids.length) {
+      const dropped = loc.npc_ids.filter((id) => !validNpcIds.has(id));
+      console.warn(
+        `[apply-regional-bible] Dropped ${dropped.length} dangling npc_id reference(s) at ${loc.id}:`,
+        dropped
+      );
+    }
+
     newNodes[loc.id] = {
       id:            loc.id,
       name:          loc.name,
@@ -197,7 +230,7 @@ export async function POST(request: NextRequest) {
       zone_id:       loc.is_interior && loc.parent_location_id ? loc.parent_location_id : loc.id,
       is_expandable: !loc.is_interior,
       connections:   [...loc.connections],
-      npc_ids:       loc.npc_ids.slice(),
+      npc_ids:       finalNpcIds,
       item_ids:      loc.objects.map((o) => `item_${o.id}`),
       asset_id:      `location_${loc.id}`,
       // The settlement node is what the player just crossed into — mark it
@@ -248,6 +281,44 @@ export async function POST(request: NextRequest) {
     nodes:           mergedNodes,
     current_node_id: startingNodeId,
   };
+
+  // ── 7. Audit Issue K fix — persist patched master_state + world_graph ──────
+  // Mirror apply-world-bible's persistence pattern so a reload mid-region
+  // expansion never loses the new region. The master_state copy includes:
+  //   - the merged world_graph with the new region's nodes
+  //   - current_location_id / current_node_id pointing at the settlement
+  //   - visited_locations including the settlement
+  //   - location_status: ARRIVING (the player just crossed the border)
+  const patchedMasterState: MasterState = {
+    ...currentMasterState,
+    world_state: {
+      ...currentMasterState.world_state,
+      current_location_id: startingNodeId,
+      current_node_id:     startingNodeId,
+      visited_locations: Array.from(
+        new Set([
+          ...(currentMasterState.world_state.visited_locations ?? []),
+          startingNodeId,
+        ])
+      ),
+      location_status: LocationStatus.ARRIVING,
+    },
+    world_graph: updatedWorldGraph,
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: persistErr } = await (supabase.from("game_sessions") as any)
+    .update({
+      master_state: patchedMasterState as unknown as Json,
+      world_graph:  updatedWorldGraph  as unknown as Json,
+    })
+    .eq("id", sessionId)
+    .eq("user_id", user.id);
+  if (persistErr) {
+    console.error("[apply-regional-bible] master_state persist failed", persistErr);
+    // Non-fatal — assets and the response payload are still useful, but
+    // surface the failure so the client can decide whether to retry.
+  }
 
   console.log(
     `[apply-regional-bible] Applied: ${bibleNarrowed.name}, ` +

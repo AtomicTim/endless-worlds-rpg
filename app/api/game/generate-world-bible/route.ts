@@ -36,34 +36,82 @@ function buildUserPrompt(
 Generate a WorldBible JSON for a ${genre} RPG.
 Character: ${name}, a ${klass}.
 
+CRITICAL ARCHITECTURAL RULE — read before generating:
+The settlement node (is_settlement_node: true) MUST be a public
+gathering space — a town square, crossroads, market plaza, central
+courtyard, hub, or equivalent. It must NEVER be a specific building
+such as a tavern, inn, smithy, shop, temple, or guild hall. Those
+are sub-locations (is_interior: true) connected to the settlement
+node. The settlement node is an exterior arrival point that the
+player can leave by entering any of its sub-locations.
+
 Return EXACTLY this JSON structure (fill in the values):
 {
   "starting_region": {
-    "id": "settlement_slug",
-    "name": "Settlement Name",
+    "id": "starting_region_slug",
+    "name": "Region Name",
     "type": "settlement_hub",
     "atmosphere": "2 sentence description",
     "locations": [
       {
-        "id": "location_slug",
-        "name": "Location Name",
-        "type": "tavern",
+        "id": "settlement_square_slug",
+        "name": "The Town Square",
+        "type": "settlement",
         "is_settlement_node": true,
         "is_interior": false,
-        "atmosphere": "description",
+        "atmosphere": "Outdoor hub description — what the player sees and hears arriving here.",
         "grid_position": {"x": 0, "y": 0},
-        "connections": ["other_location_id"],
-        "npc_ids": ["character_slug"],
-        "objects": [{"id": "obj_slug", "name": "Object Name", "description": "1 sentence", "is_interactable": true}],
+        "connections": ["tavern_slug", "shop_slug", "smithy_slug"],
+        "npc_ids": [],
+        "objects": [{"id": "well_slug", "name": "The Communal Well", "description": "1 sentence", "is_interactable": true}],
         "ambient_type": "town_square"
+      },
+      {
+        "id": "tavern_slug",
+        "name": "The Tavern Name",
+        "type": "tavern",
+        "is_settlement_node": false,
+        "is_interior": true,
+        "parent_location_id": "settlement_square_slug",
+        "atmosphere": "Tavern interior description.",
+        "grid_position": {"x": 0, "y": 0},
+        "connections": ["settlement_square_slug"],
+        "npc_ids": ["character_innkeeper_slug"],
+        "objects": [{"id": "fireplace_slug", "name": "The Hearth", "description": "1 sentence", "is_interactable": true}],
+        "ambient_type": "tavern_common_room"
+      },
+      {
+        "id": "shop_slug",
+        "name": "The Shop Name",
+        "type": "market",
+        "is_settlement_node": false,
+        "is_interior": true,
+        "parent_location_id": "settlement_square_slug",
+        "atmosphere": "Shop interior description.",
+        "grid_position": {"x": 1, "y": 0},
+        "connections": ["settlement_square_slug"],
+        "npc_ids": ["character_merchant_slug"],
+        "objects": [{"id": "counter_slug", "name": "The Counter", "description": "1 sentence", "is_interactable": true}],
+        "ambient_type": "market_stall"
       }
     ],
     "npcs": [
       {
-        "id": "character_slug",
+        "id": "character_innkeeper_slug",
         "name": "Full Name",
-        "home_location_id": "location_slug",
+        "home_location_id": "tavern_slug",
         "role": "innkeeper",
+        "appearance": "1 sentence",
+        "personality": "1 sentence",
+        "speech_style": "brief",
+        "knowledge": ["fact 1"],
+        "default_trust": 50
+      },
+      {
+        "id": "character_merchant_slug",
+        "name": "Full Name",
+        "home_location_id": "shop_slug",
+        "role": "merchant",
         "appearance": "1 sentence",
         "personality": "1 sentence",
         "speech_style": "brief",
@@ -102,7 +150,11 @@ Return EXACTLY this JSON structure (fill in the values):
   "generated_at": "${generatedAt}"
 }
 
-Generate 1 settlement node + 3 sub-locations + 4-5 NPCs.
+Generate exactly 1 settlement node + 3 sub-locations + 4-5 NPCs.
+The settlement node is a town square / crossroads / hub — NEVER a
+named building. Each sub-location is is_interior: true and references
+the settlement node via parent_location_id. NPCs live in the
+sub-locations (their home_location_id), not in the square itself.
 Make content original, specific to the WCD and genre.
 REAL NAMES for all NPCs. No placeholders.`;
 }
@@ -532,46 +584,52 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Debug: log the raw parsed schema shape so future AI variations are
-  // easier to diagnose without firing the prompt again. Includes a peek
-  // at root-level array fields so we catch flat-response variants too.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  console.log("[WorldBible] Raw structure:", JSON.stringify({
-    topLevelKeys:        Object.keys(parsed as object),
-    startingRegionType:  typeof (parsed as any)?.starting_region,
-    startingRegionKeys:  Object.keys((parsed as any)?.starting_region ?? {}),
-    hasLocationsAtRoot:  Array.isArray((parsed as any)?.locations),
-    hasNpcsAtRoot:       Array.isArray((parsed as any)?.npcs),
-    rootLocationsCount:  Array.isArray((parsed as any)?.locations) ? (parsed as any).locations.length : 0,
-  }));
+  // Capture the raw shape BEFORE normalize runs — normalizeWorldBible
+  // mutates its argument in place, so we'd otherwise log post-normalize
+  // values under the "Raw structure" header.
+  const rawSnapshot = (() => {
+    const r = (parsed ?? {}) as Record<string, unknown>;
+    const sr = r.starting_region as Record<string, unknown> | undefined;
+    const rootLocs = r.locations;
+    return {
+      topLevelKeys:        Object.keys(r),
+      startingRegionType:  typeof sr,
+      startingRegionKeys:  Object.keys(sr ?? {}),
+      hasLocationsAtRoot:  Array.isArray(rootLocs),
+      hasNpcsAtRoot:       Array.isArray(r.npcs),
+      rootLocationsCount:  Array.isArray(rootLocs) ? rootLocs.length : 0,
+    };
+  })();
+  console.log("[WorldBible] Raw structure:", JSON.stringify(rawSnapshot));
 
   // Normalize before validation — maps AI field-name variants to the
   // canonical schema and fills missing mechanical fields with defaults.
-  const normalized = normalizeWorldBible(parsed);
+  const normalized       = normalizeWorldBible(parsed);
+  const normalizedRecord = (normalized ?? {}) as Record<string, unknown>;
+  const normalizedSr     = normalizedRecord.starting_region as Record<string, unknown> | undefined;
+  const normalizedLocs   = Array.isArray(normalizedSr?.locations)
+    ? (normalizedSr!.locations as unknown[])
+    : null;
 
   // Debug: log the post-normalization shape so we can see whether the
   // various restructure paths actually landed locations / npcs in the
   // canonical place before validateBible runs.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   console.log("[WorldBible] After normalization:", JSON.stringify({
-    hasStartingRegion: !!(normalized as any)?.starting_region,
-    locationsType:     typeof (normalized as any)?.starting_region?.locations,
-    locationsIsArray:  Array.isArray((normalized as any)?.starting_region?.locations),
-    locationsLength:   Array.isArray((normalized as any)?.starting_region?.locations)
-      ? (normalized as any).starting_region.locations.length
-      : "N/A",
-    startingRegionKeys: Object.keys((normalized as any)?.starting_region ?? {}),
+    hasStartingRegion: !!normalizedSr,
+    locationsType:     typeof normalizedSr?.locations,
+    locationsIsArray:  normalizedLocs !== null,
+    locationsLength:   normalizedLocs !== null ? normalizedLocs.length : "N/A",
+    startingRegionKeys: Object.keys(normalizedSr ?? {}),
   }));
 
   const validated = validateBible(normalized);
   if (!validated.ok) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sr = (normalized as any)?.starting_region;
+    const sr = normalizedSr;
     return NextResponse.json(
       {
         error: `WorldBible validation failed: ${validated.error}`,
         debug: {
-          topLevelKeys:       Object.keys(normalized as object),
+          topLevelKeys:       Object.keys(normalizedRecord),
           startingRegionKeys: Object.keys(sr ?? {}),
           locationsType:      typeof sr?.locations,
           locationsValue:     JSON.stringify(sr?.locations)?.substring(0, 200),

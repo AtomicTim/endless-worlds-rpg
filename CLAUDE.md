@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 7.1
+**Version:** 7.2
 **Status:** Active Development — World Generation Redesign
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Day 19B — World Bible Redesign
+**Current Phase:** Day 19C — Ambient Object System
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -18,8 +18,8 @@
 | 1–14 | Phase 1 MVP | ✅ Complete |
 | 15–18 | Dialogue, UI, World Graph, Systems Audit | ✅ Complete |
 | 19A | World Consistency Document | ✅ Complete |
-| 19B | World Bible Redesign | 🔄 In Progress |
-| 19C | Ambient Object System | ⏳ Pending |
+| 19B | World Bible Redesign | ✅ Complete |
+| 19C | Ambient Object System | 🔄 In Progress |
 | 19D | Regional Bible (Phase 2) | ⏳ Pending |
 | 19E | Narrator Constraints + Highlight Overhaul | ⏳ Pending |
 | 19F | Three-Tier Map Component | ⏳ Pending |
@@ -28,180 +28,115 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Day 19A Deliverables (commit 08322b6 — 86/86 tests, clean build)
-- WorldLandmark, WorldFaction, WorldConsistencyDocument types added to types/game.ts
-- Metadata.world_consistency?: WorldConsistencyDocument
-- /api/game/generate-wcd route — POST, retry logic, strict validation (5 landmarks, 3 factions, 6 rules)
-- formatWcdBlock() helper in prompt-builder.ts
-- WCD prepended to narrator system prompt as first block
-- /api/game/narrate/route.ts accepts world_consistency, falls back to masterState
-- narrateAction() accepts optional WCD
-- useGameLoop passes metadata.world_consistency to every narrate call
-- generate-world-seed accepts WCD, prepends WCD block to seed prompt
-- world-seed-generator.ts client wrapper accepts WCD
-- apply-world-seed persists WCD to metadata.world_consistency AND world_consistency jsonb column
-- /app/game/new/page.tsx — 4-step wizard: Creating character → Establishing world laws → Generating your world → Establishing world facts
-- 009_world_generation.sql documented (already applied)
+### Day 19B Deliverables (commit d5b41b0 — 86/86 tests, clean build)
+- LocationObject, LocationDefinition, NPCDefinition, RegionExit, QuestBreadcrumb, MainQuest, RegionOutline, RegionBible, WorldBible types added
+- Metadata.main_quest optional field added
+- /api/game/generate-world-bible — POST, WCD-seeded, 4000 tokens, retry + validation
+- /api/game/apply-world-bible — writes all locations, NPCs, objects as world_assets, builds WorldGraph, patches master_state
+- /app/game/new/page.tsx — 5-step wizard using WorldBible flow
+- Legacy WorldSeed routes preserved for old saves
 
 ---
 
-## 🏗️ Architecture Redesign — Why
-
-The previous approach asked the AI to generate structured game data during live gameplay narration. This caused persistent bugs: location names changing mid-session, NPCs disappearing, duplicate assets, inconsistent highlights. The root cause is architectural — language models are excellent narrators but fundamentally unreliable as live data generators.
-
-**The new approach separates AI involvement into two distinct phases:**
-
-1. **Generation phase** (before first player action): AI generates all world content into strict validated JSON. Content is locked as permanent game assets.
-2. **Narration phase** (during gameplay): AI describes what already exists. It never creates, never names, never generates.
+## 🏗️ Architecture Overview
 
 **Full architecture documented in:** /docs/world-generation-architecture.md
 
----
-
-## 🌍 New World Generation Architecture
-
 ### Four Layers
 
-**Layer 0 — World Consistency Document (WCD) ✅**
-Generated once. Never modified. Injected into EVERY AI call.
-Contains: world name, landmarks, factions, world rules, grid bounds.
-Stored in: game_sessions.world_consistency
+**Layer 0 — WCD ✅** — world_consistency jsonb, injected into all AI calls
+**Layer 1 — WorldBible ✅** — world_bible jsonb, starting region + adjacent outlines + main quest
+**Layer 2 — RegionBible ⏳** — on-demand for new regions, background pre-generation
+**Layer 3 — Narrator ⏳** — hard rules enforced, exact Tier 1 references only
 
-**Layer 1 — World Bible (Phase 1) 🔄**
-Generated from WCD context. Starting region fully detailed + outlines of 3-5 adjacent regions + main quest.
-Stored in: game_sessions.world_bible
+### Three-Tier Object System
 
-**Layer 2 — Regional Bible (Phase 2) ⏳**
-Generated on first approach to a new region. Background pre-generation on exit discovery.
-Expands a RegionOutline into full RegionBible constrained by WCD.
+**Tier 1 — AI-generated (WorldBible):** LocationObject, tracked as world_assets, highlighted in feed, meaningful interactions. 3-5 per sub-location.
 
-**Layer 3 — Narrator ⏳**
-Receives WCD + locked location/NPC data. Describes only. Hard rules enforced in prompt.
+**Tier 2 — Code templates (ambient-objects.ts):** Every location type has a built-in library. Instant responses. Never highlighted. No AI call. No game state change.
+
+**Tier 3 — Narrator ambient:** Brief narrator call for anything not in Tier 1 or 2. "Nothing of particular note." Never says object disappeared.
 
 ### Location Hierarchy
 
 ```
-Region (e.g. "Thornwick Crossing area")
-└── Settlement Node (arrival point — town square, main street)
-    ├── Notable Sub-location 1 (Korven's Inn)
-    ├── Notable Sub-location 2 (Sylanna's Glass Emporium)
-    ├── Notable Sub-location 3 (The Ashflow Forge)
-    └── [ambient grey blocks — non-notable buildings, not generated]
+Region
+└── Settlement Node (is_settlement_node: true)
+    ├── Sub-location (is_interior: true, parent_location_id set)
+    │   ├── Tier 1 objects (LocationObject[], highlighted)
+    │   └── Tier 2 ambient (from ambient-objects.ts, never highlighted)
+    └── [non-notable buildings = ambient grey blocks on Local Map]
 ```
 
-Notable sub-locations per settlement: 3-6
-NPCs per sub-location: 1-3 (usually 1-2)
-Tier 1 objects per sub-location: 3-5
-
-### Three-Tier Object System
-
-**Tier 1 — AI-generated, tracked, highlighted**
-Named in LocationDefinition.objects. Highlighted in story feed. Meaningful interactions.
-
-**Tier 2 — Code-generated from templates**
-Every location type has a built-in ambient object library.
-Instant template responses. No AI call. Never highlighted.
-Defined in: /lib/game/ambient-objects.ts
-
-**Tier 3 — Narrator handles**
-Brief narrator call with ambient instruction. No game state change. DnD freedom layer.
-
-### NPC Rules (Simplified)
-- Every NPC has a real name assigned at generation time — permanent
-- name_known is always true for newly generated NPCs
+### NPC Rules
+- Real name from birth — no placeholders ever
+- name_known always true for WorldBible NPCs
 - Narrator introduces atmospherically then names in same paragraph
-- No reveal pipeline. No placeholder names. Ever.
-
-### Three-Tier Map System
-
-**Tier 1 — World Map:** 40x40 grid, WCD landmarks as diamonds, scrollable
-**Tier 2 — Regional Map:** One region, node squares, NPC dots, exit arrows
-**Tier 3 — Local Map:** Settlement layout, code-generated, grey filler blocks, NPC dots at home_location_id
-
-NPC movement: Static at home_location_id. No pathfinding.
+- No reveal pipeline
 
 ---
 
 ## ⚡ FOUNDATIONAL RULES (Read Before Every Session)
 
 ### 1. World Assets Are Permanent
-Write-once constitution. ignoreDuplicates: true. AI generates once, engine owns forever.
+Write-once. ignoreDuplicates: true. AI generates once, engine owns forever.
 
 ### 2. Movement Is Graph-Based
-Move classifier: GRAPH_NAVIGATE / INTERNAL_DESCRIBE / ZONE_EXPAND / WORLD_EXPLORE.
+GRAPH_NAVIGATE / INTERNAL_DESCRIBE / ZONE_EXPAND / WORLD_EXPLORE.
 current_node_id is single source of truth.
 
 ### 3. Location Is Authoritative State
 current_node_id saved immediately on real moves. INTERNAL_DESCRIBE does NOT update location.
 
 ### 4. Actions Are Permitted By Default
-Player can try anything. Tier 1 → rich AI response. Tier 2 → template. Tier 3 → brief narrator ambient.
+Tier 1 → rich AI response. Tier 2 → template. Tier 3 → brief narrator ambient. Nothing disappears.
 
 ### 5. Objects Mentioned Exist
-Tier 1 objects highlighted and interactable. Tier 2 and 3 get ambient responses. Nothing ever disappears.
+Nothing ever disappears or "didn't exist." Failed checks = evasion, never absence.
 
 ### 6. Dialogue Is Consistent
-Narrator receives ONLY the responding character. Option tone is authoritative. Badge always matches check.
+RESPONDING CHARACTER only. Option tone authoritative. Badge matches check. Real names from birth.
 
 ### 7. The AI Has Exactly Three Roles
-**Generator (Phase 1+2 only):** Creates WCD, WorldBible, RegionBibles. Locked permanently after generation.
-**Bridge:** Describes outcomes. Uses only locked asset names. Never invents.
-**Thread:** Plants quest breadcrumbs. Never forces or blocks.
+Generator (Phase 1+2 only) → Bridge (describe only) → Thread (breadcrumbs)
 
 ### 8. WCD Is Absolute Law
 Injected first into every AI call. Nothing can contradict it.
 
 ### 9. Failed Checks = Evasion Only
-Failed stat check = NPC is guarded or unhelpful. NEVER means NPC left or object doesn't exist.
+Failed check = NPC guarded/unhelpful. NEVER means NPC left or object doesn't exist.
 
 ### 10. Highlights Are Exact Tier 1 Matches
-Only Tier 1 objects, NPC names, connected location names. Exact string match only.
-
----
-
-## 🗺️ World Graph Architecture
-
-WorldNode: id, name, type, zone_id, is_expandable, connections[], npc_ids[], asset_id, discovered, map_position, category?
-
-Move Classification: GRAPH_NAVIGATE / INTERNAL_DESCRIBE / ZONE_EXPAND / WORLD_EXPLORE
-TYPE_KEYWORDS covers all 5 genres.
-
-NPC Placement:
-- Pre-seeded: assigned to nodes at world-bible time
-- Dynamic: added to currentNode.npc_ids on first encounter
-- Shown as static dots at home_location_id on Local Map
+Only Tier 1 object names, NPC names, connected location names. Exact string match only.
 
 ---
 
 ## 🎭 NPC Dialogue System
 - Narrator receives ONLY active NPC (RESPONDING CHARACTER block)
-- Option tone flows modal → submitAction(forcedTone) → resolver
+- Option tone: modal → submitAction(forcedTone) → resolver
 - Badge always matches the check that fires
 - No reveal pipeline — real names from birth
 - Failed checks = evasion, never absence
 
-## 💰 Trading System (Day 16 — Complete)
-- Merchant keyword detection → trade_available → items_for_sale
-- TradeModal: Buy full value, Sell 50%
-- Currency from getGenreColors — genre-accurate
+## 💰 Trading System (Day 16)
+- Merchant keyword → trade_available → items_for_sale
+- TradeModal: Buy full / Sell 50%. Currency from getGenreColors.
 
-## 🎨 UI System (Direction 3 — Complete)
-- genre-ui.ts: getGenreColors(genre) — single source of truth
+## 🎨 UI System (Direction 3)
+- genre-ui.ts: getGenreColors — single source of truth
 - StoryFeed: arrival headers, NPC quote-blocks, stat-check receipts
-- DialogueModal: accent-bar buttons by tone, stat badge matches resolver
-- VerbosityToggle: Terse / Standard / Rich in header
+- DialogueModal: accent-bar buttons, stat badge matches resolver
+- VerbosityToggle: Terse / Standard / Rich
 
 ---
 
 ## Narrator Architecture
 
-Narrator outputs: text only. Game code derives all mechanics.
-
 For DIALOGUE: WCD → RESPONDING CHARACTER → Location (atmosphere + Tier 1 objects) → Player state → VERBOSITY
 For non-DIALOGUE: WCD → NPCS PRESENT → Location → Player state → VERBOSITY
 
-Hard narrator rules (all prompts):
-1. Use EXACT stored names for locations, NPCs, objects
+Hard rules (all prompts):
+1. Exact stored names for locations, NPCs, objects
 2. Only name Tier 1 objects in descriptions
 3. Failed checks = evasion, never absence
 4. Write only from RESPONDING CHARACTER
@@ -211,25 +146,17 @@ Hard narrator rules (all prompts):
 
 ## Implementation Sequence
 
-### 19A — World Consistency Document ✅ (commit 08322b6)
-### 19B — World Bible Redesign 🔄
-- Full type hierarchy: WorldBible, RegionBible, LocationDefinition, NPCDefinition, LocationObject
-- Location hierarchy: settlement node + 3-6 notable sub-locations
-- Replace generateWorldSeed with generateWorldBible
-- Real names for all NPCs — remove placeholder system entirely
-- applyWorldBible writes all assets and graph nodes
-- Progressive loading: WCD → WorldBible → apply → start
-
-### 19C — Ambient Object System
-- /lib/game/ambient-objects.ts — Tier 2 library, all location types, all 5 genres
-- Tier 2: instant template response
-- Tier 3: short narrator ambient call
-- Nothing ever disappears or didn't exist
+### 19A ✅ — WCD type, generate-wcd route, injection
+### 19B ✅ — WorldBible types, generate-world-bible, apply-world-bible, 5-step wizard
+### 19C 🔄 — Ambient Object System
+- /lib/game/ambient-objects.ts — Tier 2 library all location types all 5 genres
+- Tier 2 router in useGameLoop — instant template response for known ambient objects
+- Tier 3 router — short narrator ambient call for unknown objects
+- Nothing ever disappears or "didn't exist"
 
 ### 19D — Regional Bible (Phase 2)
 - generateRegionalBible replaces stub generator
 - Background pre-generation on exit discovery
-- WCD + existing region summary as context
 
 ### 19E — Narrator Constraints + Highlight Overhaul
 - Hard narrator rules in ALL system prompts
@@ -238,14 +165,13 @@ Hard narrator rules (all prompts):
 
 ### 19F — Three-Tier Map Component
 - /components/game/WorldMap.tsx
-- Tier 1/2/3 map views, breadcrumb nav, toggleable sidebar
+- Tier 1/2/3 views, breadcrumb nav, toggleable sidebar
 
 ---
 
-## Supabase Tables (post-009 — all applied ✅)
-- profiles, game_sessions (+world_seed, +world_graph, +world_consistency, +world_bible)
-- world_states (+current_node_id), log_books, characters
-- npcs, art_cache (unused), world_assets (+svg_content unused), codex
+## Supabase Tables (all applied ✅)
+- game_sessions: +world_seed, +world_graph, +world_consistency, +world_bible
+- world_states: +current_node_id
 - Migrations 001-009 all applied
 
 ---
@@ -255,13 +181,12 @@ Hard narrator rules (all prompts):
 - AI generates content once, engine owns it forever
 - WCD is the constitution — injected everywhere, never contradicted
 - Three-layer generation: WCD → WorldBible → RegionBible
-- Three object tiers: Tier 1 (AI, tracked) / Tier 2 (templates) / Tier 3 (narrator ambient)
-- Narrator describes, never generates — hard rules enforced
-- Names are permanent from birth — no reveal pipeline
+- Three object tiers: Tier 1 (AI) / Tier 2 (templates) / Tier 3 (ambient narrator)
+- Narrator describes, never generates
+- Names are permanent from birth
 - Highlights are exact Tier 1 matches only
 - Failed checks = evasion only
 - Three-tier map: World / Regional / Local
-- NPC movement: static at home_location_id
 - DnD freedom: player can try anything, engine routes appropriately
 
 ---
@@ -290,8 +215,6 @@ Hard narrator rules (all prompts):
 | Horror/Lovecraftian | Cosmic dread | #84cc16 acid green | None | HP + Sanity |
 | Space Opera | Grand, operatic | #a855f7 purple | Stellar Units | Hull Integrity |
 | Post-Apocalyptic | Bleak, dark humor | #ea580c rust | Caps | HP |
-
-Future genres: Western, Pirate, Superhero, Dark Fantasy, Steampunk
 
 ---
 
@@ -323,4 +246,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 58 — V7.1: Day 19A complete. WCD type, route, injection. 4-step wizard. Day 19B starting.*
+*Last updated: Session 59 — V7.2: Day 19B complete. WorldBible types, generate-world-bible, apply-world-bible, 5-step wizard. Day 19C starting.*

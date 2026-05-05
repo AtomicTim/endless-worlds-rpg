@@ -63,6 +63,187 @@ function stripJsonFences(raw: string): string {
     .trim();
 }
 
+// ── Normalization helpers ────────────────────────────────────────────────────
+
+function slugify(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+}
+
+/**
+ * Pull the first array-shaped value found at one of the alternate keys.
+ * Used by normalizeWorldBible so that AI variants (sub_locations, places,
+ * characters, residents…) all collapse to the canonical field name without
+ * losing the data.
+ */
+function pickArray(o: Record<string, unknown>, keys: string[]): unknown[] | null {
+  for (const k of keys) {
+    const v = o[k];
+    if (Array.isArray(v)) return v;
+  }
+  return null;
+}
+
+/**
+ * Pre-validation pass that maps common AI field-name variants to the
+ * canonical schema and fills missing mechanical fields with safe defaults.
+ * Creative content (names, descriptions) is preserved verbatim — we only
+ * default fields the AI tends to skip when racing to fit the token budget.
+ */
+function normalizeWorldBible(parsed: unknown): unknown {
+  if (!parsed || typeof parsed !== "object") return parsed;
+  const o = parsed as Record<string, unknown>;
+
+  // ── starting_region ───────────────────────────────────────────────────────
+  const sr = o.starting_region;
+  if (sr && typeof sr === "object") {
+    const region = sr as Record<string, unknown>;
+
+    // locations: accept several alternate keys
+    if (!Array.isArray(region.locations)) {
+      const alt = pickArray(region, [
+        "sub_locations", "sublocation", "sublocations",
+        "areas", "places", "nodes", "buildings", "sites",
+      ]);
+      region.locations = alt ?? [];
+    }
+
+    // npcs: accept several alternate keys
+    if (!Array.isArray(region.npcs)) {
+      const alt = pickArray(region, [
+        "characters", "people", "inhabitants", "residents", "npc_list",
+      ]);
+      region.npcs = alt ?? [];
+    }
+
+    // exits: accept connections fallback
+    if (!Array.isArray(region.exits)) {
+      const alt = pickArray(region, ["exits", "connections"]);
+      region.exits = alt ?? [];
+    }
+
+    // id / type / atmosphere defaults
+    if (typeof region.name !== "string" || !(region.name as string).trim()) {
+      region.name = "Starting Region";
+    }
+    if (!region.id || typeof region.id !== "string" || !(region.id as string).trim()) {
+      region.id = slugify(region.name as string);
+    }
+    if (!region.type || typeof region.type !== "string" || !(region.type as string).trim()) {
+      region.type = "settlement_hub";
+    }
+    if (typeof region.atmosphere !== "string") {
+      region.atmosphere = "";
+    }
+
+    // Normalize each location
+    if (Array.isArray(region.locations)) {
+      region.locations = (region.locations as unknown[]).map((loc, idx) => {
+        if (!loc || typeof loc !== "object") return loc;
+        const l = { ...(loc as Record<string, unknown>) };
+
+        if (!l.name || typeof l.name !== "string" || !(l.name as string).trim()) {
+          l.name = `Unnamed Location ${idx + 1}`;
+        }
+        if (!l.id || typeof l.id !== "string" || !(l.id as string).trim()) {
+          l.id = slugify(l.name as string);
+        }
+        if (!Array.isArray(l.connections)) l.connections = [];
+        if (!Array.isArray(l.npc_ids))     l.npc_ids     = [];
+        if (!Array.isArray(l.objects))     l.objects     = [];
+        if (typeof l.is_settlement_node !== "boolean") l.is_settlement_node = false;
+        if (typeof l.is_interior         !== "boolean") l.is_interior         = true;
+        return l;
+      });
+    }
+
+    // Normalize each NPC and capture the first location id for fallback home
+    const firstLocId = (() => {
+      const locs = region.locations;
+      if (!Array.isArray(locs) || locs.length === 0) return "";
+      const first = locs[0] as Record<string, unknown> | undefined;
+      return typeof first?.id === "string" ? (first.id as string) : "";
+    })();
+
+    if (Array.isArray(region.npcs)) {
+      region.npcs = (region.npcs as unknown[]).map((npc, idx) => {
+        if (!npc || typeof npc !== "object") return npc;
+        const n = { ...(npc as Record<string, unknown>) };
+
+        if (!n.name || typeof n.name !== "string" || !(n.name as string).trim()) {
+          n.name = `Unnamed Character ${idx + 1}`;
+        }
+        if (!n.id || typeof n.id !== "string" || !(n.id as string).trim()) {
+          n.id = `character_${slugify(n.name as string)}`;
+        }
+        if (!Array.isArray(n.knowledge)) n.knowledge = [];
+        if (typeof n.default_trust !== "number") n.default_trust = 50;
+        if (!n.home_location_id || typeof n.home_location_id !== "string") {
+          n.home_location_id = firstLocId;
+        }
+        return n;
+      });
+    }
+  } else {
+    // No starting_region at all — seed an empty shell so validateBible
+    // produces a clear "starting_region.name missing" rather than the
+    // generic "starting_region missing".
+    o.starting_region = {
+      id:        "starting_region",
+      name:      "Starting Region",
+      type:      "settlement_hub",
+      atmosphere: "",
+      locations: [],
+      npcs:      [],
+      exits:     [],
+    };
+  }
+
+  // ── adjacent_regions ──────────────────────────────────────────────────────
+  if (!Array.isArray(o.adjacent_regions)) {
+    o.adjacent_regions = [];
+  }
+  o.adjacent_regions = (o.adjacent_regions as unknown[]).map((r, idx) => {
+    if (!r || typeof r !== "object") return r;
+    const region = { ...(r as Record<string, unknown>) };
+    if (!region.name || typeof region.name !== "string" || !(region.name as string).trim()) {
+      region.name = `Adjacent Region ${idx + 1}`;
+    }
+    if (!region.id || typeof region.id !== "string" || !(region.id as string).trim()) {
+      region.id = slugify(region.name as string);
+    }
+    if (typeof region.key_npc_count !== "number") region.key_npc_count = 2;
+    if (typeof region.location_count !== "number") region.location_count = 3;
+    return region;
+  });
+
+  // ── main_quest ────────────────────────────────────────────────────────────
+  const placeholderBreadcrumb = {
+    index:              0,
+    content:            "A strange rumour circulates",
+    delivery_method:    "npc_dialogue",
+    suggested_location: "",
+  };
+
+  if (!o.main_quest || typeof o.main_quest !== "object") {
+    o.main_quest = {
+      title:               "The Unknown Threat",
+      antagonist_name:     "Unknown",
+      antagonist_location: "",
+      goal:                "Discover the truth",
+      opening_hook:        "Something stirs in the shadows",
+      breadcrumbs:         [placeholderBreadcrumb],
+      win_condition:       "Defeat the antagonist",
+    };
+  } else {
+    const mq = o.main_quest as Record<string, unknown>;
+    if (!Array.isArray(mq.breadcrumbs) || mq.breadcrumbs.length === 0) {
+      mq.breadcrumbs = [placeholderBreadcrumb];
+    }
+  }
+
+  return o;
+}
+
 function validateBible(parsed: unknown): { ok: true; bible: WorldBible } | { ok: false; error: string } {
   if (!parsed || typeof parsed !== "object") return { ok: false, error: "WorldBible is not an object" };
   const o = parsed as Record<string, unknown>;
@@ -156,7 +337,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const validated = validateBible(parsed);
+  // Debug: log the raw parsed schema shape so future AI variations are
+  // easier to diagnose without firing the prompt again.
+  console.log(
+    "[WorldBible] Parsed top-level keys:",
+    Object.keys(parsed as object)
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  console.log(
+    "[WorldBible] starting_region keys:",
+    Object.keys((parsed as any)?.starting_region ?? {})
+  );
+
+  // Normalize before validation — maps AI field-name variants to the
+  // canonical schema and fills missing mechanical fields with defaults.
+  const normalized = normalizeWorldBible(parsed);
+  const validated = validateBible(normalized);
   if (!validated.ok) {
     return NextResponse.json(
       { error: `WorldBible validation failed: ${validated.error}` },

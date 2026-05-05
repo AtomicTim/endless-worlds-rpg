@@ -3,7 +3,7 @@
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { useGameStore } from "@/lib/stores/game-store";
 import { getNpcDisposition } from "@/lib/game/state-utils";
-import type { DialogueOption } from "@/types/game";
+import type { Attributes, DialogueOption } from "@/types/game";
 
 interface DialogueModalProps {
   /** Submit a player line. Includes the active NPC name so the game loop can
@@ -26,21 +26,32 @@ const TONE_LABELS: Record<DialogueOption["tone"], string> = {
   deceptive:  "Deceptive",
 };
 
-type StatKey = NonNullable<DialogueOption["stat_check"]>["stat"];
+interface ToneBadge {
+  icon:  string;
+  stat:  "CHA" | "STR" | "PER";
+  value: number;
+  note?: string;
+}
 
-const STAT_ICONS: Record<StatKey, string> = {
-  charisma:     "💬",
-  strength:     "💪",
-  perception:   "👁",
-  intelligence: "🧠",
-};
-
-const STAT_LABELS: Record<StatKey, string> = {
-  charisma:     "CHA",
-  strength:     "STR",
-  perception:   "PER",
-  intelligence: "INT",
-};
+/**
+ * Tone-derived stat badge — shows the player which attribute the resolver
+ * will roll if they click this option. Mirrors the resolver's tone switch
+ * exactly: aggressive → STR, curious → PER, deceptive → CHA at +2 difficulty.
+ * friendly options have no badge (no check fires).
+ */
+function getToneBadge(tone: DialogueOption["tone"], attributes: Attributes): ToneBadge | null {
+  switch (tone) {
+    case "curious":
+      return { icon: "👁", stat: "PER", value: attributes.perception };
+    case "deceptive":
+      return { icon: "💬", stat: "CHA", value: attributes.charisma, note: "+2 diff" };
+    case "aggressive":
+      return { icon: "💪", stat: "STR", value: attributes.strength };
+    case "friendly":
+    default:
+      return null;
+  }
+}
 
 const DISPOSITION_STYLES: Record<string, { color: string; icon: string }> = {
   hostile:    { color: "#ef4444", icon: "🔴" },
@@ -225,15 +236,12 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
           const color = TONE_COLORS[option.tone];
           const label = TONE_LABELS[option.tone];
 
-          // Stat-check badge — amber warning, never a hard gate.
-          const sc            = option.stat_check;
-          const playerStat    = sc && playerStats ? playerStats[sc.stat] ?? 10 : 10;
-          const tooltipText   = sc
-            ? `Your ${STAT_LABELS[sc.stat]}: ${playerStat} | Difficulty: ${sc.difficulty} — ${
-                playerStat >= sc.difficulty + 4 ? "Likely to succeed"
-                : playerStat >= sc.difficulty - 2 ? "Risky"
-                : "Difficult"
-              }`
+          // Tone-derived stat badge — shows the player their actual stat for
+          // whichever check the resolver will fire on this option's tone.
+          // Always accurate; no narrator-side configuration needed.
+          const badge       = playerStats ? getToneBadge(option.tone, playerStats) : null;
+          const tooltipText = badge
+            ? `Check fires on use. Your ${badge.stat}: ${badge.value}${badge.note ? ` (${badge.note})` : ""}`
             : "";
 
           return (
@@ -274,8 +282,9 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
                 {option.text}
               </span>
 
-              {/* Stat-check badge (amber, informational) */}
-              {sc && (
+              {/* Tone-derived stat badge (amber, informational).
+                  Shows the player's CURRENT stat — always accurate. */}
+              {badge && (
                 <span
                   title={tooltipText}
                   className="ml-auto flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
@@ -285,8 +294,8 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
                     border:          "1px solid color-mix(in srgb, #f59e0b 50%, transparent)",
                   }}
                 >
-                  <span aria-hidden>{STAT_ICONS[sc.stat]}</span>
-                  <span>{STAT_LABELS[sc.stat]} {sc.difficulty}+</span>
+                  <span aria-hidden>{badge.icon}</span>
+                  <span>{badge.stat} {badge.value}</span>
                 </span>
               )}
             </button>

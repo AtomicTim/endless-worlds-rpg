@@ -578,83 +578,112 @@ export function useGameLoop() {
         JSON.stringify(narratorResponse.revealed_npc_names)
       );
       if (narratorResponse.revealed_npc_names && narratorResponse.revealed_npc_names.length > 0) {
-        for (const reveal of narratorResponse.revealed_npc_names) {
-          // FIX 3b: Validate the narrator-provided asset_id against locationAssets.
-          // The narrator may generate an ID based on the true name instead of the
-          // existing placeholder asset_id. Resolve the correct ID here.
-          const currentAssets = useGameStore.getState().locationAssets;
-          let effectiveAssetId = reveal.asset_id;
-          let matchedAsset     = currentAssets.find((a) => a.id === reveal.asset_id);
+        // PART 1 (modal timing fix) + PART 2a (narrator simplification):
+        // Compute the active NPC name from the CURRENT action context
+        // (option-click override → previous-beat store value → primary_target).
+        // This is independent of step 7g's pending store update and is also
+        // what the game engine uses to resolve the asset_id since the
+        // narrator no longer emits one.
+        const gsBefore7d = useGameStore.getState();
+        const activeNpcName: string | null =
+          options?.npcName ??
+          gsBefore7d.currentDialogueNpc ??
+          parsedAction.primary_target ??
+          null;
 
-          if (!matchedAsset) {
-            // Fallback: find a CHARACTER whose constitution.true_name matches.
-            matchedAsset = currentAssets.find(
+        for (const reveal of narratorResponse.revealed_npc_names) {
+          const trueName = reveal.true_name;
+          const currentAssets = useGameStore.getState().locationAssets;
+
+          // Asset resolution priority:
+          //   1. CHARACTER asset whose name already equals the revealed name.
+          //   2. CHARACTER asset whose constitution.true_name matches
+          //      (placeholder asset where the narrator pre-recorded the name).
+          //   3. CHARACTER asset matching the active dialogue NPC by name —
+          //      most likely candidate when the player is mid-conversation.
+          let matchedAsset =
+            currentAssets.find(
               (a) =>
                 a.category === AssetCategory.CHARACTER &&
-                typeof a.constitution.true_name === "string" &&
-                a.constitution.true_name.toLowerCase() === reveal.true_name.toLowerCase()
-            );
-            if (matchedAsset) {
-              effectiveAssetId = matchedAsset.id;
-              console.log(
-                `[GameLoop/7d] asset_id corrected "${reveal.asset_id}" → "${effectiveAssetId}"`
-              );
-            }
+                a.name.toLowerCase() === trueName.toLowerCase()
+            ) ?? null;
+
+          if (!matchedAsset) {
+            matchedAsset =
+              currentAssets.find(
+                (a) =>
+                  a.category === AssetCategory.CHARACTER &&
+                  typeof a.constitution.true_name === "string" &&
+                  a.constitution.true_name.toLowerCase() === trueName.toLowerCase()
+              ) ?? null;
           }
 
-          // Capture placeholder name BEFORE the reveal (needed for FIX 2).
-          const placeholderName = matchedAsset?.name ?? "";
+          if (!matchedAsset && activeNpcName) {
+            matchedAsset =
+              currentAssets.find(
+                (a) =>
+                  a.category === AssetCategory.CHARACTER &&
+                  a.name.toLowerCase() === activeNpcName.toLowerCase()
+              ) ?? null;
+          }
+
+          // Derive the effective asset_id from whichever asset we matched, or
+          // fall back to normalizing the active NPC name (placeholder), or as
+          // a last resort the revealed name itself.
+          const effectiveAssetId =
+            matchedAsset?.id ??
+            (activeNpcName
+              ? normalizeAssetId(AssetCategory.CHARACTER, activeNpcName)
+              : normalizeAssetId(AssetCategory.CHARACTER, trueName));
+
+          const placeholderName = matchedAsset?.name ?? activeNpcName ?? "";
 
           // Persist to DB — fire-and-forget.
-          void updateAssetNameRevealed(sessionId, effectiveAssetId, reveal.true_name);
+          void updateAssetNameRevealed(sessionId, effectiveAssetId, trueName);
 
           // Optimistic local patch of locationAssets.
           const patched = currentAssets.map((a) =>
             a.id === effectiveAssetId
-              ? { ...a, name: reveal.true_name, name_known: true }
+              ? { ...a, name: trueName, name_known: true }
               : a
           );
           useGameStore.getState().setLocationAssets(patched);
 
-          // FIX 2: Update any DIALOGUE messages in the feed that still carry
-          // the old placeholder name so the header reflects the reveal immediately.
+          // Update any DIALOGUE feed messages that still carry the placeholder.
           if (placeholderName) {
-            useGameStore.getState().updateMessagesNpcName(placeholderName, reveal.true_name);
+            useGameStore.getState().updateMessagesNpcName(placeholderName, trueName);
           }
 
-          // FIX (modal name reveal): When a reveal lands, push the true name
-          // into the dialogue modal if EITHER the active NPC name matches
-          // the placeholder OR the active registry/asset key matches the
-          // revealed asset. Two-channel match avoids race conditions where
-          // currentDialogueNpc has already drifted but currentDialogueNpcKey
-          // is still pinned to the same asset.
+          // PART 1 (modal timing): two-channel check uses a key COMPUTED from
+          // the active NPC name (independent of step 7g's pending store
+          // update), then ALSO honors the activeNpcName text channel for
+          // placeholder collisions. This works on beat 1 too.
           {
             const gs = useGameStore.getState();
-            // Visibility log — confirms whether the key channel matches the
-            // narrator's emitted asset_id. After the FIX (key prefix) above,
-            // currentDialogueNpcKey is always "character_<slug>" so this
-            // should true-up when the narrator returns the same asset_id.
+            const computedNpcKey = activeNpcName
+              ? normalizeAssetId(AssetCategory.CHARACTER, activeNpcName)
+              : null;
+            const isActiveNpc =
+              (!!activeNpcName &&
+               placeholderName !== "" &&
+               activeNpcName.toLowerCase() === placeholderName.toLowerCase()) ||
+              (!!computedNpcKey && computedNpcKey === effectiveAssetId);
+
             console.log(
               "[GameLoop/7d] two-channel check:",
-              "npcKey:", gs.currentDialogueNpcKey,
+              "computedNpcKey:", computedNpcKey,
               "effectiveAssetId:", effectiveAssetId,
-              "match:", gs.currentDialogueNpcKey === effectiveAssetId
+              "match:", isActiveNpc
             );
-            const isActiveNpc =
-              (gs.currentDialogueNpc !== null &&
-               placeholderName !== "" &&
-               gs.currentDialogueNpc.toLowerCase() === placeholderName.toLowerCase()) ||
-              (gs.currentDialogueNpcKey !== null &&
-               gs.currentDialogueNpcKey === effectiveAssetId);
 
             if (isActiveNpc && gs.currentDialogueOptions.length > 0) {
               gs.setDialogueOptions(
                 gs.currentDialogueOptions,
-                reveal.true_name,
+                trueName,
                 gs.currentNpcPortrait ?? null,
-                gs.currentDialogueNpcKey ?? effectiveAssetId
+                gs.currentDialogueNpcKey ?? computedNpcKey ?? effectiveAssetId
               );
-              console.log("[GameLoop/7d] Modal header updated to:", reveal.true_name);
+              console.log("[GameLoop/7d] Modal header updated to:", trueName);
             }
           }
         }

@@ -91,20 +91,6 @@ function normalizeNarratorItem(raw: unknown): Item | null {
 }
 
 const DIALOGUE_TONES = new Set<string>(["friendly", "aggressive", "curious", "deceptive"]);
-const STAT_CHECK_STATS = new Set<string>(["charisma", "strength", "perception", "intelligence"]);
-
-function normalizeStatCheck(raw: unknown): DialogueOption["stat_check"] | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
-  const o = raw as Record<string, unknown>;
-  const statRaw = typeof o.stat === "string" ? o.stat.toLowerCase() : "";
-  if (!STAT_CHECK_STATS.has(statRaw)) return undefined;
-  if (typeof o.difficulty !== "number") return undefined;
-  return {
-    stat:        statRaw as NonNullable<DialogueOption["stat_check"]>["stat"],
-    difficulty:  Math.max(1, Math.min(20, Math.round(o.difficulty))),
-    description: typeof o.description === "string" ? o.description.trim() : "",
-  };
-}
 
 function normalizeDialogueOption(raw: unknown): DialogueOption | null {
   if (!raw || typeof raw !== "object") return null;
@@ -113,13 +99,11 @@ function normalizeDialogueOption(raw: unknown): DialogueOption | null {
   const toneRaw = typeof o.tone === "string" ? o.tone.toLowerCase() : "";
   if (!DIALOGUE_TONES.has(toneRaw)) return null;
 
-  const stat_check = normalizeStatCheck(o.stat_check);
-
   return {
     id:   typeof o.id === "string" && o.id.trim() ? o.id : `opt_${Math.random().toString(36).slice(2, 8)}`,
     text: o.text.trim(),
     tone: toneRaw as DialogueOption["tone"],
-    ...(stat_check ? { stat_check } : {}),
+    // stat_check intentionally omitted — derived from tone by the game engine.
   };
 }
 
@@ -217,17 +201,20 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
       : [];
 
     const revealed_npc_names = Array.isArray(parsed.revealed_npc_names)
-      ? (parsed.revealed_npc_names as unknown[]).reduce<Array<{ asset_id: string; true_name: string }>>(
+      ? (parsed.revealed_npc_names as unknown[]).reduce<Array<{ true_name: string }>>(
           (acc, entry) => {
+            // Narrator only emits { true_name }. Game code derives asset_id
+            // from locationAssets context. Be tolerant — accept any object
+            // with a non-empty true_name string, ignore stale asset_id keys
+            // emitted by older prompts.
             if (
               entry &&
               typeof entry === "object" &&
-              typeof (entry as Record<string, unknown>).asset_id  === "string" &&
-              typeof (entry as Record<string, unknown>).true_name === "string"
+              typeof (entry as Record<string, unknown>).true_name === "string" &&
+              ((entry as Record<string, unknown>).true_name as string).trim().length > 0
             ) {
               acc.push({
-                asset_id:  (entry as Record<string, unknown>).asset_id  as string,
-                true_name: (entry as Record<string, unknown>).true_name as string,
+                true_name: ((entry as Record<string, unknown>).true_name as string).trim(),
               });
             }
             return acc;

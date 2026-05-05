@@ -169,9 +169,9 @@ When an NPC says their name in this response — in any form
 you MUST populate this array. This is not optional.
 The game system cannot update the character's name without it.
 
-Format: [{ asset_id: 'character_slug', true_name: 'Real Name' }]
-asset_id: use 'character_' + name in lowercase with underscores
-Example: Mira Ashvale → 'character_mira_ashvale'
+Format: [{ true_name: 'Their Real Name' }]
+Just the name — nothing else. The game engine handles IDs.
+Example: [{ true_name: 'Marta Ironwood' }]
 
 If no name is revealed this turn: empty array []
 If a name IS revealed: populate it — this is MANDATORY
@@ -302,9 +302,10 @@ Characters who introduce themselves by name: use their real name directly in the
 WHEN THE PLAYER LEARNS A CHARACTER'S NAME:
 If, during this turn, a CHARACTER reveals their true name to the player (they introduce themselves, the player finds a name badge, reads a document, or any other in-world revelation), you MUST populate revealed_npc_names.
 
-Each entry in revealed_npc_names must contain:
-- asset_id: use the EXACT asset_id that appears in the ESTABLISHED WORLD ASSETS section for this character. Do NOT generate a new asset_id based on the true name — copy the existing asset_id verbatim from the ESTABLISHED WORLD ASSETS block. If the character is NOT yet in ESTABLISHED WORLD ASSETS (introduced this same turn), derive the asset_id from their placeholder name: lowercase the placeholder name, remove all punctuation except spaces, replace spaces with underscores, prefix with "character_". Example: "Chrome-Eyed Shopkeeper" → "character_chromeeyed_shopkeeper".
+Each entry contains a single field:
 - true_name: the character's actual name as revealed in the story.
+
+Just the name — nothing else. The game engine handles all asset-id derivation from the active dialogue context. Do NOT emit asset_id or any other field.
 
 Only populate revealed_npc_names when an identity is NEWLY REVEALED this turn. If the character's name was already known, leave revealed_npc_names empty.
 
@@ -366,7 +367,10 @@ When the current action is a DIALOGUE action type, OR an INTERACT with an NPC ta
 - Each option must be meaningfully different in tone and approach
 - Tones: "friendly" (cooperative/helpful), "aggressive" (threatening/hostile), "curious" (investigative/questioning), "deceptive" (misleading/manipulative)
 - One option should always be a natural exit like "Leave them be" or "Walk away" (tone: "friendly")
-- stat_check: include when this option would require a stat roll. Set stat to the relevant attribute (charisma/strength/perception/intelligence), difficulty 6-15 based on how hard it is, description as a brief action label (e.g. "Persuade her to trust you"). ALL options are always clickable — there are NO hard gates. Omit stat_check entirely for plain conversational options.
+- Each option is { id, text, tone } — NOTHING ELSE. No stat_check field.
+  The game engine determines the stat check automatically from tone:
+  aggressive → STR, curious → PER, deceptive → CHA (+2 difficulty), friendly → no check.
+  ALL options are always clickable.
 - Keep each option.text under 60 characters — these are button labels
 - For non-NPC actions, leave dialogue_options as an empty array
 
@@ -458,15 +462,17 @@ dialogue_options entries MUST match this shape (NPC interactions only — empty 
 {
   "id": "opt_1|opt_2|opt_3|opt_4",
   "text": "What the player says — under 60 chars",
-  "tone": "friendly|aggressive|curious|deceptive",
-  "stat_check": {
-    "stat": "charisma|strength|perception|intelligence",
-    "difficulty": 6,
-    "description": "brief action label e.g. 'Persuade her to trust you'"
-  }
+  "tone": "friendly|aggressive|curious|deceptive"
 }
-stat_check is OPTIONAL — omit the field entirely for plain conversational options.
-ALL options remain clickable regardless of the player's stats; stat_check only signals the in-fiction roll.
+NO stat_check field. The game engine determines checks from tone:
+aggressive → STR, curious → PER, deceptive → CHA at +2 difficulty, friendly → no check.
+ALL options remain clickable regardless of the player's stats.
+
+revealed_npc_names entries MUST match this shape (only when a name is revealed this turn):
+{
+  "true_name": "Their Real Name"
+}
+Just the name — nothing else. No asset_id. The game engine resolves the asset from the active dialogue context.
 
 trust_changes entries MUST match this shape (only when a notable shift occurs):
 {

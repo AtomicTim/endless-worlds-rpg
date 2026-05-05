@@ -242,20 +242,14 @@ export interface PointOfInterest {
   description: string;
 }
 
-export interface DialogueStatCheck {
-  stat:        "charisma" | "strength" | "perception" | "intelligence";
-  difficulty:  number;
-  description: string;
-}
-
 export interface DialogueOption {
-  id:           string;
-  text:         string;
-  tone:         "friendly" | "aggressive" | "curious" | "deceptive";
-  /** When set, clicking this option will require the named stat check.
-   *  Options are NEVER hard-gated — every option remains clickable; the
-   *  check determines the in-fiction outcome via the resolver. */
-  stat_check?:  DialogueStatCheck;
+  id:    string;
+  text:  string;
+  tone:  "friendly" | "aggressive" | "curious" | "deceptive";
+  // No stat_check field — the stat check applied when clicking this option
+  // is derived purely from `tone` by the game engine. The DialogueModal
+  // renders a tone-derived badge for the player; the resolver routes the
+  // tone classification through resolveDialogue's switch.
 }
 
 export interface CodexEntry {
@@ -276,8 +270,11 @@ export interface NarratorResponse {
   items_acquired?:     Item[];
   points_of_interest:  PointOfInterest[];
   codex_entries:       CodexEntry[];
-  /** Populated when the player learns a CHARACTER's true identity this turn. */
-  revealed_npc_names?: Array<{ asset_id: string; true_name: string }>;
+  /** Populated when the player learns a CHARACTER's true identity this turn.
+   *  The narrator emits ONLY the true name — the game engine derives the
+   *  asset_id from locationAssets context (placeholder match, true_name
+   *  match in constitution, or normalizing the active NPC name). */
+  revealed_npc_names?: Array<{ true_name: string }>;
   /** Terse 12-word journal shorthand of the beat — used for LogBook STORY entries. */
   log_summary?:        string;
   /** 3-4 response options shown in the Dialogue Modal; only for NPC interactions. */

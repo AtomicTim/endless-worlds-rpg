@@ -3,7 +3,9 @@
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { useGameStore } from "@/lib/stores/game-store";
 import { getNpcDisposition } from "@/lib/game/state-utils";
+import { Genre } from "@/types/game";
 import type { Attributes, DialogueOption } from "@/types/game";
+import { getGenreColors, TONE_BAR_COLORS } from "./genre-ui";
 
 interface DialogueModalProps {
   /** Submit a player line. Includes the active NPC name so the game loop can
@@ -11,20 +13,6 @@ interface DialogueModalProps {
   onSubmit:     (input: string, options?: { npcName?: string }) => void;
   onFocusInput: () => void;
 }
-
-const TONE_COLORS: Record<DialogueOption["tone"], string> = {
-  friendly:   "#22c55e",
-  aggressive: "#ef4444",
-  curious:    "#3b82f6",
-  deceptive:  "#eab308",
-};
-
-const TONE_LABELS: Record<DialogueOption["tone"], string> = {
-  friendly:   "Friendly",
-  aggressive: "Aggressive",
-  curious:    "Curious",
-  deceptive:  "Deceptive",
-};
 
 interface ToneBadge {
   icon:  string;
@@ -87,6 +75,10 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
 
   // Player's own attribute scores — used by the stat-check tooltip & badge.
   const playerStats = useGameStore((s) => s.masterState?.player_state.attributes);
+  // Day 18 — every accent comes from the active genre. Falls back to Fantasy
+  // before masterState is hydrated (purely cosmetic; primary changes once loaded).
+  const genre  = useGameStore((s) => s.masterState?.metadata.genre) ?? Genre.FANTASY;
+  const colors = getGenreColors(genre);
 
   // Trust score is the AUTHORITATIVE value: read directly from
   // masterState.npc_registry via currentDialogueNpcKey. Updates reactively
@@ -151,9 +143,10 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
       style={{
         height:          "200px",
         maxHeight:       "200px",
-        borderTop:       "3px solid var(--color-accent)",
+        borderTop:       `3px solid ${colors.primary}`,
         borderBottom:    "1px solid var(--color-border)",
         backgroundColor: "var(--color-bg)",
+        fontFamily:      "var(--font-mono)",
       }}
     >
       {/* ── LEFT — Portrait, NPC name, disposition ─────────────────────────── */}
@@ -170,8 +163,8 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
           style={{
             width:           "80px",
             height:          "80px",
-            border:          "1px solid var(--color-accent)",
-            backgroundColor: "color-mix(in srgb, var(--color-accent) 6%, var(--color-bg))",
+            border:          `1px solid ${colors.primary}`,
+            backgroundColor: `color-mix(in srgb, ${colors.primary} 6%, var(--color-bg))`,
             flexShrink:      0,
           }}
         >
@@ -189,10 +182,19 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
           )}
         </div>
 
-        {/* NPC name */}
+        {/* NPC name — genre primary, mono, bold */}
         <p
-          className="text-center text-[10px] font-bold uppercase tracking-wider leading-tight"
-          style={{ color: "var(--color-accent)", maxWidth: "100px", wordBreak: "break-word" }}
+          className="text-center leading-tight"
+          style={{
+            color:         colors.primary,
+            fontFamily:    "var(--font-mono)",
+            fontWeight:    "bold",
+            fontSize:      13,
+            letterSpacing: "0.05em",
+            textTransform: "uppercase",
+            maxWidth:      "100px",
+            wordBreak:     "break-word",
+          }}
         >
           {npcName ?? "???"}
         </p>
@@ -233,12 +235,11 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
         </button>
 
         {options.map((option) => {
-          const color = TONE_COLORS[option.tone];
-          const label = TONE_LABELS[option.tone];
+          const barColor = TONE_BAR_COLORS[option.tone] ?? TONE_BAR_COLORS.neutral;
 
           // Tone-derived stat badge — shows the player their actual stat for
           // whichever check the resolver will fire on this option's tone.
-          // Always accurate; no narrator-side configuration needed.
+          // Returns null for friendly/neutral so no badge renders for those.
           const badge       = playerStats ? getToneBadge(option.tone, playerStats) : null;
           const tooltipText = badge
             ? `Check fires on use. Your ${badge.stat}: ${badge.value}${badge.note ? ` (${badge.note})` : ""}`
@@ -248,54 +249,69 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
             <button
               key={option.id}
               onClick={() => handleOption(option)}
-              className="flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left transition-opacity"
               style={{
-                fontSize:        "0.85rem",
-                backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)`,
-                border:          `1px solid ${color}`,
-                cursor:          "pointer",
+                display:        "flex",
+                alignItems:     "stretch",
+                width:          "100%",
+                marginBottom:   4,
+                border:         "0.5px solid #2a3040",
+                borderRadius:   3,
+                overflow:       "hidden",
+                cursor:         "pointer",
+                background:     "transparent",
+                fontFamily:     "var(--font-mono)",
+                textAlign:      "left",
+                transition:     "background-color 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
               }}
             >
-              {/* Tone dot */}
+              {/* Left tone accent bar (4px) */}
               <span
-                className="size-2 shrink-0 rounded-full"
-                style={{ backgroundColor: color }}
-                title={label}
+                aria-hidden
+                style={{
+                  width:           4,
+                  flexShrink:      0,
+                  backgroundColor: barColor,
+                }}
               />
 
-              {/* Tone label — visible from 480px and up, hidden on narrow mobile */}
+              {/* Option text — fills remaining space */}
               <span
-                className="hidden shrink-0 text-[9px] font-bold uppercase tracking-wider min-[480px]:inline"
-                style={{ color, minWidth: "62px" }}
-              >
-                {label}
-              </span>
-
-              {/* Option text */}
-              <span
-                className="min-w-0 flex-1 truncate font-mono leading-snug"
                 style={{
-                  color:    "var(--color-text)",
-                  fontSize: "0.85rem",
+                  flex:        1,
+                  minWidth:    0,
+                  padding:     "6px 10px",
+                  color:       "#aab8cc",
+                  fontFamily:  "var(--font-mono)",
+                  fontSize:    12,
+                  lineHeight:  1.5,
+                  overflow:    "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace:  "nowrap",
                 }}
               >
                 {option.text}
               </span>
 
-              {/* Tone-derived stat badge (amber, informational).
-                  Shows the player's CURRENT stat — always accurate. */}
+              {/* Stat badge (right side, only when getToneBadge non-null) */}
               {badge && (
                 <span
                   title={tooltipText}
-                  className="ml-auto flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
                   style={{
-                    color:           "#f59e0b",
-                    backgroundColor: "color-mix(in srgb, #f59e0b 14%, transparent)",
-                    border:          "1px solid color-mix(in srgb, #f59e0b 50%, transparent)",
+                    fontFamily:  "var(--font-mono)",
+                    fontSize:    10,
+                    color:       "#6688bb",
+                    padding:     "0 8px",
+                    whiteSpace:  "nowrap",
+                    alignSelf:   "center",
                   }}
                 >
-                  <span aria-hidden>{badge.icon}</span>
-                  <span>{badge.stat} {badge.value}</span>
+                  {badge.icon} {badge.stat} {badge.value}{badge.note ? ` (${badge.note})` : ""}
                 </span>
               )}
             </button>

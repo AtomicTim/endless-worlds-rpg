@@ -752,6 +752,23 @@ function resolveDialogue(action: ParsedAction, state: MasterState, opts: Resolve
         success,
       })
     );
+    // BUG FIX 4b: hard-validate every required field. If any is missing
+    // here, buildRollFeedback will silently drop the check downstream —
+    // surface the bug instead of swallowing it.
+    if (
+      typeof statChecked !== "string" ||
+      typeof roll        !== "number" ||
+      typeof modifier    !== "number" ||
+      typeof total       !== "number" ||
+      typeof difficulty  !== "number" ||
+      typeof success     !== "boolean"
+    ) {
+      console.error(
+        "[resolveDialogue] MISSING stat check field:",
+        tone,
+        { stat_checked: statChecked, roll, modifier, total, difficulty, success }
+      );
+    }
   }
 
   return {

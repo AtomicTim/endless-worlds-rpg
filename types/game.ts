@@ -155,6 +155,10 @@ export interface WorldNode {
   name:           string;
   /** Major area (zone) vs interior sub-area (sub_location). */
   type:           "zone" | "sub_location";
+  /** SeedLocation.type carried over (tavern/market/dungeon/etc.). Used by
+   *  the move classifier's type-keyword channel so "the inn" routes to a
+   *  connected tavern. Optional: legacy nodes / sub_locations may omit it. */
+  category?:      string;
   /** Which zone this node belongs to. Self-id when type="zone". */
   zone_id:        string;
   /** May the narrator add new sub_locations under this zone via exploration? */

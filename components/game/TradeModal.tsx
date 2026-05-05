@@ -1,28 +1,14 @@
 "use client";
 
 import { X } from "lucide-react";
-import { Genre } from "@/types/game";
 import type { Item } from "@/types/game";
 import { useGameStore } from "@/lib/stores/game-store";
+import { getGenreColors } from "./genre-ui";
 
 interface TradeModalProps {
   onBuy:  (item: Item) => void;
   onSell: (item: Item) => void;
 }
-
-const CURRENCY_KEYS: Partial<Record<Genre, string>> = {
-  [Genre.FANTASY]:          "gold",
-  [Genre.CYBERPUNK]:        "credits",
-  [Genre.SPACE_OPERA]:      "stellar_units",
-  [Genre.POST_APOCALYPTIC]: "caps",
-};
-
-const CURRENCY_LABELS: Partial<Record<Genre, string>> = {
-  [Genre.FANTASY]:          "Gold",
-  [Genre.CYBERPUNK]:        "Credits",
-  [Genre.SPACE_OPERA]:      "Stellar Units",
-  [Genre.POST_APOCALYPTIC]: "Caps",
-};
 
 const RARITY_COLORS: Record<string, string> = {
   COMMON:    "var(--color-muted)",
@@ -46,10 +32,14 @@ export function TradeModal({ onBuy, onSell }: TradeModalProps) {
 
   if (!tradeItems || tradeItems.length === 0 || !masterState) return null;
 
-  const genre        = masterState.metadata.genre;
-  const currencyKey  = CURRENCY_KEYS[genre];
-  const currencyLbl  = CURRENCY_LABELS[genre] ?? "Currency";
-  const balance      = currencyKey ? masterState.player_state.resources[currencyKey] ?? 0 : 0;
+  const genre       = masterState.metadata.genre;
+  const colors      = getGenreColors(genre);
+  const currencyKey = colors.currencyKey;
+  const currencyLbl = colors.currency;
+  // Horror has no currency — TradeModal would never receive items_for_sale
+  // anyway, but fail closed if it somehow does.
+  if (!currencyKey || !currencyLbl) return null;
+  const balance     = masterState.player_state.resources[currencyKey] ?? 0;
   const sellableInv  = masterState.player_state.inventory.filter(
     (i) => !i.equipped && (i.value ?? 0) > 0
   );

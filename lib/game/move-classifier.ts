@@ -15,12 +15,69 @@ export interface MoveClassification {
  * "go to" but which are NOT separate locations. Phrasing here NEVER causes
  * the world graph to update — the narrator just describes the sub-area in
  * place.
+ *
+ * BUG FIX 2: covers vertical movement and interior areas across all 5
+ * genres so "go upstairs" / "head to engine room" / "lower level" don't
+ * spawn duplicate WORLD_EXPLORE nodes.
  */
 const INTERNAL_DESCRIBE_PATTERNS: RegExp[] = [
+  // Generic furniture / fixtures (Fantasy/Cyberpunk/Horror lounges).
   /\b(bar|counter|window|corner|table|tables|fireplace|hearth|stairs|stairway|booth|stool|stools|bench|benches|back of the room|far end|other side)\b/i,
   /\blook (at|around|toward|over)\b/i,
   /\b(approach|step toward|walk to(ward)?|move to(ward)?) (the )?(bar|counter|fireplace|hearth|window|table|stool|booth)\b/i,
+
+  // Vertical movement (all genres).
+  /\b(upstairs|downstairs|up the stairs|down the stairs|upper floor|lower floor|ground floor|mezzanine)\b/i,
+  /\b(go (up|down)|head (up|down)|climb (up|down)|make (my |your |our )?way (up|down))\b/i,
+
+  // Interior rooms — Fantasy/Horror.
+  /\b(common room|tap room|taproom|main hall|great hall|back room|back hall|side room|cellar|kitchen|storeroom)\b/i,
+
+  // Interior areas — Cyberpunk.
+  /\b(server room|back office|maintenance corridor|loading bay|cargo hold|lower deck)\b/i,
+
+  // Interior areas — Space Opera.
+  /\b(engine room|bridge|cargo bay|med bay|crew quarters|observation deck|airlock)\b/i,
+
+  // Interior areas — Post-Apocalyptic.
+  /\b(lower level|storage area|generator room|back of the|deeper into the)\b/i,
 ];
+
+/**
+ * BUG FIX 1: Type-keyword bank used as a third matching channel inside
+ * matchesNode(). When the player says "make for the inn" we need to
+ * resolve to the connected node typed "tavern" — substring matching on
+ * the node's NAME ("Driftwood Tavern") doesn't catch "inn", but the
+ * type-keyword channel does.
+ */
+const TYPE_KEYWORDS: Record<string, string[]> = {
+  // Fantasy
+  tavern:       ["inn", "tavern", "pub", "alehouse", "lodge", "rest", "hostel"],
+  settlement:   ["town", "village", "crossing", "hamlet", "outpost", "settlement"],
+  dungeon:      ["dungeon", "cave", "crypt", "ruins", "vault", "underground"],
+  stronghold:   ["castle", "fort", "fortress", "keep", "citadel", "tower"],
+  wilderness:   ["forest", "woods", "marsh", "swamp", "plains", "hills", "wilds"],
+  market:       ["market", "bazaar", "docks", "harbor", "wharf", "depot"],
+  // Cyberpunk
+  "data-hub":   ["hub", "node", "server", "data center", "uplink", "terminal"],
+  "corp-zone":  ["corp", "corporate", "arcology", "tower", "complex"],
+  slum:         ["slum", "undercity", "sprawl", "alley", "district", "block"],
+  bar:          ["bar", "club", "dive", "joint", "lounge", "cantina"],
+  // Space Opera
+  station:      ["station", "dock", "port", "bay", "hangar", "outpost"],
+  ship:         ["ship", "vessel", "craft", "cruiser", "freighter"],
+  colony:       ["colony", "settlement", "base", "outpost", "habitat"],
+  // Horror
+  mansion:      ["mansion", "house", "estate", "manor", "asylum", "institute"],
+  street:       ["street", "alley", "lane", "road", "avenue"],
+  // Post-Apocalyptic
+  shelter:      ["shelter", "vault", "bunker", "safehouse", "camp", "settlement"],
+  wasteland:    ["wasteland", "ruins", "highway", "outpost", "scrapyard"],
+  // Catch-all generic types we use ourselves.
+  ruin:         ["ruin", "ruins"],
+  port:         ["port", "dock", "harbor", "wharf", "marina"],
+  other:        [],
+};
 
 /**
  * Words that describe sub-areas of an expandable zone the player may be
@@ -70,18 +127,35 @@ function searchHaystack(action: ParsedAction): string {
   ].join(" ").toLowerCase();
 }
 
-function matchesNode(haystack: string, primaryTarget: string, nodeName: string): boolean {
+function matchesNode(
+  haystack: string,
+  primaryTarget: string,
+  nodeName: string,
+  nodeType?: string
+): boolean {
   const lowerName    = nodeName.toLowerCase().trim();
   const lowerTarget  = primaryTarget.toLowerCase().trim();
-  if (!lowerName) return false;
 
-  // Substring either way — handles "the inn" → "Driftwood Inn".
-  if (haystack.includes(lowerName)) return true;
-  if (lowerTarget && lowerName.includes(lowerTarget)) return true;
+  if (lowerName) {
+    // Substring either way — handles "the inn" → "Driftwood Inn".
+    if (haystack.includes(lowerName)) return true;
+    if (lowerTarget && lowerName.includes(lowerTarget)) return true;
 
-  // Distance fallback for typos / abbreviations.
-  if (lowerTarget && Math.abs(lowerName.length - lowerTarget.length) < 8) {
-    if (levenshtein(lowerTarget, lowerName) < 4) return true;
+    // Distance fallback for typos / abbreviations.
+    if (lowerTarget && Math.abs(lowerName.length - lowerTarget.length) < 8) {
+      if (levenshtein(lowerTarget, lowerName) < 4) return true;
+    }
+  }
+
+  // BUG FIX 1: type-keyword channel. When the player uses a category word
+  // ("inn", "market", "ship") that matches the node's TYPE rather than its
+  // proper name, accept the match so "make for the inn" routes to the
+  // connected tavern rather than spawning a duplicate via WORLD_EXPLORE.
+  if (nodeType) {
+    const keywords = TYPE_KEYWORDS[nodeType] ?? [];
+    for (const kw of keywords) {
+      if (haystack.includes(kw)) return true;
+    }
   }
   return false;
 }
@@ -113,13 +187,37 @@ export function classifyMove(
   // Check known connections first so that an explicit nav to a connected
   // place ALWAYS wins over a heuristic "internal" hit (a connected node
   // named "The Hearth" should NOT be hijacked by the hearth pattern).
+  //
+  // Two-pass:
+  //   1. Look for a NAME match (substring or Levenshtein on the node's
+  //      proper name / id). Wins immediately.
+  //   2. If no name match, look for TYPE-keyword matches. Only commit if
+  //      EXACTLY ONE connection matches via its type — otherwise the
+  //      reference is ambiguous (e.g. two taverns connected) and we leave
+  //      it to the user to be more specific.
+  let nameMatchId: string | null = null;
+  const typeMatchIds: string[]   = [];
   for (const connId of currentNode.connections) {
     const node = graph.nodes[connId];
     if (!node) continue;
+    // Name-only match (skip type bank by passing undefined).
     if (matchesNode(haystack, primary, node.name) ||
         matchesNode(haystack, primary, node.id)) {
-      return { type: "GRAPH_NAVIGATE", target_node_id: node.id };
+      nameMatchId = node.id;
+      break;
     }
+    // Type-only match: re-run matchesNode with empty name + the node's
+    // category (seed-location type — tavern/market/etc., not the structural
+    // 'zone'|'sub_location' value).
+    if (node.category && matchesNode(haystack, primary, "", node.category)) {
+      typeMatchIds.push(node.id);
+    }
+  }
+  if (nameMatchId) {
+    return { type: "GRAPH_NAVIGATE", target_node_id: nameMatchId };
+  }
+  if (typeMatchIds.length === 1) {
+    return { type: "GRAPH_NAVIGATE", target_node_id: typeMatchIds[0] };
   }
 
   // ── Step 1 — sub-area phrasing inside the current room ────────────────────

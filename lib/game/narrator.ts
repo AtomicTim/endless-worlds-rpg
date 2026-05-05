@@ -299,7 +299,8 @@ export async function narrateAction(
   state: MasterState,
   lastNarrativeText?: string | null,
   action?: ParsedAction | null,
-  locationAssets?: WorldAsset[] | null
+  locationAssets?: WorldAsset[] | null,
+  verbosity?: "terse" | "standard" | "rich"
 ): Promise<NarratorResponse> {
   let response: Response;
   try {
@@ -312,6 +313,7 @@ export async function narrateAction(
         ...(lastNarrativeText ? { lastNarrativeText } : {}),
         ...(action ? { action } : {}),
         ...(locationAssets && locationAssets.length > 0 ? { locationAssets } : {}),
+        ...(verbosity ? { verbosity } : {}),
       }),
     });
   } catch (err) {

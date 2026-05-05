@@ -6,23 +6,7 @@ import { Genre } from "@/types/game";
 import { getAttributeModifier } from "@/lib/game/dice";
 import { useGameStore } from "@/lib/stores/game-store";
 import { SidebarPanel } from "./SidebarPanel";
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const CURRENCY_KEYS: Partial<Record<Genre, string>> = {
-  [Genre.FANTASY]:          "gold",
-  [Genre.CYBERPUNK]:        "credits",
-  [Genre.SPACE_OPERA]:      "stellar_units",
-  [Genre.POST_APOCALYPTIC]: "caps",
-};
-
-const CURRENCY_LABELS: Partial<Record<Genre, string>> & { default: string } = {
-  [Genre.FANTASY]:          "Gold",
-  [Genre.CYBERPUNK]:        "Credits",
-  [Genre.SPACE_OPERA]:      "Stellar Units",
-  [Genre.POST_APOCALYPTIC]: "Caps",
-  default:                  "Currency",
-};
+import { getGenreColors } from "@/components/game/genre-ui";
 
 const ATTR_KEYS = [
   "strength",
@@ -71,7 +55,7 @@ function hpColor(pct: number): string {
   return "#ef4444";
 }
 
-function HPBar({ hp, maxHp }: { hp: number; maxHp: number }) {
+function HPBar({ hp, maxHp, label }: { hp: number; maxHp: number; label: string }) {
   const [flashing, setFlashing] = useState(false);
   const prevRef = useRef(hp);
   useEffect(() => {
@@ -87,7 +71,7 @@ function HPBar({ hp, maxHp }: { hp: number; maxHp: number }) {
   return (
     <div className="mb-2 space-y-1">
       <div className="flex justify-between text-[10px]">
-        <span style={{ color: "var(--color-muted)" }}>HP</span>
+        <span style={{ color: "var(--color-muted)" }}>{label}</span>
         <span
           className="font-mono transition-colors duration-300"
           style={{ color: flashing ? hpColor(pct) : "var(--color-text)" }}
@@ -217,10 +201,14 @@ export function CharacterSheet() {
   const { name, health, max_health, sanity, max_sanity, attributes, resources, level, xp } =
     player_state;
 
+  // Day 18 — read everything genre-themed from the central helper.
+  const colors        = getGenreColors(genre);
   const isHorror      = genre === Genre.HORROR_LOVECRAFTIAN;
-  const currencyLabel = CURRENCY_LABELS[genre] ?? CURRENCY_LABELS.default;
-  const currencyKey   = CURRENCY_KEYS[genre];
-  const primaryCurrency = currencyKey !== undefined ? (resources[currencyKey] ?? 0) : null;
+  const currencyLabel = colors.currency;       // string | null (null = no currency)
+  const currencyKey   = colors.currencyKey;    // string | null
+  const hpLabel       = colors.hp;
+  const primaryCurrency =
+    currencyKey ? resources[currencyKey] ?? 0 : null;
   const maxXp           = level * 500;
 
   const extraResources = Object.entries(resources).filter(
@@ -263,8 +251,8 @@ export function CharacterSheet() {
         <StatBar value={xp} max={maxXp} color="var(--color-accent)" />
       </div>
 
-      {/* HP */}
-      <HPBar hp={health} maxHp={max_health} />
+      {/* HP — label comes from genre vocabulary (HP/Integrity/Hull Integrity/etc.) */}
+      <HPBar hp={health} maxHp={max_health} label={hpLabel} />
 
       {/* Sanity — horror only */}
       {isHorror && sanity !== undefined && max_sanity !== undefined && (
@@ -282,8 +270,9 @@ export function CharacterSheet() {
         ))}
       </div>
 
-      {/* Primary currency */}
-      {primaryCurrency !== null && (
+      {/* Primary currency — hidden entirely when the genre has no currency
+          (e.g. Horror/Lovecraftian, where currencyName is null). */}
+      {primaryCurrency !== null && currencyLabel !== null && (
         <div
           className="mt-3 flex justify-between pt-2 text-[10px]"
           style={{ borderTop: "1px solid var(--color-border)" }}

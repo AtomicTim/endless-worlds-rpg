@@ -6,14 +6,7 @@ import { Genre, ItemType, ItemRarity } from "@/types/game";
 import type { Item } from "@/types/game";
 import { useGameStore } from "@/lib/stores/game-store";
 import { SidebarPanel } from "./SidebarPanel";
-
-const CURRENCY_LABELS: Partial<Record<Genre, string>> & { default: string } = {
-  [Genre.FANTASY]:          "Gold",
-  [Genre.CYBERPUNK]:        "Credits",
-  [Genre.SPACE_OPERA]:      "Stellar Units",
-  [Genre.POST_APOCALYPTIC]: "Caps",
-  default:                  "Currency",
-};
+import { getGenreColors } from "@/components/game/genre-ui";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -51,7 +44,9 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
   const inventory    = useGameStore((s) => s.masterState?.player_state.inventory) ?? [];
   const isProcessing = useGameStore((s) => s.isProcessing);
   const genre        = useGameStore((s) => s.masterState?.metadata.genre) ?? Genre.FANTASY;
-  const currencyLbl  = CURRENCY_LABELS[genre] ?? CURRENCY_LABELS.default;
+  // Day 18 — currency from genre config; null for Horror (no currency).
+  const currencyLbl  = getGenreColors(genre).currency;
+  const hasCurrency  = currencyLbl !== null;
 
   const [selectedId,  setSelectedId]  = useState<string | null>(null);
   const [draggingId,  setDraggingId]  = useState<string | null>(null);
@@ -130,11 +125,12 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
   }
 
   // SMALL FIX 2: include "Worth: N CCY" in the compact slot tooltip so the
-  // player sees value on hover without expanding the detail card.
+  // player sees value on hover without expanding the detail card. For
+  // currency-less genres (Horror) the worth line is suppressed.
   function slotTooltip(item: Item | null): string {
     if (!item) return "";
     const lines = [item.name];
-    if (typeof item.value === "number" && item.value > 0) {
+    if (hasCurrency && typeof item.value === "number" && item.value > 0) {
       lines.push(`Worth: ${item.value} ${currencyLbl}`);
     }
     return lines.join("\n");
@@ -329,8 +325,8 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
             </p>
           )}
 
-          {/* Day 16 — sell value */}
-          {typeof selectedItem.value === "number" && selectedItem.value > 0 && (
+          {/* Day 16 — sell value. Hidden in currency-less genres (Horror). */}
+          {hasCurrency && typeof selectedItem.value === "number" && selectedItem.value > 0 && (
             <p
               className="text-[9px]"
               style={{ color: "var(--color-muted)" }}

@@ -332,6 +332,28 @@ export function useGameLoop() {
         parsedAction = { ...parsedAction, primary_target: options.npcName };
       }
 
+      // ── 2c. BUG FIX 3: NPC location guard for free-typed quoted dialogue ──
+      // When the player free-types quoted speech and the active dialogue NPC
+      // isn't actually at the current node anymore (player walked away in a
+      // previous beat, or seed re-applied), clear the modal so we don't
+      // summon them from the previous location.
+      if (parsedAction.action_type === ActionType.DIALOGUE) {
+        const graph2      = state.world_graph;
+        const currentNode2 = graph2?.nodes[graph2.current_node_id];
+        const gsBefore     = useGameStore.getState();
+        if (currentNode2 && gsBefore.currentDialogueNpc) {
+          const npcAtNode = (currentNode2.npc_ids ?? []).some(
+            (id) =>
+              id === gsBefore.currentDialogueNpcKey ||
+              id === normalizeAssetId(AssetCategory.CHARACTER, gsBefore.currentDialogueNpc as string)
+          );
+          if (!npcAtNode) {
+            console.log("[GameLoop/2c] Active NPC not at current node — clearing dialogue modal");
+            gsBefore.clearDialogueOptions();
+          }
+        }
+      }
+
       // ── 3. Resolve action ──────────────────────────────────────────────────
       const resolution = resolveAction(parsedAction, state);
 
@@ -347,6 +369,15 @@ export function useGameLoop() {
       if (rollMsg) {
         store.addMessage(makeMessage("SYSTEM", rollMsg));
         updatedState = persistLogEntry(updatedState, LogEntryType.COMBAT, rollMsg);
+      } else {
+        // BUG FIX 4c: trace silently dropped checks so we can see when a
+        // resolver populated stat_checked but failed to populate roll (or
+        // some other field), preventing buildRollFeedback from rendering.
+        console.log("[GameLoop/3b] No roll feedback. ctx:", {
+          roll:         resolution.narrative_context?.roll,
+          stat_checked: resolution.narrative_context?.stat_checked,
+          outcome_type: resolution.outcome_type,
+        });
       }
 
       // ── 4b. Fast path — inventory management actions skip the Narrator ─────
@@ -388,6 +419,9 @@ export function useGameLoop() {
           }
         : updatedState;
 
+      // Day 18 — read player's verbosity preference from the store.
+      const currentVerbosity = useGameStore.getState().verbosity;
+
       let narratorResponse;
       try {
         narratorResponse = await narrateAction(
@@ -395,7 +429,8 @@ export function useGameLoop() {
           narratorState,
           lastNarrative,
           parsedAction,
-          locationAssets
+          locationAssets,
+          currentVerbosity
         );
       } catch {
         // Narrator failed — still save the resolved state so the action sticks.
@@ -420,6 +455,16 @@ export function useGameLoop() {
       // DIALOGUE actions get their own message type so StoryFeed can style
       // them with the NPC accent colour and quoted presentation.
       const isDialogueAction = parsedAction.action_type === ActionType.DIALOGUE;
+      // Day 18 — for MOVE that lands on a known graph node, pin the
+      // destination name onto the metadata so StoryFeed can render the
+      // arrival header (◈ Name).
+      const arrivalLocationName: string | null = (() => {
+        if (resolution.outcome_type !== "MOVE_SUCCESS") return null;
+        const graph = updatedState.world_graph;
+        if (!graph) return null;
+        const targetId = updatedState.world_state.current_location_id;
+        return graph.nodes[targetId]?.name ?? null;
+      })();
       store.addMessage(
         makeMessage(
           isDialogueAction ? "DIALOGUE" : "NARRATIVE",
@@ -432,6 +477,7 @@ export function useGameLoop() {
             ...(isDialogueAction && parsedAction.primary_target
               ? { npcName: parsedAction.primary_target }
               : {}),
+            ...(arrivalLocationName ? { locationName: arrivalLocationName } : {}),
           }
         )
       );

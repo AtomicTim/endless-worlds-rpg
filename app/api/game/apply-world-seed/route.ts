@@ -211,6 +211,9 @@ export async function POST(request: NextRequest) {
       id:            loc.id,
       name:          loc.name,
       type:          "zone",
+      // BUG FIX 1: carry the seed location's type so the move classifier's
+      // type-keyword channel can route "the inn" → a connected tavern, etc.
+      category:      loc.type,
       zone_id:       loc.id,
       is_expandable: defaultExpandable(loc),
       connections:   defaultConnections(loc, isStarting, startingId),

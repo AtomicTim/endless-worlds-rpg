@@ -154,7 +154,23 @@ export function getNarratorPersonality(genre: Genre): string {
  * Defines the Game Master role, response-length tiers, points of interest,
  * codex contributions, and the strict JSON output schema.
  */
-export function buildNarratorSystemPrompt(state: MasterState): string {
+export type Verbosity = "terse" | "standard" | "rich";
+
+const VERBOSITY_BLOCKS: Record<Verbosity, string> = {
+  terse:    `\n\nRESPONSE LENGTH — TERSE:
+Routine actions: 1-2 sentences. Movement: 1-2 sentences.
+NPC responses: 2-3 sentences max.
+New location / major moment: 3-4 sentences absolute max.
+Be direct. No flourishes.`,
+  standard: `\n\nRESPONSE LENGTH — STANDARD:
+Routine: 2-3 sentences. Movement: 2-3.
+NPC: 3-4 sentences. New location / major: 5-7 max.`,
+  rich:     `\n\nRESPONSE LENGTH — RICH:
+Full atmospheric prose. NPC: 4-6 sentences.
+New location: 6-8 sentences. Major moments: 8-12.`,
+};
+
+export function buildNarratorSystemPrompt(state: MasterState, verbosity: Verbosity = "standard"): string {
   const { genre, tone } = state.metadata;
   const personality = getNarratorPersonality(genre);
   const soundList   = SOUND_IDS.join(" | ");
@@ -486,7 +502,7 @@ trust_changes entries MUST match this shape (only when a notable shift occurs):
   "npc_key": "snake_case NPC key from registry or world assets",
   "delta": -20,
   "reason": "friendly|hostile|helpful|deceptive"
-}`;
+}${VERBOSITY_BLOCKS[verbosity]}`;
 }
 
 const SUMMARISE_FLAG = (key: string, value: boolean | number | string) => `${key}=${value}`;
@@ -867,6 +883,17 @@ export function buildNarratorUserPrompt(
   }
   if (ctx.already_searched === true) {
     prompt += "\n\nCONTAINER ALREADY SEARCHED: The player has already searched this container. Describe it as empty, picked clean — nothing new to find. Set items_acquired to an empty array.";
+  }
+
+  // BUG FIX 3: When the player attempts DIALOGUE at a node with no NPCs,
+  // the narrator must NOT invent a respondent. This is the symmetric pair
+  // of the NPCS PRESENT block — that one says "only these NPCs"; this one
+  // says "no NPCs, so no character to speak".
+  if (action?.action_type === ActionType.DIALOGUE && currentNode && currentNode.npc_ids.length === 0) {
+    prompt += "\n\nIMPORTANT: There are no named characters at this location. " +
+      "If the player speaks using quotes, describe ambient sounds or the " +
+      "environment only. Do NOT create a character to respond. The player " +
+      "may be talking to themselves, to no one, or to an inanimate object.";
   }
 
   // Day 18 — ZONE_EXPAND: a new sub_location within the current zone.

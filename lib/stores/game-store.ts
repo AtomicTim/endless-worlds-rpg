@@ -59,6 +59,11 @@ interface GameStore {
    *  while this array is non-empty. */
   currentTradeItems:      Item[];
 
+  // ── Day 18 — Verbosity ─────────────────────────────────────────────────────
+  /** Narrator response-length preference. Hydrated from localStorage on
+   *  store initialisation; setVerbosity() persists it back. */
+  verbosity:              "terse" | "standard" | "rich";
+
   setMasterState:          (state: MasterState) => void;
   addMessage:              (message: StoryMessage) => void;
   setProcessing:           (isProcessing: boolean, step?: string) => void;
@@ -82,6 +87,8 @@ interface GameStore {
   /** Replace the merchant's items_for_sale list. Pass [] to close the
    *  Trade Modal entirely. */
   setTradeItems:           (items: Item[]) => void;
+  /** Narrator response-length toggle. Persists to localStorage. */
+  setVerbosity:            (v: "terse" | "standard" | "rich") => void;
   /** Wipe all per-session state so a fresh session loads with a clean slate.
    *  Does NOT clear masterState — that is replaced by the caller right after.
    *  Use ONLY when switching to a different save slot. */
@@ -93,6 +100,22 @@ interface GameStore {
   clearTransientState:     () => void;
 
   persistedLogEntries: LogEntry[];
+}
+
+// ── Day 18 — verbosity persistence (SSR-safe: typeof window check) ───────────
+const VERBOSITY_KEY = "rpg-verbosity";
+function loadVerbosity(): "terse" | "standard" | "rich" {
+  if (typeof window === "undefined") return "standard";
+  const raw = window.localStorage.getItem(VERBOSITY_KEY);
+  return raw === "terse" || raw === "rich" ? raw : "standard";
+}
+function saveVerbosity(v: "terse" | "standard" | "rich"): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(VERBOSITY_KEY, v);
+  } catch {
+    // localStorage may be disabled — silently fall back to in-memory only.
+  }
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -111,6 +134,7 @@ export const useGameStore = create<GameStore>((set) => ({
   currentNpcPortrait:     null,
   dialogueModalCollapsed: false,
   currentTradeItems:      [],
+  verbosity:              loadVerbosity(),
 
   setMasterState:       (state) => set({ masterState: state }),
   addMessage:           (message) => set((s) => ({ messages: [...s.messages, message] })),
@@ -168,6 +192,10 @@ export const useGameStore = create<GameStore>((set) => ({
   setDialogueModalCollapsed: (collapsed) =>
     set({ dialogueModalCollapsed: collapsed }),
   setTradeItems: (items) => set({ currentTradeItems: items }),
+  setVerbosity: (v) => {
+    saveVerbosity(v);
+    set({ verbosity: v });
+  },
   clearSessionState: () =>
     set({
       persistedLogEntries:    [],

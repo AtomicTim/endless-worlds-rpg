@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Menu, X, BookOpen, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/layout/UserMenu";
+import { VerbosityToggle } from "@/components/game/VerbosityToggle";
 import { Genre } from "@/types/game";
 import { useGameStore } from "@/lib/stores/game-store";
 
@@ -103,6 +104,9 @@ export function GameLayout({
 
         {/* Right side */}
         <div className="flex items-center gap-2">
+          {/* Day 18 — verbosity toggle (genre-themed) */}
+          <VerbosityToggle />
+
           {/* Save & Exit */}
           <button
             onClick={() => { void handleSaveAndExit(); }}

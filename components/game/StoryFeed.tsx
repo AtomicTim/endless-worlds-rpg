@@ -2,9 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { StoryMessage } from "@/lib/stores/game-store";
+import { useGameStore } from "@/lib/stores/game-store";
+import { Genre } from "@/types/game";
 import type { PointOfInterest } from "@/types/game";
 import { InteractionPopover } from "./InteractionPopover";
 import { POI_COLORS } from "./poi-colors";
+import { getGenreColors } from "./genre-ui";
 
 // Re-export so existing import sites keep working.
 export type { StoryMessage } from "@/lib/stores/game-store";
@@ -16,6 +19,15 @@ interface StoryFeedProps {
   onSubmit?: (input: string) => void;
 }
 
+/** Detect SYSTEM messages that are stat-check feedback — rendered as a
+ *  framed mechanical receipt. Format produced by buildRollFeedback. */
+function isStatCheckMessage(content: string): { isCheck: boolean; passed: boolean } {
+  if (!content.includes("check:")) return { isCheck: false, passed: false };
+  if (content.includes("Passed")) return { isCheck: true, passed: true };
+  if (content.includes("Failed")) return { isCheck: true, passed: false };
+  return { isCheck: false, passed: false };
+}
+
 interface PopoverState {
   point:    PointOfInterest;
   position: { x: number; y: number };
@@ -24,6 +36,9 @@ interface PopoverState {
 export function StoryFeed({ messages, isLoading = false, onSubmit }: StoryFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [popover, setPopover] = useState<PopoverState | null>(null);
+  // Day 18 — every genre themes the feed via getGenreColors. Read once here
+  // and pass down so MessageEntry doesn't subscribe N times.
+  const genre = useGameStore((s) => s.masterState?.metadata.genre) ?? Genre.FANTASY;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -44,9 +59,12 @@ export function StoryFeed({ messages, isLoading = false, onSubmit }: StoryFeedPr
     // content size and scroll independently when the DialogueModal takes up
     // its own row in the column. Without it, flex's default `min-height: auto`
     // would let the feed grow and push the modal/InputBar off-screen.
-    <div className="scrollbar-thin min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
+    <div
+      className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-4 py-4"
+      style={{ fontFamily: "var(--font-mono)" }}
+    >
       {messages.map((msg) => (
-        <MessageEntry key={msg.id} message={msg} onPoiClick={openPopover} />
+        <MessageEntry key={msg.id} message={msg} onPoiClick={openPopover} genre={genre} />
       ))}
 
       {isLoading && (
@@ -75,78 +93,186 @@ export function StoryFeed({ messages, isLoading = false, onSubmit }: StoryFeedPr
 interface MessageEntryProps {
   message:    StoryMessage;
   onPoiClick: (point: PointOfInterest, e: React.MouseEvent) => void;
+  genre:      Genre;
 }
 
-function MessageEntry({ message, onPoiClick }: MessageEntryProps) {
+function MessageEntry({ message, onPoiClick, genre }: MessageEntryProps) {
   const { type, content, metadata } = message;
-  const restored = metadata?.restored === true;
-  const npcName =
+  const restored  = metadata?.restored === true;
+  const npcName   =
     typeof metadata?.npcName === "string" ? metadata.npcName : undefined;
+  const locationName =
+    typeof metadata?.locationName === "string" ? metadata.locationName : undefined;
   const points =
     Array.isArray(metadata?.points_of_interest)
       ? (metadata!.points_of_interest as PointOfInterest[])
       : [];
 
+  // Day 18 — every accent on every message ultimately reads through this.
+  const colors = getGenreColors(genre);
+
   const inner = (() => {
   switch (type) {
     case "NARRATIVE":
+      // 6a — NARRATIVE with a locationName on metadata renders the genre-themed
+      // arrival header (◈ NAME) above the body prose.
       return (
-        <p
-          className="message-enter font-mono text-sm leading-relaxed"
-          style={{ color: "var(--color-text)" }}
-        >
-          {renderNarrativeText(content, points, onPoiClick)}
-        </p>
+        <div className="message-enter">
+          {locationName && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "12px 0 8px" }}>
+              <div style={{ flex: 1, height: 1, background: "#2a3040" }} />
+              <span
+                style={{
+                  color:         colors.primary,
+                  fontSize:      13,
+                  fontWeight:    "bold",
+                  letterSpacing: "0.05em",
+                  fontFamily:    "var(--font-mono)",
+                }}
+              >
+                ◈ {locationName}
+              </span>
+              <div style={{ flex: 1, height: 1, background: "#2a3040" }} />
+            </div>
+          )}
+          <p
+            style={{
+              color:      "#8899aa",
+              lineHeight: 1.7,
+              margin:     "8px 0",
+              fontFamily: "var(--font-mono)",
+              fontSize:   12,
+            }}
+          >
+            {renderNarrativeText(content, points, onPoiClick)}
+          </p>
+        </div>
       );
 
-    case "SYSTEM":
+    case "SYSTEM": {
+      // 6f — Player action echo (lines starting with "> ").
+      if (content.startsWith("> ")) {
+        return (
+          <div
+            className="message-enter"
+            style={{
+              color:      "#446644",
+              fontSize:   12,
+              margin:     "10px 0 4px",
+              fontFamily: "var(--font-mono)",
+            }}
+          >
+            ◈ &gt; {content.slice(2)}
+          </div>
+        );
+      }
+      // 6c — Stat check feedback (mechanical receipt).
+      const check = isStatCheckMessage(content);
+      if (check.isCheck) {
+        const barColor   = check.passed ? "#22aa44" : "#aa3322";
+        const labelColor = check.passed ? "#44aa66" : "#aa4433";
+        return (
+          <div
+            className="message-enter"
+            style={{
+              background:    "rgba(0,0,0,0.3)",
+              borderLeft:    `3px solid ${barColor}`,
+              padding:       "6px 10px",
+              margin:        "6px 0",
+              fontFamily:    "var(--font-mono)",
+              fontSize:      11,
+            }}
+          >
+            <div
+              style={{
+                fontSize:      10,
+                letterSpacing: "0.1em",
+                color:         "#556677",
+                marginBottom:  3,
+              }}
+            >
+              stat check
+            </div>
+            <div style={{ color: labelColor }}>{content}</div>
+          </div>
+        );
+      }
+      // 6d — Generic system event (items acquired, trust, etc.) — italic primary.
       return (
-        <p
-          className="message-enter font-mono text-xs italic"
-          style={{ color: "var(--color-muted)" }}
+        <div
+          className="message-enter"
+          style={{
+            fontSize:   11,
+            color:      colors.primary,
+            fontStyle:  "italic",
+            margin:     "4px 0",
+            fontFamily: "var(--font-mono)",
+          }}
         >
-          ◈ {content}
-        </p>
+          ✦ {content}
+        </div>
       );
+    }
 
     case "COMBAT":
       return (
-        <p className="message-enter font-mono text-sm text-red-400/90">
-          <span className="mr-1.5">⚔</span>
+        <p
+          className="message-enter"
+          style={{
+            color:      "#ef9a9a",
+            fontSize:   12,
+            margin:     "6px 0",
+            fontFamily: "var(--font-mono)",
+          }}
+        >
+          <span style={{ marginRight: 6 }}>⚔</span>
           {content}
         </p>
       );
 
     case "DIALOGUE":
+      // 6b — NPC dialogue: name in genre-primary above a quoted block.
       return (
-        <div
-          className="message-enter space-y-0.5 border-l-2"
-          style={{ borderColor: "var(--color-accent)", paddingLeft: "12px" }}
-        >
-          {npcName && (
-            <span
-              className="block text-[10px] font-bold uppercase tracking-widest"
-              style={{ color: "var(--color-accent)" }}
-            >
-              {npcName}
-            </span>
-          )}
-          <p className="font-mono text-sm leading-relaxed">
+        <div className="message-enter" style={{ margin: "8px 0" }}>
+          <div
+            style={{
+              fontSize:      11,
+              fontWeight:    "bold",
+              color:         colors.primary,
+              letterSpacing: "0.08em",
+              marginBottom:  4,
+              fontFamily:    "var(--font-mono)",
+              textTransform: "uppercase",
+            }}
+          >
+            {npcName ?? "Unknown"}
+          </div>
+          <div
+            style={{
+              borderLeft:  `3px solid ${colors.primary}`,
+              padding:     "4px 10px",
+              background:  "rgba(0,0,0,0.2)",
+              color:       "#ccd8e8",
+              fontFamily:  "var(--font-mono)",
+              fontSize:    12,
+              lineHeight:  1.7,
+            }}
+          >
             {parseDialogueText(content).map((seg, i) =>
               seg.isQuote ? (
                 <span
                   key={i}
-                  style={{ color: "var(--color-accent)", fontStyle: "italic" }}
+                  style={{ color: colors.primary, fontStyle: "italic" }}
                 >
                   {seg.content}
                 </span>
               ) : (
-                <span key={i} style={{ color: "var(--color-text)" }}>
+                <span key={i} style={{ color: "#ccd8e8" }}>
                   {seg.content}
                 </span>
               )
             )}
-          </p>
+          </div>
         </div>
       );
 
@@ -154,7 +280,7 @@ function MessageEntry({ message, onPoiClick }: MessageEntryProps) {
       return (
         <pre
           className="message-enter ascii-art text-glow overflow-x-auto"
-          style={{ color: "var(--color-primary)" }}
+          style={{ color: colors.primary, fontFamily: "var(--font-mono)" }}
         >
           {content}
         </pre>
@@ -165,20 +291,35 @@ function MessageEntry({ message, onPoiClick }: MessageEntryProps) {
         typeof metadata?.item_name === "string" ? metadata.item_name : undefined;
       return (
         <div
-          className="message-enter border-l-2 pl-3"
-          style={{ borderColor: "color-mix(in srgb, var(--color-primary) 50%, transparent)" }}
+          className="message-enter"
+          style={{
+            borderLeft:  `2px solid color-mix(in srgb, ${colors.primary} 50%, transparent)`,
+            paddingLeft: 12,
+            margin:      "8px 0",
+            fontFamily:  "var(--font-mono)",
+          }}
         >
           {itemName && (
             <span
-              className="block text-[10px] font-bold uppercase tracking-widest"
-              style={{ color: "var(--color-primary)" }}
+              style={{
+                display:       "block",
+                fontSize:      10,
+                fontWeight:    "bold",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color:         colors.primary,
+              }}
             >
               {itemName}
             </span>
           )}
           <p
-            className="font-mono text-sm italic leading-relaxed"
-            style={{ color: "color-mix(in srgb, var(--color-text) 80%, transparent)" }}
+            style={{
+              fontSize:   13,
+              fontStyle:  "italic",
+              lineHeight: 1.6,
+              color:      "color-mix(in srgb, #8899aa 90%, transparent)",
+            }}
           >
             {content}
           </p>

@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
     lastNarrativeText?: string;
     action?:            ParsedAction;
     locationAssets?:    WorldAsset[];
+    verbosity?:         "terse" | "standard" | "rich";
   };
   try {
     body = await request.json();
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { resolutionResult, masterState, lastNarrativeText, action, locationAssets } = body;
+  const { resolutionResult, masterState, lastNarrativeText, action, locationAssets, verbosity } = body;
   if (!resolutionResult || !masterState) {
     return NextResponse.json(
       { error: "Missing resolutionResult or masterState" },
@@ -62,7 +63,11 @@ export async function POST(request: NextRequest) {
 
   const safeAssets = Array.isArray(locationAssets) ? locationAssets : null;
 
-  const systemPrompt = buildNarratorSystemPrompt(masterState);
+  // Day 18 — verbosity from the client store; defaults to "standard" so old
+  // callers keep behaving identically.
+  const validVerbosity: "terse" | "standard" | "rich" =
+    verbosity === "terse" || verbosity === "rich" ? verbosity : "standard";
+  const systemPrompt = buildNarratorSystemPrompt(masterState, validVerbosity);
   const userPrompt   = buildNarratorUserPrompt(
     resolutionResult,
     masterState,

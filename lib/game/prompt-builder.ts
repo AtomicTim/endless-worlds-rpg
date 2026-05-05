@@ -412,6 +412,7 @@ JSON OUTPUT — Respond ONLY with valid JSON matching this exact schema (no mark
   "revealed_npc_names": [],
   "dialogue_options": [],
   "trust_changes": [],
+  "items_for_sale": [],
   "log_summary": "12-word max journal shorthand of this beat. No 'You'. No 'I'. No 'explored'. Third-person or fragments. Examples: 'Attacked goblin. Hit for 8 damage.' | 'Spoke with Old Hermit. He seemed suspicious.' | 'Discovered hidden chamber beneath the ruins.' | 'Arrived at the Iron Gate fortress.'"
 }
 
@@ -438,8 +439,14 @@ items_acquired entries MUST match this shape (only on success AND when narrative
   "effect": "heal_20 | buff_strength_2 | sanity_10 | or empty string",
   "quantity": 1,
   "stackable": false,
-  "weight": 1
+  "weight": 1,
+  "value": 10
 }
+Every item MUST include a value field — sell price in genre currency.
+Use rarity as guide: Common 5-15, Uncommon 20-50, Rare 100-300, Legendary 500+.
+Value reflects worth to a merchant, not sentimental value.
+
+items_for_sale entries use the SAME shape as items_acquired (id, name, type, rarity, description, effect, quantity, stackable, weight, value). Populate ONLY when the resolution context flags a TRADE INTERACTION — list 3-5 items the merchant has on offer with appropriate values. These items are NOT granted to the player; they are merchant inventory shown in the trade UI for the player to choose from.
 
 points_of_interest entries MUST match this shape:
 {
@@ -784,6 +791,18 @@ export function buildNarratorUserPrompt(
   }
   if (ctx.already_searched === true) {
     prompt += "\n\nCONTAINER ALREADY SEARCHED: The player has already searched this container. Describe it as empty, picked clean — nothing new to find. Set items_acquired to an empty array.";
+  }
+
+  // Day 16 — TRADE block fires when resolveInteract detects merchant keywords.
+  if (ctx.trade_available === true) {
+    prompt += "\n\nTRADE INTERACTION: The player is approaching a merchant. " +
+      "Generate items_for_sale in your response — 3-5 items the merchant is " +
+      "selling with appropriate values for this genre. These are NOT granted " +
+      "to the player — they are merchant inventory for sale. Use sensible " +
+      "rarity/value combinations: a battered roadside vendor offers Common " +
+      "supplies (value 5-15), a specialist artisan offers Uncommon goods " +
+      "(value 20-50), a master trader may have Rare items (value 100-300). " +
+      "Leave items_acquired EMPTY — the player has not bought anything yet.";
   }
 
   // Lovecraftian + low sanity → unreliable narrator instruction.

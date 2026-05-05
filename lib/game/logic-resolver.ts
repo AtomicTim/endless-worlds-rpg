@@ -195,16 +195,34 @@ function resolveExamine(action: ParsedAction, state: MasterState): ResolutionRes
 
 // ── INTERACT ──────────────────────────────────────────────────────────────────
 
+// Words in the player's stated target / intent that suggest the player is
+// approaching a merchant for trade. Detected here so the narrator gets a
+// trade_available flag and emits items_for_sale.
+const TRADE_KEYWORDS = [
+  "merchant", "trader", "shopkeeper", "vendor", "shop", "wares",
+  "buy", "sell", "barter", "purchase", "browse",
+];
+
+function isTradeInteraction(action: ParsedAction): boolean {
+  const haystack = `${action.primary_target ?? ""} ${action.inferred_intent}`.toLowerCase();
+  return TRADE_KEYWORDS.some((k) => haystack.includes(k));
+}
+
 function resolveInteract(action: ParsedAction, state: MasterState): ResolutionResult {
   const targetRaw = action.primary_target ?? "";
   const target    = normalizeKey(targetRaw);
+  const tradeAvailable = isTradeInteraction(action);
 
   if (!target) {
     return {
       success: true,
       outcome_type: "INTERACT_GENERIC",
       state_delta: { world_state: PRESENT },
-      narrative_context: { target: null, relevant_flags: {} },
+      narrative_context: {
+        target: null,
+        relevant_flags: {},
+        ...(tradeAvailable ? { trade_available: true } : {}),
+      },
     };
   }
 
@@ -246,6 +264,9 @@ function resolveInteract(action: ParsedAction, state: MasterState): ResolutionRe
       object_confirmed:       true,
       object_name:            action.primary_target ?? target,
       object_exists_message:  "This object exists. The player is interacting with it right now. Do not deny its existence.",
+      // Day 16 — flag the narrator that this is a merchant interaction so it
+      // emits items_for_sale.
+      ...(tradeAvailable ? { trade_available: true } : {}),
     },
   };
 }

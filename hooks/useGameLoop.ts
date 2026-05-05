@@ -9,11 +9,21 @@ import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory, upda
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
 import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, updateWorldAssetSvg, updateAssetNameRevealed } from "@/lib/game/codex";
 import { generateArt, generateNpcPortrait, getSceneType } from "@/lib/game/art-generator";
-import { ActionType, AssetCategory, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
-import type { MasterState, ParsedAction, ResolutionResult, StoredMessage, WorldAsset } from "@/types/game";
+import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
+import type { Item, MasterState, ParsedAction, ResolutionResult, StoredMessage, WorldAsset } from "@/types/game";
 
 const MAX_INPUT_LENGTH  = 500;
 const AUTO_SAVE_INTERVAL = 10;
+
+// Genre → resources key under which the primary currency is stored. Mirrors
+// the table in CharacterSheet — kept here so the trade hook never imports UI.
+// Horror/Lovecraftian has no primary currency by design (sanity is its scarcity).
+const GENRE_CURRENCY_KEY: Partial<Record<Genre, string>> = {
+  [Genre.FANTASY]:          "gold",
+  [Genre.CYBERPUNK]:        "credits",
+  [Genre.SPACE_OPERA]:      "stellar_units",
+  [Genre.POST_APOCALYPTIC]: "caps",
+};
 
 // Module-level counter — persists across renders, resets when the module reloads.
 let autoSaveActionCount = 0;
@@ -262,6 +272,11 @@ export function useGameLoop() {
 
   const submitAction = useCallback(async (input: string, options?: { npcName?: string }) => {
     const store = useGameStore.getState();
+
+    // BUG FIX 1: track whether step 7d revealed a true name this beat. If it
+    // did, step 7g must use that name in setDialogueOptions instead of the
+    // stale placeholder, otherwise step 7g's call overwrites step 7d's update.
+    let justRevealedName: string | null = null;
 
     // ── 1. Validate input ────────────────────────────────────────────────────
     const trimmed = input.trim();
@@ -684,6 +699,9 @@ export function useGameLoop() {
                 gs.currentDialogueNpcKey ?? computedNpcKey ?? effectiveAssetId
               );
               console.log("[GameLoop/7d] Modal header updated to:", trueName);
+              // BUG FIX 1: pin the revealed name so step 7g doesn't overwrite
+              // it with the stale placeholder when it calls setDialogueOptions.
+              justRevealedName = trueName;
             }
           }
         }
@@ -786,7 +804,12 @@ export function useGameLoop() {
               ) ?? null
             : null;
 
-          const npcName = continuingSameNpc ? existingNpc : effectiveNpcName;
+          // BUG FIX 1: if step 7d revealed a true name this beat, that's the
+          // authoritative current display name — use it instead of the stale
+          // placeholder that effectiveNpcName / existingNpc still hold.
+          const npcName =
+            justRevealedName
+              ?? (continuingSameNpc ? existingNpc : effectiveNpcName);
           const portrait =
             continuingSameNpc && existingPortrait
               ? existingPortrait
@@ -857,6 +880,19 @@ export function useGameLoop() {
         } else if (!isDialogueAction) {
           store.clearDialogueOptions();
         }
+      }
+
+      // ── 7h. Day 16 — TRADE: items_for_sale → Trade Modal ────────────────────
+      // The narrator emits items_for_sale when resolveInteract flagged
+      // trade_available. Push them into the store so the Trade Modal opens.
+      // Subsequent non-trade actions don't auto-clear — the player closes the
+      // modal explicitly so they can browse over multiple turns.
+      if (narratorResponse.items_for_sale && narratorResponse.items_for_sale.length > 0) {
+        store.setTradeItems(narratorResponse.items_for_sale);
+        console.log(
+          "[GameLoop/7h] items_for_sale received:",
+          narratorResponse.items_for_sale.length
+        );
       }
 
       // ── 8. Merge new NPCs into registry ────────────────────────────────────
@@ -1018,11 +1054,83 @@ export function useGameLoop() {
     }
   }, []);
 
+  // ── Day 16 — Trade actions ─────────────────────────────────────────────────
+  // Buy / sell are dispatched from the TradeModal. They mutate masterState and
+  // currentTradeItems directly via the store, log a DISCOVERY entry, and
+  // fire-and-forget the world-state persist. They never go through the
+  // narrator — pure mechanical commerce.
+
+  const buyItem = useCallback((item: Item) => {
+    const gs = useGameStore.getState();
+    const state = gs.masterState;
+    if (!state) return;
+
+    const currencyKey = GENRE_CURRENCY_KEY[state.metadata.genre];
+    if (!currencyKey) {
+      gs.addMessage(makeMessage("SYSTEM", "This genre does not use currency."));
+      return;
+    }
+    const balance = state.player_state.resources[currencyKey] ?? 0;
+    const cost    = typeof item.value === "number" ? item.value : 0;
+    if (balance < cost) {
+      gs.addMessage(makeMessage("SYSTEM", `You can't afford ${item.name} (need ${cost}, have ${balance}).`));
+      return;
+    }
+
+    // Add a single copy with quantity 1 (merchant offer is per-item).
+    const purchased: Item = { ...item, quantity: 1, equipped: false };
+    let next = addToInventory(state, purchased);
+    next = {
+      ...next,
+      player_state: {
+        ...next.player_state,
+        resources: { ...next.player_state.resources, [currencyKey]: balance - cost },
+      },
+    };
+    next = persistLogEntry(next, LogEntryType.DISCOVERY, `Bought: ${item.name} (${cost})`);
+
+    gs.setMasterState(next);
+    gs.setTradeItems(gs.currentTradeItems.filter((i) => i.id !== item.id));
+    gs.addMessage(makeMessage("SYSTEM", `[ Bought: ${item.name} for ${cost} ]`));
+  }, []);
+
+  const sellItem = useCallback((item: Item) => {
+    const gs = useGameStore.getState();
+    const state = gs.masterState;
+    if (!state) return;
+
+    const currencyKey = GENRE_CURRENCY_KEY[state.metadata.genre];
+    if (!currencyKey) {
+      gs.addMessage(makeMessage("SYSTEM", "This genre does not use currency."));
+      return;
+    }
+
+    const owned = state.player_state.inventory.find((i) => i.id === item.id);
+    if (!owned) return;
+
+    const sellPrice = Math.max(1, Math.floor(((item.value ?? 0)) * 0.5));
+    let next        = removeFromInventory(state, item.id, 1);
+    const balance   = next.player_state.resources[currencyKey] ?? 0;
+    next = {
+      ...next,
+      player_state: {
+        ...next.player_state,
+        resources: { ...next.player_state.resources, [currencyKey]: balance + sellPrice },
+      },
+    };
+    next = persistLogEntry(next, LogEntryType.DISCOVERY, `Sold: ${item.name} for ${sellPrice}`);
+
+    gs.setMasterState(next);
+    gs.addMessage(makeMessage("SYSTEM", `[ Sold: ${item.name} for ${sellPrice} ]`));
+  }, []);
+
   return {
     submitAction,
     isProcessing,
     processingStep,
     messages,
     masterState,
+    buyItem,
+    sellItem,
   };
 }

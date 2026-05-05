@@ -6,6 +6,7 @@ import { GameLayout } from "@/components/layout/GameLayout";
 import { StoryFeed } from "@/components/game/StoryFeed";
 import { InputBar, type InputBarHandle } from "@/components/game/InputBar";
 import { DialogueModal } from "@/components/game/DialogueModal";
+import { TradeModal } from "@/components/game/TradeModal";
 import { SceneArt } from "@/components/game/SceneArt";
 import { CharacterSheet } from "@/components/game/sidebar/CharacterSheet";
 import { InventoryPanel } from "@/components/game/sidebar/InventoryPanel";
@@ -41,7 +42,7 @@ export default function GamePage() {
   const masterState   = useGameStore((s) => s.masterState);
   const messages      = useGameStore((s) => s.messages);
 
-  const { submitAction, isProcessing, processingStep } = useGameLoop();
+  const { submitAction, isProcessing, processingStep, buyItem, sellItem } = useGameLoop();
 
   // ── Load session on mount ─────────────────────────────────────────────────
   // Reads ?session_id= from the URL to load a specific save slot.
@@ -194,6 +195,7 @@ export default function GamePage() {
             onSubmit={(input, opts) => { void submitAction(input, opts); }}
             onFocusInput={() => { inputBarRef.current?.focus(); }}
           />
+          <TradeModal onBuy={buyItem} onSell={sellItem} />
           <InputBar
             ref={inputBarRef}
             onSubmit={(input) => {

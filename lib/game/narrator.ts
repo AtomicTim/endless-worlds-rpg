@@ -77,6 +77,20 @@ function normalizeNarratorItem(raw: unknown): Item | null {
 
   const effect = parseEffectString(typeof o.effect === "string" ? o.effect : "");
 
+  // Day 16 — parse the narrator's `value` field (sell price). When omitted,
+  // derive a sensible default from rarity so older saves and prompts that
+  // miss the field still work.
+  const RARITY_DEFAULTS: Record<ItemRarity, number> = {
+    [ItemRarity.COMMON]:    10,
+    [ItemRarity.UNCOMMON]:  35,
+    [ItemRarity.RARE]:      150,
+    [ItemRarity.LEGENDARY]: 750,
+  };
+  const value =
+    typeof o.value === "number" && o.value > 0
+      ? Math.max(1, Math.round(o.value))
+      : RARITY_DEFAULTS[rarity];
+
   return {
     id,
     name,
@@ -87,6 +101,7 @@ function normalizeNarratorItem(raw: unknown): Item | null {
     quantity:  typeof o.quantity  === "number" ? o.quantity  : 1,
     stackable: typeof o.stackable === "boolean" ? o.stackable : type === ItemType.CONSUMABLE,
     weight:    typeof o.weight    === "number"  ? o.weight    : 1,
+    value,
   };
 }
 
@@ -192,6 +207,10 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
       ? (parsed.items_acquired.map(normalizeNarratorItem).filter(Boolean) as Item[])
       : [];
 
+    const items_for_sale = Array.isArray(parsed.items_for_sale)
+      ? (parsed.items_for_sale.map(normalizeNarratorItem).filter(Boolean) as Item[])
+      : [];
+
     const points_of_interest = Array.isArray(parsed.points_of_interest)
       ? (parsed.points_of_interest.map(normalizePOI).filter(Boolean) as PointOfInterest[])
       : [];
@@ -253,6 +272,7 @@ export function parseNarratorResponse(rawText: string): NarratorResponse {
       ...(log_summary ? { log_summary } : {}),
       ...(dialogue_options.length > 0 ? { dialogue_options } : {}),
       ...(trust_changes.length > 0 ? { trust_changes } : {}),
+      ...(items_for_sale.length > 0 ? { items_for_sale } : {}),
     };
   } catch {
     return {

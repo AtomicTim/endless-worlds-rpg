@@ -84,6 +84,9 @@ export interface Item {
   stat_bonus?: Partial<Attributes>;
   searched?:   boolean;
   contains?:   Item[];
+  /** Sell value in genre currency. Common 5-15, Uncommon 20-50,
+   *  Rare 100-300, Legendary 500+. */
+  value?:      number;
 }
 
 export interface EquippedLoadout {
@@ -281,6 +284,9 @@ export interface NarratorResponse {
   dialogue_options?:   DialogueOption[];
   /** Trust score deltas for NPCs affected by this interaction. */
   trust_changes?:      Array<{ npc_key: string; delta: number; reason: string }>;
+  /** Items the merchant is offering for sale this turn. NOT granted —
+   *  shown to the player in the Trade Modal so they can choose to buy. */
+  items_for_sale?:     Item[];
 }
 
 // ---------------------------------------------------------------------------

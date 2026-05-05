@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { MasterState, WorldAsset, LogEntry, DialogueOption } from "@/types/game";
+import type { MasterState, WorldAsset, LogEntry, DialogueOption, Item } from "@/types/game";
 
 // ── Message types ─────────────────────────────────────────────────────────────
 
@@ -53,6 +53,12 @@ interface GameStore {
   currentNpcPortrait:     string | null;
   dialogueModalCollapsed: boolean;
 
+  // ── Trade Modal ────────────────────────────────────────────────────────────
+  /** Items the current merchant has on offer. Set by step 7 of useGameLoop
+   *  whenever the narrator emits items_for_sale. The TradeModal renders only
+   *  while this array is non-empty. */
+  currentTradeItems:      Item[];
+
   setMasterState:          (state: MasterState) => void;
   addMessage:              (message: StoryMessage) => void;
   setProcessing:           (isProcessing: boolean, step?: string) => void;
@@ -73,6 +79,9 @@ interface GameStore {
   clearDialogueOptions:    () => void;
   /** Toggle the modal between full and collapsed views without clearing options. */
   setDialogueModalCollapsed: (collapsed: boolean) => void;
+  /** Replace the merchant's items_for_sale list. Pass [] to close the
+   *  Trade Modal entirely. */
+  setTradeItems:           (items: Item[]) => void;
   /** Wipe all per-session state so a fresh session loads with a clean slate.
    *  Does NOT clear masterState — that is replaced by the caller right after.
    *  Use ONLY when switching to a different save slot. */
@@ -101,6 +110,7 @@ export const useGameStore = create<GameStore>((set) => ({
   currentDialogueNpcKey:  null,
   currentNpcPortrait:     null,
   dialogueModalCollapsed: false,
+  currentTradeItems:      [],
 
   setMasterState:       (state) => set({ masterState: state }),
   addMessage:           (message) => set((s) => ({ messages: [...s.messages, message] })),
@@ -157,6 +167,7 @@ export const useGameStore = create<GameStore>((set) => ({
     }),
   setDialogueModalCollapsed: (collapsed) =>
     set({ dialogueModalCollapsed: collapsed }),
+  setTradeItems: (items) => set({ currentTradeItems: items }),
   clearSessionState: () =>
     set({
       persistedLogEntries:    [],
@@ -165,6 +176,7 @@ export const useGameStore = create<GameStore>((set) => ({
       currentDialogueNpcKey:  null,
       currentNpcPortrait:     null,
       dialogueModalCollapsed: false,
+      currentTradeItems:      [],
       locationAssets:         [],
       artCache:               {},
       lastNarrativeText:      null,

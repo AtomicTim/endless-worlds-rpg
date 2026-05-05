@@ -2,10 +2,18 @@
 
 import { useState } from "react";
 import { Package } from "lucide-react";
-import { ItemType, ItemRarity } from "@/types/game";
+import { Genre, ItemType, ItemRarity } from "@/types/game";
 import type { Item } from "@/types/game";
 import { useGameStore } from "@/lib/stores/game-store";
 import { SidebarPanel } from "./SidebarPanel";
+
+const CURRENCY_LABELS: Partial<Record<Genre, string>> & { default: string } = {
+  [Genre.FANTASY]:          "Gold",
+  [Genre.CYBERPUNK]:        "Credits",
+  [Genre.SPACE_OPERA]:      "Stellar Units",
+  [Genre.POST_APOCALYPTIC]: "Caps",
+  default:                  "Currency",
+};
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -42,6 +50,8 @@ interface InventoryPanelProps {
 export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
   const inventory    = useGameStore((s) => s.masterState?.player_state.inventory) ?? [];
   const isProcessing = useGameStore((s) => s.isProcessing);
+  const genre        = useGameStore((s) => s.masterState?.metadata.genre) ?? Genre.FANTASY;
+  const currencyLbl  = CURRENCY_LABELS[genre] ?? CURRENCY_LABELS.default;
 
   const [selectedId,  setSelectedId]  = useState<string | null>(null);
   const [draggingId,  setDraggingId]  = useState<string | null>(null);
@@ -305,6 +315,17 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
           {selectedItem.weight !== undefined && (
             <p className="text-[9px]" style={{ color: "var(--color-muted)" }}>
               Weight: {selectedItem.weight}
+            </p>
+          )}
+
+          {/* Day 16 — sell value */}
+          {typeof selectedItem.value === "number" && selectedItem.value > 0 && (
+            <p
+              className="text-[9px]"
+              style={{ color: "var(--color-muted)" }}
+              title={`Sells to merchants for ~${Math.max(1, Math.floor(selectedItem.value * 0.5))} ${currencyLbl} (50% of value)`}
+            >
+              Worth: {selectedItem.value} {currencyLbl}
             </p>
           )}
 

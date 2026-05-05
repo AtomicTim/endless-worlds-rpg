@@ -349,6 +349,12 @@ export async function saveCodexEntry(
  * plus every CHARACTER asset (characters move around the world, so they
  * remain relevant regardless of where they were first introduced).
  *
+ * Robust against historical inconsistency in first_seen_location formatting:
+ * older saves may have stored it as a raw narrative string ("The Wanderer's
+ * Rest inn") while newer ones use the canonical slug ("wanderers_rest_inn").
+ * We fetch every asset for the session, then filter on the client by either
+ * exact match OR normalizeLocationId(first_seen_location) === locationId.
+ *
  * Returns [] on any error so the narrator call always proceeds.
  */
 export async function getWorldAssetsForLocation(
@@ -360,14 +366,21 @@ export async function getWorldAssetsForLocation(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (supabase.from("world_assets") as any)
       .select("*")
-      .eq("session_id", sessionId)
-      .or(`first_seen_location.eq.${locationId},category.eq.CHARACTER`);
+      .eq("session_id", sessionId);
 
     if (error) {
       console.error("[getWorldAssetsForLocation]", error);
       return [];
     }
-    return (data as WorldAssetRow[] | null ?? []).map(rowToWorldAsset);
+    const rows = (data as WorldAssetRow[] | null) ?? [];
+    return rows
+      .filter((r) => {
+        if (r.category === "CHARACTER") return true;
+        if (!r.first_seen_location)     return false;
+        if (r.first_seen_location === locationId) return true;
+        return normalizeLocationId(r.first_seen_location) === locationId;
+      })
+      .map(rowToWorldAsset);
   } catch (err) {
     console.error("[getWorldAssetsForLocation] unexpected", err);
     return [];

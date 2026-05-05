@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 7.2
+**Version:** 7.3
 **Status:** Active Development — World Generation Redesign
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
@@ -8,7 +8,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Day 19C — Ambient Object System
+**Current Phase:** Day 19D — Regional Bible (Phase 2)
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -19,8 +19,8 @@
 | 15–18 | Dialogue, UI, World Graph, Systems Audit | ✅ Complete |
 | 19A | World Consistency Document | ✅ Complete |
 | 19B | World Bible Redesign | ✅ Complete |
-| 19C | Ambient Object System | 🔄 In Progress |
-| 19D | Regional Bible (Phase 2) | ⏳ Pending |
+| 19C | Ambient Object System | ✅ Complete |
+| 19D | Regional Bible (Phase 2) | 🔄 In Progress |
 | 19E | Narrator Constraints + Highlight Overhaul | ⏳ Pending |
 | 19F | Three-Tier Map Component | ⏳ Pending |
 | 20+ | Combat, Skills, Background | ⏳ Pending |
@@ -28,51 +28,39 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Day 19B Deliverables (commit d5b41b0 — 86/86 tests, clean build)
-- LocationObject, LocationDefinition, NPCDefinition, RegionExit, QuestBreadcrumb, MainQuest, RegionOutline, RegionBible, WorldBible types added
-- Metadata.main_quest optional field added
-- /api/game/generate-world-bible — POST, WCD-seeded, 4000 tokens, retry + validation
-- /api/game/apply-world-bible — writes all locations, NPCs, objects as world_assets, builds WorldGraph, patches master_state
-- /app/game/new/page.tsx — 5-step wizard using WorldBible flow
-- Legacy WorldSeed routes preserved for old saves
+### Day 19C Deliverables (commit 4e7ab6f — 86/86 tests, clean build)
+- /lib/game/ambient-objects.ts — 27 ambient_type keys, all 5 genres, findAmbientResponse(), AMBIENT_TYPES
+- WorldAssetConstitution.ambient_type added to types/game.ts
+- apply-world-bible writes ambient_type to location world_asset constitution
+- useGameLoop step 4c — Tier 2 short-circuit for EXAMINE/INTERACT (no narrator call, instant response)
+- prompt-builder — Tier 1 vs Tier 3 split: key_landmarks get object pinning, others get ambient instruction
 
 ---
 
 ## 🏗️ Architecture Overview
 
-**Full architecture documented in:** /docs/world-generation-architecture.md
+**Full architecture:** /docs/world-generation-architecture.md
 
 ### Four Layers
-
-**Layer 0 — WCD ✅** — world_consistency jsonb, injected into all AI calls
-**Layer 1 — WorldBible ✅** — world_bible jsonb, starting region + adjacent outlines + main quest
-**Layer 2 — RegionBible ⏳** — on-demand for new regions, background pre-generation
+**Layer 0 — WCD ✅** — world_consistency jsonb, injected first in all AI calls
+**Layer 1 — WorldBible ✅** — world_bible jsonb, starting region + outlines + main quest
+**Layer 2 — RegionBible 🔄** — on-demand, background pre-generation on exit discovery
 **Layer 3 — Narrator ⏳** — hard rules enforced, exact Tier 1 references only
 
 ### Three-Tier Object System
-
-**Tier 1 — AI-generated (WorldBible):** LocationObject, tracked as world_assets, highlighted in feed, meaningful interactions. 3-5 per sub-location.
-
-**Tier 2 — Code templates (ambient-objects.ts):** Every location type has a built-in library. Instant responses. Never highlighted. No AI call. No game state change.
-
-**Tier 3 — Narrator ambient:** Brief narrator call for anything not in Tier 1 or 2. "Nothing of particular note." Never says object disappeared.
+**Tier 1 ✅** — AI-generated LocationObjects, tracked world_assets, highlighted in feed
+**Tier 2 ✅** — ambient-objects.ts templates, instant response, never highlighted, no narrator
+**Tier 3 ✅** — narrator ambient instruction, 1-2 sentences, nothing disappears
 
 ### Location Hierarchy
-
 ```
-Region
-└── Settlement Node (is_settlement_node: true)
-    ├── Sub-location (is_interior: true, parent_location_id set)
-    │   ├── Tier 1 objects (LocationObject[], highlighted)
-    │   └── Tier 2 ambient (from ambient-objects.ts, never highlighted)
-    └── [non-notable buildings = ambient grey blocks on Local Map]
+Region → Settlement Node → Notable Sub-locations (3-6)
+       → Adjacent Region Outlines (undiscovered)
 ```
+Notable sub-locations: 3-6 per settlement. NPCs: 1-3 per sub-location. Tier 1 objects: 3-5 per sub-location.
 
 ### NPC Rules
-- Real name from birth — no placeholders ever
-- name_known always true for WorldBible NPCs
-- Narrator introduces atmospherically then names in same paragraph
-- No reveal pipeline
+Real name from birth. name_known always true. No reveal pipeline. No placeholders.
 
 ---
 
@@ -82,14 +70,13 @@ Region
 Write-once. ignoreDuplicates: true. AI generates once, engine owns forever.
 
 ### 2. Movement Is Graph-Based
-GRAPH_NAVIGATE / INTERNAL_DESCRIBE / ZONE_EXPAND / WORLD_EXPLORE.
-current_node_id is single source of truth.
+GRAPH_NAVIGATE / INTERNAL_DESCRIBE / ZONE_EXPAND / WORLD_EXPLORE. current_node_id is truth.
 
 ### 3. Location Is Authoritative State
 current_node_id saved immediately on real moves. INTERNAL_DESCRIBE does NOT update location.
 
 ### 4. Actions Are Permitted By Default
-Tier 1 → rich AI response. Tier 2 → template. Tier 3 → brief narrator ambient. Nothing disappears.
+Tier 1 → rich AI. Tier 2 → template. Tier 3 → brief ambient. Nothing disappears.
 
 ### 5. Objects Mentioned Exist
 Nothing ever disappears or "didn't exist." Failed checks = evasion, never absence.
@@ -104,7 +91,7 @@ Generator (Phase 1+2 only) → Bridge (describe only) → Thread (breadcrumbs)
 Injected first into every AI call. Nothing can contradict it.
 
 ### 9. Failed Checks = Evasion Only
-Failed check = NPC guarded/unhelpful. NEVER means NPC left or object doesn't exist.
+NEVER means NPC left or object doesn't exist.
 
 ### 10. Highlights Are Exact Tier 1 Matches
 Only Tier 1 object names, NPC names, connected location names. Exact string match only.
@@ -118,45 +105,30 @@ Only Tier 1 object names, NPC names, connected location names. Exact string matc
 - No reveal pipeline — real names from birth
 - Failed checks = evasion, never absence
 
-## 💰 Trading System (Day 16)
-- Merchant keyword → trade_available → items_for_sale
-- TradeModal: Buy full / Sell 50%. Currency from getGenreColors.
-
-## 🎨 UI System (Direction 3)
-- genre-ui.ts: getGenreColors — single source of truth
-- StoryFeed: arrival headers, NPC quote-blocks, stat-check receipts
-- DialogueModal: accent-bar buttons, stat badge matches resolver
-- VerbosityToggle: Terse / Standard / Rich
+## 💰 Trading System (Day 16) — Complete
+## 🎨 UI System (Direction 3) — Complete
 
 ---
 
 ## Narrator Architecture
-
 For DIALOGUE: WCD → RESPONDING CHARACTER → Location (atmosphere + Tier 1 objects) → Player state → VERBOSITY
 For non-DIALOGUE: WCD → NPCS PRESENT → Location → Player state → VERBOSITY
 
-Hard rules (all prompts):
-1. Exact stored names for locations, NPCs, objects
-2. Only name Tier 1 objects in descriptions
-3. Failed checks = evasion, never absence
-4. Write only from RESPONDING CHARACTER
-5. WCD is absolute truth
+Hard rules: exact names, Tier 1 objects only, failed checks = evasion, RESPONDING CHARACTER only, WCD absolute.
 
 ---
 
 ## Implementation Sequence
 
-### 19A ✅ — WCD type, generate-wcd route, injection
-### 19B ✅ — WorldBible types, generate-world-bible, apply-world-bible, 5-step wizard
-### 19C 🔄 — Ambient Object System
-- /lib/game/ambient-objects.ts — Tier 2 library all location types all 5 genres
-- Tier 2 router in useGameLoop — instant template response for known ambient objects
-- Tier 3 router — short narrator ambient call for unknown objects
-- Nothing ever disappears or "didn't exist"
-
-### 19D — Regional Bible (Phase 2)
-- generateRegionalBible replaces stub generator
-- Background pre-generation on exit discovery
+### 19A ✅ — WCD type, generate-wcd, injection (commit 08322b6)
+### 19B ✅ — WorldBible types, generate-world-bible, apply-world-bible, 5-step wizard (commit d5b41b0)
+### 19C ✅ — Ambient Object System, 27 types, Tier 2/3 routing (commit 4e7ab6f)
+### 19D 🔄 — Regional Bible (Phase 2)
+- /api/game/generate-regional-bible — WCD-seeded, expands RegionOutline to RegionBible
+- /api/game/apply-regional-bible — writes all locations, NPCs, objects as world_assets, extends WorldGraph
+- Background pre-generation: fires when player discovers a region exit
+- "Entering [region_name]..." loading indicator if player crosses before generation completes
+- Replaces old stub generator for WORLD_EXPLORE moves
 
 ### 19E — Narrator Constraints + Highlight Overhaul
 - Hard narrator rules in ALL system prompts
@@ -164,26 +136,23 @@ Hard rules (all prompts):
 - Remove NPC reveal pipeline entirely
 
 ### 19F — Three-Tier Map Component
-- /components/game/WorldMap.tsx
-- Tier 1/2/3 views, breadcrumb nav, toggleable sidebar
+- /components/game/WorldMap.tsx — Tier 1/2/3 views, breadcrumb nav, toggleable sidebar
 
 ---
 
 ## Supabase Tables (all applied ✅)
 - game_sessions: +world_seed, +world_graph, +world_consistency, +world_bible
-- world_states: +current_node_id
-- Migrations 001-009 all applied
+- world_states: +current_node_id. Migrations 001-009.
 
 ---
 
 ## Core Philosophy
-
 - AI generates content once, engine owns it forever
 - WCD is the constitution — injected everywhere, never contradicted
 - Three-layer generation: WCD → WorldBible → RegionBible
 - Three object tiers: Tier 1 (AI) / Tier 2 (templates) / Tier 3 (ambient narrator)
 - Narrator describes, never generates
-- Names are permanent from birth
+- Names are permanent from birth — no reveal pipeline
 - Highlights are exact Tier 1 matches only
 - Failed checks = evasion only
 - Three-tier map: World / Regional / Local
@@ -236,7 +205,7 @@ Hard rules (all prompts):
 
 ## Workflow
 **Claude.ai owns all CLAUDE.md updates.**
-Claude Code pushes → git pull + restart server → report to Claude.ai → checklist → confirm → next prompt.
+Claude Code pushes → git pull + restart → report → confirm → next prompt.
 
 ## Reference Links
 - Supabase: https://supabase.com/dashboard
@@ -246,4 +215,4 @@ Claude Code pushes → git pull + restart server → report to Claude.ai → che
 
 ---
 
-*Last updated: Session 59 — V7.2: Day 19B complete. WorldBible types, generate-world-bible, apply-world-bible, 5-step wizard. Day 19C starting.*
+*Last updated: Session 60 — V7.3: Day 19C complete. Ambient Object System, 27 types, Tier 2/3 routing. Day 19D starting.*

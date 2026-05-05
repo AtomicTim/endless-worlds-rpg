@@ -26,33 +26,85 @@ function buildUserPrompt(
   klass:    string,
   wcd:      WorldConsistencyDocument
 ): string {
-  const wcdBlock = formatWcdBlock(wcd);
-  return [
-    wcdBlock,
-    "",
-    `Generate a WorldBible for a ${genre} RPG. Character: ${name}, a ${klass}.`,
-    "",
-    "STARTING REGION — generate a settlement_hub:",
-    "The starting region must have:",
-    "- 1 settlement node (the main arrival point)",
-    "- 3-4 notable sub-locations (keep it tight — fewer, richer locations). Always include: 1 inn or tavern, 1 merchant or shop. Add 1-2 more: smithy, temple, guild hall, or garrison.",
-    "- Each sub-location: id (slug), name, type, grid_position, is_interior: true, atmosphere (2 sentences max), connections, npc_ids, objects (2-3 Tier 1 objects only — name, description, is_interactable: true), ambient_type.",
-    "- Settlement node: is_settlement_node: true, is_interior: false.",
-    "",
-    "NPCS — generate 4-5 total (keep it focused):",
-    "Every NPC must have a REAL NAME. Required: 1 innkeeper, 1 merchant, 1 quest-relevant NPC.",
-    "Each NPC: id (character_[slug]), name, home_location_id, role, archetype, appearance (1 sentence), personality (1 sentence), speech_style (3 words), knowledge (2-3 facts), default_trust (50).",
-    "",
-    "ADJACENT REGIONS — generate exactly 3 outlines (brief):",
-    "Each: id, name, type, grid_centre, direction_from_start, distance, atmosphere_hint (1 sentence), key_npc_count (2), location_count (3).",
-    "",
-    "MAIN QUEST (keep it brief):",
-    "antagonist_name, antagonist_location, goal (1 sentence), opening_hook (1 sentence).",
-    "breadcrumbs: exactly 3 entries. Each: index, content (1 sentence), delivery_method, suggested_location.",
-    "",
-    "CRITICAL: Be concise. Every field should be short. The JSON must fit within the token limit.",
-    "Respond with valid JSON matching the WorldBible schema.",
-  ].join("\n");
+  const wcdBlock    = formatWcdBlock(wcd);
+  const generatedAt = new Date().toISOString();
+  // Skeleton-based prompt: showing the model the exact JSON shape (with
+  // every required key) is the single most reliable way to keep it from
+  // wandering into alias names / nested wrappers / missing fields.
+  return `${wcdBlock}
+
+Generate a WorldBible JSON for a ${genre} RPG.
+Character: ${name}, a ${klass}.
+
+Return EXACTLY this JSON structure (fill in the values):
+{
+  "starting_region": {
+    "id": "settlement_slug",
+    "name": "Settlement Name",
+    "type": "settlement_hub",
+    "atmosphere": "2 sentence description",
+    "locations": [
+      {
+        "id": "location_slug",
+        "name": "Location Name",
+        "type": "tavern",
+        "is_settlement_node": true,
+        "is_interior": false,
+        "atmosphere": "description",
+        "grid_position": {"x": 0, "y": 0},
+        "connections": ["other_location_id"],
+        "npc_ids": ["character_slug"],
+        "objects": [{"id": "obj_slug", "name": "Object Name", "description": "1 sentence", "is_interactable": true}],
+        "ambient_type": "town_square"
+      }
+    ],
+    "npcs": [
+      {
+        "id": "character_slug",
+        "name": "Full Name",
+        "home_location_id": "location_slug",
+        "role": "innkeeper",
+        "appearance": "1 sentence",
+        "personality": "1 sentence",
+        "speech_style": "brief",
+        "knowledge": ["fact 1"],
+        "default_trust": 50
+      }
+    ],
+    "exits": []
+  },
+  "adjacent_regions": [
+    {
+      "id": "region_slug",
+      "name": "Region Name",
+      "type": "wilderness",
+      "grid_centre": {"x": 5, "y": 0},
+      "direction_from_start": "north",
+      "distance": "adjacent",
+      "atmosphere_hint": "1 sentence",
+      "key_npc_count": 2,
+      "location_count": 3
+    }
+  ],
+  "main_quest": {
+    "title": "Quest Title",
+    "antagonist_name": "Name",
+    "antagonist_location": "location_id",
+    "goal": "1 sentence",
+    "opening_hook": "1 sentence",
+    "breadcrumbs": [
+      {"index": 0, "content": "hint", "delivery_method": "npc_dialogue", "suggested_location": "location_id"},
+      {"index": 1, "content": "hint", "delivery_method": "environmental", "suggested_location": "location_id"},
+      {"index": 2, "content": "hint", "delivery_method": "discovered_object", "suggested_location": "location_id"}
+    ],
+    "win_condition": "1 sentence"
+  },
+  "generated_at": "${generatedAt}"
+}
+
+Generate 1 settlement node + 3 sub-locations + 4-5 NPCs.
+Make content original, specific to the WCD and genre.
+REAL NAMES for all NPCs. No placeholders.`;
 }
 
 function stripJsonFences(raw: string): string {
@@ -92,6 +144,67 @@ function pickArray(o: Record<string, unknown>, keys: string[]): unknown[] | null
 function normalizeWorldBible(parsed: unknown): unknown {
   if (!parsed || typeof parsed !== "object") return parsed;
   const o = parsed as Record<string, unknown>;
+
+  // ── Root-level restructure ────────────────────────────────────────────────
+  // Some AI responses skip the starting_region wrapper entirely and emit
+  // locations / npcs / exits at the top level. Detect that and wrap them
+  // up so the downstream normalization sees a canonical shape.
+  if (!o.starting_region || typeof o.starting_region !== "object") {
+    const rootLocations = pickArray(o, [
+      "locations", "sub_locations", "sublocation", "sublocations",
+      "areas", "places", "nodes", "buildings", "sites",
+    ]);
+    const rootNpcs = pickArray(o, [
+      "npcs", "characters", "people", "inhabitants", "npc_list",
+    ]);
+
+    const pickString = (keys: string[]): string | null => {
+      for (const k of keys) {
+        const v = o[k];
+        if (typeof v === "string" && v.trim()) return v;
+      }
+      return null;
+    };
+
+    if ((rootLocations?.length ?? 0) > 0 || (rootNpcs?.length ?? 0) > 0) {
+      o.starting_region = {
+        id:         pickString(["id", "region_id", "settlement_id"]) ?? "starting_region",
+        name:       pickString(["name", "region_name", "settlement_name"]) ?? "Starting Settlement",
+        type:       pickString(["type", "region_type"]) ?? "settlement_hub",
+        atmosphere: pickString(["atmosphere", "description", "setting"]) ?? "",
+        locations:  rootLocations ?? [],
+        npcs:       rootNpcs ?? [],
+        exits:      pickArray(o, ["exits", "connections", "routes"]) ?? [],
+      };
+      console.log("[WorldBible] Restructured flat response into starting_region");
+    }
+
+    // If still no starting_region, scan for region data nested under a
+    // different key (region / settlement / world / area / hub / etc.).
+    if (!o.starting_region || typeof o.starting_region !== "object") {
+      for (const key of [
+        "region", "settlement", "world", "area", "hub",
+        "starting_area", "start", "beginning",
+      ]) {
+        const candidateRaw = o[key];
+        if (
+          candidateRaw &&
+          typeof candidateRaw === "object" &&
+          !Array.isArray(candidateRaw)
+        ) {
+          const candidate = candidateRaw as Record<string, unknown>;
+          const candLocations = pickArray(candidate, [
+            "locations", "sub_locations", "sublocation", "areas", "places",
+          ]);
+          if ((candLocations?.length ?? 0) > 0) {
+            o.starting_region = { ...candidate };
+            console.log(`[WorldBible] Found starting_region under key: ${key}`);
+            break;
+          }
+        }
+      }
+    }
+  }
 
   // ── starting_region ───────────────────────────────────────────────────────
   const sr = o.starting_region;
@@ -199,6 +312,17 @@ function normalizeWorldBible(parsed: unknown): unknown {
   }
 
   // ── adjacent_regions ──────────────────────────────────────────────────────
+  // Same alias treatment as starting_region — AI sometimes emits these
+  // under "regions", "nearby_regions", etc. Promote the first match.
+  if (!o.adjacent_regions || !Array.isArray(o.adjacent_regions)) {
+    const rootRegions = pickArray(o, [
+      "adjacent_regions", "regions", "nearby_regions", "other_regions",
+      "surrounding_regions", "connected_regions", "region_outlines",
+    ]);
+    if (rootRegions && rootRegions.length > 0) {
+      o.adjacent_regions = rootRegions;
+    }
+  }
   if (!Array.isArray(o.adjacent_regions)) {
     o.adjacent_regions = [];
   }
@@ -217,6 +341,21 @@ function normalizeWorldBible(parsed: unknown): unknown {
   });
 
   // ── main_quest ────────────────────────────────────────────────────────────
+  // First try to promote from common alias keys (quest / story / plot / …)
+  // before falling through to the placeholder default.
+  if (!o.main_quest || typeof o.main_quest !== "object") {
+    for (const key of [
+      "main_quest", "quest", "story", "plot",
+      "narrative", "main_story", "campaign",
+    ]) {
+      const candidate = o[key];
+      if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+        o.main_quest = candidate;
+        break;
+      }
+    }
+  }
+
   const placeholderBreadcrumb = {
     index:              0,
     content:            "A strange rumour circulates",
@@ -338,16 +477,17 @@ export async function POST(request: NextRequest) {
   }
 
   // Debug: log the raw parsed schema shape so future AI variations are
-  // easier to diagnose without firing the prompt again.
-  console.log(
-    "[WorldBible] Parsed top-level keys:",
-    Object.keys(parsed as object)
-  );
+  // easier to diagnose without firing the prompt again. Includes a peek
+  // at root-level array fields so we catch flat-response variants too.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  console.log(
-    "[WorldBible] starting_region keys:",
-    Object.keys((parsed as any)?.starting_region ?? {})
-  );
+  console.log("[WorldBible] Raw structure:", JSON.stringify({
+    topLevelKeys:        Object.keys(parsed as object),
+    startingRegionType:  typeof (parsed as any)?.starting_region,
+    startingRegionKeys:  Object.keys((parsed as any)?.starting_region ?? {}),
+    hasLocationsAtRoot:  Array.isArray((parsed as any)?.locations),
+    hasNpcsAtRoot:       Array.isArray((parsed as any)?.npcs),
+    rootLocationsCount:  Array.isArray((parsed as any)?.locations) ? (parsed as any).locations.length : 0,
+  }));
 
   // Normalize before validation — maps AI field-name variants to the
   // canonical schema and fills missing mechanical fields with defaults.

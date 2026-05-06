@@ -268,20 +268,23 @@ export async function POST(request: NextRequest) {
     }
 
     newNodes[loc.id] = {
-      id:            loc.id,
-      name:          loc.name,
-      type:          loc.is_interior ? "sub_location" : "zone",
-      category:      loc.type,
-      zone_id:       zoneId,
-      is_expandable: !loc.is_interior,
-      connections:   validConnections,
-      npc_ids:       finalNpcIds,
-      item_ids:      loc.objects.map((o) => `item_${o.id}`),
-      asset_id:      `location_${loc.id}`,
+      id:                 loc.id,
+      name:               loc.name,
+      type:               loc.is_interior ? "sub_location" : "zone",
+      category:           loc.type,
+      zone_id:            zoneId,
+      is_expandable:      !loc.is_interior,
+      connections:        validConnections,
+      npc_ids:            finalNpcIds,
+      item_ids:           loc.objects.map((o) => `item_${o.id}`),
+      asset_id:           `location_${loc.id}`,
       // The settlement node is what the player just crossed into — mark it
       // discovered so the world map renders it without delay.
-      discovered:    loc.is_settlement_node,
-      map_position:  loc.grid_position,
+      discovered:         loc.is_settlement_node,
+      map_position:       loc.grid_position,
+      // CHANGE 2 — flag the settlement node so NavigationBar's parent
+      // search succeeds. Sub-locations and standalone zones carry false.
+      is_settlement_node: loc.is_settlement_node === true,
     };
   }
 
@@ -308,33 +311,51 @@ export async function POST(request: NextRequest) {
       validConnections.push(settlementIdForZone);
     }
     newNodes[loc.id] = {
-      id:            loc.id,
-      name:          loc.name,
-      type:          "zone",
-      category:      loc.type,
-      zone_id:       bibleNarrowed.id,
-      is_expandable: false,
-      connections:   validConnections,
-      npc_ids:       finalNpcIds,
-      item_ids:      loc.objects.map((o) => `item_${o.id}`),
-      asset_id:      `location_${loc.id}`,
-      discovered:    false,
-      map_position:  loc.grid_position,
+      id:                 loc.id,
+      name:               loc.name,
+      type:               "zone",
+      category:           loc.type,
+      // CHANGE 2 — region_location lives IN the geographic region, not
+      // its own zone. Locking zone_id to bibleNarrowed.id makes
+      // NavigationBar's sibling-settlement lookup succeed.
+      zone_id:            bibleNarrowed.id,
+      is_expandable:      false,
+      connections:        validConnections,
+      npc_ids:            finalNpcIds,
+      item_ids:           loc.objects.map((o) => `item_${o.id}`),
+      asset_id:           `location_${loc.id}`,
+      discovered:         false,
+      map_position:       loc.grid_position,
+      is_settlement_node: false,
     };
   }
 
-  // 4b-2. FIX 1a — symmetric back-link from the new settlement to every
-  // region_location. Mirrors apply-world-bible; ensures the player can
-  // walk from the town hub straight out to the dungeon/wilderness.
-  if (regionLocations.length > 0) {
+  // 4b-2. CHANGE 2 — symmetric back-connection validation pass.
+  // Iterate every region_location and guarantee the bidirectional
+  // edge to the settlement, logging each stitched edge so generation
+  // failures are visible in the server log instead of getting patched
+  // up silently by NavigationBar later.
+  for (const r of regionLocations) {
+    const rNode = newNodes[r.id];
+    if (!rNode) continue;
+    if (!rNode.connections.includes(settlementIdForZone)) {
+      newNodes[r.id] = {
+        ...rNode,
+        connections: [...rNode.connections, settlementIdForZone],
+      };
+      console.log(
+        `[apply-regional-bible] Stitched back-connection: ${r.id} ↔ ${settlementIdForZone}`
+      );
+    }
     const settlement = newNodes[settlementIdForZone];
-    if (settlement) {
-      const linked = new Set(settlement.connections);
-      for (const r of regionLocations) linked.add(r.id);
+    if (settlement && !settlement.connections.includes(r.id)) {
       newNodes[settlementIdForZone] = {
         ...settlement,
-        connections: Array.from(linked),
+        connections: [...settlement.connections, r.id],
       };
+      console.log(
+        `[apply-regional-bible] Stitched back-connection: ${settlementIdForZone} ↔ ${r.id}`
+      );
     }
   }
 

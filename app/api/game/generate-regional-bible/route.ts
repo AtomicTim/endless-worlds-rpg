@@ -292,13 +292,17 @@ function validateBible(parsed: unknown): { ok: true; bible: RegionBible } | { ok
 }
 
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
-  // FIX 10 — bumped 1500 → 2200 to fit the expanded skeleton: 3 NPCs
-  // total (one at the standalone region_location), 6 Tier 1 objects
-  // total (2 per location), and the new content-purpose prose block.
-  // Still well under sonnet's response budget; truncation risk is low.
+  // CHANGE 3 — per architecture spec ("Model Selection"): RegionBible
+  // generation runs on haiku because the outline already locks the
+  // region's identity. Quality from a simpler prompt is acceptable;
+  // speed matters more here than for WCD/WorldBible/narration.
+  // max_tokens drops from 2200 to 1200 to match haiku's snappier
+  // response budget — the skeleton (1 hub + 1 sub + 1 region_location
+  // + 3 NPCs) reliably fits.
+  console.log("[RegionBible] Using haiku model");
   const message = await client.messages.create({
-    model:      "claude-sonnet-4-5",
-    max_tokens: 2200,
+    model:      "claude-haiku-4-5-20251001",
+    max_tokens: 1200,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });

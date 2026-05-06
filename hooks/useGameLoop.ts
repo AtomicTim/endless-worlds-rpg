@@ -731,73 +731,24 @@ export function useGameLoop() {
         }
       }
 
-      // ── 2d. Navigation redesign — MOVE intercepted to INTERNAL_DESCRIBE ───
-      // Free-text navigation is architecturally incompatible with a
-      // persistent world graph: any phrasing pattern eventually misfires
-      // and creates a phantom node. Movement is now UI-driven (Navigation
-      // Bar / map / highlighted-link clicks call navigateTo() directly).
+      // ── 2d. Architecture spec: text MOVE is UI-only ─────────────────────
+      // Per /docs/architecture-spec.md ("Navigation — Code Only"): the AI
+      // never receives movement intent and never writes travel prose. If
+      // the parser classified the player's text as MOVE, we respond with
+      // a hardcoded system message and stop. Zero AI involvement.
       //
-      // When the player still types something the parser classifies as
-      // MOVE, we DO NOT resolve it as a move. Instead we hand the
-      // narrator an INTERNAL_DESCRIBE context — the same one the move
-      // classifier uses for "look at the bar" phrasings. The narrator
-      // describes what's visible, including the connected location names
-      // (already in the prompt-builder CONNECTED LOCATIONS block), and
-      // the player picks an explicit option.
-      //
-      // forceMoveToNode bypasses this intercept — that path is the
-      // sanctioned UI-driven channel.
+      // The previous INTERNAL_DESCRIBE narrator path is removed entirely.
+      // navigateTo() (NavigationBar / map clicks / highlight clicks) is
+      // the only way to actually move. forceMoveToNode is the sanctioned
+      // UI channel and bypasses this guard via the early branch above.
       if (!forceMoveToNode && parsedAction.action_type === ActionType.MOVE) {
-        console.log("[GameLoop] MOVE intercepted → INTERNAL_DESCRIBE");
-        const interceptResolution: ResolutionResult = {
-          success:      true,
-          outcome_type: "DESCRIBE_SUCCESS",
-          state_delta:  {},
-          narrative_context: {
-            move_type:               "INTERNAL_DESCRIBE",
-            is_internal_description: true,
-            sub_area_hint:           parsedAction.primary_target ?? "",
-            current_location_id:     state.world_state.current_location_id,
-          },
-        };
-
-        store.setProcessing(true, "Looking around...");
-        const lastNarrativeIntercept = useGameStore.getState().lastNarrativeText;
-        const wcdIntercept           = state.metadata.world_consistency;
-        const verbosityIntercept     = useGameStore.getState().verbosity;
-        const assetsIntercept        = useGameStore.getState().locationAssets;
-        try {
-          const interceptResponse = await narrateAction(
-            interceptResolution,
-            state,
-            lastNarrativeIntercept,
-            parsedAction,
-            assetsIntercept,
-            verbosityIntercept,
-            wcdIntercept,
-          );
-          store.addMessage(
-            makeMessage("NARRATIVE", interceptResponse.narrative_text, {
-              outcome_type:  "DESCRIBE_SUCCESS",
-              sound_id:      interceptResponse.sound_id,
-              response_tier: interceptResponse.response_tier,
-            })
-          );
-          store.setLastNarrativeText(interceptResponse.narrative_text);
-          // Stamp last_played so the session sorts correctly on dashboard.
-          const stamped = {
-            ...state,
-            metadata: { ...state.metadata, last_played: new Date().toISOString() },
-          };
-          store.setMasterState(stamped);
-        } catch {
-          store.addMessage(
-            makeMessage(
-              "SYSTEM",
-              "The oracle falls silent momentarily. Try again."
-            )
-          );
-        }
+        console.log("[GameLoop] MOVE blocked — text navigation disabled per spec");
+        store.addMessage(
+          makeMessage(
+            "SYSTEM",
+            "Use the navigation bar below to travel to a nearby location."
+          )
+        );
         store.setProcessing(false);
         return;
       }

@@ -105,37 +105,65 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
       };
     }
 
-    // Resolve every connection id to a graph node (silently drop ids
-    // that don't resolve — apply-world-bible already validates these).
+    // CHANGE 4 — outline fallback for unresolved connections. When a
+    // connection id doesn't resolve to a known graph node BUT it
+    // matches a WorldBible adjacent_region outline, we still show the
+    // outline as a navigation card. This prevents the bar from going
+    // empty for outline-only neighbours that haven't been expanded
+    // into full graph nodes yet.
+    const wbForOutlineFallback = masterState?.metadata.world_bible;
+    const outlinesById: Map<string, RegionOutline> = new Map();
+    for (const o of wbForOutlineFallback?.adjacent_regions ?? []) {
+      outlinesById.set(o.id, o);
+    }
     const connected: WorldNode[] = [];
+    const fallbackOutlines: RegionOutline[] = [];
     for (const id of current.connections) {
       const node = worldGraph.nodes[id];
-      if (node) connected.push(node);
+      if (node) {
+        connected.push(node);
+      } else {
+        const outline = outlinesById.get(id);
+        if (outline) fallbackOutlines.push(outline);
+      }
     }
 
-    // FIX 1b — "← Return" safety net.
-    // When the player is at a region_location (a sibling of the
-    // settlement inside the geographic region), the connections array
-    // SHOULD include the settlement after the apply-world-bible /
-    // apply-regional-bible patch above, but we also surface a
-    // dedicated return card derived from the zone hierarchy in case a
-    // legacy save's graph still has the back-link missing. The
-    // settlement is the only sibling node in the same zone with
-    // is_expandable === true; region_locations are is_expandable: false.
+    // CHANGE 4 — robust "← Return" card per architecture spec
+    // (Navigation — Code Only / Region Location Back-Connections).
+    // Conditions ALL of:
+    //   1. currentNode exists in worldGraph
+    //   2. currentNode.type === "zone" (not sub_location)
+    //   3. currentNode.is_settlement_node !== true
+    //   4. there exists another node in the same zone whose
+    //      is_settlement_node === true
+    // Search runs against the live graph independently of
+    // currentNode.connections, so the player always has a way back
+    // even if generation-time stitching missed an edge.
     let parentSettlement: WorldNode | null = null;
-    const isRegionLocation =
+    const isCandidateForReturn =
       current.type === "zone" &&
-      current.is_expandable === false &&
-      current.zone_id !== current.id;
-    if (isRegionLocation) {
+      current.is_settlement_node !== true;
+    if (isCandidateForReturn) {
       parentSettlement =
         Object.values(worldGraph.nodes).find(
           (n) =>
             n.id !== current.id &&
             n.zone_id === current.zone_id &&
-            n.type === "zone" &&
-            n.is_expandable === true
+            n.is_settlement_node === true
         ) ?? null;
+      // Backwards-compat fallback for older save files where
+      // is_settlement_node wasn't yet populated. The legacy heuristic
+      // is is_expandable === true on a zone-typed sibling.
+      if (!parentSettlement) {
+        parentSettlement =
+          Object.values(worldGraph.nodes).find(
+            (n) =>
+              n.id !== current.id &&
+              n.zone_id === current.zone_id &&
+              n.type === "zone" &&
+              n.is_expandable === true
+          ) ?? null;
+      }
     }
     // Don't double-render: if the parent settlement is already in the
     // resolved connections list, skip the return card.
@@ -153,9 +181,22 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
       ...connected.map((n) => n.id),
       ...(parentSettlement ? [parentSettlement.id] : []),
     ]);
-    const outlines = (wb?.adjacent_regions ?? []).filter(
-      (r) => !knownIds.has(r.id)
-    );
+    const outlinesSeen = new Set<string>();
+    const outlines: RegionOutline[] = [];
+    // CHANGE 4 — surface outline cards for unresolved connection ids
+    // FIRST. These are the player's most-relevant exits because they
+    // already exist on currentNode.connections; the AI just hasn't
+    // expanded them into real graph nodes yet.
+    for (const o of fallbackOutlines) {
+      if (knownIds.has(o.id) || outlinesSeen.has(o.id)) continue;
+      outlinesSeen.add(o.id);
+      outlines.push(o);
+    }
+    for (const r of wb?.adjacent_regions ?? []) {
+      if (knownIds.has(r.id) || outlinesSeen.has(r.id)) continue;
+      outlinesSeen.add(r.id);
+      outlines.push(r);
+    }
 
     // FIX 2 — surface WCD landmarks that aren't yet a discovered graph
     // node but DO have a matching adjacent_region in the WorldBible.
@@ -378,7 +419,12 @@ function NavigationCard({ label, icon, visited, primary, onClick, kind }: CardPr
         maxWidth:        220,
         background:      isLandmark
           ? `color-mix(in srgb, ${LANDMARK_GOLD} 8%, var(--color-bg))`
-          : "color-mix(in srgb, var(--color-bg) 80%, #000)",
+          : isReturn
+            // CHANGE 4 — return card gets a faint primary tint so the
+            // "← back" reads as the most-likely action, distinct from
+            // ordinary connection cards.
+            ? `color-mix(in srgb, ${primary} 10%, color-mix(in srgb, var(--color-bg) 80%, #000))`
+            : "color-mix(in srgb, var(--color-bg) 80%, #000)",
         border,
         color:           isLandmark ? LANDMARK_GOLD : "var(--color-text)",
         fontFamily:      "var(--font-mono)",

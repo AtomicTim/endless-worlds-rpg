@@ -330,18 +330,24 @@ export async function POST(request: NextRequest) {
     }
 
     graphNodes[loc.id] = {
-      id:            loc.id,
-      name:          loc.name,
-      type:          loc.is_interior ? "sub_location" : "zone",
-      category:      loc.type,
-      zone_id:       zoneId,
-      is_expandable: !loc.is_interior,
-      connections:   validConnections,
-      npc_ids:       finalNpcIds,
-      item_ids:      loc.objects.map((o) => `item_${o.id}`),
-      asset_id:      `location_${loc.id}`,
-      discovered:    loc.is_settlement_node,
-      map_position:  loc.grid_position,
+      id:                 loc.id,
+      name:               loc.name,
+      type:               loc.is_interior ? "sub_location" : "zone",
+      category:           loc.type,
+      zone_id:            zoneId,
+      is_expandable:      !loc.is_interior,
+      connections:        validConnections,
+      npc_ids:            finalNpcIds,
+      item_ids:           loc.objects.map((o) => `item_${o.id}`),
+      asset_id:           `location_${loc.id}`,
+      discovered:         loc.is_settlement_node,
+      map_position:       loc.grid_position,
+      // CHANGE 2 — mirror the bible's flag onto the graph node so the
+      // NavigationBar's return-card logic can find the parent
+      // settlement of a region_location without inferring from
+      // is_expandable. Sub-locations and standalone region locations
+      // explicitly carry false.
+      is_settlement_node: loc.is_settlement_node === true,
     };
   }
 
@@ -373,37 +379,56 @@ export async function POST(request: NextRequest) {
       validConnections.push(startingNodeId);
     }
     graphNodes[loc.id] = {
-      id:            loc.id,
-      name:          loc.name,
-      type:          "zone",
-      category:      loc.type,
-      zone_id:       geographicRegionId,
-      is_expandable: false,
-      connections:   validConnections,
-      npc_ids:       finalNpcIds,
-      item_ids:      loc.objects.map((o) => `item_${o.id}`),
-      asset_id:      `location_${loc.id}`,
+      id:                 loc.id,
+      name:               loc.name,
+      type:               "zone",
+      category:           loc.type,
+      // CHANGE 2 — region_locations live IN the geographic region, not
+      // in their own zone. zone_id is locked to the geographic region
+      // id so NavigationBar's parent-settlement search succeeds.
+      zone_id:            geographicRegionId,
+      is_expandable:      false,
+      connections:        validConnections,
+      npc_ids:            finalNpcIds,
+      item_ids:           loc.objects.map((o) => `item_${o.id}`),
+      asset_id:           `location_${loc.id}`,
       // Discovered = false so the world map renders a dashed outline
       // until the player actually visits.
-      discovered:    false,
-      map_position:  loc.grid_position,
+      discovered:         false,
+      map_position:       loc.grid_position,
+      // Standalone landmarks are never the settlement hub.
+      is_settlement_node: false,
     };
   }
 
-  // 4b-2. FIX 1a — symmetric back-link from settlement to every
-  // region_location. Runs unconditionally (not gated on
-  // !isSameAsSettlement) so the player can walk OUT of town to the
-  // dungeon even on legacy saves where the geographic region id
-  // collides with the settlement id.
+  // 4b-2. CHANGE 2 — symmetric back-connection validation pass.
+  // For every region_location, guarantee the bidirectional edge to the
+  // settlement and log the stitch when an edge had to be added. This
+  // runs at apply time, not runtime, so the graph is fully wired
+  // BEFORE the world is persisted — no patching downstream.
   {
-    const settlement = graphNodes[startingNodeId];
-    if (settlement) {
-      const linked = new Set(settlement.connections);
-      for (const r of regionLocations) linked.add(r.id);
-      graphNodes[startingNodeId] = {
-        ...settlement,
-        connections: Array.from(linked),
-      };
+    for (const r of regionLocations) {
+      const rNode = graphNodes[r.id];
+      if (!rNode) continue;
+      if (!rNode.connections.includes(startingNodeId)) {
+        graphNodes[r.id] = {
+          ...rNode,
+          connections: [...rNode.connections, startingNodeId],
+        };
+        console.log(
+          `[apply-world-bible] Stitched back-connection: ${r.id} ↔ ${startingNodeId}`
+        );
+      }
+      const settlement = graphNodes[startingNodeId];
+      if (settlement && !settlement.connections.includes(r.id)) {
+        graphNodes[startingNodeId] = {
+          ...settlement,
+          connections: [...settlement.connections, r.id],
+        };
+        console.log(
+          `[apply-world-bible] Stitched back-connection: ${startingNodeId} ↔ ${r.id}`
+        );
+      }
     }
   }
 

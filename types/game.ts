@@ -175,6 +175,11 @@ export interface WorldNode {
   discovered:     boolean;
   /** Relative position for map rendering. */
   map_position:   { x: number; y: number };
+  /** True for the geographic region's main settlement hub. Used by the
+   *  NavigationBar return-card logic to find the parent settlement of a
+   *  region_location even when graph back-connections are missing.
+   *  Mirrored from LocationDefinition.is_settlement_node at apply time. */
+  is_settlement_node?: boolean;
 }
 
 export interface WorldGraph {

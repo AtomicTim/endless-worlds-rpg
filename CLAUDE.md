@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.3
-**Status:** Active Development — UX Polish Round 3 Complete
+**Version:** 8.4
+**Status:** Active Development — Navigation + NPC + Difficulty Fixes Complete
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
 ---
@@ -23,6 +23,7 @@
 | Map Overhaul | Icon header, type abbr, decorations, info panel | ✅ Complete |
 | UX Round 2 | Text readability, highlights, terse cap, geographic regions | ✅ Complete |
 | UX Round 3 | Map crash, inline dialogue, player text, stat rule, trade button | ✅ Complete |
+| Navigation + NPC + Difficulty | Back-links, WCD nav, NPC codex/descriptors, stakes difficulty | ✅ Complete |
 | UI Design Session | Claude Design — modern/retro visual overhaul | ⏳ Next |
 | 20 | Combat System | ⏳ Pending |
 | 21+ | Skills, Background, Factions | ⏳ Pending |
@@ -30,19 +31,31 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### UX Round 3 (commit f5e9237 — 43/43 tests, clean build)
+### Navigation + NPC + Difficulty (commits 353666f + 1828bd9 + 9a67990 — 43/43 tests)
 
-**Fix 1** — Map crash: hasValidMapPosition() helper. All tiers skip nodes with missing/non-numeric map_position.
-**Fix 2** — Current location pulse: Tier 3 current node has pulsing amber border via CSS animation.
-**Fix 3** — Inline dialogue free-text: DialogueModal has inline input with Send button. Stays open. Esc/blur dismisses.
-**Fix 4** — Player dialogue in feed: Echoed as NARRATIVE with isPlayerDialogue: true. Muted green italic before NPC response.
-**Fix 5** — Failed stat check rule: Named locations/people/secrets NEVER revealed on failed check. Wrong/right examples in prompt.
-**Fix 6** — Codex dedup notifications: saveCodexEntry returns { created: boolean }. Notification only fires when created: true.
-**Fix 7** — Repeat examine canned: examinedObjects: string[] in store. Second EXAMINE of same Tier 1 landmark → instant "You find nothing new." No AI call.
-**Fix 8** — Contextual loading wired: loadingText prop on StoryFeed from processingStep. Shows "Speaking with X...", "Examining Y...", etc.
-**Fix 9** — Merchant trade button: 💰 Trade in DialogueModal footer when NPC role contains merchant/trader/vendor/shopkeeper. Always accessible.
-**Fix 10** — RegionBible content: Every location needs purpose. Sub-locations: 1-2 NPCs + 2 objects. Standalone: ≥1 NPC + 2 objects. max_tokens 1500→2200.
-**Fix 11** — Verbosity strict: All blocks have "(STRICTLY ENFORCED)" + "This length rule overrides all other instructions."
+**Fix 1a — region_location back-connections:**
+apply-world-bible + apply-regional-bible: every region_location node unconditionally includes the settlement node id in connections. Settlement node connections include every region_location id. Symmetric edges guaranteed.
+
+**Fix 1b — NavigationBar return card:**
+When player is at a region_location, a leftmost "← [Settlement Name]" card appears pointing to the sibling settlement zone. Skipped if settlement is already in resolved connections.
+
+**Fix 2 — WCD landmarks navigable:**
+Landmarks with known_by === 'everyone' matched to adjacent_regions by id/name. Show as golden ◆ nav cards. Tap triggers RegionBible expansion. Tier 1 diamond buttons call onSelectRegion for matched landmarks.
+
+**Fix 3 — Tier 2 exit arrows filtered:**
+Only shows arrows where target is type=zone, not sub_location, in a different zone_id. Internal settlement→sub-location edges no longer appear as exits.
+
+**Fix 4 — NPC codex id fallback:**
+Step 7g lookup: exact id → character_${key} → key without character_ → name → normalized name → node npc_ids. findNpcInRegistry gained normalization reconciliation (strips character_ prefix before comparison).
+
+**Fix 5 — Descriptor → role NPC targeting:**
+matchDescriptorToNpc() helper with DESCRIPTOR_ROLES map. "the boy" → acolyte/apprentice/youth. "stranger"/"figure" match sole NPC when alone. Step 2b-2 tries descriptor matching before active-conversation fallback.
+
+**Fix 6 — Info panel NPC dedup:**
+LocationInfoPanel dedupes both npc_ids (seenIds Set) and display names (seenNames Set). Single loop, no double renders.
+
+**Fix 7 — Contextual stat check difficulty:**
+stakesBonusForIntent() in logic-resolver.ts. Public info: -2. Sensitive (location of, who is): +2. Personal/intimate: +3. Dangerous secrets (traitor/spy/conspiracy): +4. Clamps [6, 18]. Applied only when stat check fires. Dangerous tested before sensitive to avoid downgrade. Debug log shows full breakdown.
 
 ---
 
@@ -52,7 +65,7 @@
 **Layer 0 — WCD** — world_consistency jsonb, formatWcdBlock() first in all AI calls
 **Layer 1 — WorldBible** — geographic region + settlement + sub-locations + region_locations + main quest
 **Layer 2 — RegionBible** — on-demand via navigateTo, 2200 tokens, content required (≥1 NPC per location)
-**Layer 3 — Narrator** — YOUR ROLE HARD RULES (incl. stat check failure rule), TIER 1 OBJECTS verbatim, NPCS PRESENT
+**Layer 3 — Narrator** — YOUR ROLE HARD RULES, TIER 1 OBJECTS verbatim, NPCS PRESENT, stat check failure rule
 
 ### Geographic Hierarchy ✅
 ```
@@ -62,40 +75,37 @@ World
     │   ├── Sub-location (INN, MKT, FRG etc.) — Tier 3 block
     │   └── Sub-location
     ├── Standalone location (dungeon/wilderness) — Tier 2 node, ≥1 NPC
-    └── [Adjacent region exits]
-```
-
-### Three-Tier Map ✅
-```
-Tier 1 — Geographic regions. WCD landmark ◆ with tooltips.
-          Click region → Tier 2. Null-guard on map_position.
-Tier 2 — Settlement + standalone locations within region.
-          Click settlement → Tier 3.
-Tier 3 — Sub-locations. 72px blocks, type abbr, pulse on current node.
-          Location info panel below.
+    │   └── Back-connection to settlement guaranteed
+    └── [Adjacent region exits — WCD landmarks navigable via ◆ cards]
 ```
 
 ### Navigation Model ✅
+```
 Text input → DIALOGUE / EXAMINE / INTERACT / CUSTOM only (MOVE → INTERNAL_DESCRIBE)
-navigateTo(nodeId): NavigationBar, WorldMap, highlight clicks, adjacent region expansion.
-
-### Three-Tier Object System ✅
-Tier 1 → exact highlight → EXAMINE (canned response on repeat)
-Tier 2 → instant template → no narrator
-Tier 3 → narrator ambient → 1-2 sentences
+NavigationBar: connection cards + ← Return card for region_locations + ◆ WCD landmark cards
+WorldMap: Tier 1 landmark diamonds clickable when matched to adjacent_region
+Tier 2: exit arrows only for cross-zone connections (not internal sub-locations)
+```
 
 ### Dialogue System ✅
-- Inline free-text input within DialogueModal (no external InputBar routing)
-- Player dialogue echoed in feed before NPC response
-- 💰 Trade button in footer for merchant NPCs
-- Dialogue closes when trade opens, restores when trade closes
-- RESPONDING CHARACTER only, badge matches check
-- Failed check → evasion/deflection ONLY, never reveals information
+- Inline free-text within DialogueModal
+- Player dialogue echoed in feed
+- 💰 Trade button for merchants
+- Failed check → evasion only, never reveals information
+- Descriptor targets ("the boy") matched to NPC by role
+
+### Stat Check Difficulty ✅
+- Base difficulty from NPC trust score (difficultyForTrust)
+- Stakes bonus from intent analysis (stakesBonusForIntent)
+- Public info: -2 | Neutral: 0 | Sensitive: +2 | Personal: +3 | Dangerous: +4
+- Tone modifiers: deceptive +2 (on top of base+stakes)
+- Final clamp: [6, 18]
 
 ### NPC Rules ✅
 Real name from birth. Codex only on first player interaction.
-Codex dedup — notification only fires for genuinely new entries.
-Repeat examine returns instant canned response.
+id fallback chain: exact → character_ prefix → name → node npc_ids.
+Descriptor → role matching ("the boy" → acolyte/apprentice).
+Info panel deduped by id and name.
 
 ---
 
@@ -106,6 +116,8 @@ Write-once. ignoreDuplicates: true.
 
 ### 2. Navigation Is UI-Driven
 MOVE from text → INTERNAL_DESCRIBE. navigateTo(nodeId) only real navigation.
+region_locations always have back-connection to settlement.
+WCD landmarks reachable via ◆ cards when matched to adjacent_regions.
 
 ### 3. Location Is Authoritative State
 current_node_id saved on real navigateTo. IDs canonical.
@@ -119,7 +131,7 @@ Nothing disappears. Failed checks = evasion, never absence.
 ### 6. Dialogue Is Consistent
 RESPONDING CHARACTER only. Badge matches check.
 Failed check → no information revealed ever.
-intimidating→STR. curious→PER. deceptive→CHA+2. persuasive→CHA.
+Difficulty = trust base + stakes bonus + tone modifier, clamped [6,18].
 
 ### 7. The AI Has Exactly Three Roles
 Generator (Phase 1+2 only) → Bridge (exact names) → Thread (breadcrumbs)
@@ -144,7 +156,7 @@ ITEM amber+underline→EXAMINE. LANDMARK violet+underline→info.
 DIALOGUE: WCD → HARD RULES → RESPONDING CHARACTER → TIER 1 OBJECTS → WORLD ASSETS → SCENE CONTEXT → VERBOSITY
 non-DIALOGUE: WCD → HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → CONNECTED LOCATIONS → WORLD ASSETS → SCENE CONTEXT → VERBOSITY
 
-Verbosity (STRICTLY ENFORCED — overrides all other instructions):
+Verbosity (STRICTLY ENFORCED):
 - terse: 2/3/4 sentences, ≤12 words each
 - standard: 3-4/4-5/5-7 sentences
 - rich: 5-7/6-8/8-12 sentences
@@ -153,7 +165,7 @@ Verbosity (STRICTLY ENFORCED — overrides all other instructions):
 
 ## Pending Discussions
 
-**Dynamic pricing:** When STR/CHA check passes on price objection, write session flag price_override_[item_id]. TradeModal reads it. Needs: floor price, persistence rules, single-attempt limit. To discuss before implementing.
+**Dynamic pricing:** When STR/CHA check passes on price objection, write session flag price_override_[item_id]. TradeModal reads it. Needs: floor price, persistence rules, single-attempt limit.
 
 ---
 
@@ -185,11 +197,11 @@ Verbosity (STRICTLY ENFORCED — overrides all other instructions):
 - AI generates content once, engine owns it forever
 - Geographic region ≠ settlement — region is landscape, settlement is town
 - Navigation is UI-driven — text for actions only
-- Failed stat checks never reveal information
-- Codex only on first player interaction
-- Repeat examine returns instant canned response
+- region_locations always back-connected to settlement
+- WCD landmarks reachable via adjacent_region matching
+- Failed stat checks never reveal information — difficulty scales by stakes
+- Codex only on first player interaction, NPC id fallback chain
 - Every generated location must have content (NPCs + interactable objects)
-- Merchant dialogue has dedicated 💰 Trade button
 - Mobile-first: 44px touch targets, bottom sheet map, 52px nav cards
 
 ---
@@ -249,4 +261,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 70 — V8.3: UX Round 3. Map crash null guard, current node pulse, inline dialogue, player text in feed, failed stat check rule, codex dedup, repeat examine canned, contextual loading wired, merchant trade button, RegionBible content requirement, verbosity strict enforcement.*
+*Last updated: Session 71 — V8.4: Navigation back-links, WCD landmark nav cards, Tier 2 exit filter, NPC codex id fallback, descriptor→role matching, info panel dedup, contextual difficulty by stakes.*

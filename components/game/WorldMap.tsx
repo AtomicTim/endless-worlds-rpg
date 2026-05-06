@@ -283,21 +283,31 @@ function LocationInfoPanel({
     );
   }, [locationAssets, currentNode.id, currentNode.asset_id]);
 
+  // FIX 6 — dedupe npc_ids before resolving (some legacy graphs have the
+  // same id stored twice on the same node) AND dedupe by display name
+  // after resolving (the same NPC can appear under both "warden_kallista"
+  // and "character_warden_kallista" when an asset id mismatch leaks
+  // through). Render each character at most once.
   const npcs = useMemo(() => {
-    return currentNode.npc_ids
-      .map((id) => {
-        const asset = locationAssets.find(
-          (a) => a.id === id || a.id === `character_${id}`
-        );
-        if (!asset) return null;
-        return {
-          id,
-          name: asset.constitution.true_name && asset.name_known
-            ? asset.constitution.true_name
-            : asset.name,
-        };
-      })
-      .filter((x): x is { id: string; name: string } => x !== null);
+    const seenIds   = new Set<string>();
+    const seenNames = new Set<string>();
+    const out: Array<{ id: string; name: string }> = [];
+    for (const id of currentNode.npc_ids) {
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+      const asset = locationAssets.find(
+        (a) => a.id === id || a.id === `character_${id}`
+      );
+      if (!asset) continue;
+      const displayName = asset.constitution.true_name && asset.name_known
+        ? asset.constitution.true_name
+        : asset.name;
+      const nameKey = displayName.toLowerCase();
+      if (seenNames.has(nameKey)) continue;
+      seenNames.add(nameKey);
+      out.push({ id, name: displayName });
+    }
+    return out;
   }, [currentNode.npc_ids, locationAssets]);
 
   const typeAbbr   = getNodeTypeAbbr(currentNode.category ?? currentNode.type);

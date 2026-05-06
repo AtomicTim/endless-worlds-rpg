@@ -73,6 +73,77 @@ function getLoadingText(action: ParsedAction): string {
   }
 }
 
+/**
+ * FIX 5 — descriptor → role mapping. The Intent Parser sometimes hands us
+ * "the boy" / "the kid" / "the merchant" / "stranger" instead of a name
+ * because that's what the player typed. matchDescriptorToNpc tries to
+ * resolve those descriptors to a real NPC at the current node by
+ * comparing against the asset's role and archetype.
+ *
+ * Returns the matching asset when EXACTLY ONE NPC at the node fits;
+ * returns null when zero or multiple match (ambiguous → leave unresolved
+ * so the narrator can deflect rather than picking the wrong character).
+ */
+const DESCRIPTOR_ROLES: Record<string, string[]> = {
+  boy:      ["acolyte", "apprentice", "youth", "novice", "page", "child", "lad"],
+  girl:     ["acolyte", "apprentice", "youth", "vendor", "merchant", "lass", "child"],
+  kid:      ["acolyte", "apprentice", "youth", "page", "child"],
+  child:    ["acolyte", "apprentice", "youth", "page"],
+  man:      ["innkeeper", "guard", "merchant", "blacksmith", "smith", "trader",
+             "patron", "soldier", "captain", "warden"],
+  woman:    ["innkeeper", "merchant", "healer", "trader", "patron",
+             "soldier", "captain", "warden", "priestess"],
+  // Pure descriptors with no role hint — match any NPC, but only when there
+  // is exactly one at the node.
+  stranger: [],
+  figure:   [],
+  person:   [],
+};
+
+function matchDescriptorToNpc(
+  rawTarget: string,
+  presentNpcAssets: WorldAsset[]
+): WorldAsset | null {
+  const target = rawTarget.trim().toLowerCase().replace(/^the\s+/, "");
+  if (!target) return null;
+  if (presentNpcAssets.length === 0) return null;
+
+  // Direct role / archetype substring match — covers cases like
+  // "merchant" → role "merchant", "innkeeper" → role "innkeeper".
+  // archetype isn't on WorldAssetConstitution today (apply-world-bible
+  // doesn't carry it through), but we still read it via a loose record
+  // cast so any future schema addition or stub-generated NPC carrying
+  // archetype data lights up automatically.
+  const directHits = presentNpcAssets.filter((a) => {
+    const c = a.constitution as Record<string, unknown>;
+    const role      = String(c.role      ?? "").toLowerCase();
+    const archetype = String(c.archetype ?? "").toLowerCase();
+    if (!role && !archetype) return false;
+    return role.includes(target)
+        || archetype.includes(target)
+        || (role && target.includes(role))
+        || (archetype && target.includes(archetype));
+  });
+  if (directHits.length === 1) return directHits[0];
+
+  // Descriptor → role-bucket mapping (boy → acolyte, woman → innkeeper, etc.).
+  const acceptedRoles = DESCRIPTOR_ROLES[target];
+  if (acceptedRoles !== undefined) {
+    if (acceptedRoles.length === 0) {
+      // Generic descriptor — only resolve when there is exactly one NPC.
+      if (presentNpcAssets.length === 1) return presentNpcAssets[0];
+      return null;
+    }
+    const roleHits = presentNpcAssets.filter((a) => {
+      const role = String(a.constitution.role ?? "").toLowerCase();
+      if (!role) return false;
+      return acceptedRoles.some((r) => role.includes(r));
+    });
+    if (roleHits.length === 1) return roleHits[0];
+  }
+  return null;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function buildRollFeedback(resolution: ResolutionResult): string | null {
@@ -537,23 +608,38 @@ export function useGameLoop() {
             }
             parsedAction = { ...parsedAction, primary_target: real };
           } else if (shouldOverride && presentNpcAssets.length > 1) {
-            const activeNpcName = useGameStore.getState().currentDialogueNpc;
-            if (activeNpcName) {
-              const activeIsHere = presentNpcAssets.some(
-                (a) => a.name.toLowerCase() === activeNpcName.toLowerCase()
+            // FIX 5 — try descriptor → role matching BEFORE falling back
+            // to the active-conversation NPC. The intent parser sometimes
+            // emits "the boy" or "the merchant" when the player references
+            // an NPC by description rather than by name. We can resolve
+            // that descriptor against the role / archetype of every NPC
+            // present at the node — if exactly one matches, pin to that
+            // NPC instead of letting the narrator invent a new character.
+            const descriptorMatch = matchDescriptorToNpc(target, presentNpcAssets);
+            if (descriptorMatch) {
+              console.log(
+                `[GameLoop/2b-2] Resolved descriptor '${target}' → role-matched NPC: ${descriptorMatch.name}`
               );
-              if (activeIsHere) {
-                if (target && !targetMatchesPresent) {
-                  console.log(
-                    `[GameLoop/2b-2] Redirected unmatched target '${target}' to node NPC: ${activeNpcName}`
-                  );
-                } else {
-                  console.log(
-                    "[GameLoop/2b-2] Pinned primary_target to active NPC at node:",
-                    activeNpcName
-                  );
+              parsedAction = { ...parsedAction, primary_target: descriptorMatch.name };
+            } else {
+              const activeNpcName = useGameStore.getState().currentDialogueNpc;
+              if (activeNpcName) {
+                const activeIsHere = presentNpcAssets.some(
+                  (a) => a.name.toLowerCase() === activeNpcName.toLowerCase()
+                );
+                if (activeIsHere) {
+                  if (target && !targetMatchesPresent) {
+                    console.log(
+                      `[GameLoop/2b-2] Redirected unmatched target '${target}' to node NPC: ${activeNpcName}`
+                    );
+                  } else {
+                    console.log(
+                      "[GameLoop/2b-2] Pinned primary_target to active NPC at node:",
+                      activeNpcName
+                    );
+                  }
+                  parsedAction = { ...parsedAction, primary_target: activeNpcName };
                 }
-                parsedAction = { ...parsedAction, primary_target: activeNpcName };
               }
             }
           }
@@ -1832,29 +1918,68 @@ export function useGameLoop() {
                 )
                 .find((a): a is WorldAsset => !!a) ?? null;
 
+            // FIX 4 — codex lookup chain. The asset stored by
+            // apply-world-bible always has id "character_<slug>", but the
+            // registry key derived at dialogue time may be the bare slug
+            // (without prefix) when the WorldBible NPC's name normalizes
+            // to a different form than the canonical id. Try every
+            // sensible id permutation BEFORE falling back to name / node
+            // npc_ids so the codex write succeeds on the first plausible
+            // hit instead of getting silently skipped.
+            const keyWithoutPrefix = npcRegistryKey
+              ? npcRegistryKey.replace(/^character_/, "")
+              : null;
+            const keyWithPrefix = npcRegistryKey
+              ? (npcRegistryKey.startsWith("character_")
+                  ? npcRegistryKey
+                  : `character_${npcRegistryKey}`)
+              : null;
+
             const npcCodexAsset =
-              // First try: name match (covers most cases including stubs).
+              // 1. Exact id match against the registry key.
               liveAssets.find(
+                (a) =>
+                  a.category === AssetCategory.CHARACTER &&
+                  npcRegistryKey !== null &&
+                  a.id === npcRegistryKey
+              )
+              // 2. character_-prefixed id (registry key was a bare slug).
+              ?? liveAssets.find(
+                (a) =>
+                  a.category === AssetCategory.CHARACTER &&
+                  keyWithPrefix !== null &&
+                  a.id === keyWithPrefix
+              )
+              // 3. Unprefixed id (registry key was already prefixed but the
+              // asset row stored the bare slug — older saves).
+              ?? liveAssets.find(
+                (a) =>
+                  a.category === AssetCategory.CHARACTER &&
+                  keyWithoutPrefix !== null &&
+                  a.id === keyWithoutPrefix
+              )
+              // 4. Name match (existing) — covers stubs and most NPCs whose
+              // asset.id and asset.name normalize to the same slug.
+              ?? liveAssets.find(
                 (a) =>
                   a.category === AssetCategory.CHARACTER &&
                   effectiveNpcName !== null &&
                   a.name.toLowerCase() === effectiveNpcName.toLowerCase()
               )
-              // Second try: registry-key-normalized lookup. Catches pre-seeded
-              // NPCs whose stored asset.name spells slightly differently from
-              // what the player or narrator referred to them as.
+              // 5. Asset-name normalized to npcRegistryKey — catches
+              // assets whose display name differs slightly from the
+              // referenced name (e.g. honorific mismatches).
               ?? liveAssets.find(
                 (a) =>
                   a.category === AssetCategory.CHARACTER &&
                   normalizeAssetId(AssetCategory.CHARACTER, a.name) === npcRegistryKey
               )
-              // Third try: matchingAsset from earlier in the seed block (it
-              // already searched by id and name so we won't re-find anything
-              // new, but keep it as a final fallback for completeness).
+              // 6. matchingAsset (resolved earlier in the seed block).
               ?? matchingAsset
-              // Fourth try (audit fix): pick the first CHARACTER from the
-              // current node's npc_ids — works even when name matching is
-              // hopeless because the AI parser returned a descriptor.
+              // 7. currentNode.npc_ids fallback — pick the first CHARACTER
+              // from the live roster. Only correct when the player's
+              // descriptor (parsed by the AI as primary_target) couldn't
+              // be matched any other way.
               ?? nodeNpcAsset;
 
             if (npcCodexAsset) {

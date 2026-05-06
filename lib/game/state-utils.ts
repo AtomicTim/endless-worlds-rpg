@@ -216,6 +216,20 @@ export function findNpcInRegistry(
     }
   }
 
+  // 4. FIX 4 — reconciliation scan. Normalize every registry key the
+  // same way we normalized the target, with character_ prefix stripped
+  // from both, and compare. Catches obscure cases where the registry
+  // key and the WorldBible NPC asset id were minted from slightly
+  // different slug rules and none of the earlier prefixed / stripped
+  // permutations happened to line up exactly.
+  const targetCore = normalized.replace(/^character_/, "");
+  for (const [key, npc] of Object.entries(registry)) {
+    const keyCore = key.toLowerCase().replace(/^character_/, "");
+    if (keyCore && keyCore === targetCore) {
+      return { key, npc };
+    }
+  }
+
   return null;
 }
 

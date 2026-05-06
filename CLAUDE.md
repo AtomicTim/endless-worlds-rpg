@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.4
-**Status:** Active Development — Navigation + NPC + Difficulty Fixes Complete
+**Version:** 8.5
+**Status:** Active Development — Trade + Dialogue + Arrival Fixes Complete
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
 ---
@@ -24,6 +24,7 @@
 | UX Round 2 | Text readability, highlights, terse cap, geographic regions | ✅ Complete |
 | UX Round 3 | Map crash, inline dialogue, player text, stat rule, trade button | ✅ Complete |
 | Navigation + NPC + Difficulty | Back-links, WCD nav, NPC codex/descriptors, stakes difficulty | ✅ Complete |
+| Trade + Dialogue + Arrival | No-check trade, NPC switch, arrival header | ✅ Complete |
 | UI Design Session | Claude Design — modern/retro visual overhaul | ⏳ Next |
 | 20 | Combat System | ⏳ Pending |
 | 21+ | Skills, Background, Factions | ⏳ Pending |
@@ -31,31 +32,19 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Navigation + NPC + Difficulty (commits 353666f + 1828bd9 + 9a67990 — 43/43 tests)
+### Trade + Dialogue + Arrival (commit 38de0c4 — 43/43 tests, clean build)
 
-**Fix 1a — region_location back-connections:**
-apply-world-bible + apply-regional-bible: every region_location node unconditionally includes the settlement node id in connections. Settlement node connections include every region_location id. Symmetric edges guaranteed.
+**Fix 1 — Trade button no stat check:**
+New openTrade(npcName) in useGameLoop. Synthesizes INTERACT/INTERACT_SUCCESS with trade_available:true, calls narrateAction directly. No parseIntent, no resolveDialogue, no stat check. Trade is always available for merchants — trust affects price, not access. DialogueModal 💰 button calls onOpenTrade(npcName) prop.
 
-**Fix 1b — NavigationBar return card:**
-When player is at a region_location, a leftmost "← [Settlement Name]" card appears pointing to the sibling settlement zone. Skipped if settlement is already in resolved connections.
+**Fix 2 — Clear trade state on NPC change:**
+setTradeItems([]) clears tradeOpen flag. Step 7g clears items_for_sale on NPC switch (!continuingSameNpc). Merchant detection uses NPC asset role only — dropped items_for_sale.length > 0 shortcut.
 
-**Fix 2 — WCD landmarks navigable:**
-Landmarks with known_by === 'everyone' matched to adjacent_regions by id/name. Show as golden ◆ nav cards. Tap triggers RegionBible expansion. Tier 1 diamond buttons call onSelectRegion for matched landmarks.
+**Fix 3 — NPC switch during active dialogue:**
+Step 2b: explicit named NPC in input beats active-conversation pin. Step 2b-2: when named NPC is present at node but different from current, logs "NPC switch: old → new" and clears stale options. When named NPC is NOT at node, tags _namedNpcNotPresent — narrator says "X isn't here" in 1 sentence, never invents them.
 
-**Fix 3 — Tier 2 exit arrows filtered:**
-Only shows arrows where target is type=zone, not sub_location, in a different zone_id. Internal settlement→sub-location edges no longer appear as exits.
-
-**Fix 4 — NPC codex id fallback:**
-Step 7g lookup: exact id → character_${key} → key without character_ → name → normalized name → node npc_ids. findNpcInRegistry gained normalization reconciliation (strips character_ prefix before comparison).
-
-**Fix 5 — Descriptor → role NPC targeting:**
-matchDescriptorToNpc() helper with DESCRIPTOR_ROLES map. "the boy" → acolyte/apprentice/youth. "stranger"/"figure" match sole NPC when alone. Step 2b-2 tries descriptor matching before active-conversation fallback.
-
-**Fix 6 — Info panel NPC dedup:**
-LocationInfoPanel dedupes both npc_ids (seenIds Set) and display names (seenNames Set). Single loop, no double renders.
-
-**Fix 7 — Contextual stat check difficulty:**
-stakesBonusForIntent() in logic-resolver.ts. Public info: -2. Sensitive (location of, who is): +2. Personal/intimate: +3. Dangerous secrets (traitor/spy/conspiracy): +4. Clamps [6, 18]. Applied only when stat check fires. Dangerous tested before sensitive to avoid downgrade. Debug log shows full breakdown.
+**Fix 4 — Arrival header on RegionBible navigation:**
+Step 4d explicitly stamps location_status: ARRIVING after RegionBible expansion. arrivalLocationName derivation fires on MOVE_SUCCESS OR ZONE_EXPAND OR narrative_context.arriving_at OR location_status === ARRIVING.
 
 ---
 
@@ -88,23 +77,22 @@ Tier 2: exit arrows only for cross-zone connections (not internal sub-locations)
 ```
 
 ### Dialogue System ✅
-- Inline free-text within DialogueModal
-- Player dialogue echoed in feed
-- 💰 Trade button for merchants
+- Inline free-text within DialogueModal, player text echoed in feed
+- 💰 Trade button: direct openTrade() — NO stat check, NO parseIntent
+- Trade state cleared on panel close and on NPC change
+- Named NPC in input switches dialogue target if present at node
+- Named NPC not at node → narrator says "X isn't here", never invents
 - Failed check → evasion only, never reveals information
 - Descriptor targets ("the boy") matched to NPC by role
 
 ### Stat Check Difficulty ✅
-- Base difficulty from NPC trust score (difficultyForTrust)
-- Stakes bonus from intent analysis (stakesBonusForIntent)
+- difficultyForTrust (NPC trust) + stakesBonusForIntent (what player wants)
 - Public info: -2 | Neutral: 0 | Sensitive: +2 | Personal: +3 | Dangerous: +4
-- Tone modifiers: deceptive +2 (on top of base+stakes)
-- Final clamp: [6, 18]
+- Tone: deceptive +2. Final clamp [6, 18].
 
 ### NPC Rules ✅
 Real name from birth. Codex only on first player interaction.
 id fallback chain: exact → character_ prefix → name → node npc_ids.
-Descriptor → role matching ("the boy" → acolyte/apprentice).
 Info panel deduped by id and name.
 
 ---
@@ -131,6 +119,7 @@ Nothing disappears. Failed checks = evasion, never absence.
 ### 6. Dialogue Is Consistent
 RESPONDING CHARACTER only. Badge matches check.
 Failed check → no information revealed ever.
+Trade = direct openTrade(), no stat check. Trust affects price only.
 Difficulty = trust base + stakes bonus + tone modifier, clamped [6,18].
 
 ### 7. The AI Has Exactly Three Roles
@@ -197,8 +186,8 @@ Verbosity (STRICTLY ENFORCED):
 - AI generates content once, engine owns it forever
 - Geographic region ≠ settlement — region is landscape, settlement is town
 - Navigation is UI-driven — text for actions only
-- region_locations always back-connected to settlement
-- WCD landmarks reachable via adjacent_region matching
+- Trade is always available for merchants — no stat check
+- Named NPC in input switches dialogue, not-present NPC gets "X isn't here"
 - Failed stat checks never reveal information — difficulty scales by stakes
 - Codex only on first player interaction, NPC id fallback chain
 - Every generated location must have content (NPCs + interactable objects)
@@ -261,4 +250,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 71 — V8.4: Navigation back-links, WCD landmark nav cards, Tier 2 exit filter, NPC codex id fallback, descriptor→role matching, info panel dedup, contextual difficulty by stakes.*
+*Last updated: Session 72 — V8.5: Trade no stat check, trade state cleared on NPC change, NPC switch during dialogue, arrival header on RegionBible nav.*

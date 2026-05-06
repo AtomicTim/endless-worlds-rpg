@@ -647,6 +647,54 @@ function difficultyForTrust(trustScore: number): number {
   return 6;                          // allied
 }
 
+/**
+ * Maps the player's inferred_intent → a difficulty modifier reflecting
+ * the stakes of the information being asked for. Combines with
+ * difficultyForTrust() so the same NPC is easier to push for public
+ * facts and harder to push for dangerous secrets.
+ *
+ * Bands (cumulative with the trust base):
+ *   public knowledge    → -2  (almost free unless the NPC is hostile)
+ *   general lore        →  0  (no modifier)
+ *   sensitive info      → +2  (NPC needs a reason to share)
+ *   intimate/personal   → +3  (only friends and allies open up)
+ *   dangerous secrets   → +4  (could get the NPC killed or arrested)
+ *
+ * Order matters — earlier matches win because the player's intent
+ * usually only fits one band. We test the most "softening" (public)
+ * pattern first so a string like "where is the inn" stays easy
+ * instead of falling into the "where.*is" sensitive bucket.
+ */
+function stakesBonusForIntent(inferredIntent: string): number {
+  const intent = (inferredIntent ?? "").toLowerCase();
+  if (!intent) return 0;
+
+  // Public / basic knowledge — anyone in town would know this.
+  if (intent.match(/name|called|known as|what is this|where is the/)) {
+    return -2;
+  }
+
+  // Dangerous knowledge — could get the NPC killed or in trouble.
+  // Tested before the broader "sensitive" bucket so e.g. "weakness of
+  // the warden" stays at +4 instead of being downgraded to +2.
+  if (intent.match(/traitor|spy|weakness|betray|illegal|forbidden|kill|assassin|conspiracy/)) {
+    return 4;
+  }
+
+  // Intimate / personal history — strangers don't get this.
+  if (intent.match(/family|past|history|before.*came|what happened|personal/)) {
+    return 3;
+  }
+
+  // Sensitive — people don't share this freely.
+  if (intent.match(/secret|hiding|location of|where.*is|who.*is|contact|find.*person/)) {
+    return 2;
+  }
+
+  // General lore / local knowledge — base difficulty.
+  return 0;
+}
+
 function resolveDialogue(action: ParsedAction, state: MasterState, opts: ResolveOptions = {}): ResolutionResult {
   const charisma         = state.player_state.attributes.charisma;
   const strength         = state.player_state.attributes.strength;
@@ -725,6 +773,25 @@ function resolveDialogue(action: ParsedAction, state: MasterState, opts: Resolve
     default:
       // No stat check — just talk.
       break;
+  }
+
+  // Stakes bonus — what the player stands to learn. Layered on top of
+  // the trust+tone difficulty so a hostile NPC asked about a secret is
+  // very hard, but the same hostile NPC asked for the inn's name is
+  // still reachable. Clamp to a sane band so dice rolls stay meaningful
+  // at both extremes.
+  const stakesBonus = stakesBonusForIntent(action.inferred_intent ?? "");
+  if (statChecked !== null) {
+    difficulty = difficulty + stakesBonus;
+    difficulty = Math.max(6, Math.min(18, difficulty));
+    console.log("[resolveDialogue] difficulty breakdown:", {
+      baseDifficulty,
+      toneDifficulty:  baseDifficulty + (tone === "deceptive" ? 2 : 0),
+      stakesBonus,
+      finalDifficulty: difficulty,
+      tone,
+      trustScore,
+    });
   }
 
   // Always return success=true at the resolver layer; the narrator interprets

@@ -1,14 +1,14 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 7.9
-**Status:** Active Development — Gameplay Stabilization Round 2
+**Version:** 8.0
+**Status:** Active Development — Navigation Redesign Complete
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Testing stabilization, then Day 20 — Combat System
+**Current Phase:** Testing navigation redesign, then Day 20 — Combat System
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -19,75 +19,82 @@
 | 15–18 | Dialogue, UI, World Graph, Systems Audit | ✅ Complete |
 | 19A–19F | World Generation Architecture | ✅ Complete |
 | Gameplay Audit | 21-issue audit + full stabilization | ✅ Complete |
-| Stabilization Round 2 | Connection validation, pre-load, look-around, codex notify | ✅ Complete |
+| Navigation Redesign | UI-driven movement, mobile-first | ✅ Complete |
 | 20 | Combat System | ⏳ Pending |
 | 21+ | Skills, Background, Factions | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Stabilization Round 2 (commit bde032b — 86/86 tests, clean build)
+### Navigation Redesign (commit affc1a1 — 86/86 tests, clean build)
+Full spec: /docs/navigation-redesign.md
 
-**Fix 1 — WorldBible connection ID validation:**
-apply-world-bible + apply-regional-bible: build validLocationIds set per region. Each location's connections[] filtered against it. Dropped IDs are warn-logged. apply-regional-bible set also includes existingGraph.nodes so the back-link to origin region survives. Prevents WORLD_EXPLORE duplicates from typo'd/aliased connection IDs.
+**Core change:** Free-text navigation is disabled. When the player types movement text, the game intercepts it and routes to INTERNAL_DESCRIBE — the narrator describes what is visible from the current location. Navigation happens through explicit UI only.
 
-**Fix 2 — Pre-load assets BEFORE narrator runs on ARRIVING:**
-useGameLoop step 5: synchronous await getWorldAssetsForLocation() when location_status === ARRIVING before narrateAction call. NPCS PRESENT and TIER 1 OBJECTS now correctly populated on first visit. Step 7c fire-and-forget still runs for subsequent beats.
+**MOVE intercept (useGameLoop.ts):**
+parsedAction.action_type === MOVE → short-circuit before resolveAction → build synthetic DESCRIBE_SUCCESS resolution → call narrator with INTERNAL_DESCRIBE context. No move classifier. No WORLD_EXPLORE. No stub generator from text input.
 
-**Fix 3 — "Approach person" → INTERNAL_DESCRIBE:**
-move-classifier.ts: walk up to / approach / step toward / move toward (the) (woman|man|figure|person|stranger|knight|guard|merchant|innkeeper|bartender|clerk|vendor) added to INTERNAL_DESCRIBE_PATTERNS. "Walk up to the knight" no longer creates a phantom location.
+**navigateTo(nodeId) function:**
+Separate function from submitAction. Takes a raw node ID. Fires GRAPH_NAVIGATE directly for known connections. Triggers RegionBible expansion for adjacent undiscovered regions. Used by NavigationBar, WorldMap clicks, and highlight link clicks. Never called from text parsing.
 
-**Fix 4 — CONNECTED LOCATIONS block for look-around:**
-prompt-builder.ts: when action is EXAMINE or inferred_intent matches surroundings|look around|take in|scan|survey, narrator user prompt appends CONNECTED LOCATIONS block built from currentNode.connections (each resolved to WorldNode.name) + NPCs at this location line. Narrator told to use exact names only.
+**NavigationBar component (/components/game/NavigationBar.tsx):**
+Horizontal scrollable row of cards above InputBar. Reads currentNode.connections from worldGraph. Also shows adjacent undiscovered region cards from world_bible.adjacent_regions. Each card: location name, type icon, visited dot. Min height 52px (touch target). Tap calls onNavigate(nodeId) → navigateTo. Empty state: hidden.
 
-**Fix 5 — Codex notifications in story feed:**
-useGameLoop: store.addMessage("✦ [Name] added to codex") added after every codex save in step 7b (NOTABLE/MAJOR entries), step 7c (location on first arrival), step 7g (NPC on first dialogue). Styled as SYSTEM message — italic amber per Direction 3 UI.
+**Mobile map → bottom sheet:**
+Viewport < 768px: map opens as bottom sheet (65vh, rounded top corners, drag handle, backdrop, X button). Tap backdrop or X to close. Default tier on open: Local (Tier 3). Desktop: sidebar panel unchanged. Map button: 44px min touch target on mobile.
 
-**Fix 6 — Verbosity toggle measurable + verified:**
-VerbosityToggle: console.log on click. useGameLoop: console.log before narrateAction. prompt-builder: console.log when verbosity block added. VERBOSITY_BLOCKS rewritten with concrete sentence caps: terse = max 2/3/4, standard = 3-4/4-5/5-7, rich = 5-7/6-8/8-12. Block appended LAST so caps are final instruction the model reads.
+**Highlight clicks → navigateTo:**
+LOCATION highlights now carry nodeId in HighlightCandidate. Clicking a LOCATION highlight calls navigateTo(nodeId) directly — no text parsing, no submitAction.
+
+**WorldMap clicks → navigateTo:**
+WorldMap.onNavigate now takes nodeId. All three tier components pass raw node IDs. No "go to X" text string.
+
+**InputBar:**
+Placeholder: "Talk, examine, or take action..." Font size 16px (prevents iOS auto-zoom). Min height 52px.
+
+**Local Map (Tier 3) mobile:**
+Sub-location blocks: min 56px height. Exit buttons: full-width 44px pill buttons labeled "→ [Region Name]".
 
 ---
 
 ## 🏗️ Architecture — Complete ✅
 
 ### Four Layers ✅
-**Layer 0 — WCD** — world_consistency jsonb, formatWcdBlock() injected first in all AI calls
+**Layer 0 — WCD** — world_consistency jsonb, formatWcdBlock() first in all AI calls
 **Layer 1 — WorldBible** — world_bible jsonb, settlement hub + sub-locations + NPCs + outlines + main quest
-**Layer 2 — RegionBible** — on-demand, maxDuration=300, background pre-generation, deduplication cache
-**Layer 3 — Narrator** — YOUR ROLE HARD RULES, TIER 1 OBJECTS verbatim imperative, NPCS PRESENT from graph npc_ids, CONNECTED LOCATIONS on look-around
+**Layer 2 — RegionBible** — on-demand via navigateTo only (never from text), background pre-generation
+**Layer 3 — Narrator** — YOUR ROLE HARD RULES, TIER 1 OBJECTS verbatim, NPCS PRESENT, CONNECTED LOCATIONS
+
+### Navigation Model ✅
+```
+Text input → DIALOGUE / EXAMINE / INTERACT / CUSTOM only
+           → MOVE intercepted → INTERNAL_DESCRIBE (narrator describes visible locations)
+
+NavigationBar card click → navigateTo(nodeId) → GRAPH_NAVIGATE
+WorldMap node click → navigateTo(nodeId) → GRAPH_NAVIGATE
+Highlighted location text click → navigateTo(nodeId) → GRAPH_NAVIGATE
+Adjacent region card click → navigateTo(regionId) → RegionBible expansion
+```
 
 ### Three-Tier Object System ✅
 **Tier 1** — AI LocationObjects → key_landmarks → exact highlight → EXAMINE
-**Tier 2** — ambient-objects.ts (27 types, all genres) → instant response → no narrator
-**Tier 3** — narrator ambient instruction → 1-2 sentences → nothing disappears
+**Tier 2** — ambient-objects.ts (27 types) → instant response → no narrator
+**Tier 3** — narrator ambient → 1-2 sentences → nothing disappears
 
 ### Location Hierarchy ✅
-```
-Region
-└── Settlement Node (type:settlement, town square/crossroads — NEVER a building)
-    ├── Sub-location (is_interior: true)
-    ├── Sub-location (is_interior: true)
-    └── [non-notable — grey filler blocks on Local Map]
-```
-Connection IDs validated against location IDs at apply time. Bad IDs dropped and warn-logged.
+Settlement Node (town square) → Sub-locations (interior) → [grey filler on map]
+Connection IDs validated at apply time.
 
 ### NPC Rules ✅
-Real name from birth. name_known always true. No reveal pipeline.
-Narrator: use exact NPC names verbatim. NPCs highlighted on first arrival (pre-load fix).
-"Walk up to person" → INTERNAL_DESCRIBE, not MOVE.
+Real name from birth. Pre-loaded before narrator on ARRIVING.
+Placeholder targets redirect to real WorldBible NPC.
+"Walk up to person" → INTERNAL_DESCRIBE.
 
-### Narrator Prompt Order ✅
-For DIALOGUE: WCD → HARD RULES → RESPONDING CHARACTER → TIER 1 OBJECTS → WORLD ASSETS → SCENE CONTEXT → VERBOSITY
-For non-DIALOGUE: WCD → HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → CONNECTED LOCATIONS (on look) → WORLD ASSETS → SCENE CONTEXT → VERBOSITY
-
-### Verbosity ✅
-- Terse: max 2 sentences routine / 3 NPC / 4 arrival
-- Standard: 3-4 / 4-5 / 5-7
-- Rich: 5-7 / 6-8 / 8-12
-Block appended LAST in system prompt.
-
-### Codex Notifications ✅
-"✦ [Name] added to codex" SYSTEM message fires on: NOTABLE/MAJOR codex entry saves, location first arrival, NPC first dialogue.
+### Mobile-First ✅
+NavigationBar: 52px cards, horizontal scroll, always visible.
+Map: bottom sheet on mobile (<768px), sidebar on desktop.
+InputBar: 16px font, 52px height.
+All touch targets: 44px minimum.
 
 ---
 
@@ -96,27 +103,28 @@ Block appended LAST in system prompt.
 ### 1. World Assets Are Permanent
 Write-once. ignoreDuplicates: true. AI generates once, engine owns forever.
 
-### 2. Movement Is Graph-Based
-GRAPH_NAVIGATE / INTERNAL_DESCRIBE / ZONE_EXPAND / WORLD_EXPLORE. current_node_id is truth.
-Location IDs canonical — never strip article prefixes.
-Connection IDs validated at apply time. "Walk up to person" → INTERNAL_DESCRIBE.
+### 2. Navigation Is UI-Driven
+MOVE actions from text input → INTERNAL_DESCRIBE only.
+Real navigation via navigateTo(nodeId): NavigationBar, WorldMap, highlight clicks.
+WORLD_EXPLORE and RegionBible expansion via navigateTo only — never from text parsing.
 
 ### 3. Location Is Authoritative State
-current_node_id saved immediately on real moves. INTERNAL_DESCRIBE does NOT update location.
+current_node_id saved immediately on real navigateTo moves.
+Location IDs canonical — never strip article prefixes.
 
 ### 4. Actions Are Permitted By Default
-Tier 1 → rich AI. Tier 2 → template. Tier 3 → brief ambient. Nothing disappears.
+Text input: DIALOGUE / EXAMINE / INTERACT / CUSTOM.
+Tier 1 → rich AI. Tier 2 → template. Tier 3 → brief ambient.
 
 ### 5. Objects Mentioned Exist
-Nothing ever disappears or "didn't exist." Failed checks = evasion, never absence.
+Nothing ever disappears. Failed checks = evasion, never absence.
 
 ### 6. Dialogue Is Consistent
-RESPONDING CHARACTER only. Option tone authoritative. Badge always matches check.
-Placeholder descriptors redirect to real WorldBible NPC via step 2b-2.
-intimidating → STR. aggressive → STR. curious → PER. deceptive → CHA+2. persuasive → CHA.
+RESPONDING CHARACTER only. Badge matches check.
+intimidating → STR. curious → PER. deceptive → CHA+2. persuasive → CHA.
 
 ### 7. The AI Has Exactly Three Roles
-Generator (Phase 1+2 only) → Bridge (describe only, exact names) → Thread (breadcrumbs)
+Generator (Phase 1+2 only) → Bridge (describe only) → Thread (breadcrumbs)
 
 ### 8. WCD Is Absolute Law
 Injected first into every AI call. Nothing can contradict it.
@@ -125,24 +133,27 @@ Injected first into every AI call. Nothing can contradict it.
 NEVER means NPC left or object doesn't exist.
 
 ### 10. Highlights Are Exact Tier 1 Matches
-Tier 1 objects, NPC names, connected location names, WCD landmarks. Exact whole-word match.
-Narrator instructed to use exact names verbatim.
+Objects → EXAMINE. NPCs → DIALOGUE. Locations → navigateTo(nodeId). WCD landmarks → info.
 
 ---
 
 ## 🎭 NPC Dialogue System ✅
-- Assets pre-loaded before narrator on ARRIVING — NPCs visible on first visit
-- RESPONDING CHARACTER only for DIALOGUE
-- Placeholder targets redirect to real WorldBible NPC via step 2b-2
-- Option tone: modal → submitAction(forcedTone) → resolver
-- intimidating always STR, no CHA fallback
-- Badge always matches the check that fires
-- No reveal pipeline — real names from birth
-- Failed checks = evasion, never absence
-- npc_ids validated + re-stitched at apply time
+- RESPONDING CHARACTER only. Placeholder → real NPC via step 2b-2.
+- Option tone → resolver. Badge matches check. Real names from birth.
+- Failed checks = evasion. Assets pre-loaded before narrator on ARRIVING.
 
 ## 💰 Trading System (Day 16) ✅
 ## 🎨 UI System (Direction 3) ✅
+## 🗺️ Three-Tier Map ✅ — bottom sheet on mobile
+
+---
+
+## Narrator Architecture ✅
+
+For DIALOGUE: WCD → HARD RULES → RESPONDING CHARACTER → TIER 1 OBJECTS → WORLD ASSETS → SCENE CONTEXT → VERBOSITY
+For non-DIALOGUE: WCD → HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → CONNECTED LOCATIONS → WORLD ASSETS → SCENE CONTEXT → VERBOSITY
+
+Verbosity: terse (2/3/4 sentences) / standard (3-4/4-5/5-7) / rich (5-7/6-8/8-12). Block last.
 
 ---
 
@@ -150,38 +161,31 @@ Narrator instructed to use exact names verbatim.
 
 | System | When | Description |
 | --- | --- | --- |
-| Combat System | Day 20 | Turn-based, enemy AI, loot |
+| Combat System | Day 20 | Turn-based, structured UI (not free text) |
 | Skills & Abilities | Day 21 | Skill trees, attribute thresholds |
 | Main Narrative Thread | Day 22 | Breadcrumb injection from WorldBible |
-| Character Background | Phase 3 | Traits, history, faction rep |
+| Object Types | Day 20 | landmark/container/item/mechanism/document — distinct actions |
 | Art System | Phase 3 | Static pixel art library + Replicate API |
 
 ---
 
 ## Supabase Tables (all applied ✅)
 - game_sessions: +world_seed, +world_graph, +world_consistency, +world_bible
-- world_states: +current_node_id. world-state route accepts optional worldGraph.
+- world_states: +current_node_id. world-state route accepts worldGraph.
 - Migrations 001-009.
 
 ---
 
 ## Core Philosophy
 - AI generates content once, engine owns it forever
+- Navigation is UI-driven — text input for actions only
 - WCD is the constitution — injected everywhere, never contradicted
-- Settlement node = public hub (square/crossroads) — NEVER a building
+- Settlement node = public hub — never a building
 - Location IDs canonical — never strip article prefixes
-- Connection IDs validated at apply time — no phantom locations from bad references
-- Assets pre-loaded before narrator on ARRIVING — NPCs visible on first visit
-- "Walk up to person" = INTERNAL_DESCRIBE, not MOVE
-- Look-around receives CONNECTED LOCATIONS block with exact WorldBible names
-- Codex notifications in feed on every new entry
-- Verbosity has concrete sentence caps, appended last
-- Three object tiers: Tier 1 (AI, verbatim) / Tier 2 (templates) / Tier 3 (ambient)
+- Assets pre-loaded before narrator on ARRIVING
+- Three object tiers: Tier 1 (AI) / Tier 2 (templates) / Tier 3 (ambient)
 - Narrator describes with exact names, never generates
-- Highlights are exact Tier 1 matches only
-- Failed checks = evasion only
-- Graph persisted after every mutation
-- DnD freedom: player can try anything, engine routes appropriately
+- Mobile-first: 44px touch targets, bottom sheet map, 52px nav cards
 
 ---
 
@@ -240,4 +244,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 66 — V7.9: Stabilization Round 2. Connection validation, pre-load assets on ARRIVING, approach-person INTERNAL_DESCRIBE, CONNECTED LOCATIONS on look-around, codex notifications, verbosity concrete caps.*
+*Last updated: Session 67 — V8.0: Navigation redesign complete. UI-driven movement. NavigationBar. Mobile bottom sheet map. MOVE intercepted → INTERNAL_DESCRIBE. navigateTo bypasses text parsing. 44px touch targets throughout.*

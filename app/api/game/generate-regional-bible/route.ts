@@ -67,162 +67,115 @@ function buildUserPrompt(
 ): string {
   const wcdBlock = formatWcdBlock(wcd);
   const opposite = OPPOSITE[directionFromOrigin.toLowerCase()] ?? "the opposite direction";
-  const existing = existingNames.length > 0 ? existingNames.join(", ") : "(none)";
-  const factionLine = outline.controlling_faction
-    ? `Region is controlled by faction "${outline.controlling_faction}" — at least 1 NPC must be affiliated with that faction.`
-    : "Faction affiliations only when consistent with the WCD.";
-  const landmarkLine = outline.landmark_id
-    ? `If outline.landmark_id ("${outline.landmark_id}") is set, feature it prominently in one location's atmosphere and objects.`
-    : "";
+  void existingNames;
+  void genre;
 
-  // Audit Issue E fix: tightened to a small skeleton. The previous
-  // bullet-list prompt produced 3000-token responses that timed out.
-  // New shape: 1 settlement + 2 sub-locations + 3 NPCs + 1 outward
-  // exit (back to origin is implicit). Skeleton format reduces drift
-  // to alias names / nested wrappers (same approach as WorldBible).
+  // Audit Issue E follow-up: shrunk to the bare minimum that still
+  // produces a playable region. 1 hub + 1 sub-location + 2 NPCs + 1
+  // exit (back to origin only). Pairs with max_tokens: 1500 below so
+  // the response never truncates mid-JSON.
+  const originRegionId = originRegionName.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+  const subSlug        = `${outline.id}_inn`;
+  const npc1Slug       = `${outline.id}_npc1`;
+  const npc2Slug       = `${outline.id}_npc2`;
+  const obj1Slug       = `${outline.id}_obj1`;
+  const obj2Slug       = `${outline.id}_obj2`;
+
   return `${wcdBlock}
 
-Expand this region outline into a Regional Bible for a ${genre} RPG.
-The player is arriving from ${originRegionName} to the ${directionFromOrigin}.
-Already-existing region names (do NOT duplicate): ${existing}
+Expand this region outline into a RegionBible JSON.
+Region: ${JSON.stringify(outline)}
+Arriving from: ${originRegionName} to the ${directionFromOrigin}
 
-Region outline (locked facts):
-${JSON.stringify(outline, null, 2)}
-
-CRITICAL ARCHITECTURAL RULE — read before generating:
-The settlement node (is_settlement_node: true) MUST be a public hub
-(square, crossroads, market plaza). It must NEVER be a tavern, inn,
-smithy, shop, temple, or other named building. Those are sub-locations
-(is_interior: true) connected to the hub via parent_location_id.
-
-Return EXACTLY this JSON structure (fill in the values):
+Return EXACTLY this structure (fill with creative content
+consistent with the WCD):
 {
   "id": "${outline.id}",
   "name": "${outline.name}",
   "type": "${outline.type}",
   "grid_centre": ${JSON.stringify(outline.grid_centre)},
-  "grid_radius": 4,
-  "atmosphere": "2 sentence description (must echo: ${outline.atmosphere_hint})",
+  "grid_radius": 3,
+  "atmosphere": "[2 sentences, consistent with WCD]",
   "controlling_faction": ${outline.controlling_faction ? `"${outline.controlling_faction}"` : "null"},
   "locations": [
     {
-      "id": "hub_slug",
-      "name": "Hub Name (square / crossroads / plaza — NEVER a building)",
+      "id": "${outline.id}",
+      "name": "[Hub Name — a public gathering space, NOT a building]",
       "type": "settlement",
-      "grid_position": ${JSON.stringify(outline.grid_centre)},
-      "region_id": "${outline.id}",
       "is_settlement_node": true,
       "is_interior": false,
-      "atmosphere": "2 sentences describing arrival impressions.",
-      "connections": ["sub_one_slug", "sub_two_slug"],
+      "atmosphere": "[2 sentences]",
+      "grid_position": ${JSON.stringify(outline.grid_centre)},
+      "connections": ["${subSlug}"],
       "npc_ids": [],
       "objects": [
-        {"id": "obj_a_slug", "name": "Object A Name", "description": "1 sentence", "is_interactable": true},
-        {"id": "obj_b_slug", "name": "Object B Name", "description": "1 sentence", "is_interactable": true}
+        {
+          "id": "${obj1Slug}",
+          "name": "[Exact Object Name]",
+          "description": "[1 sentence]",
+          "is_interactable": true
+        }
       ],
       "ambient_type": "town_square"
     },
     {
-      "id": "sub_one_slug",
-      "name": "Sub-location One Name",
+      "id": "${subSlug}",
+      "name": "[Sub-location Name]",
       "type": "tavern",
-      "grid_position": {"x": ${outline.grid_centre.x}, "y": ${outline.grid_centre.y}},
-      "region_id": "${outline.id}",
       "is_settlement_node": false,
       "is_interior": true,
-      "parent_location_id": "hub_slug",
-      "atmosphere": "2 sentences.",
-      "connections": ["hub_slug"],
-      "npc_ids": ["character_one_slug"],
+      "parent_location_id": "${outline.id}",
+      "atmosphere": "[2 sentences]",
+      "grid_position": {"x": ${outline.grid_centre.x - 1}, "y": ${outline.grid_centre.y}},
+      "connections": ["${outline.id}"],
+      "npc_ids": ["character_${npc1Slug}", "character_${npc2Slug}"],
       "objects": [
-        {"id": "obj_c_slug", "name": "Object C Name", "description": "1 sentence", "is_interactable": true},
-        {"id": "obj_d_slug", "name": "Object D Name", "description": "1 sentence", "is_interactable": true}
+        {
+          "id": "${obj2Slug}",
+          "name": "[Exact Object Name]",
+          "description": "[1 sentence]",
+          "is_interactable": true
+        }
       ],
       "ambient_type": "tavern_common_room"
-    },
-    {
-      "id": "sub_two_slug",
-      "name": "Sub-location Two Name",
-      "type": "market",
-      "grid_position": {"x": ${outline.grid_centre.x}, "y": ${outline.grid_centre.y}},
-      "region_id": "${outline.id}",
-      "is_settlement_node": false,
-      "is_interior": true,
-      "parent_location_id": "hub_slug",
-      "atmosphere": "2 sentences.",
-      "connections": ["hub_slug"],
-      "npc_ids": ["character_two_slug", "character_three_slug"],
-      "objects": [
-        {"id": "obj_e_slug", "name": "Object E Name", "description": "1 sentence", "is_interactable": true},
-        {"id": "obj_f_slug", "name": "Object F Name", "description": "1 sentence", "is_interactable": true}
-      ],
-      "ambient_type": "market_stall"
     }
   ],
   "npcs": [
     {
-      "id": "character_one_slug",
-      "name": "Full Name",
-      "home_location_id": "sub_one_slug",
+      "id": "character_${npc1Slug}",
+      "name": "[Full Real Name]",
+      "home_location_id": "${subSlug}",
       "role": "innkeeper",
-      "archetype": "1-2 word archetype",
-      "appearance": "1 sentence",
-      "personality": "1 sentence (2-3 traits)",
-      "speech_style": "brief",
-      "knowledge": ["fact 1", "fact 2"],
+      "appearance": "[1 sentence]",
+      "personality": "[1 sentence]",
+      "speech_style": "[3 words]",
+      "knowledge": ["[WCD-consistent fact]"],
       "default_trust": 50
     },
     {
-      "id": "character_two_slug",
-      "name": "Full Name",
-      "home_location_id": "sub_two_slug",
-      "role": "merchant",
-      "archetype": "1-2 word archetype",
-      "appearance": "1 sentence",
-      "personality": "1 sentence",
-      "speech_style": "brief",
-      "knowledge": ["fact 1"],
-      "default_trust": 50
-    },
-    {
-      "id": "character_three_slug",
-      "name": "Full Name",
-      "home_location_id": "sub_two_slug",
+      "id": "character_${npc2Slug}",
+      "name": "[Full Real Name]",
+      "home_location_id": "${subSlug}",
       "role": "patron",
-      "archetype": "1-2 word archetype",
-      "appearance": "1 sentence",
-      "personality": "1 sentence",
-      "speech_style": "brief",
-      "knowledge": ["fact 1"],
+      "appearance": "[1 sentence]",
+      "personality": "[1 sentence]",
+      "speech_style": "[3 words]",
+      "knowledge": ["[WCD-consistent fact]"],
       "default_trust": 50
     }
   ],
   "exits": [
     {
       "direction": "${opposite}",
-      "target_region_id": "${outline.id === originRegionName.toLowerCase().replace(/[^a-z0-9]+/g, "_") ? outline.id : originRegionName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}",
-      "from_location_id": "hub_slug",
-      "description": "1 sentence describing the path back to ${originRegionName}."
-    },
-    {
-      "direction": "outward",
-      "target_region_id": "outward_region_slug",
-      "from_location_id": "hub_slug",
-      "description": "1 sentence hinting at undiscovered territory."
+      "target_region_id": "${originRegionId}",
+      "from_location_id": "${outline.id}",
+      "description": "[1 sentence]"
     }
   ]
 }
 
-Constraints:
-- Settlement node MUST be a hub (square/crossroads), never a building.
-- 1 settlement node + 2 sub-locations (no more, no less).
-- 3 NPCs total. Real names. No placeholders. ${factionLine}
-- 2 Tier 1 objects per location with specific evocative names.
-- ${landmarkLine}
-- All connections bidirectional. NPC knowledge must be WCD-consistent.
-- No breadcrumbs in this layer — those live in the WorldBible.
-
-Respond with valid JSON matching the structure above. No markdown.`;
+Make everything original and consistent with the WCD.
+Real names for all NPCs. No placeholders.`;
 }
 
 function stripJsonFences(raw: string): string {
@@ -265,12 +218,13 @@ function validateBible(parsed: unknown): { ok: true; bible: RegionBible } | { ok
 }
 
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
-  // Audit Issue E fix: max_tokens reduced from 3000 → 2000 to keep
-  // the wall time within the function budget. Pair with the smaller
-  // skeleton prompt above which targets ~1500-1800 tokens of output.
+  // Audit Issue E follow-up: max_tokens reduced from 2000 → 1500 to
+  // pair with the further-shrunk skeleton (1 hub + 1 sub-location +
+  // 2 NPCs + 1 exit). Responses now sit comfortably under the limit
+  // so we never truncate mid-JSON.
   const message = await client.messages.create({
     model:      "claude-sonnet-4-5",
-    max_tokens: 2000,
+    max_tokens: 1500,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });

@@ -9,17 +9,21 @@ import type {
 } from "@/types/game";
 import {
   getNodeColor,
+  getNodeTypeAbbr,
   MAP_CURRENT_GLOW,
   MAP_NPC_DOT,
 } from "@/lib/game/map-colors";
+import { getGenreColors } from "../genre-ui";
+import { MapDecoration, getDecorationsForGenre } from "./MapDecorations";
 
 /**
  * Day 19F — Tier 3: Local Map.
  *
  * Renders the layout of a single zone: its settlement node plus every
- * sub_location that calls the zone home. Ambient grey filler blocks pad
- * the layout out so a tiny settlement still feels like a real place.
- * Region exits sit as labelled arrows around the edges.
+ * sub_location that calls the zone home. Empty grid cells are dressed
+ * with a small constellation of genre-themed SVG decorations (replacing
+ * the previous grey filler blocks). Region exits sit as labelled arrows
+ * around the edges.
  *
  * Clicking a notable sub-location fires onNavigateTo(nodeId) — the
  * caller (WorldMap → GameLayout → page) submits a "go to <name>" action
@@ -36,15 +40,19 @@ interface Props {
   onNavigateTo:    (nodeId: string) => void;
 }
 
-const NODE_PX        = 56;
-const FILLER_PX      = 20;
-const TARGET_FILLERS = 12;
+const NODE_PX     = 72;
+const CELL_PAD_PX = 8;
+const CELL_PX     = NODE_PX + CELL_PAD_PX;
 
 export function WorldMapTier3({
+  masterState,
   worldGraph,
   currentNodeId,
   onNavigateTo,
 }: Props) {
+  const genre  = masterState.metadata.genre;
+  const colors = getGenreColors(genre);
+
   const currentNode = worldGraph.nodes[currentNodeId];
   const zoneId =
     currentNode && currentNode.type === "sub_location"
@@ -82,8 +90,6 @@ export function WorldMapTier3({
       positions.set(node.id, { x, y });
     }
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    // Snapshot to an array first — older TS targets can't iterate Map values
-    // directly without --downlevelIteration.
     const allPositions = Array.from(positions.values());
     for (const p of allPositions) {
       if (p.x < minX) minX = p.x;
@@ -99,33 +105,60 @@ export function WorldMapTier3({
 
   const cols   = Math.max(1, layout.bounds.maxX - layout.bounds.minX + 1);
   const rows   = Math.max(1, layout.bounds.maxY - layout.bounds.minY + 1);
-  const totalW = cols * (NODE_PX + 8);
-  const totalH = rows * (NODE_PX + 8);
+  const totalW = cols * CELL_PX;
+  const totalH = rows * CELL_PX;
 
   const toPx = (gx: number, gy: number) => ({
-    left: (gx - layout.bounds.minX) * (NODE_PX + 8),
-    top:  (gy - layout.bounds.minY) * (NODE_PX + 8),
+    left: (gx - layout.bounds.minX) * CELL_PX,
+    top:  (gy - layout.bounds.minY) * CELL_PX,
   });
 
-  // ── Ambient filler blocks — count derived from notable count ───────────────
-  const fillerCount = Math.max(0, TARGET_FILLERS - notableNodes.length);
-  const fillerSeed  = hashString(zoneId);
-  const fillers     = useMemo(() => {
-    const out: Array<{ left: number; top: number; rot: number }> = [];
-    const wPad = 12;
-    const hPad = 12;
-    for (let i = 0; i < fillerCount; i += 1) {
-      const r1 = mulberry32(fillerSeed + i * 9301);
-      const r2 = mulberry32(fillerSeed + i * 49297);
-      const r3 = mulberry32(fillerSeed + i * 233280);
-      out.push({
-        left: wPad + r1() * Math.max(0, totalW - 2 * wPad - FILLER_PX),
-        top:  hPad + r2() * Math.max(0, totalH - 2 * hPad - FILLER_PX),
-        rot:  Math.floor(r3() * 30) - 15,
-      });
+  // ── Decorations — fill every empty grid cell with 3-5 small SVG glyphs ────
+  // Each cell's decorations are seeded by `${zoneId}:${gx}:${gy}` so the
+  // texture is stable across renders and across save/load cycles.
+  const decorations = useMemo(() => {
+    const occupied = new Set<string>();
+    Array.from(layout.positions.values()).forEach((p) => {
+      occupied.add(`${p.x},${p.y}`);
+    });
+    const decorCount = getDecorationsForGenre(genre).length;
+
+    const out: Array<{
+      key:   string;
+      left:  number;
+      top:   number;
+      size:  number;
+      rot:   number;
+      type:  number;
+    }> = [];
+
+    for (let gy = layout.bounds.minY; gy <= layout.bounds.maxY; gy += 1) {
+      for (let gx = layout.bounds.minX; gx <= layout.bounds.maxX; gx += 1) {
+        if (occupied.has(`${gx},${gy}`)) continue;
+
+        const seed = hashString(`${zoneId}:${gx}:${gy}`);
+        const rng  = mulberry32(seed);
+        const count = 3 + Math.floor(rng() * 3); // 3, 4 or 5
+        const cellLeft = (gx - layout.bounds.minX) * CELL_PX;
+        const cellTop  = (gy - layout.bounds.minY) * CELL_PX;
+
+        for (let i = 0; i < count; i += 1) {
+          const size = 14 + Math.floor(rng() * 10); // 14-23px
+          const dx   = rng() * Math.max(0, NODE_PX - size);
+          const dy   = rng() * Math.max(0, NODE_PX - size);
+          out.push({
+            key:  `${gx},${gy}:${i}`,
+            left: cellLeft + dx,
+            top:  cellTop  + dy,
+            size,
+            rot:  Math.floor(rng() * 360),
+            type: Math.floor(rng() * decorCount),
+          });
+        }
+      }
     }
     return out;
-  }, [fillerCount, fillerSeed, totalW, totalH]);
+  }, [layout, zoneId, genre]);
 
   // ── Region exits — connections that point outside this zone ────────────────
   const regionExits = useMemo(() => {
@@ -152,6 +185,9 @@ export function WorldMapTier3({
     );
   }
 
+  // Decoration ink — heavily muted tint of the genre's primary accent.
+  const decorColor = `color-mix(in srgb, ${colors.primary} 18%, transparent)`;
+
   return (
     <div
       className="scrollbar-thin h-full w-full overflow-auto p-3"
@@ -161,24 +197,29 @@ export function WorldMapTier3({
         className="relative mx-auto"
         style={{ width: totalW, height: totalH }}
       >
-        {/* Filler ambient blocks — non-clickable, no tooltip */}
-        {fillers.map((f, i) => (
-          <div
-            key={`filler-${i}`}
-            aria-hidden
-            className="pointer-events-none absolute"
-            style={{
-              left:            f.left,
-              top:             f.top,
-              width:           FILLER_PX,
-              height:          FILLER_PX,
-              backgroundColor: "#1f2937",
-              opacity:         0.55,
-              borderRadius:    2,
-              transform:       `rotate(${f.rot}deg)`,
-            }}
-          />
-        ))}
+        {/* Genre-flavoured ambient decorations — non-clickable, non-tooltip. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{ color: decorColor }}
+        >
+          {decorations.map((d) => (
+            <span
+              key={d.key}
+              className="absolute"
+              style={{
+                left:      d.left,
+                top:       d.top,
+                width:     d.size,
+                height:    d.size,
+                transform: `rotate(${d.rot}deg)`,
+                lineHeight: 0,
+              }}
+            >
+              <MapDecoration typeIndex={d.type} genre={genre} size={d.size} />
+            </span>
+          ))}
+        </div>
 
         {/* Notable sub-locations */}
         {notableNodes.map((node) => {
@@ -190,6 +231,7 @@ export function WorldMapTier3({
               node={node}
               isCurrent={node.id === currentNodeId}
               position={toPx(pos.x, pos.y)}
+              accent={colors.primary}
               onClick={() => onNavigateTo(node.id)}
             />
           );
@@ -236,13 +278,16 @@ interface SubLocationCellProps {
   node:      WorldNode;
   isCurrent: boolean;
   position:  { left: number; top: number };
+  accent:    string;
   onClick:   () => void;
 }
 
-function SubLocationCell({ node, isCurrent, position, onClick }: SubLocationCellProps) {
+function SubLocationCell({ node, isCurrent, position, accent, onClick }: SubLocationCellProps) {
   const fill        = getNodeColor(node.category ?? node.type);
   const npcCount    = node.npc_ids.length;
   const visibleDots = Math.min(3, npcCount);
+  const typeAbbr    = getNodeTypeAbbr(node.category ?? node.type);
+  const displayName = truncate(node.name, 14);
   return (
     <button
       onClick={onClick}
@@ -261,15 +306,34 @@ function SubLocationCell({ node, isCurrent, position, onClick }: SubLocationCell
         boxShadow:    isCurrent ? `0 0 10px ${MAP_CURRENT_GLOW}` : "none",
         cursor:       "pointer",
         fontFamily:   "var(--font-mono)",
-        padding:      4,
-        lineHeight:   1.05,
+        padding:      6,
+        lineHeight:   1.1,
         textAlign:    "center",
       }}
     >
-      <span>{wrapTwoLines(node.name, 12)}</span>
+      <span>{wrapTwoLines(displayName, 12)}</span>
+
+      {/* Type abbreviation in the bottom-left corner — replaces the old
+          emoji icon. Slightly muted tint of the genre primary so it
+          reads as a chip without competing with the location name. */}
+      <span
+        aria-hidden
+        className="absolute"
+        style={{
+          left:      4,
+          bottom:    3,
+          fontSize:  9,
+          fontFamily: "var(--font-mono)",
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+          color:     `color-mix(in srgb, ${accent} 60%, transparent)`,
+        }}
+      >
+        {typeAbbr}
+      </span>
 
       {visibleDots > 0 && (
-        <span className="absolute -bottom-1 left-1 flex items-center gap-[2px]">
+        <span className="absolute -bottom-1 right-1 flex items-center gap-[2px]">
           {Array.from({ length: visibleDots }).map((_, i) => (
             <span
               key={i}
@@ -312,7 +376,7 @@ function truncate(s: string, max: number): string {
 /**
  * Wraps a label into at most two lines with naive word-boundary splits.
  * Used so longer sub-location names like "The Rusted Anchor" don't get
- * cut to "The R…" inside the 56px tile.
+ * cut to "The R…" inside the 72px tile.
  */
 function wrapTwoLines(s: string, maxPerLine: number): React.ReactNode {
   if (s.length <= maxPerLine) return s;
@@ -329,7 +393,6 @@ function wrapTwoLines(s: string, maxPerLine: number): React.ReactNode {
     }
   }
   if (cur && lines.length < 2) lines.push(cur);
-  // Truncate any over-long single token.
   return (
     <>
       {lines.map((l, i) => (
@@ -341,7 +404,7 @@ function wrapTwoLines(s: string, maxPerLine: number): React.ReactNode {
   );
 }
 
-/** Tiny string hash → 32-bit int for seeded jitter / filler placement. */
+/** Tiny string hash → 32-bit int for seeded jitter / decoration placement. */
 function hashString(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i += 1) {

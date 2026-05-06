@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Globe2, Map as MapIcon, MapPin } from "lucide-react";
-import type { MasterState, WorldAsset, WorldGraph } from "@/types/game";
+import { AssetCategory } from "@/types/game";
+import type { MasterState, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
 import { getGenreColors } from "./genre-ui";
+import { getNodeTypeAbbr, MAP_NPC_DOT } from "@/lib/game/map-colors";
 import { WorldMapTier1 } from "./map/WorldMapTier1";
 import { WorldMapTier2 } from "./map/WorldMapTier2";
 import { WorldMapTier3 } from "./map/WorldMapTier3";
@@ -15,13 +17,13 @@ import { WorldMapTier3 } from "./map/WorldMapTier3";
  * Tier 2 (Regional) — selected region's nodes + exit arrows.
  * Tier 3 (Local)    — current zone's sub-locations + ambient filler.
  *
- * The default tier is determined from the player's current node:
- *   - Inside a sub_location → Tier 3 (local layout).
- *   - Standing on a top-level zone with sub-locations → Tier 3.
- *   - Otherwise → Tier 2 of the current zone.
+ * Header shows only three icon-buttons (🌍 / 🗺 / 📍). The active tier
+ * label and its in-context name (world / region / sub-location) are
+ * rendered inside the body, above the active tier component.
  *
- * Whenever the player moves to a new node, the breadcrumb / focus snaps
- * to the new location automatically (effect on current_node_id).
+ * When the player crosses into a new region, an effect snaps
+ * selectedRegionId to the new zone and switches the view to Tier 3 so
+ * arrival is instantly readable.
  */
 
 interface Props {
@@ -50,24 +52,45 @@ export function WorldMap({ masterState, worldGraph, locationAssets, onNavigate }
     () => playerZoneId ?? null
   );
 
-  // Re-anchor the breadcrumb / focus whenever the player moves.
+  // FIX 1C — auto-update selectedRegionId when the player crosses regions.
+  // Watching current_node_id directly (rather than the derived zoneId) so
+  // we react to the canonical signal even when zone_id is undefined for a
+  // top-level node. Switching to Tier 3 keeps arrival immediately legible.
   useEffect(() => {
-    if (playerZoneId) setSelectedRegionId(playerZoneId);
-  }, [playerZoneId]);
+    if (!masterState?.world_graph) return;
+    const currentNodeId = masterState.world_graph.current_node_id;
+    const currentNode   = masterState.world_graph.nodes[currentNodeId];
+    if (!currentNode) return;
 
-  // ── Breadcrumb labels ──────────────────────────────────────────────────────
+    const zoneId = currentNode.zone_id ?? currentNodeId;
+    if (zoneId !== selectedRegionId) {
+      setSelectedRegionId(zoneId);
+      setActiveTier(3);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [masterState?.world_graph?.current_node_id]);
+
+  // ── Labels for the in-body header ──────────────────────────────────────────
   const wcd        = masterState.metadata.world_consistency;
   const worldName  = wcd?.world_name ?? "World";
   const regionNode = selectedRegionId ? worldGraph.nodes[selectedRegionId] : null;
   const regionName = regionNode?.name ?? "—";
-  const playerName = player?.name ?? masterState.world_state.current_location_id;
 
-  // ── Coords + tier handlers ─────────────────────────────────────────────────
-  const coords = useMemo(() => {
-    if (!player) return null;
-    return player.map_position;
-  }, [player]);
+  // Tier 3 context: sub-location name when the player is inside one,
+  // else the region name (player is standing on the settlement node).
+  const tier3Name =
+    player && player.type === "sub_location"
+      ? player.name
+      : regionName;
 
+  const tierLabel = activeTier === 1 ? "WORLD MAP"
+                  : activeTier === 2 ? "REGION MAP"
+                  : "LOCAL MAP";
+  const tierContext = activeTier === 1 ? worldName
+                    : activeTier === 2 ? regionName
+                    : tier3Name;
+
+  // ── Tier handlers ─────────────────────────────────────────────────────────
   function handleSelectRegion(regionId: string) {
     setSelectedRegionId(regionId);
     setActiveTier(2);
@@ -89,7 +112,9 @@ export function WorldMap({ masterState, worldGraph, locationAssets, onNavigate }
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-full flex-col">
-      {/* Header: breadcrumb + tier toggles */}
+      {/* Header — icon-only tier toggles. The breadcrumb and text labels
+          have moved into the in-body header (below) to free up the header
+          row for chrome only. */}
       <div
         className="flex shrink-0 items-center justify-between gap-2 px-3 py-2"
         style={{
@@ -97,16 +122,12 @@ export function WorldMap({ masterState, worldGraph, locationAssets, onNavigate }
           backgroundColor: "var(--color-bg)",
         }}
       >
-        <Breadcrumb
-          worldName={worldName}
-          regionName={regionName}
-          playerName={playerName}
-          activeTier={activeTier}
-          accent={colors.primary}
-          onTier1={() => setActiveTier(1)}
-          onTier2={() => setActiveTier(2)}
-          onTier3={() => setActiveTier(3)}
-        />
+        <span
+          className="text-[10px] tracking-wider uppercase"
+          style={{ color: "var(--color-muted)", fontFamily: "var(--font-mono)" }}
+        >
+          MAP
+        </span>
         <TierToggle
           activeTier={activeTier}
           accent={colors.primary}
@@ -114,52 +135,69 @@ export function WorldMap({ masterState, worldGraph, locationAssets, onNavigate }
         />
       </div>
 
-      {/* Body: active tier component */}
-      <div className="min-h-0 flex-1 overflow-hidden">
-        {activeTier === 1 && (
-          <WorldMapTier1
-            masterState={masterState}
-            worldGraph={worldGraph}
-            onSelectRegion={handleSelectRegion}
-          />
-        )}
-        {activeTier === 2 && selectedRegionId && (
-          <WorldMapTier2
-            masterState={masterState}
-            worldGraph={worldGraph}
-            selectedRegionId={selectedRegionId}
-            onSelectNode={handleSelectNode}
-            onSelectRegion={handleSelectRegion}
-          />
-        )}
-        {activeTier === 3 && (
-          <WorldMapTier3
-            masterState={masterState}
-            worldGraph={worldGraph}
-            currentNodeId={worldGraph.current_node_id}
-            locationAssets={locationAssets}
-            onNavigateTo={handleNavigateTo}
-          />
-        )}
-      </div>
-
-      {/* Footer: current location + coords */}
-      <div
-        className="flex shrink-0 items-center justify-between px-3 py-2 text-[10px] tracking-wider uppercase"
-        style={{
-          borderTop:       "1px solid var(--color-border)",
-          color:           "var(--color-muted)",
-          backgroundColor: "var(--color-bg)",
-          fontFamily:      "var(--font-mono)",
-        }}
-      >
-        <span>
-          <span style={{ color: colors.primary }}>◆</span> {playerName}
-        </span>
-        {coords && (
-          <span>
-            ({coords.x}, {coords.y})
+      {/* Body: in-body tier title + active tier component + location info. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {/* Two-line tier header — small-caps label + context name. */}
+        <div
+          className="flex shrink-0 flex-col gap-0.5 px-3 py-2"
+          style={{
+            borderBottom: "1px solid var(--color-border)",
+            backgroundColor: "var(--color-bg)",
+          }}
+        >
+          <span
+            className="text-[9px] tracking-[0.2em] uppercase"
+            style={{ color: "var(--color-muted)", fontFamily: "var(--font-mono)" }}
+          >
+            {tierLabel}
           </span>
+          <span
+            className="text-[13px] font-bold tracking-wide"
+            style={{ color: colors.primary, fontFamily: "var(--font-mono)" }}
+          >
+            {tierContext}
+          </span>
+        </div>
+
+        {/* Active tier component */}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {activeTier === 1 && (
+            <WorldMapTier1
+              masterState={masterState}
+              worldGraph={worldGraph}
+              onSelectRegion={handleSelectRegion}
+            />
+          )}
+          {activeTier === 2 && selectedRegionId && (
+            <WorldMapTier2
+              masterState={masterState}
+              worldGraph={worldGraph}
+              selectedRegionId={selectedRegionId}
+              onSelectNode={handleSelectNode}
+              onSelectRegion={handleSelectRegion}
+            />
+          )}
+          {activeTier === 3 && (
+            <WorldMapTier3
+              masterState={masterState}
+              worldGraph={worldGraph}
+              currentNodeId={worldGraph.current_node_id}
+              locationAssets={locationAssets}
+              onNavigateTo={handleNavigateTo}
+            />
+          )}
+        </div>
+
+        {/* Location info panel — sits below the tier body, above the
+            footer. Always summarises the player's CURRENT node so the
+            information stays anchored to "where am I" regardless of which
+            tier you're browsing. */}
+        {player && (
+          <LocationInfoPanel
+            currentNode={player}
+            locationAssets={locationAssets}
+            accent={colors.primary}
+          />
         )}
       </div>
     </div>
@@ -167,87 +205,6 @@ export function WorldMap({ masterState, worldGraph, locationAssets, onNavigate }
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
-
-interface BreadcrumbProps {
-  worldName:  string;
-  regionName: string;
-  playerName: string;
-  activeTier: Tier;
-  accent:     string;
-  onTier1:    () => void;
-  onTier2:    () => void;
-  onTier3:    () => void;
-}
-
-function Breadcrumb({
-  worldName,
-  regionName,
-  playerName,
-  activeTier,
-  accent,
-  onTier1,
-  onTier2,
-  onTier3,
-}: BreadcrumbProps) {
-  return (
-    <nav
-      className="flex min-w-0 items-center gap-1 text-[10px] uppercase tracking-wider"
-      style={{ fontFamily: "var(--font-mono)", color: "var(--color-muted)" }}
-    >
-      <BreadcrumbButton
-        label={truncate(worldName, 12)}
-        active={activeTier === 1}
-        accent={accent}
-        onClick={onTier1}
-      />
-      <span style={{ opacity: 0.5 }}>›</span>
-      <BreadcrumbButton
-        label={truncate(regionName, 14)}
-        active={activeTier === 2}
-        accent={accent}
-        onClick={onTier2}
-      />
-      <span style={{ opacity: 0.5 }}>›</span>
-      <BreadcrumbButton
-        label={truncate(playerName, 14)}
-        active={activeTier === 3}
-        accent={accent}
-        onClick={onTier3}
-      />
-    </nav>
-  );
-}
-
-function BreadcrumbButton({
-  label,
-  active,
-  accent,
-  onClick,
-}: {
-  label:   string;
-  active:  boolean;
-  accent:  string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="rounded-sm px-1.5 py-0.5 transition-opacity hover:opacity-80"
-      style={{
-        color:           active ? accent : "var(--color-muted)",
-        backgroundColor: active
-          ? `color-mix(in srgb, ${accent} 18%, transparent)`
-          : "transparent",
-        border:          active
-          ? `1px solid color-mix(in srgb, ${accent} 50%, transparent)`
-          : "1px solid transparent",
-        cursor: "pointer",
-      }}
-    >
-      {label}
-    </button>
-  );
-}
 
 function TierToggle({
   activeTier,
@@ -258,10 +215,10 @@ function TierToggle({
   accent:     string;
   onSelect:   (t: Tier) => void;
 }) {
-  const items: Array<{ tier: Tier; icon: React.ReactNode; label: string }> = [
-    { tier: 1, icon: <Globe2 className="size-3.5" />, label: "World" },
-    { tier: 2, icon: <MapIcon className="size-3.5" />, label: "Region" },
-    { tier: 3, icon: <MapPin className="size-3.5" />, label: "Local" },
+  const items: Array<{ tier: Tier; icon: (active: boolean) => React.ReactNode; label: string }> = [
+    { tier: 1, icon: (a) => <Globe2 className={a ? "size-5" : "size-4"} />, label: "World"  },
+    { tier: 2, icon: (a) => <MapIcon className={a ? "size-5" : "size-4"} />, label: "Region" },
+    { tier: 3, icon: (a) => <MapPin className={a ? "size-5" : "size-4"} />, label: "Local"  },
   ];
   return (
     <div className="flex shrink-0 items-center gap-1">
@@ -276,19 +233,176 @@ function TierToggle({
             className="flex items-center justify-center rounded-sm p-1 transition-opacity hover:opacity-80"
             style={{
               color:  isActive ? accent : "var(--color-muted)",
-              border: isActive
-                ? `1px solid color-mix(in srgb, ${accent} 60%, transparent)`
-                : "1px solid color-mix(in srgb, var(--color-border) 60%, transparent)",
               backgroundColor: isActive
                 ? `color-mix(in srgb, ${accent} 14%, transparent)`
                 : "transparent",
+              border: "none",
               cursor: "pointer",
             }}
           >
-            {it.icon}
+            {it.icon(isActive)}
           </button>
         );
       })}
+    </div>
+  );
+}
+
+interface LocationInfoPanelProps {
+  currentNode:    WorldNode;
+  locationAssets: WorldAsset[];
+  accent:         string;
+}
+
+function LocationInfoPanel({
+  currentNode,
+  locationAssets,
+  accent,
+}: LocationInfoPanelProps) {
+  // Resolve the WorldAsset for this location. apply-world-bible writes
+  // location assets keyed as "location_<bareId>", but legacy / fallback
+  // saves may use the bare id directly — accept either, and fall back to
+  // matching by first_seen_location.
+  const locationAsset = useMemo(() => {
+    return locationAssets.find(
+      (a) =>
+        a.category === AssetCategory.LOCATION &&
+        (a.id === currentNode.id ||
+         a.id === `location_${currentNode.id}` ||
+         a.id === currentNode.asset_id ||
+         a.first_seen_location === currentNode.id)
+    );
+  }, [locationAssets, currentNode.id, currentNode.asset_id]);
+
+  const npcs = useMemo(() => {
+    return currentNode.npc_ids
+      .map((id) => {
+        const asset = locationAssets.find(
+          (a) => a.id === id || a.id === `character_${id}`
+        );
+        if (!asset) return null;
+        return {
+          id,
+          name: asset.constitution.true_name && asset.name_known
+            ? asset.constitution.true_name
+            : asset.name,
+        };
+      })
+      .filter((x): x is { id: string; name: string } => x !== null);
+  }, [currentNode.npc_ids, locationAssets]);
+
+  const typeAbbr   = getNodeTypeAbbr(currentNode.category ?? currentNode.type);
+  const physical   = locationAsset?.constitution.physical_description ??
+                     locationAsset?.constitution.atmosphere ??
+                     null;
+  const snippet    = physical ? extractFirstSentence(physical) : null;
+
+  const keyLandmarks    = locationAsset?.constitution.key_landmarks ?? [];
+  const visibleLandmarks = keyLandmarks.slice(0, 4);
+  const extraLandmarks   = Math.max(0, keyLandmarks.length - 4);
+
+  return (
+    <div
+      className="flex shrink-0 flex-col gap-1.5 px-3 py-2"
+      style={{
+        borderTop:       "1px solid var(--color-border)",
+        backgroundColor: "var(--color-bg)",
+      }}
+    >
+      <div className="flex items-baseline gap-2">
+        <span
+          style={{
+            color:      accent,
+            fontSize:   13,
+            fontWeight: 700,
+            fontFamily: "var(--font-mono)",
+            lineHeight: 1.15,
+          }}
+        >
+          {currentNode.name}
+        </span>
+        <span
+          style={{
+            fontSize:      10,
+            fontFamily:    "var(--font-mono)",
+            color:         "var(--color-muted)",
+            letterSpacing: "0.08em",
+          }}
+        >
+          {typeAbbr}
+        </span>
+      </div>
+
+      {snippet && (
+        <p
+          style={{
+            fontSize:      11,
+            fontStyle:     "italic",
+            color:         "var(--color-muted)",
+            margin:        0,
+            display:       "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow:        "hidden",
+            lineHeight:    1.4,
+          }}
+        >
+          {snippet}
+        </p>
+      )}
+
+      {npcs.length > 0 && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1" style={{ fontSize: 11 }}>
+          {npcs.map((npc) => (
+            <span key={npc.id} style={{ color: "var(--color-text)" }}>
+              <span
+                aria-hidden
+                style={{
+                  color:        MAP_NPC_DOT,
+                  marginRight:  4,
+                  fontSize:     10,
+                  textShadow:   `0 0 4px ${MAP_NPC_DOT}`,
+                }}
+              >
+                ●
+              </span>
+              {npc.name}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {visibleLandmarks.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {visibleLandmarks.map((lm, i) => (
+            <span
+              key={i}
+              style={{
+                fontSize:    10,
+                fontFamily:  "var(--font-mono)",
+                color:       "var(--color-muted)",
+                border:      "1px solid color-mix(in srgb, var(--color-border) 80%, transparent)",
+                borderRadius: 3,
+                padding:     "1px 6px",
+              }}
+            >
+              {lm}
+            </span>
+          ))}
+          {extraLandmarks > 0 && (
+            <span
+              style={{
+                fontSize:   10,
+                fontFamily: "var(--font-mono)",
+                color:      "var(--color-muted)",
+                padding:    "1px 4px",
+              }}
+            >
+              +{extraLandmarks}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -306,6 +420,14 @@ function chooseInitialTier(
   return 2;
 }
 
-function truncate(s: string, max: number): string {
-  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+/**
+ * Pull the first sentence out of a longer paragraph. Used by the
+ * Location Info Panel to keep the atmosphere snippet to a couple of
+ * lines without truncating mid-word.
+ */
+function extractFirstSentence(s: string): string {
+  const trimmed = s.trim();
+  if (!trimmed) return "";
+  const match = trimmed.match(/^[^.!?]+[.!?]/);
+  return match ? match[0].trim() : trimmed;
 }

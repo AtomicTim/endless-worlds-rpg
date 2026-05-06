@@ -76,3 +76,87 @@ export function getNodeColor(type: string | undefined | null): string {
   if (!type) return MAP_DEFAULT_COLOR;
   return MAP_NODE_COLORS[type] ?? MAP_DEFAULT_COLOR;
 }
+
+/**
+ * Three-letter abbreviations for the location-type chip rendered in the
+ * bottom-left corner of every Tier 3 sub-location block. Replaces the
+ * previous emoji icons so small blocks don't get hijacked by a 16px glyph.
+ *
+ * Match is case-insensitive and falls through to "LOC" for any node whose
+ * category isn't enumerated below — keeps the map lossless while still
+ * giving the player a quick visual cue.
+ */
+export const NODE_TYPE_ABBREVIATIONS: Record<string, string> = {
+  // ── Fantasy / shared ──────────────────────────────────────────────────────
+  settlement:        "HUB",
+  settlement_hub:    "HUB",
+  hub:               "HUB",
+  tavern:            "INN",
+  inn:               "INN",
+  bar:               "INN",
+  alehouse:          "INN",
+  market:            "MKT",
+  shop:              "MKT",
+  store:             "MKT",
+  smithy:            "FRG",
+  forge:             "FRG",
+  workshop:          "FRG",
+  temple:            "SHR",
+  shrine:            "SHR",
+  chapel:            "SHR",
+  guild:             "GLD",
+  hall:              "GLD",
+  garrison:          "GAR",
+  guard:             "GAR",
+  dungeon:           "DNG",
+  crypt:             "DNG",
+  ruins:             "DNG",
+  ruin:              "DNG",
+  wilderness:        "WLD",
+  nature:            "WLD",
+  port:              "PRT",
+  dock:              "PRT",
+  harbor:            "PRT",
+
+  // ── Cyberpunk ─────────────────────────────────────────────────────────────
+  "data-hub":        "DAT",
+  data_hub:          "DAT",
+  server:            "DAT",
+  corp:              "CRP",
+  "corp-zone":       "CRP",
+  corporate:         "CRP",
+  slum:              "CRP",
+  underground:       "DAT",
+
+  // ── Space Opera ───────────────────────────────────────────────────────────
+  station:           "STN",
+  ship:              "SHP",
+  colony:            "STN",
+  cantina:           "INN",
+
+  // ── Horror ────────────────────────────────────────────────────────────────
+  manor:             "MNR",
+  mansion:           "MNR",
+  asylum:            "MNR",
+  ritual:            "SHR",
+
+  // ── Post-Apocalyptic ──────────────────────────────────────────────────────
+  shelter:           "SHR",
+  bunker:            "SHR",
+  wasteland:         "WST",
+  outpost:           "WST",
+  scrapyard:         "WST",
+  stronghold:        "GAR",
+};
+
+export const NODE_TYPE_ABBR_DEFAULT = "LOC";
+
+/**
+ * Look up the 3-letter abbreviation for a WorldNode given its `category`
+ * (preferred) or `type` (fallback). Returns NODE_TYPE_ABBR_DEFAULT on miss.
+ */
+export function getNodeTypeAbbr(type: string | undefined | null): string {
+  if (!type) return NODE_TYPE_ABBR_DEFAULT;
+  const key = type.toLowerCase();
+  return NODE_TYPE_ABBREVIATIONS[key] ?? NODE_TYPE_ABBR_DEFAULT;
+}

@@ -373,8 +373,35 @@ export function useGameLoop() {
     // Echo the player's command into the feed — only for typed input.
     // Direct-navigation clicks are intentionally silent here; the
     // narrator's ARRIVING beat is the player-facing record.
+    //
+    // FIX 4 — DIALOGUE option clicks (and the inline free-type input
+    // submitted from the DialogueModal) come in as quoted speech with
+    // an explicit npcName/tone option. Render those as a NARRATIVE
+    // dialogue echo styled like the player's spoken line, not as the
+    // generic "> action" SYSTEM echo, so the conversation reads as a
+    // back-and-forth in the story feed.
     if (!forceMoveToNode) {
-      store.addMessage(makeMessage("SYSTEM", `> ${trimmed}`));
+      const isQuotedSpeech =
+        /^["'“‘]/.test(trimmed) &&
+        (!!options?.npcName || !!options?.tone);
+      if (isQuotedSpeech) {
+        // Strip surrounding quotes so the renderer can format the line
+        // without doubling them. Falls back to the raw trimmed string
+        // if the regex misses for any reason.
+        const stripped = trimmed
+          .replace(/^["'“‘]/, "")
+          .replace(/["'”’]$/, "")
+          .trim();
+        store.addMessage(
+          makeMessage(
+            "NARRATIVE",
+            `◈ "${stripped}"`,
+            { isPlayerDialogue: true }
+          )
+        );
+      } else {
+        store.addMessage(makeMessage("SYSTEM", `> ${trimmed}`));
+      }
     }
 
     try {
@@ -731,6 +758,52 @@ export function useGameLoop() {
           store.setProcessing(false);
           return;
         }
+
+        // FIX 7 — Tier 1 repeat-examine short-circuit. Match the
+        // player's target against the current location's key_landmarks
+        // (the Tier 1 object roster). If they've already examined this
+        // landmark in this session, return a canned line instead of
+        // burning another narrator call to re-describe the same thing.
+        // EXAMINE only — INTERACT semantics differ (player may push,
+        // pull, take from a container) so we don't dedup those.
+        if (parsedAction.action_type === ActionType.EXAMINE) {
+          const landmarks = (tier2LocAsset?.constitution.key_landmarks ?? [])
+            .map((s) => (typeof s === "string" ? s : ""))
+            .filter((s) => s.trim().length > 0);
+          const targetLower = target.trim().toLowerCase();
+          const matchedLandmark = landmarks.find((lm) => {
+            const lmLower = lm.toLowerCase();
+            return lmLower === targetLower
+                || lmLower.includes(targetLower)
+                || targetLower.includes(lmLower);
+          });
+
+          if (matchedLandmark) {
+            const examineKey = matchedLandmark.toLowerCase();
+            if (useGameStore.getState().hasExaminedObject(examineKey)) {
+              const canned = "You find nothing new upon closer inspection.";
+              store.addMessage(makeMessage("NARRATIVE", canned));
+              store.setLastNarrativeText(canned);
+              updatedState = persistLogEntry(
+                updatedState,
+                LogEntryType.STORY,
+                `Re-examined ${matchedLandmark} — no new details.`
+              );
+              const stamped: MasterState = {
+                ...updatedState,
+                metadata: { ...updatedState.metadata, last_played: new Date().toISOString() },
+              };
+              store.setMasterState(stamped);
+              await persistState(stamped, store.addMessage);
+              store.setProcessing(false);
+              return;
+            }
+            // First examine this session — stash the key on the parsed
+            // action so step 6 can mark it examined after the narrator
+            // produces a successful response.
+            (parsedAction as ParsedAction & { _examineKey?: string })._examineKey = examineKey;
+          }
+        }
       }
 
       // ── 4d. Day 19D — WORLD_EXPLORE → Regional Bible expansion ─────────────
@@ -1064,6 +1137,18 @@ export function useGameLoop() {
         )
       );
       store.setLastNarrativeText(narratorResponse.narrative_text);
+
+      // FIX 7 — landmark passed step 4c's match check; the narrator just
+      // produced its first description for this session. Mark the
+      // landmark examined so the next EXAMINE on the same target
+      // short-circuits to the canned response instead of paying for
+      // another narrator call.
+      {
+        const examineKey = (parsedAction as ParsedAction & { _examineKey?: string })._examineKey;
+        if (examineKey) {
+          useGameStore.getState().markObjectExamined(examineKey);
+        }
+      }
 
       // ── 6b. Day 19D — Background pre-generation of adjacent regions ────────
       // When the narrator's response hints toward an undiscovered region
@@ -1408,21 +1493,22 @@ export function useGameLoop() {
       for (const entry of narratorResponse.codex_entries) {
         if (entry.significance !== "NOTABLE" && entry.significance !== "MAJOR") continue;
 
-        // Codex (player-facing encyclopedia row).
+        // Codex (player-facing encyclopedia row). FIX 6 — saveCodexEntry
+        // now reports whether this was a genuinely new entry; only
+        // surface the "✦ added to codex" notification when it was, so
+        // the feed isn't spammed every time the narrator re-mentions an
+        // already-saved character or location.
         try {
-          void saveCodexEntry(sessionId, entry);
+          void saveCodexEntry(sessionId, entry).then(({ created }) => {
+            if (created) {
+              store.addMessage(
+                makeMessage("SYSTEM", `✦ ${entry.name} added to codex`)
+              );
+            }
+          });
         } catch (err) {
           console.error("[useGameLoop] saveCodexEntry threw", err);
         }
-
-        // FIX 5 — surface a small "added to codex" beat in the feed so
-        // the player knows their journal grew. saveCodexEntry uses
-        // ignoreDuplicates server-side, so we may emit this for an
-        // already-saved entry; the styling is intentionally subtle so
-        // the occasional duplicate isn't noisy.
-        store.addMessage(
-          makeMessage("SYSTEM", `✦ ${entry.name} added to codex`)
-        );
 
         // World asset (immutable narrator constitution).
         const assetCategory: AssetCategory =
@@ -1781,6 +1867,10 @@ export function useGameLoop() {
                 .map((s) => s.trim())
                 .filter(Boolean)
                 .join(" ");
+              // FIX 6 — only emit the SYSTEM beat when the row was
+              // genuinely new. saveCodexEntry's `created` flag detects
+              // pre-existing entries up front so re-prompts on the
+              // same NPC don't spam the feed.
               void saveCodexEntry(sessionId, {
                 id:                  npcCodexAsset.id,
                 category:            "CHARACTER",
@@ -1788,12 +1878,14 @@ export function useGameLoop() {
                 description:         description || "A character encountered in the world.",
                 first_seen_location: updatedState.world_state.current_location_id,
                 significance:        "NOTABLE",
+              }).then(({ created }) => {
+                if (created) {
+                  store.addMessage(
+                    makeMessage("SYSTEM", `✦ ${npcCodexAsset.name} added to codex`)
+                  );
+                }
               });
               console.log("[GameLoop/7g] Codex entry written for NPC:", npcCodexAsset.name);
-              // FIX 5 — surface the codex add in the story feed.
-              store.addMessage(
-                makeMessage("SYSTEM", `✦ ${npcCodexAsset.name} added to codex`)
-              );
 
               // FIX 7 — when an NPC codex entry is written for the first
               // time, also write the current location's codex entry if
@@ -1823,6 +1915,12 @@ export function useGameLoop() {
                     (typeof lc.notes                === "string" && lc.notes) ||
                     (typeof lc.atmosphere           === "string" && lc.atmosphere) ||
                     "A location in the world.";
+                  // FIX 6 — same dedup as the NPC codex above. The
+                  // codex_loc_<id> flag already gates this branch on
+                  // first NPC interaction at the location, but we
+                  // still want the feed beat suppressed if the row
+                  // existed for any reason (e.g. narrator emitted it
+                  // earlier in step 7b).
                   void saveCodexEntry(sessionId, {
                     id:                  locationAsset.id,
                     category:            "LOCATION",
@@ -1830,10 +1928,13 @@ export function useGameLoop() {
                     description:         locDescription,
                     first_seen_location: locId,
                     significance:        "NOTABLE",
+                  }).then(({ created }) => {
+                    if (created) {
+                      store.addMessage(
+                        makeMessage("SYSTEM", `✦ ${locationAsset.name} added to codex`)
+                      );
+                    }
                   });
-                  store.addMessage(
-                    makeMessage("SYSTEM", `✦ ${locationAsset.name} added to codex`)
-                  );
                   updatedState = {
                     ...updatedState,
                     world_state: {

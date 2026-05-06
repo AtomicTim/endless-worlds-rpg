@@ -79,15 +79,31 @@ function buildUserPrompt(
   const regionLocSlug  = `${outline.id}_point`;
   const npc1Slug       = `${outline.id}_npc1`;
   const npc2Slug       = `${outline.id}_npc2`;
+  const npc3Slug       = `${outline.id}_npc3`;
   const obj1Slug       = `${outline.id}_obj1`;
   const obj2Slug       = `${outline.id}_obj2`;
-  const regionObjSlug  = `${outline.id}_region_obj`;
+  const obj3Slug       = `${outline.id}_obj3`;
+  const obj4Slug       = `${outline.id}_obj4`;
+  const obj5Slug       = `${outline.id}_obj5`;
+  const obj6Slug       = `${outline.id}_obj6`;
 
   return `${wcdBlock}
 
 Expand this region outline into a RegionBible JSON.
 Region: ${JSON.stringify(outline)}
 Arriving from: ${originRegionName} to the ${directionFromOrigin}
+
+CONTENT REQUIREMENT — EVERY LOCATION MUST HAVE PURPOSE:
+Every location in this region must give the player a reason
+to visit. Requirements:
+- Settlement sub-location: must have 1-2 NPCs and 2 Tier 1 objects
+- Standalone region location (dungeon/wilderness): must have
+  AT LEAST 1 NPC and 2 Tier 1 interactable objects
+- An empty location with no NPCs and no objects is NOT acceptable
+- Objects must be genuinely interesting (not just 'a rock' or
+  'some dirt') — give them lore relevance or mystery
+- The NPC at a standalone location should have a reason for
+  being there (explorer, guard, cultist, hermit, etc.)
 
 Return EXACTLY this structure (fill with creative content
 consistent with the WCD):
@@ -113,8 +129,14 @@ consistent with the WCD):
       "objects": [
         {
           "id": "${obj1Slug}",
-          "name": "[Exact Object Name]",
-          "description": "[1 sentence]",
+          "name": "[Exact Object Name with lore weight]",
+          "description": "[1 sentence — hint at history or mystery]",
+          "is_interactable": true
+        },
+        {
+          "id": "${obj2Slug}",
+          "name": "[Exact Object Name with lore weight]",
+          "description": "[1 sentence — hint at history or mystery]",
           "is_interactable": true
         }
       ],
@@ -133,9 +155,15 @@ consistent with the WCD):
       "npc_ids": ["character_${npc1Slug}", "character_${npc2Slug}"],
       "objects": [
         {
-          "id": "${obj2Slug}",
-          "name": "[Exact Object Name]",
-          "description": "[1 sentence]",
+          "id": "${obj3Slug}",
+          "name": "[Exact Object Name with lore weight]",
+          "description": "[1 sentence — hint at history or mystery]",
+          "is_interactable": true
+        },
+        {
+          "id": "${obj4Slug}",
+          "name": "[Exact Object Name with lore weight]",
+          "description": "[1 sentence — hint at history or mystery]",
           "is_interactable": true
         }
       ],
@@ -164,6 +192,17 @@ consistent with the WCD):
       "speech_style": "[3 words]",
       "knowledge": ["[WCD-consistent fact]"],
       "default_trust": 50
+    },
+    {
+      "id": "character_${npc3Slug}",
+      "name": "[Full Real Name]",
+      "home_location_id": "${regionLocSlug}",
+      "role": "explorer",
+      "appearance": "[1 sentence]",
+      "personality": "[1 sentence — give them a reason to be at this remote spot]",
+      "speech_style": "[3 words]",
+      "knowledge": ["[WCD-consistent fact specific to this site]"],
+      "default_trust": 50
     }
   ],
   "region_locations": [
@@ -176,12 +215,18 @@ consistent with the WCD):
       "atmosphere": "[1 sentence]",
       "grid_position": {"x": ${outline.grid_centre.x + 1}, "y": ${outline.grid_centre.y}},
       "connections": ["${outline.id}"],
-      "npc_ids": [],
+      "npc_ids": ["character_${npc3Slug}"],
       "objects": [
         {
-          "id": "${regionObjSlug}",
-          "name": "[Exact Object Name]",
-          "description": "[1 sentence]",
+          "id": "${obj5Slug}",
+          "name": "[Exact Object Name with lore weight]",
+          "description": "[1 sentence — hint at history or mystery]",
+          "is_interactable": true
+        },
+        {
+          "id": "${obj6Slug}",
+          "name": "[Exact Object Name with lore weight]",
+          "description": "[1 sentence — hint at history or mystery]",
           "is_interactable": true
         }
       ],
@@ -202,7 +247,9 @@ Make everything original and consistent with the WCD.
 Real names for all NPCs. No placeholders.
 The region_locations entry is a STANDALONE point in the geographic
 area (dungeon / wilderness / shrine) — NOT inside the settlement.
-It connects directly to the settlement hub.`;
+It connects directly to the settlement hub. It MUST have an NPC
+with a believable reason to be there, plus 2 evocative Tier 1
+objects.`;
 }
 
 function stripJsonFences(raw: string): string {
@@ -245,13 +292,13 @@ function validateBible(parsed: unknown): { ok: true; bible: RegionBible } | { ok
 }
 
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
-  // Audit Issue E follow-up: max_tokens reduced from 2000 → 1500 to
-  // pair with the further-shrunk skeleton (1 hub + 1 sub-location +
-  // 2 NPCs + 1 exit). Responses now sit comfortably under the limit
-  // so we never truncate mid-JSON.
+  // FIX 10 — bumped 1500 → 2200 to fit the expanded skeleton: 3 NPCs
+  // total (one at the standalone region_location), 6 Tier 1 objects
+  // total (2 per location), and the new content-purpose prose block.
+  // Still well under sonnet's response budget; truncation risk is low.
   const message = await client.messages.create({
     model:      "claude-sonnet-4-5",
-    max_tokens: 1500,
+    max_tokens: 2200,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });

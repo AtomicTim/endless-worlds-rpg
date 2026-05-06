@@ -75,6 +75,14 @@ interface GameStore {
   /** Whether the three-tier WorldMap sidebar panel is currently open. */
   mapPanelOpen:           boolean;
 
+  // ── FIX 7 — Examined objects cache ─────────────────────────────────────────
+  /** Set of object keys (canonical landmark name lowercased) the player
+   *  has already examined this session. Repeat examines short-circuit
+   *  to a canned "nothing new" response so the narrator isn't paid to
+   *  re-describe the same Tier 1 object turn after turn. Cleared on
+   *  session switch via clearSessionState. */
+  examinedObjects:        string[];
+
   setMasterState:          (state: MasterState) => void;
   addMessage:              (message: StoryMessage) => void;
   setProcessing:           (isProcessing: boolean, step?: string) => void;
@@ -103,6 +111,12 @@ interface GameStore {
   /** Imperatively set the map panel state — used by the layout's mobile
    *  backdrop and ESC handler. */
   setMapPanelOpen:         (open: boolean) => void;
+  /** FIX 7 — record that the player examined a Tier 1 object so the
+   *  next EXAMINE on the same target short-circuits to a canned
+   *  response. Key should be the canonical landmark name (lowercased). */
+  markObjectExamined:      (objectKey: string) => void;
+  /** FIX 7 — has the player already examined this object this session? */
+  hasExaminedObject:       (objectKey: string) => boolean;
   /** Wipe all per-session state so a fresh session loads with a clean slate.
    *  Does NOT clear masterState — that is replaced by the caller right after.
    *  Use ONLY when switching to a different save slot. */
@@ -131,7 +145,7 @@ function saveVerbosity(v: "terse" | "standard" | "rich"): void {
   }
 }
 
-export const useGameStore = create<GameStore>((set) => ({
+export const useGameStore = create<GameStore>((set, get) => ({
   masterState:            null,
   messages:               [],
   isProcessing:           false,
@@ -151,6 +165,7 @@ export const useGameStore = create<GameStore>((set) => ({
   currentTradeItems:      [],
   verbosity:              loadVerbosity(),
   mapPanelOpen:           false,
+  examinedObjects:        [],
 
   setMasterState:       (state) => set({ masterState: state }),
   addMessage:           (message) => set((s) => ({ messages: [...s.messages, message] })),
@@ -253,6 +268,16 @@ export const useGameStore = create<GameStore>((set) => ({
   },
   toggleMapPanel:  () => set((s) => ({ mapPanelOpen: !s.mapPanelOpen })),
   setMapPanelOpen: (open) => set({ mapPanelOpen: open }),
+  markObjectExamined: (objectKey) =>
+    set((s) => {
+      const key = objectKey.trim().toLowerCase();
+      if (!key || s.examinedObjects.includes(key)) return s;
+      return { examinedObjects: [...s.examinedObjects, key] };
+    }),
+  hasExaminedObject: (objectKey) => {
+    const key = objectKey.trim().toLowerCase();
+    return get().examinedObjects.includes(key);
+  },
   clearSessionState: () => {
     // Day 19D — drop any cached regional bibles so a switch between save
     // slots never serves stale region data to a fresh campaign.
@@ -274,6 +299,7 @@ export const useGameStore = create<GameStore>((set) => ({
       locationAssets:         [],
       lastNarrativeText:      null,
       mapPanelOpen:           false,
+      examinedObjects:        [],
     });
   },
   clearTransientState: () =>

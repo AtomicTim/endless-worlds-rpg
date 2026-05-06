@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { MasterState, WorldGraph, WorldLandmark, WorldNode } from "@/types/game";
 import {
   getNodeColor,
+  hasValidMapPosition,
   MAP_CURRENT_GLOW,
   MAP_LANDMARK,
   MAP_UNDISCOVERED,
@@ -77,8 +78,11 @@ export function WorldMapTier1({ masterState, worldGraph, onSelectRegion }: Props
     playerNode && playerNode.type === "zone"
       ? playerNode
       : (playerNode ? worldGraph.nodes[playerNode.zone_id] : null);
-  const centreX = playerZone?.map_position.x ?? wcd?.world_origin.x ?? 0;
-  const centreY = playerZone?.map_position.y ?? wcd?.world_origin.y ?? 0;
+  // FIX 1 — guard against nodes whose map_position is undefined (legacy
+  // saves, stub-generated zones missing coords). Fall back to the WCD's
+  // world origin so the viewport always centres on something sensible.
+  const centreX = hasValidMapPosition(playerZone) ? playerZone.map_position.x : (wcd?.world_origin.x ?? 0);
+  const centreY = hasValidMapPosition(playerZone) ? playerZone.map_position.y : (wcd?.world_origin.y ?? 0);
 
   useEffect(() => {
     const el = viewportRef.current;
@@ -131,29 +135,48 @@ export function WorldMapTier1({ masterState, worldGraph, onSelectRegion }: Props
         />
 
         {/* Discovered zones */}
-        {discoveredZones.map((node) => (
-          <DiscoveredCell
-            key={node.id}
-            node={node}
-            isCurrent={node.id === playerZone?.id}
-            position={toPx(node.map_position.x, node.map_position.y)}
-            onClick={() => onSelectRegion(node.id)}
-          />
-        ))}
+        {discoveredZones.map((node) => {
+          // FIX 1 — silently skip nodes without a valid map_position.
+          // Older saves and freshly-generated stub zones occasionally
+          // arrive without coords; rendering them would crash with
+          // "cannot read property 'x' of undefined".
+          if (!hasValidMapPosition(node)) return null;
+          return (
+            <DiscoveredCell
+              key={node.id}
+              node={node}
+              isCurrent={node.id === playerZone?.id}
+              position={toPx(node.map_position.x, node.map_position.y)}
+              onClick={() => onSelectRegion(node.id)}
+            />
+          );
+        })}
 
         {/* Undiscovered hints — outline only, "???" label */}
-        {undiscoveredHints.map((node) => (
-          <UndiscoveredCell
-            key={node.id}
-            node={node}
-            position={toPx(node.map_position.x, node.map_position.y)}
-          />
-        ))}
+        {undiscoveredHints.map((node) => {
+          if (!hasValidMapPosition(node)) return null;
+          return (
+            <UndiscoveredCell
+              key={node.id}
+              node={node}
+              position={toPx(node.map_position.x, node.map_position.y)}
+            />
+          );
+        })}
 
         {/* WCD landmarks — diamonds visible from the start. FIX 8:
             hovering / touching opens a Direction-3 styled tooltip with
             the landmark's name + public_description above the marker. */}
         {(wcd?.landmarks ?? []).map((lm) => {
+          // FIX 1 — landmarks share the same crash-on-missing-coord
+          // failure mode as zone nodes; skip if the WCD entry is malformed.
+          if (
+            !lm.grid_position ||
+            typeof lm.grid_position.x !== "number" ||
+            typeof lm.grid_position.y !== "number"
+          ) {
+            return null;
+          }
           const pos = toPx(lm.grid_position.x, lm.grid_position.y);
           return (
             <LandmarkMarker
@@ -188,7 +211,7 @@ export function WorldMapTier1({ masterState, worldGraph, onSelectRegion }: Props
         )}
 
         {/* Player marker — pulsing crosshair on the current region */}
-        {playerZone && (
+        {playerZone && hasValidMapPosition(playerZone) && (
           <div
             aria-hidden
             className="pointer-events-none absolute"

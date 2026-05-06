@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import type { MasterState, WorldGraph, WorldNode } from "@/types/game";
 import {
   getNodeColor,
+  hasValidMapPosition,
   MAP_CURRENT_GLOW,
   MAP_NPC_DOT,
   MAP_UNDISCOVERED,
@@ -77,12 +78,15 @@ export function WorldMapTier2({
   }, [worldGraph.nodes, selectedRegionId]);
 
   // Compute layout bounds from map_position so the panel auto-fits.
+  // FIX 1 — only consider nodes with a valid map_position so a single
+  // malformed entry can't poison Infinity/-Infinity into the bounds.
   const bounds = useMemo(() => {
-    if (regionNodes.length === 0) {
+    const positioned = regionNodes.filter(hasValidMapPosition);
+    if (positioned.length === 0) {
       return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
     }
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const n of regionNodes) {
+    for (const n of positioned) {
       if (n.map_position.x < minX) minX = n.map_position.x;
       if (n.map_position.y < minY) minY = n.map_position.y;
       if (n.map_position.x > maxX) maxX = n.map_position.x;
@@ -123,11 +127,17 @@ export function WorldMapTier2({
           className="pointer-events-none absolute inset-0"
         >
           {regionNodes.flatMap((node) => {
+            // FIX 1 — silently skip endpoints without coords. Drawing a
+            // line from NaN coords would render an invisible artefact
+            // anchored at the SVG origin.
+            if (!hasValidMapPosition(node)) return [];
             const a = toPx(node.map_position.x, node.map_position.y);
             return node.connections
               .map((c) => worldGraph.nodes[c])
               .filter((target): target is WorldNode =>
-                !!target && (target.zone_id === selectedRegionId || target.id === selectedRegionId)
+                !!target &&
+                (target.zone_id === selectedRegionId || target.id === selectedRegionId) &&
+                hasValidMapPosition(target)
               )
               .map((target) => {
                 const b = toPx(target.map_position.x, target.map_position.y);
@@ -147,27 +157,34 @@ export function WorldMapTier2({
         </svg>
 
         {/* Discovered region nodes */}
-        {regionNodes.filter((n) => n.discovered).map((node) => (
-          <RegionNodeCell
-            key={node.id}
-            node={node}
-            isCurrent={node.id === currentNodeId}
-            position={toPx(node.map_position.x, node.map_position.y)}
-            onClick={() => onSelectNode(node.id)}
-          />
-        ))}
+        {regionNodes.filter((n) => n.discovered).map((node) => {
+          if (!hasValidMapPosition(node)) return null;
+          return (
+            <RegionNodeCell
+              key={node.id}
+              node={node}
+              isCurrent={node.id === currentNodeId}
+              position={toPx(node.map_position.x, node.map_position.y)}
+              onClick={() => onSelectNode(node.id)}
+            />
+          );
+        })}
 
         {/* Undiscovered nodes inside this region — outline only */}
-        {regionNodes.filter((n) => !n.discovered).map((node) => (
-          <UndiscoveredNodeCell
-            key={node.id}
-            node={node}
-            position={toPx(node.map_position.x, node.map_position.y)}
-          />
-        ))}
+        {regionNodes.filter((n) => !n.discovered).map((node) => {
+          if (!hasValidMapPosition(node)) return null;
+          return (
+            <UndiscoveredNodeCell
+              key={node.id}
+              node={node}
+              position={toPx(node.map_position.x, node.map_position.y)}
+            />
+          );
+        })}
 
         {/* Exit arrows clustered at the edge of the source node */}
         {exits.map((exit, i) => {
+          if (!hasValidMapPosition(exit.from)) return null;
           const pos = toPx(exit.from.map_position.x, exit.from.map_position.y);
           return (
             <button

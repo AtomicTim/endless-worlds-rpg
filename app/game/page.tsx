@@ -258,6 +258,11 @@ export default function GamePage() {
           <StoryFeed
             messages={messages}
             isLoading={isProcessing && !!processingStep}
+            // FIX 8 — surface the contextual processingStep ("Speaking
+            // with Korven...", "Examining the fountain...") so the feed's
+            // loading row matches the InputBar indicator instead of the
+            // old hardcoded "Generating response…".
+            loadingText={processingStep}
             onSubmit={(input) => { void submitAction(input); }}
             // Navigation redesign — LOCATION highlights with a nodeId
             // route through navigateTo directly (no popover, no text).

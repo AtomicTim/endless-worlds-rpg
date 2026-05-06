@@ -1,9 +1,10 @@
 "use client";
 
-import { ChevronUp, ChevronDown } from "lucide-react";
+import { ChevronUp, ChevronDown, Send } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useGameStore } from "@/lib/stores/game-store";
 import { getNpcDisposition } from "@/lib/game/state-utils";
-import { Genre } from "@/types/game";
+import { AssetCategory, Genre } from "@/types/game";
 import type { Attributes, DialogueOption } from "@/types/game";
 import { getGenreColors, TONE_BAR_COLORS } from "./genre-ui";
 
@@ -75,6 +76,8 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
   const collapsed     = useGameStore((s) => s.dialogueModalCollapsed);
   const setCollapsed  = useGameStore((s) => s.setDialogueModalCollapsed);
   const clear         = useGameStore((s) => s.clearDialogueOptions);
+  const tradeItems    = useGameStore((s) => s.currentTradeItems);
+  const locationAssets = useGameStore((s) => s.locationAssets);
 
   // Player's own attribute scores — used by the stat-check tooltip & badge.
   const playerStats = useGameStore((s) => s.masterState?.player_state.attributes);
@@ -82,6 +85,29 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
   // before masterState is hydrated (purely cosmetic; primary changes once loaded).
   const genre  = useGameStore((s) => s.masterState?.metadata.genre) ?? Genre.FANTASY;
   const colors = getGenreColors(genre);
+
+  // FIX 3 — inline free-type input state. When the player clicks the
+  // "type your own response" button, we DON'T close the modal or jump
+  // to the main InputBar; instead we reveal an input INSIDE the modal
+  // so the conversation context (NPC name, portrait, options) stays
+  // anchored on screen. Submit on Enter or send-button click.
+  const [inlineInputOpen, setInlineInputOpen] = useState(false);
+  const [inlineValue,     setInlineValue]     = useState("");
+  const inlineInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Reset inline mode whenever the conversation pivots to a different NPC
+  // so a stale input doesn't bleed across characters.
+  useEffect(() => {
+    setInlineInputOpen(false);
+    setInlineValue("");
+  }, [npcName]);
+
+  // Focus the inline input as soon as it appears.
+  useEffect(() => {
+    if (inlineInputOpen) {
+      inlineInputRef.current?.focus();
+    }
+  }, [inlineInputOpen]);
 
   // Trust score is the AUTHORITATIVE value: read directly from
   // masterState.npc_registry via currentDialogueNpcKey. Updates reactively
@@ -105,9 +131,70 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
     });
   };
 
+  // FIX 3 — replaced. The button now opens an inline input INSIDE the
+  // modal instead of clearing the modal and routing to the main
+  // InputBar. The conversation context (NPC name, portrait, disposition)
+  // stays visible while the player types their custom line. The
+  // onFocusInput callback is preserved for the legacy behaviour but is
+  // no longer wired to this button.
+  void onFocusInput;
   const handleTypeOwn = () => {
-    clear();
-    onFocusInput();
+    setInlineInputOpen(true);
+  };
+
+  const handleInlineSubmit = () => {
+    const trimmed = inlineValue.trim();
+    if (!trimmed) return;
+    // Wrap in quotes so the Intent Parser classifies the line as
+    // DIALOGUE rather than a CUSTOM action. npcName pinning makes
+    // sure the resolver fires against the active NPC even when the
+    // parser can't extract a target from raw speech.
+    const wrapped = `"${trimmed}"`;
+    setInlineValue("");
+    setInlineInputOpen(false);
+    onSubmit(wrapped, npcName ? { npcName } : {});
+  };
+
+  const handleInlineKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleInlineSubmit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setInlineInputOpen(false);
+      setInlineValue("");
+    }
+  };
+
+  // FIX 9 — detect whether the active NPC is a merchant. We use two
+  // signals so the trade button shows up reliably:
+  //   • currentTradeItems already populated → trade UI is in flight
+  //   • the NPC asset's role/is_merchant flag → permanent merchant
+  // Either one is enough to surface the button.
+  const isMerchant = (() => {
+    if (tradeItems.length > 0) return true;
+    if (!npcName) return false;
+    const npcAsset = locationAssets.find(
+      (a) => a.category === AssetCategory.CHARACTER &&
+             a.name.toLowerCase() === npcName.toLowerCase()
+    );
+    if (!npcAsset) return false;
+    const role = (npcAsset.constitution.role ?? "").toLowerCase();
+    return role.includes("merchant")
+        || role.includes("trader")
+        || role.includes("vendor")
+        || role.includes("shopkeeper");
+  })();
+
+  const handleOpenTrade = () => {
+    // If the modal is already populated, the TradeModal is rendering —
+    // nothing to do. Otherwise ask the merchant to show their wares,
+    // which trips the narrator's items_for_sale pipeline and opens the
+    // TradeModal once they respond.
+    if (tradeItems.length > 0) return;
+    setInlineInputOpen(false);
+    onSubmit(`"Show me what you have for sale."`,
+      npcName ? { npcName } : {});
   };
 
   // ── Collapsed bar ───────────────────────────────────────────────────────────
@@ -326,17 +413,97 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
           );
         })}
 
-        {/* Type your own — always last */}
-        <button
-          onClick={handleTypeOwn}
-          className="mt-auto w-full rounded-sm px-2 py-1 text-center text-[10px] italic transition-opacity hover:opacity-70"
-          style={{
-            color:  "var(--color-muted)",
-            border: "1px dashed color-mix(in srgb, var(--color-border) 70%, transparent)",
-          }}
-        >
-          ✎ type your own response
-        </button>
+        {/* FIX 3 — inline free-type input. Slides into place under the
+            options when the player clicks "type your own". Stays inside
+            the modal so the NPC's name + portrait remain visible. */}
+        {inlineInputOpen ? (
+          <div
+            className="mt-auto flex items-center gap-2"
+            style={{
+              border:       `1px solid ${colors.primary}`,
+              borderRadius: 4,
+              padding:      4,
+              backgroundColor: "color-mix(in srgb, var(--color-bg) 70%, #000)",
+            }}
+          >
+            <input
+              ref={inlineInputRef}
+              type="text"
+              value={inlineValue}
+              onChange={(e) => setInlineValue(e.target.value)}
+              onKeyDown={handleInlineKeyDown}
+              onBlur={(e) => {
+                // Don't close if focus moves to the send button —
+                // relatedTarget will be the button in that case.
+                const next = e.relatedTarget as HTMLElement | null;
+                if (next?.dataset?.dialogueSend === "true") return;
+                if (!inlineValue.trim()) {
+                  setInlineInputOpen(false);
+                }
+              }}
+              placeholder={
+                npcName
+                  ? `Say something to ${npcName}...`
+                  : "Say something..."
+              }
+              maxLength={300}
+              className="min-w-0 flex-1 bg-transparent px-2 text-[12px] focus:outline-none"
+              style={{
+                color:      "var(--color-text)",
+                fontFamily: "var(--font-mono)",
+              }}
+            />
+            <button
+              onClick={handleInlineSubmit}
+              data-dialogue-send="true"
+              disabled={!inlineValue.trim()}
+              aria-label="Send"
+              className="shrink-0 rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wider transition-opacity disabled:opacity-40"
+              style={{
+                backgroundColor: colors.primary,
+                color:           "#000",
+                cursor:          inlineValue.trim() ? "pointer" : "not-allowed",
+              }}
+            >
+              <Send className="size-3" />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={handleTypeOwn}
+            className="mt-auto w-full rounded-sm px-2 py-1 text-center text-[10px] italic transition-opacity hover:opacity-70"
+            style={{
+              color:  "var(--color-muted)",
+              border: "1px dashed color-mix(in srgb, var(--color-border) 70%, transparent)",
+            }}
+          >
+            ✎ type your own response
+          </button>
+        )}
+
+        {/* FIX 9 — permanent trade button when the active NPC is a
+            merchant. Visible at any point during conversation so the
+            player doesn't need to fish for the right phrase. */}
+        {isMerchant && (
+          <button
+            onClick={handleOpenTrade}
+            disabled={tradeItems.length > 0}
+            className="mt-1 w-full rounded-sm px-2 py-1 text-center text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-80 disabled:opacity-40"
+            style={{
+              backgroundColor: "color-mix(in srgb, #fbbf24 18%, transparent)",
+              border:          "1px solid #fbbf24",
+              color:           "#fbbf24",
+              cursor:          tradeItems.length > 0 ? "default" : "pointer",
+            }}
+            title={
+              tradeItems.length > 0
+                ? "Trade panel is open"
+                : "Open trade panel"
+            }
+          >
+            💰 Trade
+          </button>
+        )}
       </div>
     </div>
   );

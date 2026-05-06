@@ -199,22 +199,30 @@ export function formatWcdBlock(wcd: WorldConsistencyDocument | undefined): strin
 // produce visibly different output. Also overrides the earlier
 // RESPONSE LENGTH tiers in the system prompt — the verbosity block
 // is appended LAST, so its caps are the final word the model reads.
+// FIX 11 — three modes are now mutually exclusive and strictly bounded.
+// Each block ends with the same override line so the model can't argue
+// itself into a "but the action is interesting" exception. Counts MUST
+// match across modes — they're orthogonal length budgets, not gradients.
 const VERBOSITY_BLOCKS: Record<Verbosity, string> = {
-  terse:    `\n\nRESPONSE LENGTH — TERSE MODE:
-- Maximum 2 sentences for routine actions
-- Maximum 3 sentences for NPC dialogue
-- Maximum 4 sentences for new location arrivals
-- SENTENCE LENGTH: Every sentence must be 12 words or fewer.
-  No subordinate clauses. No lists within sentences.
-  No atmospheric asides. State the fact, stop.
-- Wrong: 'The ancient fountain, its surface carved with countless
-  oath-marks from generations of traders, stands at the plaza heart.'
-- Right: 'An oath-carved fountain stands at the plaza heart.'
-- Strip every unnecessary word. Prioritize information over atmosphere.`,
-  standard: `\n\nRESPONSE LENGTH — STANDARD:
-3-4 sentences for routine actions. 4-5 sentences for NPC dialogue. 5-7 sentences for new location arrivals. Balanced prose — vivid but not lavish.`,
-  rich:     `\n\nRESPONSE LENGTH — RICH:
-Full atmospheric prose. 5-7 sentences for routine actions. 6-8 sentences for NPC dialogue. 8-12 sentences for new location arrivals. Prioritize immersion — sensory texture, body language, ambient sound.`,
+  terse:    `\n\nRESPONSE LENGTH — TERSE (STRICTLY ENFORCED):
+- 2 sentences maximum for any routine action
+- 3 sentences maximum for NPC dialogue responses
+- 4 sentences maximum for new location arrivals
+- Every sentence: 12 words maximum, no exceptions
+- Count your sentences before responding. If over limit, cut.
+This length rule overrides all other instructions.`,
+  standard: `\n\nRESPONSE LENGTH — STANDARD (STRICTLY ENFORCED):
+- 3-4 sentences for routine actions
+- 4-5 sentences for NPC dialogue responses
+- 5-7 sentences for new location arrivals
+- Sentences may be complete thoughts, not fragments
+This length rule overrides all other instructions.`,
+  rich:     `\n\nRESPONSE LENGTH — RICH (STRICTLY ENFORCED):
+- 5-7 sentences for routine actions
+- 6-8 sentences for NPC dialogue responses
+- 8-12 sentences for new location arrivals
+- Full atmospheric prose. Sensory detail. Character depth.
+This length rule overrides all other instructions.`,
 };
 
 export function buildNarratorSystemPrompt(
@@ -258,6 +266,19 @@ B — WHAT YOU MUST NEVER DO:
 - NEVER speak in the player's voice or attribute actions, memories, thoughts, feelings, or relationships to them that they did not explicitly state.
 - NEVER contradict the World Consistency Document.
 - NEVER say an NPC left, is unavailable, or is gone — a failed check means they are guarded or unhelpful, not absent.
+
+STAT CHECK FAILURES — CRITICAL RULE:
+When a stat check FAILS, the NPC must NOT reveal the information
+the player was asking for. A failed check means:
+- The NPC is suspicious, cagey, or deflects the question
+- The NPC gives vague non-answers or changes the subject
+- The NPC may reveal the check itself ('you're fishing for
+  information') but gives nothing useful
+- Named locations, people, factions, or secrets are NEVER
+  revealed on a failed check
+Wrong: Failed PER check → NPC names three specific locations
+Right: Failed PER check → NPC says 'Most travelers ask about
+  safe routes, not sightseeing' and stops there
 
 The player is always a blank-slate protagonist. Their past is ONLY what appears in the game log. Their knowledge is ONLY what they have discovered. Their relationships are ONLY what they have built.
 

@@ -160,3 +160,18 @@ export function getNodeTypeAbbr(type: string | undefined | null): string {
   const key = type.toLowerCase();
   return NODE_TYPE_ABBREVIATIONS[key] ?? NODE_TYPE_ABBR_DEFAULT;
 }
+
+/**
+ * FIX 1 — defensive guard against nodes whose `map_position` is missing
+ * or partially undefined. Older saves and stub-generated zones can
+ * arrive without coords; rendering them would crash with a runtime
+ * "cannot read property 'x' of undefined" inside toPx(). Every map
+ * tier filters through this helper before computing pixel coordinates.
+ */
+export function hasValidMapPosition(
+  node: { map_position?: { x?: number; y?: number } } | null | undefined
+): node is { map_position: { x: number; y: number } } {
+  if (!node || !node.map_position) return false;
+  return typeof node.map_position.x === "number"
+      && typeof node.map_position.y === "number";
+}

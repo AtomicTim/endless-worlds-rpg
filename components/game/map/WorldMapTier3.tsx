@@ -10,6 +10,7 @@ import type {
 import {
   getNodeColor,
   getNodeTypeAbbr,
+  hasValidMapPosition,
   MAP_CURRENT_GLOW,
   MAP_NPC_DOT,
 } from "@/lib/game/map-colors";
@@ -74,6 +75,9 @@ export function WorldMapTier3({
     const positions = new Map<string, { x: number; y: number }>();
     const taken     = new Set<string>();
     for (const node of notableNodes) {
+      // FIX 1 — skip nodes without coords entirely. They won't render,
+      // but the rest of the layout doesn't crash on the missing fields.
+      if (!hasValidMapPosition(node)) continue;
       let { x, y } = node.map_position;
       let attempts = 0;
       // Seeded jitter — when two sub-locations sit at the same grid cell,
@@ -193,6 +197,26 @@ export function WorldMapTier3({
       className="scrollbar-thin h-full w-full overflow-auto p-3"
       style={{ background: "color-mix(in srgb, var(--color-bg) 95%, #000)" }}
     >
+      {/* FIX 2 — pulsing amber border for the current node. Drawn via
+          a keyframed border-color + box-shadow so the player can spot
+          their position at a glance even when zoomed out far enough
+          that node names are unreadable. */}
+      <style jsx global>{`
+        @keyframes tier3-pulse-border {
+          0%, 100% {
+            border-color: #fbbf24;
+            box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.45);
+          }
+          50% {
+            border-color: #f59e0b;
+            box-shadow: 0 0 0 4px rgba(251, 191, 36, 0);
+          }
+        }
+        .tier3-current-pulse {
+          animation: tier3-pulse-border 2s ease-in-out infinite;
+        }
+      `}</style>
+
       <div
         className="relative mx-auto"
         style={{ width: totalW, height: totalH }}
@@ -292,7 +316,14 @@ function SubLocationCell({ node, isCurrent, position, accent, onClick }: SubLoca
     <button
       onClick={onClick}
       title={`${node.name}${npcCount > 0 ? ` — ${npcCount} NPC${npcCount === 1 ? "" : "s"}` : ""}`}
-      className="absolute flex flex-col items-center justify-center text-[10px] font-bold uppercase tracking-wider transition-transform hover:scale-105"
+      // FIX 2 — current node gets the pulse-border animation defined
+      // in the keyframes block below. Non-current cells keep the
+      // static muted border so the current location reads as the
+      // single most attention-grabbing node on the map.
+      className={[
+        "absolute flex flex-col items-center justify-center text-[10px] font-bold uppercase tracking-wider transition-transform hover:scale-105",
+        isCurrent ? "tier3-current-pulse" : "",
+      ].join(" ")}
       style={{
         ...position,
         width:           NODE_PX,
@@ -303,7 +334,6 @@ function SubLocationCell({ node, isCurrent, position, accent, onClick }: SubLoca
           : "1px solid rgba(255,255,255,0.2)",
         borderRadius: 4,
         color:        "rgba(255,255,255,0.92)",
-        boxShadow:    isCurrent ? `0 0 10px ${MAP_CURRENT_GLOW}` : "none",
         cursor:       "pointer",
         fontFamily:   "var(--font-mono)",
         padding:      6,

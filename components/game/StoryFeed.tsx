@@ -22,6 +22,12 @@ export type MessageType = StoryMessage["type"];
 interface StoryFeedProps {
   messages:  StoryMessage[];
   isLoading?: boolean;
+  /** FIX 8 — contextual loading text propagated from useGameLoop's
+   *  setProcessing(true, getLoadingText(...)). Replaces the previous
+   *  hardcoded "Generating response…" so the player sees what's
+   *  actually happening (e.g. "Speaking with Korven...", "Examining
+   *  the fountain...", "Entering Salt-Iron Crossing..."). */
+  loadingText?: string | null;
   onSubmit?: (input: string) => void;
   /** Navigation redesign — when a LOCATION highlight has a nodeId, the
    *  click handler routes directly through this callback instead of
@@ -44,7 +50,7 @@ interface PopoverState {
   position: { x: number; y: number };
 }
 
-export function StoryFeed({ messages, isLoading = false, onSubmit, onNavigate }: StoryFeedProps) {
+export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, onNavigate }: StoryFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [popover, setPopover] = useState<PopoverState | null>(null);
   // Day 18 — every genre themes the feed via getGenreColors. Read once here
@@ -103,7 +109,9 @@ export function StoryFeed({ messages, isLoading = false, onSubmit, onNavigate }:
           <span className="cursor-blink" style={{ color: "var(--color-primary)" }}>
             █
           </span>
-          <span style={{ color: "var(--color-muted)" }}>Generating response…</span>
+          <span style={{ color: "var(--color-muted)" }}>
+            {loadingText ?? "Thinking…"}
+          </span>
         </div>
       )}
 
@@ -136,6 +144,7 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
     typeof metadata?.npcName === "string" ? metadata.npcName : undefined;
   const locationName =
     typeof metadata?.locationName === "string" ? metadata.locationName : undefined;
+  const isPlayerDialogue = metadata?.isPlayerDialogue === true;
 
   // Day 18 — every accent on every message ultimately reads through this.
   const colors = getGenreColors(genre);
@@ -143,6 +152,27 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
   const inner = (() => {
   switch (type) {
     case "NARRATIVE":
+      // FIX 4 — player dialogue echo. When the player picks an option
+      // or types in the inline DialogueModal input, the loop emits a
+      // NARRATIVE message with isPlayerDialogue=true. Render it like
+      // the existing "> action" echo (muted green, smaller text, no
+      // highlights) so the feed reads as a clean back-and-forth.
+      if (isPlayerDialogue) {
+        return (
+          <div
+            className="message-enter"
+            style={{
+              color:      "#446644",
+              fontSize:   12,
+              margin:     "10px 0 4px",
+              fontFamily: "var(--font-mono)",
+              fontStyle:  "italic",
+            }}
+          >
+            {content}
+          </div>
+        );
+      }
       // 6a — NARRATIVE with a locationName on metadata renders the genre-themed
       // arrival header (◈ NAME) above the body prose.
       return (

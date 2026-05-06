@@ -242,14 +242,32 @@ export async function saveWorldAsset(
 /**
  * Upsert a codex entry. Codex rows are also write-once per (session, entry).
  * Logs errors, never throws.
+ *
+ * FIX 6 — returns `{ created }` so callers can suppress duplicate
+ * "✦ X added to codex" notifications. ignoreDuplicates makes the DB
+ * write a no-op on conflict; we detect that by pre-checking whether
+ * the row exists. Falls back to `created: true` (the safe default
+ * that surfaces the notification) on any unexpected error.
  */
 export async function saveCodexEntry(
   sessionId: string,
   entry: CodexEntry
-): Promise<void> {
+): Promise<{ created: boolean }> {
   try {
     const supabase = createClient();
     const entryId  = normalizeAssetId(entry.category, entry.name);
+
+    // Pre-check existence so we can tell the caller whether this is
+    // genuinely new. Cheaper than relying on a postgres RETURNING
+    // signal we'd need to thread through the supabase-js builder.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: existing } = await (supabase.from("codex") as any)
+      .select("entry_id")
+      .eq("session_id", sessionId)
+      .eq("entry_id", entryId)
+      .maybeSingle() as { data: { entry_id: string } | null };
+    const alreadyExists = !!existing;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase.from("codex") as any).upsert(
       {
@@ -266,8 +284,10 @@ export async function saveCodexEntry(
     if (error) {
       console.error("[saveCodexEntry]", error);
     }
+    return { created: !alreadyExists };
   } catch (err) {
     console.error("[saveCodexEntry] unexpected", err);
+    return { created: true };
   }
 }
 

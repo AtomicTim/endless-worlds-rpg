@@ -197,6 +197,13 @@ export async function POST(request: NextRequest) {
   // Audit Issue L / Area 2 fix: validate npc_ids against the bible's npcs[]
   // and re-stitch via home_location_id when a location has zero valid ids.
   const validNpcIds = new Set(bibleNarrowed.npcs.map((n) => n.id));
+  // FIX 1 — connections also validated against the region's own location
+  // ids PLUS the existing graph (so a connection back to the origin node
+  // isn't accidentally dropped as "unknown").
+  const validLocationIds = new Set([
+    ...bibleNarrowed.locations.map((l) => l.id),
+    ...Object.keys(existingGraph.nodes),
+  ]);
 
   const newNodes: Record<string, WorldNode> = {};
   for (const loc of bibleNarrowed.locations) {
@@ -222,6 +229,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // FIX 1 — filter connections.
+    const validConnections: string[] = [];
+    for (const id of loc.connections) {
+      if (validLocationIds.has(id)) {
+        validConnections.push(id);
+      } else {
+        console.warn(
+          "[apply-regional-bible] Dropping invalid connection:",
+          id,
+          "from location:",
+          loc.id
+        );
+      }
+    }
+
     newNodes[loc.id] = {
       id:            loc.id,
       name:          loc.name,
@@ -229,7 +251,7 @@ export async function POST(request: NextRequest) {
       category:      loc.type,
       zone_id:       loc.is_interior && loc.parent_location_id ? loc.parent_location_id : loc.id,
       is_expandable: !loc.is_interior,
-      connections:   [...loc.connections],
+      connections:   validConnections,
       npc_ids:       finalNpcIds,
       item_ids:      loc.objects.map((o) => `item_${o.id}`),
       asset_id:      `location_${loc.id}`,

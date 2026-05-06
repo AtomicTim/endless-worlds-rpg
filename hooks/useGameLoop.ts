@@ -762,6 +762,33 @@ export function useGameLoop() {
 
       // ── 5. Narrate ─────────────────────────────────────────────────────────
       store.setProcessing(true, "Narrating...");
+
+      // FIX 2 — Pre-load locationAssets BEFORE the narrator runs when this
+      // action ARRIVES at a new location. Step 7c does the same fetch
+      // fire-and-forget AFTER the narrator returns, but on first visit
+      // to a WorldBible sub-location that's too late: NPCS PRESENT and
+      // the TIER 1 OBJECTS block render empty, so the narrator can't
+      // reference the real cast / props. Synchronous pre-load fixes the
+      // first beat; step 7c continues to keep subsequent beats fresh.
+      const arrivingAt =
+        resolution.state_delta.world_state?.location_status === LocationStatus.ARRIVING
+          ? resolution.state_delta.world_state.current_location_id ?? null
+          : null;
+      if (arrivingAt) {
+        const arrivedAssets = await getWorldAssetsForLocation(
+          updatedState.metadata.session_id,
+          arrivingAt
+        );
+        if (arrivedAssets.length > 0) {
+          useGameStore.getState().setLocationAssets(arrivedAssets);
+          console.log(
+            "[GameLoop/5] Pre-loaded assets for ARRIVING:",
+            arrivingAt,
+            arrivedAssets.length
+          );
+        }
+      }
+
       const lastNarrative      = useGameStore.getState().lastNarrativeText;
       const allLocationAssets  = useGameStore.getState().locationAssets;
 
@@ -825,6 +852,9 @@ export function useGameLoop() {
 
       // Day 18 — read player's verbosity preference from the store.
       const currentVerbosity = useGameStore.getState().verbosity;
+      // FIX 6 — log verbosity at the call site so we can confirm the
+      // store value reaches the narrator.
+      console.log("[GameLoop/5] verbosity:", currentVerbosity);
       // Day 19A — pull the World Consistency Document straight from state
       // metadata so every narrator call carries the absolute facts. Old
       // saves without a WCD pass undefined — narrate route handles it.
@@ -1242,6 +1272,15 @@ export function useGameLoop() {
           console.error("[useGameLoop] saveCodexEntry threw", err);
         }
 
+        // FIX 5 — surface a small "added to codex" beat in the feed so
+        // the player knows their journal grew. saveCodexEntry uses
+        // ignoreDuplicates server-side, so we may emit this for an
+        // already-saved entry; the styling is intentionally subtle so
+        // the occasional duplicate isn't noisy.
+        store.addMessage(
+          makeMessage("SYSTEM", `✦ ${entry.name} added to codex`)
+        );
+
         // World asset (immutable narrator constitution).
         const assetCategory: AssetCategory =
           (Object.values(AssetCategory) as string[]).includes(entry.category)
@@ -1399,6 +1438,10 @@ export function useGameLoop() {
               first_seen_location: arrivedAt,
               significance:        "NOTABLE",
             });
+            // FIX 5 — surface the codex add in the story feed.
+            store.addMessage(
+              makeMessage("SYSTEM", `✦ ${locationAsset.name} added to codex`)
+            );
           }
         });
       } else {
@@ -1631,6 +1674,10 @@ export function useGameLoop() {
                 significance:        "NOTABLE",
               });
               console.log("[GameLoop/7g] Codex entry written for NPC:", npcCodexAsset.name);
+              // FIX 5 — surface the codex add in the story feed.
+              store.addMessage(
+                makeMessage("SYSTEM", `✦ ${npcCodexAsset.name} added to codex`)
+              );
             } else {
               console.log(
                 "[GameLoop/7g] No world_asset found for NPC:",

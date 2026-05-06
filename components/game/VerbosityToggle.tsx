@@ -35,7 +35,12 @@ export function VerbosityToggle() {
         return (
           <button
             key={opt.key}
-            onClick={() => setVerbosity(opt.key)}
+            onClick={() => {
+              // FIX 6 — log each toggle click so we can confirm the
+              // setter is actually running and the store is mutating.
+              console.log("[VerbosityToggle] setting verbosity:", opt.key);
+              setVerbosity(opt.key);
+            }}
             className="px-2 py-1 text-[11px] uppercase tracking-wider transition-colors"
             style={{
               color:           active ? "#e2e8f0" : "var(--color-muted)",

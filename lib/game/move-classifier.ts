@@ -26,6 +26,11 @@ const INTERNAL_DESCRIBE_PATTERNS: RegExp[] = [
   /\blook (at|around|toward|over)\b/i,
   /\b(approach|step toward|walk to(ward)?|move to(ward)?) (the )?(bar|counter|fireplace|hearth|window|table|stool|booth)\b/i,
 
+  // FIX 3: approaching/walking toward a person. These are dialogue
+  // setups, never location moves — without this, "walk up to the
+  // knight" classifies as WORLD_EXPLORE and spawns a duplicate node.
+  /\b(walk up to|walked up to|approach|approaches|approached|move toward|step toward|step up to|head toward|go to the|go up to)\s+(the\s+)?(woman|man|figure|person|stranger|knight|guard|merchant|innkeeper|bartender|clerk|vendor)\b/i,
+
   // Vertical movement (all genres).
   /\b(upstairs|downstairs|up the stairs|down the stairs|upper floor|lower floor|ground floor|mezzanine)\b/i,
   /\b(go (up|down)|head (up|down)|climb (up|down)|make (my |your |our )?way (up|down))\b/i,
@@ -182,6 +187,24 @@ export function classifyMove(
 ): MoveClassification {
   const primary = (action.primary_target ?? "").trim();
   const haystack = searchHaystack(action);
+
+  // ── Step 0 (FIX 3) — approaching a person is NOT a move. ──────────────────
+  // The intent parser sometimes classifies "walk up to the knight" as
+  // ActionType.MOVE because of the verb. The graph has no node for "the
+  // knight", so without this short-circuit we'd fall through to
+  // WORLD_EXPLORE and spawn a phantom location. Treating it as
+  // INTERNAL_DESCRIBE keeps the player in place and lets the narrator
+  // describe the encounter; the player's next turn (a quoted line)
+  // routes through the dialogue path naturally.
+  const isApproachingPerson =
+    /\b(walk(ed)?\s+up\s+to|approach(es|ed)?|step(ped)?\s+(up|toward)|move(d)?\s+toward)\b/i.test(haystack);
+  if (isApproachingPerson) {
+    const hasPersonTarget =
+      /\b(woman|man|figure|person|stranger|knight|guard|merchant|innkeeper|bartender|clerk|vendor)\b/i.test(haystack);
+    if (hasPersonTarget) {
+      return { type: "INTERNAL_DESCRIBE" };
+    }
+  }
 
   // ── Step 2 (precedence over INTERNAL_DESCRIBE) ────────────────────────────
   // Check known connections first so that an explicit nav to a connected

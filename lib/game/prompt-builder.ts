@@ -195,18 +195,17 @@ export function formatWcdBlock(wcd: WorldConsistencyDocument | undefined): strin
   return lines.join("\n");
 }
 
+// FIX 6 — Concrete, measurable sentence caps so the three modes
+// produce visibly different output. Also overrides the earlier
+// RESPONSE LENGTH tiers in the system prompt — the verbosity block
+// is appended LAST, so its caps are the final word the model reads.
 const VERBOSITY_BLOCKS: Record<Verbosity, string> = {
   terse:    `\n\nRESPONSE LENGTH — TERSE:
-Routine actions: 1-2 sentences. Movement: 1-2 sentences.
-NPC responses: 2-3 sentences max.
-New location / major moment: 3-4 sentences absolute max.
-Be direct. No flourishes.`,
+Maximum 2 sentences for routine actions. Maximum 3 sentences for NPC dialogue. Maximum 4 sentences for new location arrivals. Be extremely concise — strip every unnecessary word. Single descriptive beat per sentence.`,
   standard: `\n\nRESPONSE LENGTH — STANDARD:
-Routine: 2-3 sentences. Movement: 2-3.
-NPC: 3-4 sentences. New location / major: 5-7 max.`,
+3-4 sentences for routine actions. 4-5 sentences for NPC dialogue. 5-7 sentences for new location arrivals. Balanced prose — vivid but not lavish.`,
   rich:     `\n\nRESPONSE LENGTH — RICH:
-Full atmospheric prose. NPC: 4-6 sentences.
-New location: 6-8 sentences. Major moments: 8-12.`,
+Full atmospheric prose. 5-7 sentences for routine actions. 6-8 sentences for NPC dialogue. 8-12 sentences for new location arrivals. Prioritize immersion — sensory texture, body language, ambient sound.`,
 };
 
 export function buildNarratorSystemPrompt(
@@ -214,6 +213,9 @@ export function buildNarratorSystemPrompt(
   verbosity: Verbosity = "standard",
   wcd?: WorldConsistencyDocument
 ): string {
+  // FIX 6 — log the verbosity that actually reached the prompt builder
+  // so we can correlate UI clicks → store → narrator end-to-end.
+  console.log("[PromptBuilder] verbosity block added:", verbosity);
   const { genre, tone } = state.metadata;
   const personality = getNarratorPersonality(genre);
   const soundList   = SOUND_IDS.join(" | ");
@@ -954,6 +956,50 @@ export function buildNarratorUserPrompt(
         ];
         prompt += `\n${npcLines.join("\n")}`;
       }
+    }
+  }
+
+  // FIX 4 — When the player looks around / takes in their surroundings,
+  // inject the NEARBY LOCATIONS + NPCS PRESENT block so the narrator
+  // names the real WorldBible neighbours rather than inventing
+  // exits / strangers. Triggers on EXAMINE actions plus any inferred
+  // intent that mentions surroundings/look around/take in/scan.
+  const lookIntent = (action?.inferred_intent ?? "").toLowerCase();
+  const isLookAround =
+    action?.action_type === ActionType.EXAMINE ||
+    /\b(surroundings|look around|take in|scan|survey)\b/i.test(lookIntent);
+  if (isLookAround && graph && currentNode) {
+    const connectedLines: string[] = [];
+    for (const connId of currentNode.connections) {
+      const node = graph.nodes[connId];
+      if (!node) continue;
+      connectedLines.push(`- ${node.name}`);
+    }
+    if (connectedLines.length > 0) {
+      prompt +=
+        "\n\nCONNECTED LOCATIONS (use these EXACT names when describing what " +
+        "the player can see or reach from here):\n" +
+        connectedLines.join("\n") +
+        "\nWhen the player looks around or asks what is nearby, reference " +
+        "ONLY these named locations. Do not invent location names.";
+    } else {
+      prompt += "\n\nCONNECTED LOCATIONS: none in the graph yet — describe " +
+        "the broader environment ambiently without naming specific exits.";
+    }
+
+    // NPC reminder for look/examine. Even when npc_ids is empty we want
+    // the narrator to know it can't introduce someone new.
+    const npcRosterAssets = currentNode.npc_ids
+      .map((id) => (locationAssets ?? []).find((a) => a.id === id))
+      .filter((a): a is WorldAsset => !!a && a.category === AssetCategory.CHARACTER);
+    if (npcRosterAssets.length > 0) {
+      prompt +=
+        "\n\nNPCs at this location: " +
+        npcRosterAssets.map((a) => a.name).join(", ") +
+        ". Use these exact names if any are visible to the player.";
+    } else {
+      prompt += "\n\nNPCs at this location: None — describe ambient crowd " +
+        "or solitude only. Do NOT introduce a named character.";
     }
   }
 

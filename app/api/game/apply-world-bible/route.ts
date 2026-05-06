@@ -241,6 +241,15 @@ export async function POST(request: NextRequest) {
   // whose home_location_id matches the location, re-stitch via that
   // home_location_id so NPCS PRESENT renders correctly.
   const validNpcIds = new Set(bibleNarrowed.starting_region.npcs.map((n) => n.id));
+  // FIX 1 — Same validation for connection IDs. AI sometimes references
+  // a location id that doesn't exist in starting_region.locations
+  // (typo, alias, hallucination). Without filtering, classifyMove sees
+  // a connection it can't resolve, and resolveMove falls through to
+  // WORLD_EXPLORE — spawning a duplicate node for a place that the
+  // bible already declares.
+  const validLocationIds = new Set(
+    bibleNarrowed.starting_region.locations.map((l) => l.id)
+  );
 
   const graphNodes: Record<string, WorldNode> = {};
   for (const loc of bibleNarrowed.starting_region.locations) {
@@ -266,6 +275,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // FIX 1 — filter connections to known locations only. Dangling
+    // connection ids would otherwise survive into the graph and break
+    // GRAPH_NAVIGATE for valid neighbours.
+    const validConnections: string[] = [];
+    for (const id of loc.connections) {
+      if (validLocationIds.has(id)) {
+        validConnections.push(id);
+      } else {
+        console.warn(
+          "[apply-world-bible] Dropping invalid connection:",
+          id,
+          "from location:",
+          loc.id
+        );
+      }
+    }
+
     graphNodes[loc.id] = {
       id:            loc.id,
       name:          loc.name,
@@ -273,7 +299,7 @@ export async function POST(request: NextRequest) {
       category:      loc.type,
       zone_id:       loc.is_interior && loc.parent_location_id ? loc.parent_location_id : loc.id,
       is_expandable: !loc.is_interior,
-      connections:   [...loc.connections],
+      connections:   validConnections,
       npc_ids:       finalNpcIds,
       item_ids:      loc.objects.map((o) => `item_${o.id}`),
       asset_id:      `location_${loc.id}`,

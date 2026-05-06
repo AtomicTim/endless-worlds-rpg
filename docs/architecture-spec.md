@@ -1,6 +1,6 @@
 # Endless Worlds RPG — Architecture Specification
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Status:** Active reference document. All implementation decisions must align with this spec.
 
 ---
@@ -27,6 +27,7 @@ Contains:
 - All game state mutations
 - Dialogue option generation
 - Stat check resolution
+- Container registry and loot resolution
 
 Rule: If something changes game state, it is Domain 1. The AI cannot touch it.
 
@@ -38,6 +39,7 @@ Contains:
 - Every location: name, atmosphere text, Tier 1 objects, connections
 - Every NPC: name, role, personality, knowledge array, inventory if merchant
 - Every item: name, stats, effects, description
+- Regional loot tables: 20-30 items per region across quality tiers
 - Main quest: antagonist, goal, 3-5 breadcrumb hints
 - Adjacent region outlines: name, type, atmosphere hint
 
@@ -53,7 +55,8 @@ The AI writes prose. It does not make decisions, create content, or change state
 1. **Location arrival description** — First visit only. Receives frozen location data and writes atmospheric prose. Result cached permanently. No AI on subsequent visits.
 2. **NPC dialogue responses** — Code determines the topic and check result. AI writes how this NPC expresses the outcome in their voice. Context is closed: only this NPC's frozen data, current location, WCD.
 3. **Action narration** — Examine, interact, use item. Code resolves the outcome. AI writes 1-4 atmospheric sentences describing it. Cached after first examine of each object.
-4. **Combat narration** — Code resolves the combat round. AI writes the beat. (Future system.)
+4. **Container search narration** — Code resolves what was found (or not). AI writes one sentence describing the discovery. The item was determined by code before the AI sees anything.
+5. **Combat narration** — Code resolves the combat round. AI writes the beat. (Future system.)
 
 ### What the AI does NOT do:
 - Decide movement or navigation
@@ -62,8 +65,10 @@ The AI writes prose. It does not make decisions, create content, or change state
 - Assign merchant status to NPCs
 - Generate dialogue options (code does this)
 - Introduce locations not in the world graph
+- Introduce containers not in the container registry
 - Change what exists in the world
 - Receive movement intent in any prompt
+- Decide what is found in a container
 
 ---
 
@@ -75,7 +80,8 @@ The world is infinite in potential but only concrete where needed. Three zones e
 The region the player is in, plus all directly adjacent regions that have been entered. Fully generated:
 - All locations with names, atmosphere, Tier 1 objects, connections
 - All NPCs with full assets
-- All items defined
+- All items and loot tables defined
+- Container registries populated for all locations
 - Cached arrival descriptions for visited locations
 
 ### Zone 2 — Outlined (1-2 regions away)
@@ -155,9 +161,81 @@ Wilderness / Road:
 #### Template Rule
 If a location type's template does not include the requested sub-area, the response is a hardcoded string. No AI call. No phantom location created.
 
-Example: Player in a smithy tries to go upstairs. Smithy template has no upstairs. Response: "There's nothing above the forge floor." Done.
+---
 
-Example: Player in a tavern tries to go to the kitchen. Tavern template includes kitchen. Node is created, AI generates it once, cached permanently.
+## Container and Loot System
+
+### The Container Registry
+Every location has a fixed, frozen list of searchable containers. This is the ONLY source of truth for what can be searched. If a container is not in the registry, it does not exist.
+
+**Two sources populate the registry:**
+
+**Source 1 — Tier 1 named containers** (from WorldBible/RegionBible)
+Specific named objects defined at generation time: "The Merchant's Strongbox", "Verity's Locked Desk". These are in the location's `objects` array with `type: container`. They exist definitionally.
+
+**Source 2 — Template containers** (hardcoded by location type)
+Every location type has ambient containers that always exist:
+```
+Tavern common room:    1 barrel near bar, 1 storage crate
+Tavern kitchen:        2 supply barrels, 1 larder chest
+Tavern upper floor:    1 travel pack per room (1-3 rooms)
+Dungeon entrance:      1-2 debris piles, 0-1 chest (spawn roll)
+Dungeon depth level:   1-3 chests, 1-2 debris piles
+Merchant back room:    1 crate, 1 locked strongbox
+Merchant shop floor:   display cases (examine only, not searchable)
+Wilderness off-path:   1 abandoned pack, 0-1 buried cache
+Smithy back workshop:  1 scrap bin, 1 tool chest
+```
+
+These are created when the sub-location node is first visited and added permanently to the location's `searchable_containers` list.
+
+### The Free Text Container Gate
+When the player types "I look for a chest" or "I search for a barrel":
+
+1. Parse intent → EXAMINE or INTERACT, extract container type keyword
+2. Look up current location's `searchable_containers`
+3. If named container: does it exist in the list?
+   - Yes → proceed to search flow
+   - No → hardcoded: "There's no [chest] here." Zero AI call.
+4. If no specific target ("I look for something to search"):
+   - Return hardcoded list: "You notice: a supply barrel, a storage crate." Player then targets one.
+
+**The AI never decides what containers exist. Never.**
+
+### The Search Flow
+Once code confirms the container exists:
+
+1. **Already searched?** Check `searched` flag. If true: "You've already been through this." Done.
+2. **Spawn roll** — Does this container have anything? Probability by type:
+   - Dungeon chest: 75%
+   - Tavern barrel: 25%
+   - Merchant strongbox: 85%
+   - Debris pile: 40%
+   - Wilderness cache: 60%
+3. **If nothing:** "Empty." One hardcoded sentence. Container flagged searched. Done.
+4. **Quality roll** — Stat check (Perception or Strength by container type):
+   - Critical success (total ≥ difficulty + 6): Rare item from loot table
+   - Success (total ≥ difficulty): Common item from loot table
+   - Partial (total ≥ difficulty - 3): Low-quality item or lesser version
+   - Fail: Junk — broken pieces, worthless debris, or nothing useful
+5. **Item selection** — Code picks from the frozen regional loot table at the determined quality tier
+6. **State update** — Item added to inventory, container flagged as searched permanently
+7. **Narration** — AI writes one sentence. It receives: container name, item found (or junk description), quality tier, location atmosphere. It writes color. It did not decide what was there.
+
+### Regional Loot Tables
+Generated as part of WorldBible/RegionBible. Frozen at generation time. 20-30 items per region across three tiers:
+
+- **Rare (5-8 items):** Unique weapons, named armor pieces, significant quest-adjacent items, rare consumables
+- **Common (10-15 items):** Standard weapons, armor, consumables, crafting materials, currency bundles
+- **Junk (5-8 items):** Broken tools, worthless trinkets, scraps, spoiled food
+
+All items in the loot table are real world_assets with names, stats, effects, and prices. The AI generates the loot table at WorldBible time alongside NPCs and locations. After that, loot table items are as frozen as any other asset.
+
+### Container Rules
+- One search per container, ever. The `searched` flag is permanent.
+- Container list for a location is finalized on first visit. Never changes after that.
+- Free text cannot create containers. Code cannot create containers after location generation.
+- AI cannot name or reference containers that aren't in the registry.
 
 ---
 
@@ -231,25 +309,22 @@ Before free text reaches the AI, code runs these checks in order:
 
 1. Is this movement intent? → Hardcoded: "Use the navigation bar to travel."
 2. Does this name an NPC not at this location? → Hardcoded: "[Name] isn't here."
-3. Does this reference something impossible in this world? → Hardcoded: "You don't know what that is."
-4. Is this the player's second or third examine of the same object? → Hardcoded: "You find nothing new."
+3. Does this reference a container not in the container registry? → Hardcoded: "There's no [thing] here."
+4. Does this reference something impossible in this world? → Hardcoded: "You don't know what that is."
+5. Is this the player's second or third examine of the same object? → Hardcoded: "You find nothing new."
 
-Only if all four checks pass does the AI receive the input.
+Only if all checks pass does the AI receive the input.
 
 ### Closed Context for AI Dialogue Calls
 When the AI writes a dialogue response, it receives exactly:
 - WCD block (world laws)
 - RESPONDING CHARACTER block (this NPC's frozen asset data only)
 - TIER 1 OBJECTS at current location (exact names only)
-- SCENE CONTEXT (current location atmosphere, time of day if relevant)
+- SCENE CONTEXT (current location atmosphere)
 - The specific topic or player input
 - The stat check result (pass/fail, not the numbers)
 
-The AI does NOT receive:
-- A list of all NPCs in the game
-- Other locations the player has visited
-- Movement context or destination hints
-- Anything that could prompt it to invent new content
+The AI does NOT receive movement context, destination hints, or anything that could prompt invention.
 
 ### Stat Check Difficulty
 Determined entirely by code before AI sees anything:
@@ -259,11 +334,7 @@ Determined entirely by code before AI sees anything:
 - Clamp: [6, 18]
 
 Intent categories:
-- Public knowledge (directions, NPC name, basic services): -2
-- General lore (local customs, recent events): 0
-- Sensitive (locations of people, faction movements): +2
-- Personal/intimate (backstory, relationships): +3
-- Dangerous secrets (betrayal, illegal activity, conspiracies): +4
+- Public knowledge: -2 | General lore: 0 | Sensitive: +2 | Personal: +3 | Dangerous: +4
 
 ---
 
@@ -274,170 +345,107 @@ Defined at WorldBible/RegionBible generation time in the NPC asset.
 If NPC.constitution.role does not contain merchant/trader/vendor/shopkeeper: no trade button, ever.
 
 ### Inventory
-Defined in the NPC asset at generation time. Items are real world_assets with names, stats, descriptions, and prices.
-The AI does not generate items at runtime. It describes existing items atmospherically.
+Defined in the NPC asset at generation time. Items are real world_assets.
+The AI does not generate items at runtime.
 
 ### Trade Button
-Appears in DialogueModal footer only when:
-1. Current NPC is a merchant by role (from asset)
-2. Player is actively in dialogue with them
-
-Clicking it opens the trade panel directly. No AI call. No stat check. No parseIntent.
+Opens trade panel directly. No AI call. No stat check.
 
 ### Haggling (Future)
-A separate haggling mode triggered by player action. Stat check (STR or CHA) against the price. If successful: write price_override_[item_id] flag to session. TradeModal reads this flag. Single attempt per item. Floor price enforced by code.
+Stat check (STR or CHA). price_override_[item_id] flag. Single attempt. Floor price enforced by code.
 
 ---
 
 ## Map System
 
 ### Tier 1 — World Map
-- Shows geographic regions as colored blocks
-- WCD landmarks as ◆ diamonds with name/description tooltips
-- Undiscovered Zone 2 regions as dim outlines with names
-- Zone 3 regions not shown (player hasn't heard of them yet)
-- Clicking a region → switches to Tier 2 for that region
-- Never triggers navigation directly
+- Geographic regions as colored blocks
+- WCD landmarks as ◆ with tooltips
+- Zone 2 regions as dim outlines with names
+- Zone 3 not shown
+- Click region → Tier 2
 
 ### Tier 2 — Regional Map
-- Shows all concrete nodes within the selected geographic region
-- Settlement + standalone locations (dungeons, wilderness) side by side
-- SVG connection lines between nodes
+- Settlement + standalone locations side by side
 - Exit arrows only for cross-region connections
-- NPC dots at home locations
-- Clicking a settlement node → switches to Tier 3
-- Clicking a standalone location → triggers navigation to it
-- Undiscovered nodes shown as dim outlines
+- Click settlement → Tier 3
 
 ### Tier 3 — Local Map
-- Shows sub-locations inside the current settlement
-- 72px blocks, 3-letter type abbreviation, genre decorations
+- Sub-locations, 72px blocks, type abbreviations, genre decorations
 - Current node: pulsing amber border
-- NPC dots at home sub-locations
-- Clicking a sub-location → navigates player there
-- Exit buttons at edges for outward connections
-
-### Map Auto-Behavior
-- On navigation to a new sub-location within current settlement: stays on Tier 3
-- On navigation to a standalone region location: Tier 3 shows that location's sub-areas if any, else Tier 2
-- On RegionBible expansion (entering new region): auto-switches to Tier 3 of new settlement
-- Clicking Tier 1 region: goes to Tier 2, NOT Tier 3
+- Click sub-location → navigate
 
 ---
 
-## Combat System (Design Intent — Future Implementation)
+## Combat System (Future)
 
-### Principles
-- Fully turn-based, structured UI (not free text)
+- Turn-based, structured UI (not free text)
 - Code resolves all combat math
 - AI writes narration for each round result
-- Enemies defined in world_assets at generation time with stats, abilities, loot tables
-- Combat initiated by: entering certain locations (dungeon rooms), explicit enemy encounter nodes, or player-initiated via examine/interact on a known enemy
-
-### Structure
-- Player turn: action buttons (Attack, Defend, Use Item, Flee, Special)
-- Enemy turn: code resolves enemy action based on enemy type and health state
-- Each round: code computes result → AI writes 1-2 sentences of narration → next round
-- Victory: loot defined by enemy asset, XP defined by enemy difficulty
-- Defeat: player returns to last settlement with reduced HP, some gold lost
+- Enemies defined in world_assets at generation time
+- Victory: loot from enemy's defined loot table, XP from enemy difficulty
+- Defeat: return to last settlement, reduced HP, some gold lost
 
 ---
 
-## Leveling and Progression System (Design Intent)
+## Leveling and Progression System (Future)
 
 ### Stats
-Strength, Perception, Charisma, Agility, Intelligence (starting values from character creation)
+Strength, Perception, Charisma, Agility, Intelligence
 
 ### XP Sources
-- Defeating enemies (XP defined in enemy asset)
-- Completing quests and quest steps
-- Discovering new locations (first visit bonus)
-- Successfully passing difficult stat checks (PER/CHA/STR ≥ 15 difficulty)
+- Defeating enemies | Completing quests | Discovering locations (first visit) | Difficult stat check successes
 
 ### Level Up
-- At each level: +2 points to distribute across stats
-- New dialogue options unlocked at certain stat thresholds
-- New areas accessible at certain level thresholds (gated dungeon depths, inner sanctums)
-
-### Equipment
-- Weapons and armor add stat bonuses
-- Defined in world_assets at generation time
-- Found in dungeons, purchased from merchants, rewarded for quests
+- +2 stat points per level
+- New areas gated by level thresholds
+- New dialogue options at stat thresholds
 
 ---
 
-## Quest System (Design Intent)
+## Quest System (Future)
 
 ### Main Quest
-Defined in WorldBible. Has: antagonist, goal, 3-5 breadcrumbs, win condition.
-Breadcrumbs delivered via NPC dialogue (when trust threshold met), discovered objects, or environmental clues.
-Main quest completable — the game has a defined ending.
+Defined in WorldBible. Antagonist, goal, 3-5 breadcrumbs, win condition. Completable.
 
 ### Side Quests
-Generated per NPC at WorldBible/RegionBible time. Simple structure:
-- Quest giver NPC with quest_relevance = 'quest'
-- Objective: fetch item / reach location / speak to NPC / defeat enemy
-- Reward: gold, item, trust increase with faction
-- Tracked as world_state flags
-
-### Quest Tracking UI
-Separate codex tab. Shows active quests, completed quests, and main quest progress. All data from world_state flags — no AI involvement.
+Generated per NPC. Objective + reward + world_state flag tracking.
 
 ---
 
 ## Codex System
 
 ### What Gets Added
-- Locations: on first player interaction at that location (not on entry)
-- NPCs: on first dialogue with that NPC
-- Items: on first examine of that item
-- Lore: on discovering specific objects or passing knowledge checks
-- WCD landmarks: on first time NPC mentions them or player reaches them
-
-### Updates
-Future: when new information is learned about an existing entry, the entry updates. The original entry is preserved in history.
-
-### Usage
-Designer vision: codex entries become raw material for the player's own world-building outside the game (writing, other media). The codex is a living document of the world they experienced.
+- Locations: on first player interaction (not on entry)
+- NPCs: on first dialogue
+- Items: on first examine or first find in container
+- Lore: on discovering objects or passing knowledge checks
 
 ---
 
 ## Performance and Reliability
 
 ### AI Call Budget
-- World generation: 2-3 AI calls (WCD + WorldBible + apply). One-time cost.
-- RegionBible expansion: 1 AI call per new region. Pre-generated in background.
-- Location arrival: 1 AI call per new location. Cached permanently after first visit.
-- Dialogue beat: 1 AI call per player-initiated dialogue exchange.
-- No AI calls for: movement, re-examining known objects, trade panel open, re-visiting locations.
-
-### Caching Strategy
-- Location arrival descriptions: cached in world_assets after first generation
-- Examined object descriptions: cached in world_assets after first examine
-- Items_for_sale: cached in session state for merchant NPC's current session
-- RegionBible: module-level cache keyed by sessionId__regionId with in-flight dedup
+- World generation: 2-3 calls. One-time cost.
+- RegionBible: 1 call per region. Pre-generated in background.
+- Location arrival: 1 call per new location. Cached permanently.
+- Dialogue beat: 1 call per exchange.
+- Container search narration: 1 call only when item found (not on empty).
+- No AI for: movement, re-examine, trade open, re-visit, empty container.
 
 ### Model Selection
-- World generation (WCD, WorldBible): claude-sonnet-4-5 — quality matters most here
-- RegionBible: claude-haiku-4-5 — speed matters, quality acceptable from simpler prompt
-- Live narration (dialogue, arrive, examine): claude-sonnet-4-5 — quality for immersion
-
-### Route Timeouts
-- generate-regional-bible: maxDuration = 300, switch to haiku for faster response
-- generate-world-bible: maxDuration = 300, accepts up to 8000 tokens
-- All narrate calls: maxDuration = 60 (should complete well within this)
+- World generation (WCD, WorldBible): claude-sonnet-4-5
+- RegionBible: claude-haiku-4-5 (speed over quality — outline already defines the region)
+- Live narration: claude-sonnet-4-5
 
 ---
 
 ## What Makes This Novel
 
-This game sits at the intersection of two things that don't normally exist together:
+1. **Procedural world generation** — Every playthrough is a new world. Not a replay.
+2. **CRPG depth** — Full stats, leveling, combat, quests, exploration, dungeons, loot.
 
-1. **Procedural world generation** — Every playthrough is a new world with its own laws, factions, places, characters, and history. Completely different from Skyrim which you replay in the same world.
-
-2. **CRPG depth** — Full stat system, leveling, combat, quests, exploration, merchants, dungeons. Not just a chatbot with an RPG skin.
-
-The AI's role is specific and valuable: it makes every world feel alive, every NPC feel like a person, every location feel atmospheric. But it does this as a writer, not as an engineer. The world exists before the AI writes a single word of dialogue. The AI just makes it beautiful.
+The AI is a writer hired to describe a world the code already built. It makes things beautiful. It does not make things exist.
 
 ---
 

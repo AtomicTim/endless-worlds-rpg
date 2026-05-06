@@ -363,6 +363,15 @@ export async function POST(request: NextRequest) {
     for (const id of loc.connections) {
       if (validLocationIds.has(id)) validConnections.push(id);
     }
+    // FIX 1a — ALWAYS guarantee the back-link to the settlement. The AI
+    // sometimes omits the settlement from a region_location's
+    // connections array, which leaves the player stranded at "The
+    // Bellhaven Road" with an empty NavigationBar (no way to walk back
+    // to town). The settlement is structurally always reachable from
+    // any sibling node in the geographic region.
+    if (!validConnections.includes(startingNodeId)) {
+      validConnections.push(startingNodeId);
+    }
     graphNodes[loc.id] = {
       id:            loc.id,
       name:          loc.name,
@@ -379,6 +388,23 @@ export async function POST(request: NextRequest) {
       discovered:    false,
       map_position:  loc.grid_position,
     };
+  }
+
+  // 4b-2. FIX 1a — symmetric back-link from settlement to every
+  // region_location. Runs unconditionally (not gated on
+  // !isSameAsSettlement) so the player can walk OUT of town to the
+  // dungeon even on legacy saves where the geographic region id
+  // collides with the settlement id.
+  {
+    const settlement = graphNodes[startingNodeId];
+    if (settlement) {
+      const linked = new Set(settlement.connections);
+      for (const r of regionLocations) linked.add(r.id);
+      graphNodes[startingNodeId] = {
+        ...settlement,
+        connections: Array.from(linked),
+      };
+    }
   }
 
   // 4c. Day 20 — the geographic REGION itself is a top-level zone
@@ -404,24 +430,16 @@ export async function POST(request: NextRequest) {
       discovered:    true,
       map_position:  bibleNarrowed.starting_region.grid_centre,
     };
-    // Also wire the settlement node back to the region and to each
-    // region_location so the player can navigate there from the hub.
+    // Wire the settlement node back to the geographic region. The
+    // settlement ↔ region_location wiring already happened in 4b/4b-2;
+    // here we only add the region zone itself to the settlement's
+    // connections so the player can step onto the broader landscape.
     const settlement = graphNodes[startingNodeId];
-    if (settlement) {
-      const linked = new Set(settlement.connections);
-      linked.add(geographicRegionId);
-      for (const r of regionLocations) linked.add(r.id);
+    if (settlement && !settlement.connections.includes(geographicRegionId)) {
       graphNodes[startingNodeId] = {
         ...settlement,
-        connections: Array.from(linked),
+        connections: [...settlement.connections, geographicRegionId],
       };
-    }
-    for (const r of regionLocations) {
-      const node = graphNodes[r.id];
-      if (!node) continue;
-      const linked = new Set(node.connections);
-      linked.add(startingNodeId);
-      graphNodes[r.id] = { ...node, connections: Array.from(linked) };
     }
   }
 

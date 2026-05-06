@@ -299,6 +299,14 @@ export async function POST(request: NextRequest) {
     for (const id of loc.connections) {
       if (validLocationIds.has(id)) validConnections.push(id);
     }
+    // FIX 1a — ALWAYS guarantee the back-link to the settlement. Same
+    // failure mode as apply-world-bible: the AI occasionally drops the
+    // settlement from connections and the player has no nav bar option
+    // back. The settlement is the only structurally-required peer of
+    // every region_location.
+    if (!validConnections.includes(settlementIdForZone)) {
+      validConnections.push(settlementIdForZone);
+    }
     newNodes[loc.id] = {
       id:            loc.id,
       name:          loc.name,
@@ -314,7 +322,21 @@ export async function POST(request: NextRequest) {
       map_position:  loc.grid_position,
     };
   }
-  void settlementIdForZone;
+
+  // 4b-2. FIX 1a — symmetric back-link from the new settlement to every
+  // region_location. Mirrors apply-world-bible; ensures the player can
+  // walk from the town hub straight out to the dungeon/wilderness.
+  if (regionLocations.length > 0) {
+    const settlement = newNodes[settlementIdForZone];
+    if (settlement) {
+      const linked = new Set(settlement.connections);
+      for (const r of regionLocations) linked.add(r.id);
+      newNodes[settlementIdForZone] = {
+        ...settlement,
+        connections: Array.from(linked),
+      };
+    }
+  }
 
   // ── 5. Merge the new nodes into the existing graph ─────────────────────────
   // Remove the placeholder outline node (added by apply-world-bible at

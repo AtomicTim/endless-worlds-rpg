@@ -48,30 +48,52 @@ export function WorldMapTier2({
   // the town and the dungeon side-by-side as distinct, navigable points
   // in the geographic area.
   //
-  // Exits to other geographic regions are computed on the kept set so
-  // Tier 2 still renders boundary arrows.
+  // FIX 3 — exit arrows are TRUE cross-region edges only. The previous
+  // filter (`targetRegion !== selectedRegionId` where `targetRegion`
+  // for sub_locations resolves to the settlement id) flagged every
+  // settlement → tavern edge as an exit, so Tier 2 was littered with
+  // arrows pointing INTO the same town. The new filter rejects:
+  //   • targets in the same zone (target.zone_id === selectedRegionId)
+  //   • targets that are sub_locations (those belong on Tier 3)
+  //   • from-nodes that are sub_locations (kept for safety; the
+  //     candidates filter already excludes them but the outer guard is
+  //     cheap and protects against future changes)
   const { regionNodes, exits } = useMemo(() => {
     const candidates: WorldNode[] = Object.values(worldGraph.nodes).filter(
       (n) => n.zone_id === selectedRegionId || n.id === selectedRegionId
     );
-    // Drop sub-locations — those live on Tier 3.
     const nodes: WorldNode[] = candidates.filter(
       (n) => n.type !== "sub_location"
     );
 
     const exitsList: Array<{ from: WorldNode; targetRegionId: string; targetName: string }> = [];
     for (const node of nodes) {
+      // FIX 3 — only the settlement and standalone region_locations
+      // (both type === "zone") emit exit arrows. Skip the geographic
+      // region zone node itself when it shows up in the list — it
+      // self-references via zone_id and would fire spurious arrows.
+      if (node.type !== "zone") continue;
       for (const c of node.connections) {
         const target = worldGraph.nodes[c];
         if (!target) continue;
+        // FIX 3 — strict cross-zone test. Sub-locations always live in
+        // some settlement so their zone_id will never match
+        // selectedRegionId, but they are NEVER true region exits.
+        if (target.type === "sub_location") continue;
+        if (target.zone_id === selectedRegionId) continue;
+        // The geographic region zone node has zone_id === self, so
+        // an edge from the settlement to its containing region zone
+        // also reads as cross-zone — but it isn't an exit, it's a
+        // "step out into the landscape" link. Skip when the target
+        // IS the selected region itself.
+        if (target.id === selectedRegionId) continue;
+
         const targetRegion = target.type === "zone" ? target.id : target.zone_id;
-        if (targetRegion !== selectedRegionId) {
-          exitsList.push({
-            from:           node,
-            targetRegionId: targetRegion,
-            targetName:     worldGraph.nodes[targetRegion]?.name ?? target.name,
-          });
-        }
+        exitsList.push({
+          from:           node,
+          targetRegionId: targetRegion,
+          targetName:     worldGraph.nodes[targetRegion]?.name ?? target.name,
+        });
       }
     }
     return { regionNodes: nodes, exits: exitsList };

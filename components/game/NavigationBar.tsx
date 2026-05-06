@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Genre, MasterState, RegionOutline, WorldGraph, WorldNode } from "@/types/game";
+import type {
+  Genre,
+  MasterState,
+  RegionOutline,
+  WorldGraph,
+  WorldLandmark,
+  WorldNode,
+} from "@/types/game";
 import { getGenreColors } from "./genre-ui";
 
 /**
@@ -79,13 +86,23 @@ function truncate(s: string, max: number): string {
 export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Props) {
   const colors = getGenreColors(genre);
 
-  const { connectedNodes, adjacentOutlines } = useMemo(() => {
+  const { connectedNodes, returnNode, adjacentOutlines, landmarkOutlines } = useMemo(() => {
     if (!worldGraph) {
-      return { connectedNodes: [] as WorldNode[], adjacentOutlines: [] as RegionOutline[] };
+      return {
+        connectedNodes:    [] as WorldNode[],
+        returnNode:        null as WorldNode | null,
+        adjacentOutlines:  [] as RegionOutline[],
+        landmarkOutlines:  [] as Array<{ landmark: WorldLandmark; outline: RegionOutline }>,
+      };
     }
     const current = worldGraph.nodes[worldGraph.current_node_id];
     if (!current) {
-      return { connectedNodes: [] as WorldNode[], adjacentOutlines: [] as RegionOutline[] };
+      return {
+        connectedNodes:    [] as WorldNode[],
+        returnNode:        null as WorldNode | null,
+        adjacentOutlines:  [] as RegionOutline[],
+        landmarkOutlines:  [] as Array<{ landmark: WorldLandmark; outline: RegionOutline }>,
+      };
     }
 
     // Resolve every connection id to a graph node (silently drop ids
@@ -96,16 +113,93 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
       if (node) connected.push(node);
     }
 
+    // FIX 1b — "← Return" safety net.
+    // When the player is at a region_location (a sibling of the
+    // settlement inside the geographic region), the connections array
+    // SHOULD include the settlement after the apply-world-bible /
+    // apply-regional-bible patch above, but we also surface a
+    // dedicated return card derived from the zone hierarchy in case a
+    // legacy save's graph still has the back-link missing. The
+    // settlement is the only sibling node in the same zone with
+    // is_expandable === true; region_locations are is_expandable: false.
+    let parentSettlement: WorldNode | null = null;
+    const isRegionLocation =
+      current.type === "zone" &&
+      current.is_expandable === false &&
+      current.zone_id !== current.id;
+    if (isRegionLocation) {
+      parentSettlement =
+        Object.values(worldGraph.nodes).find(
+          (n) =>
+            n.id !== current.id &&
+            n.zone_id === current.zone_id &&
+            n.type === "zone" &&
+            n.is_expandable === true
+        ) ?? null;
+    }
+    // Don't double-render: if the parent settlement is already in the
+    // resolved connections list, skip the return card.
+    const alreadyConnected = parentSettlement
+      ? connected.some((n) => n.id === parentSettlement!.id)
+      : false;
+    if (alreadyConnected) parentSettlement = null;
+
     // Outline cards for adjacent undiscovered regions. Skip any outline
     // whose id collides with an already-resolved graph node so we never
     // double-render the same destination.
     const wb       = masterState?.metadata.world_bible;
-    const known    = new Set(connected.map((n) => n.id));
+    const wcd      = masterState?.metadata.world_consistency;
+    const knownIds = new Set([
+      ...connected.map((n) => n.id),
+      ...(parentSettlement ? [parentSettlement.id] : []),
+    ]);
     const outlines = (wb?.adjacent_regions ?? []).filter(
-      (r) => !known.has(r.id)
+      (r) => !knownIds.has(r.id)
     );
 
-    return { connectedNodes: connected, adjacentOutlines: outlines };
+    // FIX 2 — surface WCD landmarks that aren't yet a discovered graph
+    // node but DO have a matching adjacent_region in the WorldBible.
+    // The match is loose (id OR name) because the bible/AI sometimes
+    // mints a different slug for the same place; this gives players a
+    // reliable way to reach a landmark like "Bellhaven" from the start.
+    const adjacentRegions = wb?.adjacent_regions ?? [];
+    const everyoneLandmarks = (wcd?.landmarks ?? []).filter(
+      (lm) => lm.known_by === "everyone"
+    );
+    const landmarkPairs: Array<{ landmark: WorldLandmark; outline: RegionOutline }> = [];
+    for (const lm of everyoneLandmarks) {
+      // Skip when the landmark already has a discovered graph node
+      // — the player can navigate to it via normal means.
+      const existingNode = worldGraph.nodes[lm.id];
+      if (existingNode && existingNode.discovered) continue;
+
+      // Find a matching adjacent_region by id or name.
+      const lmNameLower = lm.name.toLowerCase();
+      const match = adjacentRegions.find(
+        (r) =>
+          r.landmark_id === lm.id ||
+          r.id === lm.id ||
+          r.name.toLowerCase() === lmNameLower
+      );
+      if (!match) continue;
+      // Skip if we're already showing this outline as a regular adjacent
+      // region card OR if it's already a known connection.
+      if (knownIds.has(match.id)) continue;
+      if (outlines.some((o) => o.id === match.id)) {
+        // Promote: drop from the regular outlines list and re-render
+        // it as a landmark card so the diamond + name reads as one.
+        const idx = outlines.findIndex((o) => o.id === match.id);
+        if (idx >= 0) outlines.splice(idx, 1);
+      }
+      landmarkPairs.push({ landmark: lm, outline: match });
+    }
+
+    return {
+      connectedNodes:   connected,
+      returnNode:       parentSettlement,
+      adjacentOutlines: outlines,
+      landmarkOutlines: landmarkPairs,
+    };
   }, [worldGraph, masterState]);
 
   // ── Desktop overflow arrows ──────────────────────────────────────────────
@@ -146,7 +240,12 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
     el.scrollBy({ left: direction * amount, behavior: "smooth" });
   }
 
-  if (connectedNodes.length === 0 && adjacentOutlines.length === 0) {
+  if (
+    connectedNodes.length === 0 &&
+    adjacentOutlines.length === 0 &&
+    landmarkOutlines.length === 0 &&
+    !returnNode
+  ) {
     return null;
   }
 
@@ -171,6 +270,21 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
           scrollbarWidth: "none",
         }}
       >
+        {/* FIX 1b — return card pinned first when relevant so the
+            player's most likely action (walk back to town) is the
+            leftmost option. Only rendered when the connections graph
+            doesn't already contain the parent settlement. */}
+        {returnNode && (
+          <NavigationCard
+            key={`return-${returnNode.id}`}
+            label={`← ${returnNode.name}`}
+            icon="↩"
+            visited={visited.has(returnNode.id) || returnNode.discovered}
+            primary={colors.primary}
+            onClick={() => onNavigate(returnNode.id)}
+            kind="return"
+          />
+        )}
         {connectedNodes.map((node) => (
           <NavigationCard
             key={node.id}
@@ -180,6 +294,22 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
             primary={colors.primary}
             onClick={() => onNavigate(node.id)}
             kind="known"
+          />
+        ))}
+        {/* FIX 2 — WCD landmark cards. Distinct golden border + ◆
+            prefix so the player can spot them as "world-tier"
+            destinations rather than ordinary adjacent regions.
+            Tapping them triggers RegionBible expansion via the same
+            navigateTo channel as a regular outline card. */}
+        {landmarkOutlines.map(({ landmark, outline }) => (
+          <NavigationCard
+            key={`landmark-${landmark.id}`}
+            label={`◆ ${landmark.name}`}
+            icon="🗺"
+            visited={false}
+            primary={colors.primary}
+            onClick={() => onNavigate(outline.id)}
+            kind="landmark"
           />
         ))}
         {adjacentOutlines.map((outline) => (
@@ -216,11 +346,27 @@ interface CardProps {
   visited: boolean;
   primary: string;
   onClick: () => void;
-  kind:    "known" | "outline";
+  kind:    "known" | "outline" | "return" | "landmark";
 }
 
+const LANDMARK_GOLD = "#f5b942";
+
 function NavigationCard({ label, icon, visited, primary, onClick, kind }: CardProps) {
-  const isOutline = kind === "outline";
+  const isOutline   = kind === "outline";
+  const isLandmark  = kind === "landmark";
+  const isReturn    = kind === "return";
+  // Border + opacity vary per kind so the player can read intent at a
+  // glance: solid for graph-resolved connections, dashed for
+  // un-discovered outlines, gold for WCD landmarks, primary-tinted
+  // for the return-to-settlement card.
+  const border = isLandmark
+    ? `1.5px solid ${LANDMARK_GOLD}`
+    : isOutline
+      ? `1px dashed color-mix(in srgb, ${primary} 50%, var(--color-border))`
+      : isReturn
+        ? `1px solid color-mix(in srgb, ${primary} 60%, var(--color-border))`
+        : "0.5px solid var(--color-border)";
+  const opacity = isOutline ? 0.85 : 1;
   return (
     <button
       onClick={onClick}
@@ -230,15 +376,15 @@ function NavigationCard({ label, icon, visited, primary, onClick, kind }: CardPr
         minHeight:       52,                       // touch target floor
         minWidth:        140,
         maxWidth:        220,
-        background:      "color-mix(in srgb, var(--color-bg) 80%, #000)",
-        border:          isOutline
-          ? `1px dashed color-mix(in srgb, ${primary} 50%, var(--color-border))`
-          : "0.5px solid var(--color-border)",
-        color:           "var(--color-text)",
+        background:      isLandmark
+          ? `color-mix(in srgb, ${LANDMARK_GOLD} 8%, var(--color-bg))`
+          : "color-mix(in srgb, var(--color-bg) 80%, #000)",
+        border,
+        color:           isLandmark ? LANDMARK_GOLD : "var(--color-text)",
         fontFamily:      "var(--font-mono)",
         fontSize:        13,
         cursor:          "pointer",
-        opacity:         isOutline ? 0.85 : 1,
+        opacity,
       }}
     >
       <span aria-hidden style={{ fontSize: 16, lineHeight: 1 }}>

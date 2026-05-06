@@ -166,7 +166,13 @@ export function WorldMapTier1({ masterState, worldGraph, onSelectRegion }: Props
 
         {/* WCD landmarks — diamonds visible from the start. FIX 8:
             hovering / touching opens a Direction-3 styled tooltip with
-            the landmark's name + public_description above the marker. */}
+            the landmark's name + public_description above the marker.
+            FIX 2: a landmark with a matching WorldBible adjacent_region
+            (id, landmark_id, or name) becomes clickable — clicking
+            calls onSelectRegion with the adjacent_region id, which the
+            map container routes through to navigateTo (RegionBible
+            expansion). The fallback non-matching diamond stays
+            hover-only. */}
         {(wcd?.landmarks ?? []).map((lm) => {
           // FIX 1 — landmarks share the same crash-on-missing-coord
           // failure mode as zone nodes; skip if the WCD entry is malformed.
@@ -178,11 +184,14 @@ export function WorldMapTier1({ masterState, worldGraph, onSelectRegion }: Props
             return null;
           }
           const pos = toPx(lm.grid_position.x, lm.grid_position.y);
+          const matchingRegionId = matchAdjacentRegionId(lm, masterState);
           return (
             <LandmarkMarker
               key={lm.id}
               landmark={lm}
               position={pos}
+              clickableRegionId={matchingRegionId}
+              onClickRegion={onSelectRegion}
               onShow={() =>
                 setActiveLandmark({
                   landmark: lm,
@@ -299,11 +308,56 @@ function UndiscoveredCell({
 interface LandmarkMarkerProps {
   landmark: WorldLandmark;
   position: { left: number; top: number };
+  /** When set, the diamond becomes a real button that selects this
+   *  WorldBible adjacent_region (Tier 2 view + RegionBible expansion).
+   *  When null, the diamond is informational only — hover/touch
+   *  reveals the tooltip but clicks do nothing. */
+  clickableRegionId: string | null;
+  onClickRegion:     (regionId: string) => void;
   onShow:   () => void;
   onHide:   () => void;
 }
 
-function LandmarkMarker({ landmark, position, onShow, onHide }: LandmarkMarkerProps) {
+function LandmarkMarker({
+  landmark,
+  position,
+  clickableRegionId,
+  onClickRegion,
+  onShow,
+  onHide,
+}: LandmarkMarkerProps) {
+  const sharedStyle: React.CSSProperties = {
+    ...position,
+    width:      CELL_PX,
+    height:     CELL_PX,
+    color:      MAP_LANDMARK,
+    fontSize:   18,
+    fontWeight: "bold",
+    textShadow: `0 0 4px ${MAP_LANDMARK}`,
+    display:    "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "transparent",
+    border:     "none",
+    padding:    0,
+  };
+  if (clickableRegionId) {
+    return (
+      <button
+        type="button"
+        aria-label={`Travel to ${landmark.name}`}
+        onClick={() => onClickRegion(clickableRegionId)}
+        onMouseEnter={onShow}
+        onMouseLeave={onHide}
+        onTouchStart={onShow}
+        onTouchEnd={onHide}
+        className="absolute"
+        style={{ ...sharedStyle, cursor: "pointer" }}
+      >
+        ◆
+      </button>
+    );
+  }
   return (
     <div
       role="img"
@@ -312,21 +366,34 @@ function LandmarkMarker({ landmark, position, onShow, onHide }: LandmarkMarkerPr
       onMouseLeave={onHide}
       onTouchStart={onShow}
       onTouchEnd={onHide}
-      className="absolute flex items-center justify-center"
-      style={{
-        ...position,
-        width:      CELL_PX,
-        height:     CELL_PX,
-        color:      MAP_LANDMARK,
-        fontSize:   18,
-        fontWeight: "bold",
-        textShadow: `0 0 4px ${MAP_LANDMARK}`,
-        cursor:     "help",
-      }}
+      className="absolute"
+      style={{ ...sharedStyle, cursor: "help" }}
     >
       ◆
     </div>
   );
+}
+
+/**
+ * FIX 2 — match a WCD landmark to a WorldBible adjacent_region by id,
+ * landmark_id, or case-insensitive name. Returns the adjacent_region's
+ * id when a match is found, else null. Used to decide whether the
+ * landmark diamond becomes a clickable navigation target.
+ */
+function matchAdjacentRegionId(
+  landmark: WorldLandmark,
+  masterState: MasterState
+): string | null {
+  const adjacents = masterState.metadata.world_bible?.adjacent_regions ?? [];
+  if (adjacents.length === 0) return null;
+  const lmNameLower = landmark.name.toLowerCase();
+  const match = adjacents.find(
+    (r) =>
+      r.landmark_id === landmark.id ||
+      r.id === landmark.id ||
+      r.name.toLowerCase() === lmNameLower
+  );
+  return match?.id ?? null;
 }
 
 interface LandmarkTooltipProps {

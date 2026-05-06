@@ -71,15 +71,17 @@ function buildUserPrompt(
   void genre;
 
   // Audit Issue E follow-up: shrunk to the bare minimum that still
-  // produces a playable region. 1 hub + 1 sub-location + 2 NPCs + 1
-  // exit (back to origin only). Pairs with max_tokens: 1500 below so
-  // the response never truncates mid-JSON.
+  // produces a playable region. Day 20 expansion: the geographic
+  // region also gets ONE standalone region_location (a dungeon /
+  // wilderness point) alongside the settlement.
   const originRegionId = originRegionName.toLowerCase().replace(/[^a-z0-9]+/g, "_");
   const subSlug        = `${outline.id}_inn`;
+  const regionLocSlug  = `${outline.id}_point`;
   const npc1Slug       = `${outline.id}_npc1`;
   const npc2Slug       = `${outline.id}_npc2`;
   const obj1Slug       = `${outline.id}_obj1`;
   const obj2Slug       = `${outline.id}_obj2`;
+  const regionObjSlug  = `${outline.id}_region_obj`;
 
   return `${wcdBlock}
 
@@ -164,6 +166,28 @@ consistent with the WCD):
       "default_trust": 50
     }
   ],
+  "region_locations": [
+    {
+      "id": "${regionLocSlug}",
+      "name": "[Standalone landmark name — dungeon / wilderness / shrine]",
+      "type": "dungeon",
+      "is_settlement_node": false,
+      "is_interior": false,
+      "atmosphere": "[1 sentence]",
+      "grid_position": {"x": ${outline.grid_centre.x + 1}, "y": ${outline.grid_centre.y}},
+      "connections": ["${outline.id}"],
+      "npc_ids": [],
+      "objects": [
+        {
+          "id": "${regionObjSlug}",
+          "name": "[Exact Object Name]",
+          "description": "[1 sentence]",
+          "is_interactable": true
+        }
+      ],
+      "ambient_type": "dungeon_corridor"
+    }
+  ],
   "exits": [
     {
       "direction": "${opposite}",
@@ -175,7 +199,10 @@ consistent with the WCD):
 }
 
 Make everything original and consistent with the WCD.
-Real names for all NPCs. No placeholders.`;
+Real names for all NPCs. No placeholders.
+The region_locations entry is a STANDALONE point in the geographic
+area (dungeon / wilderness / shrine) — NOT inside the settlement.
+It connects directly to the settlement hub.`;
 }
 
 function stripJsonFences(raw: string): string {

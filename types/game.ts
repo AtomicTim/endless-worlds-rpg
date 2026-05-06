@@ -435,21 +435,45 @@ export interface RegionOutline {
 }
 
 export interface RegionBible {
-  id:                  string;
-  name:                string;
-  type:                string;
-  grid_centre:         { x: number; y: number };
+  /** Geographic-region slug — landscape, district, territory.
+   *  e.g. "the_salt_plains", "rust_peaks_foothills", "the_ashwood". */
+  id:                   string;
+  /** Geographic-region display name. NEVER a town/building name.
+   *  e.g. "The Salt Plains", "Rust Peaks Foothills". */
+  name:                 string;
+  type:                 string;
+  grid_centre:          { x: number; y: number };
   /** How many cells this region spans on the world grid (typically 3-5). */
-  grid_radius:         number;
+  grid_radius:          number;
   /** Region atmosphere — must not contradict the WCD. */
-  atmosphere:          string;
+  atmosphere:           string;
   /** WCD faction id when one controls this region. */
   controlling_faction?: string;
-  /** Includes the settlement node and all notable sub-locations. */
-  locations:           LocationDefinition[];
+
+  /** Day 20 — geographic restructure.
+   *  Which location id inside `locations[]` is the main settlement hub
+   *  (the town within this geographic area). When omitted, callers
+   *  resolve it via the legacy `is_settlement_node` flag. */
+  settlement_id?:       string;
+  /** Day 20 — display name of the town/settlement. Distinct from
+   *  `name` (which is the geographic region) so the player can see
+   *  e.g. "Salt-Iron Crossing" inside "The Salt Plains". */
+  settlement_name?:     string;
+
+  /** Includes the settlement node and all notable sub-locations
+   *  inside it. */
+  locations:            LocationDefinition[];
+
+  /** Day 20 — standalone locations that live in the geographic region
+   *  alongside the settlement (NOT inside it). Dungeon entrances,
+   *  ancient shrines, abandoned structures, wilderness points. They
+   *  share `zone_id = <geographic region id>` rather than the
+   *  settlement node id used by sub-locations. */
+  region_locations?:    LocationDefinition[];
+
   /** Every NPC in this region — real names from generation. */
-  npcs:                NPCDefinition[];
-  exits:               RegionExit[];
+  npcs:                 NPCDefinition[];
+  exits:                RegionExit[];
 }
 
 export interface WorldBible {

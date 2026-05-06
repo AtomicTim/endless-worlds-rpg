@@ -200,8 +200,17 @@ export function formatWcdBlock(wcd: WorldConsistencyDocument | undefined): strin
 // RESPONSE LENGTH tiers in the system prompt — the verbosity block
 // is appended LAST, so its caps are the final word the model reads.
 const VERBOSITY_BLOCKS: Record<Verbosity, string> = {
-  terse:    `\n\nRESPONSE LENGTH — TERSE:
-Maximum 2 sentences for routine actions. Maximum 3 sentences for NPC dialogue. Maximum 4 sentences for new location arrivals. Be extremely concise — strip every unnecessary word. Single descriptive beat per sentence.`,
+  terse:    `\n\nRESPONSE LENGTH — TERSE MODE:
+- Maximum 2 sentences for routine actions
+- Maximum 3 sentences for NPC dialogue
+- Maximum 4 sentences for new location arrivals
+- SENTENCE LENGTH: Every sentence must be 12 words or fewer.
+  No subordinate clauses. No lists within sentences.
+  No atmospheric asides. State the fact, stop.
+- Wrong: 'The ancient fountain, its surface carved with countless
+  oath-marks from generations of traders, stands at the plaza heart.'
+- Right: 'An oath-carved fountain stands at the plaza heart.'
+- Strip every unnecessary word. Prioritize information over atmosphere.`,
   standard: `\n\nRESPONSE LENGTH — STANDARD:
 3-4 sentences for routine actions. 4-5 sentences for NPC dialogue. 5-7 sentences for new location arrivals. Balanced prose — vivid but not lavish.`,
   rich:     `\n\nRESPONSE LENGTH — RICH:

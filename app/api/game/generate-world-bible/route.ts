@@ -45,21 +45,41 @@ are sub-locations (is_interior: true) connected to the settlement
 node. The settlement node is an exterior arrival point that the
 player can leave by entering any of its sub-locations.
 
+GEOGRAPHIC vs SETTLEMENT NAMING (Day 20):
+The region 'name' MUST be a geographic area name (landscape,
+district, territory) — NOT a town or building name.
+The 'settlement_name' is the name of the town within that area.
+Example: region name "The Ashwood Forest", settlement name
+"Thornwick Crossing". NOT: region name "Thornwick Crossing".
+Other valid region names: "The Salt Plains", "Rust Peaks
+Foothills", "Neon Quarter", "The Bone-Drift Steppe".
+Other valid settlement names: "Salt-Iron Crossing",
+"Waystation Seven", "The Refuge", "Hollow Mark".
+
+REGION LOCATIONS (Day 20):
+The geographic region also contains ONE standalone location
+alongside the settlement — a dungeon entrance, wilderness point,
+ancient shrine, or abandoned structure. It is NOT inside the
+settlement (is_interior: false, no parent_location_id). It has its
+own atmosphere, 0-1 NPCs, 1-2 Tier 1 objects.
+
 Return EXACTLY this JSON structure (fill in the values):
 {
   "starting_region": {
-    "id": "starting_region_slug",
-    "name": "Region Name",
+    "id": "the_geographic_region_slug",
+    "name": "The Geographic Region Name (landscape — NOT a town)",
+    "settlement_id": "settlement_slug",
+    "settlement_name": "Town Name",
     "type": "settlement_hub",
-    "atmosphere": "2 sentence description",
+    "atmosphere": "2 sentence description of the geographic area",
     "locations": [
       {
-        "id": "settlement_square_slug",
-        "name": "The Town Square",
+        "id": "settlement_slug",
+        "name": "Town Name (matches settlement_name above)",
         "type": "settlement",
         "is_settlement_node": true,
         "is_interior": false,
-        "atmosphere": "Outdoor hub description — what the player sees and hears arriving here.",
+        "atmosphere": "Outdoor hub description — what the player sees and hears arriving at the town centre.",
         "grid_position": {"x": 0, "y": 0},
         "connections": ["tavern_slug", "shop_slug", "smithy_slug"],
         "npc_ids": [],
@@ -72,10 +92,10 @@ Return EXACTLY this JSON structure (fill in the values):
         "type": "tavern",
         "is_settlement_node": false,
         "is_interior": true,
-        "parent_location_id": "settlement_square_slug",
+        "parent_location_id": "settlement_slug",
         "atmosphere": "Tavern interior description.",
         "grid_position": {"x": 0, "y": 0},
-        "connections": ["settlement_square_slug"],
+        "connections": ["settlement_slug"],
         "npc_ids": ["character_innkeeper_slug"],
         "objects": [{"id": "fireplace_slug", "name": "The Hearth", "description": "1 sentence", "is_interactable": true}],
         "ambient_type": "tavern_common_room"
@@ -86,13 +106,28 @@ Return EXACTLY this JSON structure (fill in the values):
         "type": "market",
         "is_settlement_node": false,
         "is_interior": true,
-        "parent_location_id": "settlement_square_slug",
+        "parent_location_id": "settlement_slug",
         "atmosphere": "Shop interior description.",
         "grid_position": {"x": 1, "y": 0},
-        "connections": ["settlement_square_slug"],
+        "connections": ["settlement_slug"],
         "npc_ids": ["character_merchant_slug"],
         "objects": [{"id": "counter_slug", "name": "The Counter", "description": "1 sentence", "is_interactable": true}],
         "ambient_type": "market_stall"
+      }
+    ],
+    "region_locations": [
+      {
+        "id": "region_landmark_slug",
+        "name": "The Region Landmark Name (dungeon / wilderness / shrine — NOT inside the town)",
+        "type": "dungeon",
+        "is_settlement_node": false,
+        "is_interior": false,
+        "atmosphere": "1-2 sentences describing this standalone point in the geographic area.",
+        "grid_position": {"x": 2, "y": 1},
+        "connections": ["settlement_slug"],
+        "npc_ids": [],
+        "objects": [{"id": "region_obj_slug", "name": "Tier 1 Object Name", "description": "1 sentence", "is_interactable": true}],
+        "ambient_type": "dungeon_corridor"
       }
     ],
     "npcs": [
@@ -150,11 +185,18 @@ Return EXACTLY this JSON structure (fill in the values):
   "generated_at": "${generatedAt}"
 }
 
-Generate exactly 1 settlement node + 3 sub-locations + 4-5 NPCs.
+Generate exactly:
+- 1 settlement node + 3 sub-locations inside it (tavern + shop + one more) + 4-5 NPCs.
+- 1 standalone region_location alongside the settlement (dungeon / wilderness / shrine).
+
 The settlement node is a town square / crossroads / hub — NEVER a
 named building. Each sub-location is is_interior: true and references
 the settlement node via parent_location_id. NPCs live in the
 sub-locations (their home_location_id), not in the square itself.
+The region_locations entry is is_interior: false with no
+parent_location_id — it sits in the geographic area, NOT inside the
+town. Connect it to the settlement node via connections.
+'name' is the geographic region. 'settlement_name' is the town.
 Make content original, specific to the WCD and genre.
 REAL NAMES for all NPCs. No placeholders.`;
 }
@@ -327,6 +369,38 @@ function normalizeWorldBible(parsed: unknown): unknown {
       const alt = pickArray(region, ["exits", "connections"]);
       region.exits = alt ?? [];
     }
+
+    // Day 20 — region_locations is the new "standalone locations in
+    // the geographic region (NOT inside the settlement)" field.
+    // Default to [] when absent so apply-world-bible can iterate
+    // unconditionally. Accept a few aliases the model occasionally
+    // emits in its place.
+    if (!Array.isArray(region.region_locations)) {
+      const alt = pickArray(region, [
+        "region_locations", "regional_locations",
+        "standalone_locations", "outdoor_locations",
+        "wilderness_points", "landmarks",
+      ]);
+      region.region_locations = alt ?? [];
+    }
+    region.region_locations = (region.region_locations as unknown[]).map((loc, idx) => {
+      if (!loc || typeof loc !== "object") return loc;
+      const l = { ...(loc as Record<string, unknown>) };
+      if (!l.name || typeof l.name !== "string" || !(l.name as string).trim()) {
+        l.name = `Region Landmark ${idx + 1}`;
+      }
+      if (!l.id || typeof l.id !== "string" || !(l.id as string).trim()) {
+        l.id = slugify(l.name as string);
+      }
+      if (!Array.isArray(l.connections)) l.connections = [];
+      if (!Array.isArray(l.npc_ids))     l.npc_ids     = [];
+      if (!Array.isArray(l.objects))     l.objects     = [];
+      // Standalone region locations are NEVER settlement nodes and
+      // NEVER interior — coerce in case the model got confused.
+      l.is_settlement_node = false;
+      l.is_interior        = false;
+      return l;
+    });
 
     // id / type / atmosphere defaults
     if (typeof region.name !== "string" || !(region.name as string).trim()) {

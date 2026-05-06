@@ -149,10 +149,15 @@ export async function POST(request: NextRequest) {
   const currentMasterState = row.master_state as unknown as MasterState;
 
   // ── 1. Build all world_asset rows ──────────────────────────────────────────
-  const locationAssets = bibleNarrowed.locations.map((l) => locationToAsset(l, sessionId));
-  const npcAssets      = bibleNarrowed.npcs.map((n) => npcToAsset(n, sessionId));
+  // Day 20 — geographic restructure: region_locations are standalone
+  // landmarks in the geographic region (dungeons, wilderness points)
+  // alongside the settlement, NOT inside it.
+  const regionLocations = bibleNarrowed.region_locations ?? [];
+  const allLocations    = [...bibleNarrowed.locations, ...regionLocations];
+  const locationAssets  = allLocations.map((l) => locationToAsset(l, sessionId));
+  const npcAssets       = bibleNarrowed.npcs.map((n) => npcToAsset(n, sessionId));
   const objectAssets:    WorldAsset[] = [];
-  for (const loc of bibleNarrowed.locations) {
+  for (const loc of allLocations) {
     for (const obj of loc.objects) {
       if (obj.is_interactable) {
         objectAssets.push(objectToAsset(obj, loc.id, sessionId));
@@ -201,11 +206,17 @@ export async function POST(request: NextRequest) {
   // ids PLUS the existing graph (so a connection back to the origin node
   // isn't accidentally dropped as "unknown").
   const validLocationIds = new Set([
-    ...bibleNarrowed.locations.map((l) => l.id),
+    ...allLocations.map((l) => l.id),
+    bibleNarrowed.id,
     ...Object.keys(existingGraph.nodes),
   ]);
 
+  const settlementNodeForZone = bibleNarrowed.locations.find((l) => l.is_settlement_node);
+  const settlementIdForZone   = settlementNodeForZone?.id ?? bibleNarrowed.id;
+
   const newNodes: Record<string, WorldNode> = {};
+
+  // 4a. Settlement-side locations (the town and its sub-locations).
   for (const loc of bibleNarrowed.locations) {
     const filteredNpcIds = loc.npc_ids.filter((id) => validNpcIds.has(id));
     let finalNpcIds = filteredNpcIds;
@@ -244,12 +255,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Day 20 zone_id rules (mirror apply-world-bible):
+    //   sub_location  → zone_id = settlement node
+    //   settlement    → zone_id = geographic region
+    let zoneId: string;
+    if (loc.is_interior && loc.parent_location_id) {
+      zoneId = loc.parent_location_id;
+    } else if (loc.is_settlement_node) {
+      zoneId = bibleNarrowed.id;
+    } else {
+      zoneId = loc.id;
+    }
+
     newNodes[loc.id] = {
       id:            loc.id,
       name:          loc.name,
       type:          loc.is_interior ? "sub_location" : "zone",
       category:      loc.type,
-      zone_id:       loc.is_interior && loc.parent_location_id ? loc.parent_location_id : loc.id,
+      zone_id:       zoneId,
       is_expandable: !loc.is_interior,
       connections:   validConnections,
       npc_ids:       finalNpcIds,
@@ -261,6 +284,37 @@ export async function POST(request: NextRequest) {
       map_position:  loc.grid_position,
     };
   }
+
+  // 4b. Day 20 — standalone region_locations.
+  for (const loc of regionLocations) {
+    const filteredNpcIds = loc.npc_ids.filter((id) => validNpcIds.has(id));
+    let finalNpcIds = filteredNpcIds;
+    if (filteredNpcIds.length === 0) {
+      const homeNpcs = bibleNarrowed.npcs
+        .filter((n) => n.home_location_id === loc.id)
+        .map((n) => n.id);
+      if (homeNpcs.length > 0) finalNpcIds = homeNpcs;
+    }
+    const validConnections: string[] = [];
+    for (const id of loc.connections) {
+      if (validLocationIds.has(id)) validConnections.push(id);
+    }
+    newNodes[loc.id] = {
+      id:            loc.id,
+      name:          loc.name,
+      type:          "zone",
+      category:      loc.type,
+      zone_id:       bibleNarrowed.id,
+      is_expandable: false,
+      connections:   validConnections,
+      npc_ids:       finalNpcIds,
+      item_ids:      loc.objects.map((o) => `item_${o.id}`),
+      asset_id:      `location_${loc.id}`,
+      discovered:    false,
+      map_position:  loc.grid_position,
+    };
+  }
+  void settlementIdForZone;
 
   // ── 5. Merge the new nodes into the existing graph ─────────────────────────
   // Remove the placeholder outline node (added by apply-world-bible at

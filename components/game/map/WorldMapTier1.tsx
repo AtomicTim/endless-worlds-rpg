@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MasterState, WorldGraph, WorldLandmark, WorldNode } from "@/types/game";
 import {
   getNodeColor,
@@ -8,6 +8,7 @@ import {
   MAP_LANDMARK,
   MAP_UNDISCOVERED,
 } from "@/lib/game/map-colors";
+import { getGenreColors } from "../genre-ui";
 
 /**
  * Day 19F — Tier 1: World Map.
@@ -33,6 +34,16 @@ export function WorldMapTier1({ masterState, worldGraph, onSelectRegion }: Props
   const wcd      = masterState.metadata.world_consistency;
   const gridSize = wcd?.grid_size ?? 40;
   const half     = Math.floor(gridSize / 2);
+  const colors   = getGenreColors(masterState.metadata.genre);
+
+  // FIX 8 — landmark tooltip state. Tracks which landmark (if any) the
+  // player is currently hovering / touching, plus the screen-relative
+  // position of its diamond so the tooltip can anchor above it.
+  const [activeLandmark, setActiveLandmark] = useState<{
+    landmark: WorldLandmark;
+    left:     number;
+    top:      number;
+  } | null>(null);
 
   // ── Bucketise nodes ────────────────────────────────────────────────────────
   // - discoveredZones: top-level zones the player has visited or that
@@ -139,14 +150,42 @@ export function WorldMapTier1({ masterState, worldGraph, onSelectRegion }: Props
           />
         ))}
 
-        {/* WCD landmarks — diamonds visible from the start */}
-        {(wcd?.landmarks ?? []).map((lm) => (
-          <LandmarkMarker
-            key={lm.id}
-            landmark={lm}
-            position={toPx(lm.grid_position.x, lm.grid_position.y)}
+        {/* WCD landmarks — diamonds visible from the start. FIX 8:
+            hovering / touching opens a Direction-3 styled tooltip with
+            the landmark's name + public_description above the marker. */}
+        {(wcd?.landmarks ?? []).map((lm) => {
+          const pos = toPx(lm.grid_position.x, lm.grid_position.y);
+          return (
+            <LandmarkMarker
+              key={lm.id}
+              landmark={lm}
+              position={pos}
+              onShow={() =>
+                setActiveLandmark({
+                  landmark: lm,
+                  left:     pos.left + CELL_PX / 2,
+                  top:      pos.top,
+                })
+              }
+              onHide={() =>
+                setActiveLandmark((cur) =>
+                  cur && cur.landmark.id === lm.id ? null : cur
+                )
+              }
+            />
+          );
+        })}
+
+        {/* Tooltip layer — sits inside the scrollable grid so it tracks
+            the diamond's position when the user pans. */}
+        {activeLandmark && (
+          <LandmarkTooltip
+            landmark={activeLandmark.landmark}
+            left={activeLandmark.left}
+            top={activeLandmark.top}
+            accent={colors.primary}
           />
-        ))}
+        )}
 
         {/* Player marker — pulsing crosshair on the current region */}
         {playerZone && (
@@ -234,17 +273,23 @@ function UndiscoveredCell({
   );
 }
 
-function LandmarkMarker({
-  landmark,
-  position,
-}: {
+interface LandmarkMarkerProps {
   landmark: WorldLandmark;
   position: { left: number; top: number };
-}) {
+  onShow:   () => void;
+  onHide:   () => void;
+}
+
+function LandmarkMarker({ landmark, position, onShow, onHide }: LandmarkMarkerProps) {
   return (
     <div
-      title={`${landmark.name} — ${landmark.public_description}`}
-      className="absolute pointer-events-none flex items-center justify-center"
+      role="img"
+      aria-label={landmark.name}
+      onMouseEnter={onShow}
+      onMouseLeave={onHide}
+      onTouchStart={onShow}
+      onTouchEnd={onHide}
+      className="absolute flex items-center justify-center"
       style={{
         ...position,
         width:      CELL_PX,
@@ -253,9 +298,90 @@ function LandmarkMarker({
         fontSize:   18,
         fontWeight: "bold",
         textShadow: `0 0 4px ${MAP_LANDMARK}`,
+        cursor:     "help",
       }}
     >
       ◆
+    </div>
+  );
+}
+
+interface LandmarkTooltipProps {
+  landmark: WorldLandmark;
+  left:     number;
+  top:      number;
+  accent:   string;
+}
+
+function LandmarkTooltip({ landmark, left, top, accent }: LandmarkTooltipProps) {
+  // Direction-3 aesthetic: dark backdrop, thin genre-primary border,
+  // monospace text. Anchored above the diamond with a small triangular
+  // arrow pointing down at the marker.
+  return (
+    <div
+      role="tooltip"
+      aria-live="polite"
+      className="pointer-events-none absolute"
+      style={{
+        left:      left,
+        top:       top - 8,
+        transform: "translate(-50%, -100%)",
+        zIndex:    50,
+      }}
+    >
+      <div
+        style={{
+          minWidth:        160,
+          maxWidth:        220,
+          padding:         "6px 8px",
+          backgroundColor: "color-mix(in srgb, var(--color-bg) 92%, #000)",
+          border:          `1px solid color-mix(in srgb, ${accent} 60%, transparent)`,
+          borderRadius:    4,
+          fontFamily:      "var(--font-mono)",
+          boxShadow:       "0 4px 12px rgba(0,0,0,0.6)",
+        }}
+      >
+        <div
+          style={{
+            color:         accent,
+            fontSize:      11,
+            fontWeight:    700,
+            letterSpacing: "0.04em",
+            lineHeight:    1.2,
+            marginBottom:  3,
+          }}
+        >
+          {landmark.name}
+        </div>
+        <div
+          style={{
+            color:           "var(--color-muted)",
+            fontSize:        10,
+            lineHeight:      1.35,
+            display:         "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow:        "hidden",
+          }}
+        >
+          {landmark.public_description}
+        </div>
+      </div>
+      {/* Down-pointing arrow */}
+      <div
+        aria-hidden
+        style={{
+          position:   "absolute",
+          left:       "50%",
+          bottom:     -5,
+          transform:  "translateX(-50%) rotate(45deg)",
+          width:      8,
+          height:     8,
+          backgroundColor: "color-mix(in srgb, var(--color-bg) 92%, #000)",
+          borderRight: `1px solid color-mix(in srgb, ${accent} 60%, transparent)`,
+          borderBottom: `1px solid color-mix(in srgb, ${accent} 60%, transparent)`,
+        }}
+      />
     </div>
   );
 }

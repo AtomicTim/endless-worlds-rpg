@@ -39,33 +39,39 @@ interface Props {
 type Tier = 1 | 2 | 3;
 
 export function WorldMap({ masterState, worldGraph, locationAssets, onNavigate }: Props) {
-  const colors    = getGenreColors(masterState.metadata.genre);
-  const player    = worldGraph.nodes[worldGraph.current_node_id];
-  const playerZoneId =
-    player && player.type === "sub_location" ? player.zone_id : player?.id;
+  const colors = getGenreColors(masterState.metadata.genre);
+  const player = worldGraph.nodes[worldGraph.current_node_id];
 
   // ── Tier + selection state ─────────────────────────────────────────────────
-  const [activeTier, setActiveTier]             = useState<Tier>(() =>
-    chooseInitialTier(player)
-  );
+  const [activeTier, setActiveTier] = useState<Tier>(() => chooseInitialTier(player));
+  // Day 20 — initial selectedRegionId tracks the GEOGRAPHIC zone, not
+  // the immediate parent. findRootZoneId walks up the zone chain so a
+  // player loading inside a tavern still anchors Tier 2 to the broader
+  // landscape.
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(
-    () => playerZoneId ?? null
+    () => findRootZoneId(worldGraph.current_node_id, worldGraph.nodes) ?? null
   );
 
-  // FIX 1C — auto-update selectedRegionId when the player crosses regions.
-  // Watching current_node_id directly (rather than the derived zoneId) so
-  // we react to the canonical signal even when zone_id is undefined for a
-  // top-level node. Switching to Tier 3 keeps arrival immediately legible.
+  // FIX 1C / FIX 9 / Day 20 — auto-update selectedRegionId when the
+  // player crosses regions. We always re-anchor the breadcrumb / focus
+  // to the GEOGRAPHIC zone (the topmost `zone_id` chain root) so Tier 2
+  // shows the town + region landmarks side by side.
+  // Hierarchy under Day 20:
+  //   sub_location.zone_id   = settlement node id
+  //   settlement.zone_id     = geographic region id
+  //   geographic region.zone_id = self
+  // The tier switch is conditional: only auto-jump to Tier 3 if the
+  // player was already on Tier 3. Tier 1 / 2 viewers stay where they
+  // are — they may be planning a journey and shouldn't get yanked.
   useEffect(() => {
     if (!masterState?.world_graph) return;
-    const currentNodeId = masterState.world_graph.current_node_id;
-    const currentNode   = masterState.world_graph.nodes[currentNodeId];
-    if (!currentNode) return;
-
-    const zoneId = currentNode.zone_id ?? currentNodeId;
-    if (zoneId !== selectedRegionId) {
-      setSelectedRegionId(zoneId);
-      setActiveTier(3);
+    const graph         = masterState.world_graph;
+    const currentNodeId = graph.current_node_id;
+    const rootZoneId    = findRootZoneId(currentNodeId, graph.nodes);
+    if (!rootZoneId) return;
+    if (rootZoneId !== selectedRegionId) {
+      setSelectedRegionId(rootZoneId);
+      setActiveTier((cur) => (cur === 3 ? 3 : cur));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masterState?.world_graph?.current_node_id]);
@@ -76,12 +82,13 @@ export function WorldMap({ masterState, worldGraph, locationAssets, onNavigate }
   const regionNode = selectedRegionId ? worldGraph.nodes[selectedRegionId] : null;
   const regionName = regionNode?.name ?? "—";
 
-  // Tier 3 context: sub-location name when the player is inside one,
-  // else the region name (player is standing on the settlement node).
-  const tier3Name =
-    player && player.type === "sub_location"
-      ? player.name
-      : regionName;
+  // Tier 3 context — show the player's CURRENT node name. Under Day 20
+  // the geographic zone is its own node, so the settlement's name is
+  // distinct from the regionName above (e.g. settlement "Salt-Iron
+  // Crossing" inside region "The Salt Plains"). Falling back to the
+  // region name covers legacy saves that share an id between region
+  // and settlement.
+  const tier3Name = player?.name ?? regionName;
 
   const tierLabel = activeTier === 1 ? "WORLD MAP"
                   : activeTier === 2 ? "REGION MAP"
@@ -98,7 +105,9 @@ export function WorldMap({ masterState, worldGraph, locationAssets, onNavigate }
   function handleSelectNode(nodeId: string) {
     const node = worldGraph.nodes[nodeId];
     if (!node) return;
-    setSelectedRegionId(node.type === "zone" ? node.id : node.zone_id);
+    // Day 20 — keep selectedRegionId anchored to the geographic root so
+    // the Tier 2 viewport remains useful when the player toggles back.
+    setSelectedRegionId(findRootZoneId(nodeId, worldGraph.nodes));
     setActiveTier(3);
   }
   function handleNavigateTo(nodeId: string) {
@@ -418,6 +427,27 @@ function chooseInitialTier(
   // Standing on a settlement node with sub-locations → also start at Tier 3.
   if (player.is_expandable) return 3;
   return 2;
+}
+
+/**
+ * Walk up the zone chain from `nodeId` to the topmost zone — the
+ * geographic-region root under the Day 20 hierarchy. Sub-locations
+ * point at their settlement; the settlement points at the geographic
+ * region; the geographic region points at itself. Cycle-safe via a
+ * visited set.
+ */
+function findRootZoneId(
+  nodeId: string,
+  nodes:  Record<string, WorldNode>
+): string {
+  const visited = new Set<string>();
+  let cur: WorldNode | undefined = nodes[nodeId];
+  while (cur && !visited.has(cur.id)) {
+    visited.add(cur.id);
+    if (!cur.zone_id || cur.zone_id === cur.id) return cur.id;
+    cur = nodes[cur.zone_id];
+  }
+  return nodeId;
 }
 
 /**

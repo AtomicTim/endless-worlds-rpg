@@ -36,6 +36,43 @@ const GENRE_CURRENCY_KEY: Partial<Record<Genre, string>> = {
 // Module-level counter — persists across renders, resets when the module reloads.
 let autoSaveActionCount = 0;
 
+/**
+ * FIX 4 — contextual loading-state text.
+ *
+ * The InputBar's "processingStep" indicator used to flash a generic
+ * "Generating response..." regardless of what was actually happening.
+ * This helper turns the parsed action into a sentence the player can
+ * read at a glance — "Speaking with Korven...", "Examining the
+ * fountain...", "Entering Salt-Iron Crossing..." — so the wait feels
+ * directed instead of opaque.
+ *
+ * The MOVE intercept and WORLD_EXPLORE branch set their own bespoke
+ * strings ("Looking around...", "Entering [region]...") before this is
+ * reached; this is the fallback for the post-parse / narrator-call
+ * stages where the action_type is the only signal we have.
+ */
+function getLoadingText(action: ParsedAction): string {
+  const target = action.primary_target?.trim();
+  switch (action.action_type) {
+    case ActionType.DIALOGUE:
+      return target ? `Speaking with ${target}...` : "Speaking...";
+    case ActionType.EXAMINE:
+      return target ? `Examining ${target}...` : "Examining...";
+    case ActionType.MOVE:
+      return target ? `Entering ${target}...` : "Looking around...";
+    case ActionType.INTERACT:
+      return target ? `Interacting with ${target}...` : "Interacting...";
+    case ActionType.ATTACK:
+      return target ? `Attacking ${target}...` : "Attacking...";
+    case ActionType.USE_ITEM: {
+      const item = action.item_used?.trim() ?? target;
+      return item ? `Using ${item}...` : "Using item...";
+    }
+    default:
+      return "Thinking...";
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function buildRollFeedback(resolution: ResolutionResult): string | null {
@@ -378,7 +415,11 @@ export function useGameLoop() {
           }
           throw err;
         }
-        store.setProcessing(true, "The world responds...");
+        // FIX 4 — show the player what we're actually doing instead of
+        // the generic "The world responds...". MOVE intercept and
+        // WORLD_EXPLORE override this further down with their own
+        // bespoke strings; everything else uses the helper's default.
+        store.setProcessing(true, getLoadingText(parsedAction));
       }
 
       // ── 2b. NPC name + tone override ───────────────────────────────────────
@@ -856,12 +897,14 @@ export function useGameLoop() {
           }
           // Either way, the "Entering..." status is no longer accurate —
           // narration takes over from here.
-          store.setProcessing(true, "Narrating...");
+          store.setProcessing(true, getLoadingText(parsedAction));
         }
       }
 
       // ── 5. Narrate ─────────────────────────────────────────────────────────
-      store.setProcessing(true, "Narrating...");
+      // FIX 4 — replace the generic "Narrating..." with action-specific
+      // text so the player can read what's about to happen.
+      store.setProcessing(true, getLoadingText(parsedAction));
 
       // FIX 2 — Pre-load locationAssets BEFORE the narrator runs when this
       // action ARRIVES at a new location. Step 7c does the same fetch
@@ -1507,42 +1550,15 @@ export function useGameLoop() {
           ? resolution.state_delta.world_state.current_location_id ?? null
           : null;
       if (arrivedAt) {
+        // FIX 7 — codex no longer writes on bare ARRIVING. Only refresh
+        // the locationAssets cache here so the next narrator/highlight
+        // pass sees the full Tier 1 / NPC roster.
+        // The location's codex entry is now written on first explicit
+        // EXAMINE (handled in step 7c-1 below) or on first DIALOGUE with
+        // an NPC at that location (handled in step 7g's seed branch) —
+        // walking through a location no longer counts as discovering it.
         void getWorldAssetsForLocation(sessionId, arrivedAt).then((assets) => {
           useGameStore.getState().setLocationAssets(assets);
-
-          // Day 17 — codex populates from player ENCOUNTER, not seed time.
-          // On first arrival at any location with a world_asset (whether
-          // seeded or stub-generated), write the codex entry from the
-          // asset's constitution. saveCodexEntry uses ignoreDuplicates,
-          // so this is safe to call on every arrival; the entry is
-          // created exactly once.
-          const locationAsset = assets.find(
-            (a) =>
-              a.category === AssetCategory.LOCATION &&
-              (a.id === arrivedAt ||
-               a.id === `location_${arrivedAt}` ||
-               normalizeLocationId(a.first_seen_location ?? "") === arrivedAt)
-          );
-          if (locationAsset) {
-            const c = locationAsset.constitution;
-            const description =
-              (typeof c.physical_description === "string" && c.physical_description) ||
-              (typeof c.notes === "string" && c.notes) ||
-              (typeof c.atmosphere === "string" && c.atmosphere) ||
-              "A location in the world.";
-            void saveCodexEntry(sessionId, {
-              id:                  locationAsset.id,
-              category:            "LOCATION",
-              name:                locationAsset.name,
-              description,
-              first_seen_location: arrivedAt,
-              significance:        "NOTABLE",
-            });
-            // FIX 5 — surface the codex add in the story feed.
-            store.addMessage(
-              makeMessage("SYSTEM", `✦ ${locationAsset.name} added to codex`)
-            );
-          }
         });
       } else {
         // Late-load fallback: if locationAssets is still empty at this point,
@@ -1778,6 +1794,59 @@ export function useGameLoop() {
               store.addMessage(
                 makeMessage("SYSTEM", `✦ ${npcCodexAsset.name} added to codex`)
               );
+
+              // FIX 7 — when an NPC codex entry is written for the first
+              // time, also write the current location's codex entry if
+              // it hasn't been recorded yet. This is now the only path
+              // (alongside narrator-emitted codex_entries in step 7b)
+              // through which a location enters the codex — pure
+              // navigation no longer counts. Gated by a world_state
+              // flag so meeting a 2nd NPC at the same location doesn't
+              // re-emit the codex notification.
+              const locId    = updatedState.world_state.current_location_id;
+              const flagKey  = `codex_loc_${locId}`;
+              const alreadyWritten =
+                updatedState.world_state.flags?.[flagKey] === true;
+              if (!alreadyWritten) {
+                const liveAssetsForLoc = useGameStore.getState().locationAssets;
+                const locationAsset = liveAssetsForLoc.find(
+                  (a) =>
+                    a.category === AssetCategory.LOCATION &&
+                    (a.id === locId ||
+                     a.id === `location_${locId}` ||
+                     normalizeLocationId(a.first_seen_location ?? "") === locId)
+                );
+                if (locationAsset) {
+                  const lc = locationAsset.constitution;
+                  const locDescription =
+                    (typeof lc.physical_description === "string" && lc.physical_description) ||
+                    (typeof lc.notes                === "string" && lc.notes) ||
+                    (typeof lc.atmosphere           === "string" && lc.atmosphere) ||
+                    "A location in the world.";
+                  void saveCodexEntry(sessionId, {
+                    id:                  locationAsset.id,
+                    category:            "LOCATION",
+                    name:                locationAsset.name,
+                    description:         locDescription,
+                    first_seen_location: locId,
+                    significance:        "NOTABLE",
+                  });
+                  store.addMessage(
+                    makeMessage("SYSTEM", `✦ ${locationAsset.name} added to codex`)
+                  );
+                  updatedState = {
+                    ...updatedState,
+                    world_state: {
+                      ...updatedState.world_state,
+                      flags: { ...updatedState.world_state.flags, [flagKey]: true },
+                    },
+                  };
+                  console.log(
+                    "[GameLoop/7g] Location codex entry written via NPC interaction:",
+                    locationAsset.name
+                  );
+                }
+              }
             } else {
               console.log(
                 "[GameLoop/7g] No world_asset found for NPC:",

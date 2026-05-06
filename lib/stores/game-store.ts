@@ -50,6 +50,15 @@ interface GameStore {
   currentDialogueNpcKey:  string | null;
   currentNpcPortrait:     string | null;
   dialogueModalCollapsed: boolean;
+  /** FIX 6 — last dialogue options + npc key, kept around so the
+   *  Dialogue Modal can be restored after the Trade Modal closes.
+   *  setDialogueOptions writes these whenever it stores fresh options;
+   *  setTradeItems([]) reads them to put the dialogue back if the
+   *  player walked into trade mid-conversation. */
+  lastDialogueOptions:    DialogueOption[];
+  lastDialogueNpc:        string | null;
+  lastDialogueNpcKey:     string | null;
+  lastDialoguePortrait:   string | null;
 
   // ── Trade Modal ────────────────────────────────────────────────────────────
   /** Items the current merchant has on offer. Set by step 7 of useGameLoop
@@ -135,6 +144,10 @@ export const useGameStore = create<GameStore>((set) => ({
   currentDialogueNpcKey:  null,
   currentNpcPortrait:     null,
   dialogueModalCollapsed: false,
+  lastDialogueOptions:    [],
+  lastDialogueNpc:        null,
+  lastDialogueNpcKey:     null,
+  lastDialoguePortrait:   null,
   currentTradeItems:      [],
   verbosity:              loadVerbosity(),
   mapPanelOpen:           false,
@@ -178,6 +191,12 @@ export const useGameStore = create<GameStore>((set) => ({
       currentDialogueNpc:     npcName,
       currentDialogueNpcKey:  npcKey ?? null,
       currentNpcPortrait:     portrait,
+      // FIX 6 — keep a snapshot so the modal can be restored after the
+      // Trade Modal closes. Mirrors the active fields exactly.
+      lastDialogueOptions:    options,
+      lastDialogueNpc:        npcName,
+      lastDialogueNpcKey:     npcKey ?? null,
+      lastDialoguePortrait:   portrait,
       // New options always re-expand the modal so the player sees them.
       dialogueModalCollapsed: false,
     }),
@@ -187,11 +206,47 @@ export const useGameStore = create<GameStore>((set) => ({
       currentDialogueNpc:     null,
       currentDialogueNpcKey:  null,
       currentNpcPortrait:     null,
+      // FIX 6 — also clear the cached snapshot. clearDialogueOptions is
+      // called when the player walks away or the active NPC leaves the
+      // node — both cases where the dialogue is genuinely over and we
+      // shouldn't restore it after a trade closes.
+      lastDialogueOptions:    [],
+      lastDialogueNpc:        null,
+      lastDialogueNpcKey:     null,
+      lastDialoguePortrait:   null,
       dialogueModalCollapsed: false,
     }),
   setDialogueModalCollapsed: (collapsed) =>
     set({ dialogueModalCollapsed: collapsed }),
-  setTradeItems: (items) => set({ currentTradeItems: items }),
+  // FIX 6 — opening the Trade Modal hides the Dialogue Modal so the two
+  // never overlap. Closing the Trade Modal restores the cached dialogue
+  // for the same NPC, so the player goes back to the conversation they
+  // were in mid-merchant interaction without losing context.
+  setTradeItems: (items) =>
+    set((s) => {
+      if (items.length > 0) {
+        return {
+          currentTradeItems:      items,
+          currentDialogueOptions: [],
+          currentDialogueNpc:     null,
+          currentDialogueNpcKey:  null,
+          currentNpcPortrait:     null,
+          dialogueModalCollapsed: false,
+        };
+      }
+      // items === [] → trade closed. Restore dialogue if we cached one.
+      if (s.lastDialogueNpc && s.lastDialogueOptions.length > 0) {
+        return {
+          currentTradeItems:      [],
+          currentDialogueOptions: s.lastDialogueOptions,
+          currentDialogueNpc:     s.lastDialogueNpc,
+          currentDialogueNpcKey:  s.lastDialogueNpcKey,
+          currentNpcPortrait:     s.lastDialoguePortrait,
+          dialogueModalCollapsed: false,
+        };
+      }
+      return { currentTradeItems: [] };
+    }),
   setVerbosity: (v) => {
     saveVerbosity(v);
     set({ verbosity: v });
@@ -211,6 +266,10 @@ export const useGameStore = create<GameStore>((set) => ({
       currentDialogueNpcKey:  null,
       currentNpcPortrait:     null,
       dialogueModalCollapsed: false,
+      lastDialogueOptions:    [],
+      lastDialogueNpc:        null,
+      lastDialogueNpcKey:     null,
+      lastDialoguePortrait:   null,
       currentTradeItems:      [],
       locationAssets:         [],
       lastNarrativeText:      null,

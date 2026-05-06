@@ -6,7 +6,7 @@ import { useGameStore } from "@/lib/stores/game-store";
 import { Genre } from "@/types/game";
 import type { PointOfInterest } from "@/types/game";
 import { InteractionPopover } from "./InteractionPopover";
-import { POI_COLORS } from "./poi-colors";
+import { POI_COLORS, POI_HOVER_COLORS } from "./poi-colors";
 import { getGenreColors } from "./genre-ui";
 import {
   buildExactHighlights,
@@ -166,11 +166,12 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
           )}
           <p
             style={{
-              color:      "#8899aa",
-              lineHeight: 1.7,
-              margin:     "8px 0",
-              fontFamily: "var(--font-mono)",
-              fontSize:   12,
+              color:         "#b0bec5",
+              lineHeight:    1.8,
+              letterSpacing: "0.01em",
+              margin:        "8px 0",
+              fontFamily:    "var(--font-mono)",
+              fontSize:      14,
             }}
           >
             {renderNarrativeText(content, highlightCandidates, onPoiClick, onNavigate)}
@@ -278,13 +279,14 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
           </div>
           <div
             style={{
-              borderLeft:  `3px solid ${colors.primary}`,
-              padding:     "4px 10px",
-              background:  "rgba(0,0,0,0.2)",
-              color:       "#ccd8e8",
-              fontFamily:  "var(--font-mono)",
-              fontSize:    12,
-              lineHeight:  1.7,
+              borderLeft:    `3px solid ${colors.primary}`,
+              padding:       "4px 10px",
+              background:    "rgba(0,0,0,0.2)",
+              color:         "#d0dce8",
+              fontFamily:    "var(--font-mono)",
+              fontSize:      14,
+              lineHeight:    1.8,
+              letterSpacing: "0.01em",
             }}
           >
             {parseDialogueText(content).map((seg, i) =>
@@ -296,7 +298,7 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
                   {seg.content}
                 </span>
               ) : (
-                <span key={i} style={{ color: "#ccd8e8" }}>
+                <span key={i} style={{ color: "#d0dce8" }}>
                   {seg.content}
                 </span>
               )
@@ -424,7 +426,8 @@ function renderNarrativeText(
   let cursor = 0;
   matches.forEach((m, i) => {
     if (m.start > cursor) nodes.push(text.slice(cursor, m.start));
-    const accent = POI_COLORS[m.point.type];
+    const accent     = POI_COLORS[m.point.type];
+    const hoverColor = POI_HOVER_COLORS[m.point.type];
 
     // Navigation redesign — when a LOCATION highlight carries a nodeId
     // and the parent provided onNavigate, click goes straight to
@@ -444,6 +447,14 @@ function renderNarrativeText(
         role="button"
         tabIndex={0}
         onClick={handleClick}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = hoverColor;
+          e.currentTarget.style.textDecorationColor = hoverColor;
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = accent;
+          e.currentTarget.style.textDecorationColor = accent;
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
@@ -458,8 +469,20 @@ function renderNarrativeText(
             }
           }
         }}
-        className="cursor-pointer underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-80"
-        style={{ color: accent, textDecorationColor: accent }}
+        // FIX 2 — solid underline + 3px offset gives every highlight type
+        // a clear interactable affordance. Per-type colors are now
+        // distinct (LOCATION blue, NPC genre primary, ITEM amber,
+        // LANDMARK violet) so the player can tell the actions apart at
+        // a glance instead of relying on subtle hue differences.
+        style={{
+          color:                accent,
+          textDecorationLine:   "underline",
+          textDecorationColor:  accent,
+          textDecorationStyle:  "solid",
+          textUnderlineOffset:  "3px",
+          cursor:               "pointer",
+          transition:           "color 120ms ease, text-decoration-color 120ms ease",
+        }}
       >
         {text.slice(m.start, m.end)}
       </span>

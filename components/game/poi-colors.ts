@@ -1,15 +1,37 @@
 import type { PointOfInterest } from "@/types/game";
 
 /**
- * Color tokens for POI highlights and the interaction popover. LOCATION/NPC
- * use CSS variables so they track the active genre theme; the others are
- * fixed semantic colors (item gold, container orange, hazard red).
+ * Color tokens for POI highlights and the interaction popover.
+ *
+ * FIX 2 — highlight types are now visually distinct and consistently
+ * underlined so the player can spot interactable text at a glance:
+ *   LOCATION  → bright blue (#60a5fa)  — clickable, fires navigateTo
+ *   NPC       → genre primary          — clickable, opens dialogue
+ *   ITEM      → amber (#fbbf24)        — clickable, fires EXAMINE
+ *   LANDMARK  → violet (#a78bfa)       — info-only popover
+ *   CONTAINER → orange  (legacy)
+ *   HAZARD    → red     (legacy)
+ *
+ * Rendering of the underline + hover state lives in StoryFeed (the
+ * highlight span itself) — this module is pure colour tokens.
  */
 export const POI_COLORS: Record<PointOfInterest["type"], string> = {
-  LOCATION:  "#94a3b8",         // blue-grey — connected nodes the player can move to
-  NPC:       "var(--color-accent)",
-  ITEM:      "#eab308",         // amber — Tier 1 objects (Day 19E)
+  LOCATION:  "#60a5fa",
+  NPC:       "var(--color-primary)",
+  ITEM:      "#fbbf24",
   CONTAINER: "#f97316",
   HAZARD:    "#ef4444",
-  LANDMARK:  "#a16207",         // muted gold — WCD landmarks (info only)
+  LANDMARK:  "#a78bfa",
+};
+
+/** Slightly brighter colour applied on hover so the player gets an
+ *  affordance cue without changing the background. LANDMARK shares the
+ *  base since it's info-only — no click feedback needed. */
+export const POI_HOVER_COLORS: Record<PointOfInterest["type"], string> = {
+  LOCATION:  "#93c5fd",
+  NPC:       "var(--color-primary)",
+  ITEM:      "#fde68a",
+  CONTAINER: "#fdba74",
+  HAZARD:    "#fca5a5",
+  LANDMARK:  "#c4b5fd",
 };

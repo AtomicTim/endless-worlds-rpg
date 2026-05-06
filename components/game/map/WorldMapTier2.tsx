@@ -39,12 +39,23 @@ export function WorldMapTier2({
 }: Props) {
   const currentNodeId = worldGraph.current_node_id;
 
-  // Resolve the selected region's nodes plus the exit map (any connection
-  // that crosses zones counts as an exit). We filter to just THIS region
-  // so the player isn't seeing nodes from other regions bleed into the view.
+  // Day 20 — Tier 2 now shows the GEOGRAPHIC region's top-level nodes:
+  //   • the settlement hub (zone_id === selectedRegionId, type === "zone")
+  //   • standalone region_locations (zone_id === selectedRegionId, type === "zone")
+  // It hides the settlement's interior sub-locations (those belong on
+  // Tier 3, the Local Map). This gives Tier 2 real meaning: you can see
+  // the town and the dungeon side-by-side as distinct, navigable points
+  // in the geographic area.
+  //
+  // Exits to other geographic regions are computed on the kept set so
+  // Tier 2 still renders boundary arrows.
   const { regionNodes, exits } = useMemo(() => {
-    const nodes: WorldNode[] = Object.values(worldGraph.nodes).filter(
+    const candidates: WorldNode[] = Object.values(worldGraph.nodes).filter(
       (n) => n.zone_id === selectedRegionId || n.id === selectedRegionId
+    );
+    // Drop sub-locations — those live on Tier 3.
+    const nodes: WorldNode[] = candidates.filter(
+      (n) => n.type !== "sub_location"
     );
 
     const exitsList: Array<{ from: WorldNode; targetRegionId: string; targetName: string }> = [];

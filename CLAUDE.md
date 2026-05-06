@@ -1,160 +1,136 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.5
-**Status:** Active Development — Trade + Dialogue + Arrival Fixes Complete
-**Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
+**Version:** 8.6
+**Status:** Active Development — Architecture Hardening Complete
+**Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
+
+**Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Testing, then UI Design Session + Day 20 Combat
+**Current Phase:** UI Design Session (Claude Design) → Combat System
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
 
 | Phase | Title | Status |
 | --- | --- | --- |
-| 1–14 | Phase 1 MVP | ✅ Complete |
-| 15–18 | Dialogue, UI, World Graph, Systems Audit | ✅ Complete |
+| 1–18 | MVP, Dialogue, UI, Graph, Audit | ✅ Complete |
 | 19A–19F | World Generation Architecture | ✅ Complete |
-| Gameplay Audit | 21-issue audit + full stabilization | ✅ Complete |
+| Gameplay Audit | 21-issue audit + stabilization | ✅ Complete |
 | Navigation Redesign | UI-driven movement, mobile-first | ✅ Complete |
-| Map Overhaul | Icon header, type abbr, decorations, info panel | ✅ Complete |
-| UX Round 2 | Text readability, highlights, terse cap, geographic regions | ✅ Complete |
-| UX Round 3 | Map crash, inline dialogue, player text, stat rule, trade button | ✅ Complete |
-| Navigation + NPC + Difficulty | Back-links, WCD nav, NPC codex/descriptors, stakes difficulty | ✅ Complete |
+| Map + UX Rounds 1-3 | Overhaul, readability, inline dialogue | ✅ Complete |
+| Navigation + NPC fixes | Back-links, NPC codex, stakes difficulty | ✅ Complete |
 | Trade + Dialogue + Arrival | No-check trade, NPC switch, arrival header | ✅ Complete |
-| UI Design Session | Claude Design — modern/retro visual overhaul | ⏳ Next |
+| Architecture Hardening | MOVE text removed, zone_id, haiku model | ✅ Complete |
+| UI Design Session | Claude Design — map + full UI overhaul | ⏳ Active |
 | 20 | Combat System | ⏳ Pending |
+| Container + Loot | Registry, loot tables, search flow | ⏳ Pending |
 | 21+ | Skills, Background, Factions | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
-**⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
+**⚠️ Noir has been removed.**
 
-### Trade + Dialogue + Arrival (commit 38de0c4 — 43/43 tests, clean build)
+### Architecture Hardening (commit e9a355c — 43/43 tests, clean build)
 
-**Fix 1 — Trade button no stat check:**
-New openTrade(npcName) in useGameLoop. Synthesizes INTERACT/INTERACT_SUCCESS with trade_available:true, calls narrateAction directly. No parseIntent, no resolveDialogue, no stat check. Trade is always available for merchants — trust affects price, not access. DialogueModal 💰 button calls onOpenTrade(npcName) prop.
+**Change 1 — MOVE text → zero AI:**
+Text classified as MOVE now returns hardcoded SYSTEM message: "Use the navigation bar below to travel to a nearby location." Zero AI call. INTERNAL_DESCRIBE narrator path removed from text input entirely. forceMoveToNode (navigateTo) bypasses this guard.
 
-**Fix 2 — Clear trade state on NPC change:**
-setTradeItems([]) clears tradeOpen flag. Step 7g clears items_for_sale on NPC switch (!continuingSameNpc). Merchant detection uses NPC asset role only — dropped items_for_sale.length > 0 shortcut.
+**Change 2 — zone_id + back-connection validation:**
+WorldNode.is_settlement_node field added. region_locations locked to geographic region zone_id. Both apply routes run stitch validation: region_location.connections ↔ settlement.connections enforced at apply time, logged.
 
-**Fix 3 — NPC switch during active dialogue:**
-Step 2b: explicit named NPC in input beats active-conversation pin. Step 2b-2: when named NPC is present at node but different from current, logs "NPC switch: old → new" and clears stale options. When named NPC is NOT at node, tags _namedNpcNotPresent — narrator says "X isn't here" in 1 sentence, never invents them.
+**Change 3 — RegionBible → haiku model:**
+claude-sonnet-4-5 → claude-haiku-4-5-20251001. max_tokens 2200 → 1200. Logs [RegionBible] Using haiku model.
 
-**Fix 4 — Arrival header on RegionBible navigation:**
-Step 4d explicitly stamps location_status: ARRIVING after RegionBible expansion. arrivalLocationName derivation fires on MOVE_SUCCESS OR ZONE_EXPAND OR narrative_context.arriving_at OR location_status === ARRIVING.
+**Change 4 — NavigationBar return card robust:**
+Return card detection: type=zone, is_settlement_node≠true, search graph for sibling with same zone_id and is_settlement_node=true. Independent of connections array. Outline fallback for unresolved connections.
 
 ---
 
-## 🏗️ Architecture — Complete ✅
+## 🏗️ Architecture — See /docs/architecture-spec.md
 
-### Four Layers ✅
-**Layer 0 — WCD** — world_consistency jsonb, formatWcdBlock() first in all AI calls
-**Layer 1 — WorldBible** — geographic region + settlement + sub-locations + region_locations + main quest
-**Layer 2 — RegionBible** — on-demand via navigateTo, 2200 tokens, content required (≥1 NPC per location)
-**Layer 3 — Narrator** — YOUR ROLE HARD RULES, TIER 1 OBJECTS verbatim, NPCS PRESENT, stat check failure rule
+### The Two Domains
+**Domain 1 (Engine — pure code):** World graph, player state, combat, quests, map, navigation, dialogue option generation, stat checks, container registry, loot resolution.
+
+**Domain 2 (Content Library — frozen after generation):** WCD, locations, NPCs, items, loot tables, main quest, region outlines.
+
+**The AI during gameplay:** Narration only. Location arrivals (cached after first visit), NPC dialogue responses, action narration (1-4 sentences), container search narration (1 sentence). Never touches state.
 
 ### Geographic Hierarchy ✅
 ```
 World
-└── Geographic Region (e.g. "The Rust Flats") — Tier 1 block
-    ├── Settlement (e.g. "Filter Mark") — Tier 2 node
-    │   ├── Sub-location (INN, MKT, FRG etc.) — Tier 3 block
-    │   └── Sub-location
-    ├── Standalone location (dungeon/wilderness) — Tier 2 node, ≥1 NPC
-    │   └── Back-connection to settlement guaranteed
+└── Geographic Region (Tier 1 block)
+    ├── Settlement (Tier 2 node)
+    │   ├── Sub-location (Tier 3 block)
+    │   └── Sub-location (Tier 3 block)
+    ├── Standalone location — dungeon/wilderness (Tier 2 node, ≥1 NPC)
+    │   └── Back-connection to settlement GUARANTEED at apply time
     └── [Adjacent region exits — WCD landmarks navigable via ◆ cards]
 ```
 
 ### Navigation Model ✅
 ```
-Text input → DIALOGUE / EXAMINE / INTERACT / CUSTOM only (MOVE → INTERNAL_DESCRIBE)
-NavigationBar: connection cards + ← Return card for region_locations + ◆ WCD landmark cards
-WorldMap: Tier 1 landmark diamonds clickable when matched to adjacent_region
-Tier 2: exit arrows only for cross-zone connections (not internal sub-locations)
+Text MOVE → hardcoded "Use the navigation bar" — ZERO AI CALL
+navigateTo(nodeId): NavigationBar cards, WorldMap clicks, highlight clicks
+NavigationBar: connection cards + ← Return (sibling settlement) + ◆ WCD landmarks
+RegionBible expansion: navigateTo(adjacentRegionId) only
 ```
 
+### Generation Model ✅
+```
+Zone 1 (current region): Fully concrete. All assets frozen.
+Zone 2 (1-2 hops): Named + outlined. Pre-generates when player is 1 hop away.
+Zone 3 (3+ hops, WCD landmarks): Name + position only. Visible on map.
+```
+
+### Model Selection ✅
+- WCD + WorldBible: claude-sonnet-4-5
+- RegionBible: claude-haiku-4-5-20251001 (speed over quality)
+- Live narration: claude-sonnet-4-5
+
 ### Dialogue System ✅
-- Inline free-text within DialogueModal, player text echoed in feed
-- 💰 Trade button: direct openTrade() — NO stat check, NO parseIntent
-- Trade state cleared on panel close and on NPC change
-- Named NPC in input switches dialogue target if present at node
-- Named NPC not at node → narrator says "X isn't here", never invents
-- Failed check → evasion only, never reveals information
-- Descriptor targets ("the boy") matched to NPC by role
+- Options generated by code from NPC asset data
+- Free text validation gate (movement, absent NPC, absent container, repeat examine)
+- Closed context: WCD + RESPONDING CHARACTER + TIER 1 OBJECTS + SCENE CONTEXT only
+- 💰 Trade = direct openTrade(), zero AI, zero stat check
+- Failed check → evasion only, never reveals info
+- Difficulty = difficultyForTrust + stakesBonusForIntent + tone modifier [6,18]
 
-### Stat Check Difficulty ✅
-- difficultyForTrust (NPC trust) + stakesBonusForIntent (what player wants)
-- Public info: -2 | Neutral: 0 | Sensitive: +2 | Personal: +3 | Dangerous: +4
-- Tone: deceptive +2. Final clamp [6, 18].
-
-### NPC Rules ✅
-Real name from birth. Codex only on first player interaction.
-id fallback chain: exact → character_ prefix → name → node npc_ids.
-Info panel deduped by id and name.
+### Container + Loot System (Pending Implementation)
+- Container registry: Tier 1 named + template ambient per location type
+- Free text gate: not in registry → "There's no [X] here." Zero AI.
+- Search flow: spawn roll → quality roll → loot table pick → item added → 1-sentence AI narration
+- One search per container, permanent
+- Regional loot tables generated at WorldBible time, frozen
 
 ---
 
-## ⚡ FOUNDATIONAL RULES (Read Before Every Session)
+## ⚡ FOUNDATIONAL RULES
 
-### 1. World Assets Are Permanent
-Write-once. ignoreDuplicates: true.
-
-### 2. Navigation Is UI-Driven
-MOVE from text → INTERNAL_DESCRIBE. navigateTo(nodeId) only real navigation.
-region_locations always have back-connection to settlement.
-WCD landmarks reachable via ◆ cards when matched to adjacent_regions.
-
-### 3. Location Is Authoritative State
-current_node_id saved on real navigateTo. IDs canonical.
-
-### 4. Actions Are Permitted By Default
-Tier 1→AI (canned on repeat). Tier 2→template. Tier 3→ambient.
-
-### 5. Objects Mentioned Exist
-Nothing disappears. Failed checks = evasion, never absence.
-
-### 6. Dialogue Is Consistent
-RESPONDING CHARACTER only. Badge matches check.
-Failed check → no information revealed ever.
-Trade = direct openTrade(), no stat check. Trust affects price only.
-Difficulty = trust base + stakes bonus + tone modifier, clamped [6,18].
-
-### 7. The AI Has Exactly Three Roles
-Generator (Phase 1+2 only) → Bridge (exact names) → Thread (breadcrumbs)
-
-### 8. WCD Is Absolute Law
-
-### 9. Failed Checks = Evasion Only
-NEVER reveals named locations, people, factions, or secrets.
-
-### 10. Highlights Are Exact Tier 1 Matches
-LOCATION blue+underline→navigateTo. NPC genre+underline→DIALOGUE.
-ITEM amber+underline→EXAMINE. LANDMARK violet+underline→info.
+### 1. World Assets Are Permanent. Write-once.
+### 2. Navigation Is UI-Only. Text MOVE → hardcoded. navigateTo() is the only navigation.
+### 3. Location Is Authoritative State. current_node_id saved on navigateTo.
+### 4. Actions Are Permitted By Default. Tier 1→AI. Tier 2→template. Tier 3→ambient.
+### 5. Objects Mentioned Exist. Failed checks = evasion, never absence.
+### 6. Dialogue Is Consistent. Closed context. Failed check = no info. Trade = no check.
+### 7. AI Has Exactly Three Roles. Generator → Bridge (exact names) → Thread (breadcrumbs).
+### 8. WCD Is Absolute Law.
+### 9. Failed Checks = Evasion Only. Never reveals locations, people, secrets.
+### 10. Highlights Are Exact Tier 1 Matches. LOCATION→navigateTo. NPC→DIALOGUE. ITEM→EXAMINE. LANDMARK→info.
 
 ---
 
-## 🎭 NPC/Dialogue ✅ | 💰 Trading ✅ | 🎨 Direction 3 UI ✅ | 🗺️ Three-Tier Map ✅
-
----
-
-## Narrator Architecture ✅
+## Narrator Prompt Order ✅
 
 DIALOGUE: WCD → HARD RULES → RESPONDING CHARACTER → TIER 1 OBJECTS → WORLD ASSETS → SCENE CONTEXT → VERBOSITY
 non-DIALOGUE: WCD → HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → CONNECTED LOCATIONS → WORLD ASSETS → SCENE CONTEXT → VERBOSITY
 
 Verbosity (STRICTLY ENFORCED):
 - terse: 2/3/4 sentences, ≤12 words each
-- standard: 3-4/4-5/5-7 sentences
-- rich: 5-7/6-8/8-12 sentences
-
----
-
-## Pending Discussions
-
-**Dynamic pricing:** When STR/CHA check passes on price objection, write session flag price_override_[item_id]. TradeModal reads it. Needs: floor price, persistence rules, single-attempt limit.
+- standard: 3-4/4-5/5-7
+- rich: 5-7/6-8/8-12
 
 ---
 
@@ -162,36 +138,21 @@ Verbosity (STRICTLY ENFORCED):
 
 | System | When | Description |
 | --- | --- | --- |
-| UI Design Session | Next | Claude Design — full visual overhaul |
-| Dynamic pricing | Discuss | Haggling check → price_override flag |
-| Combat System | Day 20 | Turn-based, structured UI |
-| Object Types | Day 20 | landmark/container/item/mechanism/document |
-| Skills & Abilities | Day 21 | Skill trees, attribute thresholds |
-| Main Narrative Thread | Day 22 | Breadcrumb injection from WorldBible |
-| Lore System | Later | Codex entry updates |
-| Item Interaction Depth | Later | Searching barrels/crates for loot |
-| NPC dots clickable in map | Later | Quick interact from map panel |
+| UI Design Session | Active | Claude Design — map + full UI redesign |
+| Combat System | Day 20 | Turn-based, code resolves, AI narrates |
+| Container + Loot | Day 21 | Registry, loot tables, search flow |
+| Skills + Leveling | Day 22 | XP, stat points, level gates |
+| Main Quest Thread | Day 23 | Breadcrumb injection, quest tracking UI |
+| Dynamic Pricing | Discuss | Haggling check → price_override flag |
+| Lore System | Later | Codex entry updates with new info |
+| NPC dots clickable | Later | Map info panel quick interact |
 | Art System | Phase 3 | Static pixel art + Replicate API |
 
 ---
 
 ## Supabase Tables (all applied ✅)
-- game_sessions: +world_seed, +world_graph, +world_consistency, +world_bible
-- world_states: +current_node_id. world-state route accepts worldGraph.
-- Migrations 001-009.
-
----
-
-## Core Philosophy
-- AI generates content once, engine owns it forever
-- Geographic region ≠ settlement — region is landscape, settlement is town
-- Navigation is UI-driven — text for actions only
-- Trade is always available for merchants — no stat check
-- Named NPC in input switches dialogue, not-present NPC gets "X isn't here"
-- Failed stat checks never reveal information — difficulty scales by stakes
-- Codex only on first player interaction, NPC id fallback chain
-- Every generated location must have content (NPCs + interactable objects)
-- Mobile-first: 44px touch targets, bottom sheet map, 52px nav cards
+Migrations 001-009. game_sessions: +world_graph, +world_consistency, +world_bible.
+world_states: +current_node_id. world-state route accepts worldGraph.
 
 ---
 
@@ -202,7 +163,8 @@ Verbosity (STRICTLY ENFORCED):
 | Frontend | Next.js 14 (App Router) |
 | Styling | Tailwind CSS + shadcn/ui |
 | Database | Supabase |
-| AI | Claude API (claude-sonnet-4-5) |
+| AI (world gen + narration) | claude-sonnet-4-5 |
+| AI (RegionBible) | claude-haiku-4-5-20251001 |
 | Payments | Stripe |
 | Deploy | Vercel |
 | Audio | Howler.js |
@@ -210,15 +172,15 @@ Verbosity (STRICTLY ENFORCED):
 
 ---
 
-## Genre Definitions (Final — No Noir)
+## Genre Definitions
 
-| Genre | Tone | Primary | Currency | HP |
-| --- | --- | --- | --- | --- |
-| Fantasy | Epic, mythic | #f59e0b amber | Gold | HP |
-| Cyberpunk | Terse, neon | #22d3ee cyan | Credits | Integrity |
-| Horror/Lovecraftian | Cosmic dread | #84cc16 acid green | None | HP + Sanity |
-| Space Opera | Grand, operatic | #a855f7 purple | Stellar Units | Hull Integrity |
-| Post-Apocalyptic | Bleak, dark humor | #ea580c rust | Caps | HP |
+| Genre | Primary | Currency | HP |
+| --- | --- | --- | --- |
+| Fantasy | #f59e0b amber | Gold | HP |
+| Cyberpunk | #22d3ee cyan | Credits | Integrity |
+| Horror/Lovecraftian | #84cc16 acid green | None | HP + Sanity |
+| Space Opera | #a855f7 purple | Stellar Units | Hull Integrity |
+| Post-Apocalyptic | #ea580c rust | Caps | HP |
 
 ---
 
@@ -229,25 +191,17 @@ Verbosity (STRICTLY ENFORCED):
 | Genres | Fantasy | All 5 | All 5 + future |
 | Save Slots | 1 | 3 | Unlimited |
 | AI Actions/Day | 50 | Unlimited | Unlimited |
-| Art | Placeholder | Static pixel art | Generated (Replicate) |
-| Templates | Browse | Browse + Play | Create + Share |
-| Export Log | ❌ | ✅ | ✅ |
 | Priority Speed | ❌ | ❌ | ✅ |
 
 ---
 
-## Platform: PWA Only. No Electron, no Steam. Manifest Day 35.
+## Platform: PWA Only. Manifest Day 35.
 
 ## Workflow
 **Claude.ai owns all CLAUDE.md updates.**
 Claude Code pushes → git pull + restart → report → confirm → next prompt.
-
-## Reference Links
-- Supabase: https://supabase.com/dashboard
-- Anthropic: https://console.anthropic.com
-- Vercel: https://vercel.com/dashboard
-- Stripe: https://dashboard.stripe.com
+**All architecture decisions defer to /docs/architecture-spec.md.**
 
 ---
 
-*Last updated: Session 72 — V8.5: Trade no stat check, trade state cleared on NPC change, NPC switch during dialogue, arrival header on RegionBible nav.*
+*Last updated: Session 73 — V8.6: Architecture hardening. MOVE text → zero AI hardcoded response. zone_id validation. RegionBible → haiku. Return card graph-search. Architecture spec V1.1 in /docs/architecture-spec.md.*

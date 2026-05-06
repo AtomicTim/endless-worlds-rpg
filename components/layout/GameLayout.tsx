@@ -136,7 +136,8 @@ export function GameLayout({
 
           {/* Day 19F — Map panel toggle. Only shown when the page provides
               a mapPanel slot, so other layouts (e.g. dashboard) don't get
-              a stray icon. */}
+              a stray icon. Mobile gets a slightly larger touch target so
+              the bottom-sheet trigger is easy to hit one-handed. */}
           {mapPanel && (
             <Button
               variant="ghost"
@@ -144,6 +145,7 @@ export function GameLayout({
               onClick={toggleMapPanel}
               aria-label={mapPanelOpen ? "Close map" : "Open map"}
               title={mapPanelOpen ? "Close map" : "Open map"}
+              className="min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0"
               style={{
                 color: mapPanelOpen
                   ? "var(--color-primary)"
@@ -187,37 +189,61 @@ export function GameLayout({
 
       {/* ── Content row ─────────────────────────────────────────── */}
       <div className="relative flex flex-1 overflow-hidden">
-        {/* Day 19F — Left-side map panel. Slides in over the main panel
-            on mobile, takes its own column on md+. Mirrors the right-side
-            sidebar's translate-x animation pattern but anchored left. */}
+        {/* Map panel.
+            - Desktop (md+): unchanged left-side sliding sidebar.
+            - Mobile (< md): bottom sheet sliding up from the bottom,
+              rounded top corners, drag handle, full-width.
+            Two separate render paths so each viewport gets the right
+            interaction model without compromise. */}
         {mapPanel && (
           <>
-            {/* Mobile backdrop — separate from the right sidebar's so the
-                two can be toggled independently. */}
+            {/* ── Mobile backdrop ─────────────────────────────────── */}
             {mapPanelOpen && (
               <div
-                className="fixed inset-0 z-10 bg-black/60 md:hidden"
+                className="fixed inset-0 z-30 bg-black/60 md:hidden"
                 onClick={() => setMapPanelOpen(false)}
+                aria-hidden
               />
             )}
-            <aside
+
+            {/* ── Mobile: bottom sheet ────────────────────────────── */}
+            <div
+              role="dialog"
+              aria-label="World map"
+              aria-hidden={!mapPanelOpen}
               className={[
-                "fixed left-0 top-14 z-20 h-[calc(100vh-3.5rem)] w-80",
-                "md:relative md:top-auto md:z-auto md:h-auto",
+                "fixed inset-x-0 bottom-0 z-40 flex flex-col md:hidden",
                 "transition-transform duration-300 ease-in-out",
-                mapPanelOpen
-                  ? "translate-x-0 md:w-80 md:max-w-[320px] md:min-w-[280px]"
-                  : "-translate-x-full md:w-0 md:min-w-0 md:max-w-0 md:overflow-hidden",
+                mapPanelOpen ? "translate-y-0" : "translate-y-full",
               ].join(" ")}
               style={{
-                borderRight:     "1px solid var(--color-border)",
+                height:          "65vh",
+                borderTopLeftRadius:  16,
+                borderTopRightRadius: 16,
+                borderTop:       "1px solid var(--color-border)",
                 backgroundColor: "var(--color-bg)",
+                boxShadow:       "0 -8px 24px rgba(0,0,0,0.6)",
               }}
-              aria-hidden={!mapPanelOpen}
             >
-              {/* Mobile close row — mirrors the right sidebar's pattern. */}
+              {/* Drag handle pill */}
               <div
-                className="flex items-center justify-between px-3 py-2 md:hidden"
+                className="flex shrink-0 justify-center pt-2"
+                onClick={() => setMapPanelOpen(false)}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width:           32,
+                    height:          4,
+                    borderRadius:    2,
+                    backgroundColor: "var(--color-muted)",
+                    opacity:         0.5,
+                  }}
+                />
+              </div>
+              {/* Header row with close button */}
+              <div
+                className="flex shrink-0 items-center justify-between px-3 py-2"
                 style={{ borderBottom: "1px solid var(--color-border)" }}
               >
                 <span
@@ -229,14 +255,35 @@ export function GameLayout({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-6"
+                  className="size-7"
                   onClick={() => setMapPanelOpen(false)}
+                  aria-label="Close map"
                 >
                   <X className="size-4" />
                 </Button>
               </div>
+              {/* Sheet body — flex-1 so the tier component scrolls inside. */}
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {mapPanel}
+              </div>
+            </div>
 
-              <div className="h-full md:h-full">
+            {/* ── Desktop: left sidebar (unchanged) ─────────────── */}
+            <aside
+              className={[
+                "hidden md:relative md:top-auto md:z-auto md:flex",
+                "transition-transform duration-300 ease-in-out",
+                mapPanelOpen
+                  ? "md:w-80 md:max-w-[320px] md:min-w-[280px]"
+                  : "md:w-0 md:min-w-0 md:max-w-0 md:overflow-hidden",
+              ].join(" ")}
+              style={{
+                borderRight:     "1px solid var(--color-border)",
+                backgroundColor: "var(--color-bg)",
+              }}
+              aria-hidden={!mapPanelOpen}
+            >
+              <div className="h-full w-full">
                 {mapPanel}
               </div>
             </aside>

@@ -12,6 +12,7 @@ import { CharacterSheet } from "@/components/game/sidebar/CharacterSheet";
 import { InventoryPanel } from "@/components/game/sidebar/InventoryPanel";
 import { LogBook } from "@/components/game/sidebar/LogBook";
 import { WorldMap } from "@/components/game/WorldMap";
+import { NavigationBar } from "@/components/game/NavigationBar";
 import { AssetCategory, Genre } from "@/types/game";
 import type { MasterState } from "@/types/game";
 import { createClient } from "@/lib/supabase/client";
@@ -44,7 +45,7 @@ export default function GamePage() {
   const messages       = useGameStore((s) => s.messages);
   const locationAssets = useGameStore((s) => s.locationAssets);
 
-  const { submitAction, isProcessing, processingStep, buyItem, sellItem } = useGameLoop();
+  const { submitAction, navigateTo, isProcessing, processingStep, buyItem, sellItem } = useGameLoop();
 
   // ── Load session on mount ─────────────────────────────────────────────────
   // Reads ?session_id= from the URL to load a specific save slot.
@@ -258,12 +259,25 @@ export default function GamePage() {
             messages={messages}
             isLoading={isProcessing && !!processingStep}
             onSubmit={(input) => { void submitAction(input); }}
+            // Navigation redesign — LOCATION highlights with a nodeId
+            // route through navigateTo directly (no popover, no text).
+            onNavigate={(nodeId) => navigateTo(nodeId)}
           />
           <DialogueModal
             onSubmit={(input, opts) => { void submitAction(input, opts); }}
             onFocusInput={() => { inputBarRef.current?.focus(); }}
           />
           <TradeModal onBuy={buyItem} onSell={sellItem} />
+          {/* Navigation redesign — UI-driven movement strip. Sits between
+              the modals and the InputBar so it's part of the bottom
+              chrome. NavigationBar returns null when there are no
+              connections to display. */}
+          <NavigationBar
+            masterState={masterState}
+            worldGraph={masterState?.world_graph}
+            onNavigate={(nodeId) => navigateTo(nodeId)}
+            genre={genre}
+          />
           <InputBar
             ref={inputBarRef}
             onSubmit={(input) => {
@@ -292,7 +306,8 @@ export default function GamePage() {
             masterState={masterState}
             worldGraph={masterState.world_graph}
             locationAssets={locationAssets}
-            onNavigate={(input) => { void submitAction(input); }}
+            // Navigation redesign — direct, UI-driven movement via nodeId.
+            onNavigate={(nodeId) => navigateTo(nodeId)}
           />
         ) : null
       }

@@ -125,14 +125,24 @@ export const InputBar = forwardRef<InputBarHandle, InputBarProps>(function Input
             onKeyDown={handleKeyDown}
             disabled={disabled}
             maxLength={MAX_LENGTH}
-            placeholder="What do you do?"
-            className="w-full rounded-sm bg-black py-2 pl-3 pr-8 font-mono text-sm transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+            // Navigation redesign — placeholder reflects what text input
+            // actually does now: action verbs only. Movement is UI-driven
+            // via the NavigationBar / map / highlighted location links.
+            placeholder="Talk, examine, or take action..."
+            // Navigation redesign — 16px font on mobile prevents iOS Safari
+            // from auto-zooming on focus. minHeight 52px hits the
+            // touch-target floor without disturbing desktop visuals.
+            className="w-full rounded-sm bg-black pl-3 pr-8 font-mono transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
             style={{
               border: dialogueMode
                 ? "1px solid var(--color-accent)"
                 : "1px solid color-mix(in srgb, var(--color-primary) 35%, transparent)",
               color:      "var(--color-text)",
               caretColor: dialogueMode ? "var(--color-accent)" : "var(--color-primary)",
+              fontSize:   16,
+              minHeight:  52,
+              paddingTop:    10,
+              paddingBottom: 10,
             }}
             onFocus={(e) => {
               e.currentTarget.style.borderColor = dialogueMode
@@ -158,9 +168,12 @@ export const InputBar = forwardRef<InputBarHandle, InputBarProps>(function Input
           onClick={handleSubmit}
           disabled={disabled || !value.trim()}
           className="shrink-0 px-4 font-mono font-bold disabled:opacity-40"
+          // Match the input's 52px height so the bottom row aligns
+          // cleanly on mobile and gives a comfortable tap target.
           style={{
             backgroundColor: dialogueMode ? "var(--color-accent)" : "var(--color-primary)",
             color: "#000",
+            minHeight: 52,
           }}
         >
           {dialogueMode ? "Speak" : "Act"}

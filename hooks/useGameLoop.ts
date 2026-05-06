@@ -305,13 +305,25 @@ export function useGameLoop() {
 
   const submitAction = useCallback(async (
     input: string,
-    options?: { npcName?: string; tone?: "friendly" | "aggressive" | "curious" | "deceptive" }
+    options?: {
+      npcName?:         string;
+      tone?:            "friendly" | "aggressive" | "curious" | "deceptive";
+      /** Navigation redesign — when set, submitAction skips parseIntent
+       *  AND the MOVE intercept, building a synthetic MOVE ParsedAction
+       *  for this node id. Used by navigateTo() and direct UI navigation
+       *  (NavigationBar, map clicks, LOCATION highlight links). */
+      forceMoveToNode?: string;
+    }
   ) => {
     const store = useGameStore.getState();
+    const forceMoveToNode = options?.forceMoveToNode ?? null;
 
     // ── 1. Validate input ────────────────────────────────────────────────────
+    // Direct-navigation invocations carry no player text; skip the
+    // empty-input guard for that path so the call goes through.
     const trimmed = input.trim();
-    if (!trimmed || trimmed.length > MAX_INPUT_LENGTH) return;
+    if (!forceMoveToNode && (!trimmed || trimmed.length > MAX_INPUT_LENGTH)) return;
+    if (forceMoveToNode && trimmed.length > MAX_INPUT_LENGTH) return;
 
     const state = store.masterState;
     if (!state) {
@@ -321,15 +333,32 @@ export function useGameLoop() {
       return;
     }
 
-    // Echo the player's command into the feed.
-    store.addMessage(makeMessage("SYSTEM", `> ${trimmed}`));
+    // Echo the player's command into the feed — only for typed input.
+    // Direct-navigation clicks are intentionally silent here; the
+    // narrator's ARRIVING beat is the player-facing record.
+    if (!forceMoveToNode) {
+      store.addMessage(makeMessage("SYSTEM", `> ${trimmed}`));
+    }
 
     try {
       // ── 2. Parse intent (fast-path skips AI call entirely) ────────────────
       const directAction = getDirectAction(trimmed, state);
       let parsedAction: ParsedAction;
 
-      if (directAction) {
+      if (forceMoveToNode) {
+        // Direct navigation — bypass the AI parser entirely. The target
+        // node is resolved from the live graph; we set primary_target
+        // to its display name so the move classifier's name-match
+        // channel resolves the node on the resolveAction pass.
+        const navTarget =
+          state.world_graph?.nodes[forceMoveToNode]?.name ?? forceMoveToNode;
+        parsedAction = {
+          action_type:     ActionType.MOVE,
+          primary_target:  navTarget,
+          inferred_intent: `navigate to ${navTarget}`,
+          confidence:      1,
+        };
+      } else if (directAction) {
         // Direct actions (equip/unequip/drop/read) — zero AI calls, zero delay.
         parsedAction = directAction;
       } else {
@@ -485,6 +514,77 @@ export function useGameLoop() {
             gsBefore.clearDialogueOptions();
           }
         }
+      }
+
+      // ── 2d. Navigation redesign — MOVE intercepted to INTERNAL_DESCRIBE ───
+      // Free-text navigation is architecturally incompatible with a
+      // persistent world graph: any phrasing pattern eventually misfires
+      // and creates a phantom node. Movement is now UI-driven (Navigation
+      // Bar / map / highlighted-link clicks call navigateTo() directly).
+      //
+      // When the player still types something the parser classifies as
+      // MOVE, we DO NOT resolve it as a move. Instead we hand the
+      // narrator an INTERNAL_DESCRIBE context — the same one the move
+      // classifier uses for "look at the bar" phrasings. The narrator
+      // describes what's visible, including the connected location names
+      // (already in the prompt-builder CONNECTED LOCATIONS block), and
+      // the player picks an explicit option.
+      //
+      // forceMoveToNode bypasses this intercept — that path is the
+      // sanctioned UI-driven channel.
+      if (!forceMoveToNode && parsedAction.action_type === ActionType.MOVE) {
+        console.log("[GameLoop] MOVE intercepted → INTERNAL_DESCRIBE");
+        const interceptResolution: ResolutionResult = {
+          success:      true,
+          outcome_type: "DESCRIBE_SUCCESS",
+          state_delta:  {},
+          narrative_context: {
+            move_type:               "INTERNAL_DESCRIBE",
+            is_internal_description: true,
+            sub_area_hint:           parsedAction.primary_target ?? "",
+            current_location_id:     state.world_state.current_location_id,
+          },
+        };
+
+        store.setProcessing(true, "Looking around...");
+        const lastNarrativeIntercept = useGameStore.getState().lastNarrativeText;
+        const wcdIntercept           = state.metadata.world_consistency;
+        const verbosityIntercept     = useGameStore.getState().verbosity;
+        const assetsIntercept        = useGameStore.getState().locationAssets;
+        try {
+          const interceptResponse = await narrateAction(
+            interceptResolution,
+            state,
+            lastNarrativeIntercept,
+            parsedAction,
+            assetsIntercept,
+            verbosityIntercept,
+            wcdIntercept,
+          );
+          store.addMessage(
+            makeMessage("NARRATIVE", interceptResponse.narrative_text, {
+              outcome_type:  "DESCRIBE_SUCCESS",
+              sound_id:      interceptResponse.sound_id,
+              response_tier: interceptResponse.response_tier,
+            })
+          );
+          store.setLastNarrativeText(interceptResponse.narrative_text);
+          // Stamp last_played so the session sorts correctly on dashboard.
+          const stamped = {
+            ...state,
+            metadata: { ...state.metadata, last_played: new Date().toISOString() },
+          };
+          store.setMasterState(stamped);
+        } catch {
+          store.addMessage(
+            makeMessage(
+              "SYSTEM",
+              "The oracle falls silent momentarily. Try again."
+            )
+          );
+        }
+        store.setProcessing(false);
+        return;
       }
 
       // ── 3. Resolve action ──────────────────────────────────────────────────
@@ -1940,8 +2040,48 @@ export function useGameLoop() {
     gs.addMessage(makeMessage("SYSTEM", `[ Sold: ${item.name} for ${sellPrice} ]`));
   }, []);
 
+  /**
+   * Navigation redesign — direct, UI-driven movement.
+   *
+   * The text-input pipeline never produces a real MOVE action anymore
+   * (see step 2d's MOVE intercept). Movement is dispatched here:
+   *   - NavigationBar card taps → navigateTo(nodeId)
+   *   - WorldMap clicks         → navigateTo(nodeId)
+   *   - LOCATION highlight clicks → navigateTo(nodeId) (when nodeId known)
+   *
+   * Behaviour:
+   *   1. Validates nodeId against the live world_graph OR the world
+   *      bible's adjacent_regions outline list.
+   *   2. Routes through submitAction with `forceMoveToNode: nodeId` —
+   *      submitAction skips parseIntent / MOVE intercept and feeds a
+   *      synthetic MOVE ParsedAction into resolveAction. Whether the
+   *      destination is a known graph connection or an undiscovered
+   *      adjacent region, classifyMove + resolveMove pick the right
+   *      branch (GRAPH_NAVIGATE vs WORLD_EXPLORE → step 4d Region
+   *      expansion) downstream.
+   */
+  const navigateTo = useCallback((nodeId: string) => {
+    const gs    = useGameStore.getState();
+    const state = gs.masterState;
+    if (!state) return;
+
+    const graph = state.world_graph;
+    const node  = graph?.nodes[nodeId];
+    const adjacentOutline = state.metadata.world_bible?.adjacent_regions?.find(
+      (r) => r.id === nodeId
+    );
+
+    if (!node && !adjacentOutline) {
+      console.warn("[navigateTo] node id not found in graph or adjacent_regions:", nodeId);
+      return;
+    }
+
+    void submitAction("", { forceMoveToNode: nodeId });
+  }, [submitAction]);
+
   return {
     submitAction,
+    navigateTo,
     isProcessing,
     processingStep,
     messages,

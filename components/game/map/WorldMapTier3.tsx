@@ -208,8 +208,11 @@ export function WorldMapTier3({
                 key={exit.targetId}
                 onClick={() => onNavigateTo(exit.targetId)}
                 title={`Travel to ${exit.label}`}
-                className="rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-80"
+                className="rounded-md px-3 text-[11px] font-bold uppercase tracking-wider transition-opacity hover:opacity-80"
                 style={{
+                  // Navigation redesign — mobile-friendly tap target.
+                  minHeight:       44,
+                  minWidth:        160,
                   border:          `1px solid ${MAP_CURRENT_GLOW}`,
                   color:           MAP_CURRENT_GLOW,
                   backgroundColor: "color-mix(in srgb, var(--color-bg) 80%, transparent)",
@@ -217,7 +220,7 @@ export function WorldMapTier3({
                   cursor:          "pointer",
                 }}
               >
-                → {truncate(exit.label, 16)}
+                → {truncate(exit.label, 18)}
               </button>
             ))}
           </div>

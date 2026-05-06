@@ -26,6 +26,11 @@ export interface HighlightCandidate {
   label:       string;
   type:        PointOfInterest["type"];
   description: string;
+  /** Navigation redesign — set on LOCATION candidates. When the player
+   *  clicks a LOCATION highlight in the story feed, the click handler
+   *  uses this id to call useGameLoop.navigateTo directly, bypassing
+   *  text parsing and the popover. */
+  nodeId?:     string;
 }
 
 /**
@@ -89,6 +94,10 @@ export function buildExactHighlights(
           node.type === "sub_location"
             ? "A connected sub-location."
             : "A connected location.",
+        // Navigation redesign — store the canonical node id so a click
+        // on a LOCATION highlight can route through navigateTo without
+        // parsing the display name back into a slug.
+        nodeId:      node.id,
       });
     }
   }
@@ -138,6 +147,10 @@ export interface HighlightMatch {
   start: number;
   end:   number;
   point: PointOfInterest;
+  /** Navigation redesign — present for LOCATION matches so the click
+   *  handler in StoryFeed can route directly via navigateTo(nodeId)
+   *  without round-tripping through text parsing. */
+  nodeId?: string;
 }
 
 /**
@@ -162,6 +175,7 @@ export function findExactHighlights(
       start: idx,
       end:   idx + needle.length,
       point: { label: c.label, type: c.type, description: c.description },
+      ...(c.nodeId ? { nodeId: c.nodeId } : {}),
     });
   }
 

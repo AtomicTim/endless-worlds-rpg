@@ -23,6 +23,11 @@ interface StoryFeedProps {
   messages:  StoryMessage[];
   isLoading?: boolean;
   onSubmit?: (input: string) => void;
+  /** Navigation redesign — when a LOCATION highlight has a nodeId, the
+   *  click handler routes directly through this callback instead of
+   *  opening a popover and submitting "go to <name>" text. Maps to
+   *  useGameLoop.navigateTo. */
+  onNavigate?: (nodeId: string) => void;
 }
 
 /** Detect SYSTEM messages that are stat-check feedback — rendered as a
@@ -39,7 +44,7 @@ interface PopoverState {
   position: { x: number; y: number };
 }
 
-export function StoryFeed({ messages, isLoading = false, onSubmit }: StoryFeedProps) {
+export function StoryFeed({ messages, isLoading = false, onSubmit, onNavigate }: StoryFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [popover, setPopover] = useState<PopoverState | null>(null);
   // Day 18 — every genre themes the feed via getGenreColors. Read once here
@@ -87,6 +92,7 @@ export function StoryFeed({ messages, isLoading = false, onSubmit }: StoryFeedPr
           key={msg.id}
           message={msg}
           onPoiClick={openPopover}
+          onNavigate={onNavigate}
           genre={genre}
           highlightCandidates={highlightCandidates}
         />
@@ -118,11 +124,12 @@ export function StoryFeed({ messages, isLoading = false, onSubmit }: StoryFeedPr
 interface MessageEntryProps {
   message:             StoryMessage;
   onPoiClick:          (point: PointOfInterest, e: React.MouseEvent) => void;
+  onNavigate?:         (nodeId: string) => void;
   genre:               Genre;
   highlightCandidates: HighlightCandidate[];
 }
 
-function MessageEntry({ message, onPoiClick, genre, highlightCandidates }: MessageEntryProps) {
+function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandidates }: MessageEntryProps) {
   const { type, content, metadata } = message;
   const restored  = metadata?.restored === true;
   const npcName   =
@@ -166,7 +173,7 @@ function MessageEntry({ message, onPoiClick, genre, highlightCandidates }: Messa
               fontSize:   12,
             }}
           >
-            {renderNarrativeText(content, highlightCandidates, onPoiClick)}
+            {renderNarrativeText(content, highlightCandidates, onPoiClick, onNavigate)}
           </p>
         </div>
       );
@@ -407,7 +414,8 @@ function parseDialogueText(text: string): DialogueSegment[] {
 function renderNarrativeText(
   text:       string,
   candidates: HighlightCandidate[],
-  onPoiClick: (point: PointOfInterest, e: React.MouseEvent) => void
+  onPoiClick: (point: PointOfInterest, e: React.MouseEvent) => void,
+  onNavigate?: (nodeId: string) => void
 ): React.ReactNode {
   const matches: HighlightMatch[] = findExactHighlights(text, candidates);
   if (matches.length === 0) return text;
@@ -417,20 +425,37 @@ function renderNarrativeText(
   matches.forEach((m, i) => {
     if (m.start > cursor) nodes.push(text.slice(cursor, m.start));
     const accent = POI_COLORS[m.point.type];
+
+    // Navigation redesign — when a LOCATION highlight carries a nodeId
+    // and the parent provided onNavigate, click goes straight to
+    // navigateTo without opening the popover. Other types (NPC, ITEM,
+    // CONTAINER, HAZARD, LANDMARK) still open the popover.
+    const isDirectNav = m.point.type === "LOCATION" && !!m.nodeId && !!onNavigate;
+    const handleClick = (e: React.MouseEvent) => {
+      if (isDirectNav && m.nodeId) {
+        onNavigate!(m.nodeId);
+      } else {
+        onPoiClick(m.point, e);
+      }
+    };
     nodes.push(
       <span
         key={`poi-${i}-${m.start}`}
         role="button"
         tabIndex={0}
-        onClick={(e) => onPoiClick(m.point, e)}
+        onClick={handleClick}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            const target = e.currentTarget.getBoundingClientRect();
-            onPoiClick(m.point, {
-              clientX: target.left,
-              clientY: target.bottom,
-            } as React.MouseEvent);
+            if (isDirectNav && m.nodeId) {
+              onNavigate!(m.nodeId);
+            } else {
+              const target = e.currentTarget.getBoundingClientRect();
+              onPoiClick(m.point, {
+                clientX: target.left,
+                clientY: target.bottom,
+              } as React.MouseEvent);
+            }
           }
         }}
         className="cursor-pointer underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-80"

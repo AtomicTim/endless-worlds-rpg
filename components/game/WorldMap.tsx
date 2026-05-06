@@ -28,8 +28,10 @@ interface Props {
   masterState:    MasterState;
   worldGraph:     WorldGraph;
   locationAssets: WorldAsset[];
-  /** Submit a `go to <name>` action through useGameLoop.submitAction. */
-  onNavigate:     (input: string) => void;
+  /** Navigation redesign — receives a raw node id. Wire to
+   *  useGameLoop.navigateTo, which routes via submitAction's
+   *  forceMoveToNode option (bypasses the text-pipeline MOVE intercept). */
+  onNavigate:     (nodeId: string) => void;
 }
 
 type Tier = 1 | 2 | 3;
@@ -77,13 +79,11 @@ export function WorldMap({ masterState, worldGraph, locationAssets, onNavigate }
     setActiveTier(3);
   }
   function handleNavigateTo(nodeId: string) {
-    const node = worldGraph.nodes[nodeId];
-    if (!node) return;
-    // The map always submits via the parser-friendly "go to X" prefix —
-    // intent-parser maps this to ActionType.MOVE with primary_target = X.
-    // The resolver then either finds it in the graph (GRAPH_NAVIGATE) or
-    // falls through to ZONE_EXPAND / WORLD_EXPLORE depending on context.
-    onNavigate(`go to ${node.name}`);
+    // Navigation redesign — pass the raw node id straight through.
+    // useGameLoop.navigateTo validates against the live graph + the
+    // WorldBible's adjacent_regions outlines, then routes via the
+    // sanctioned forceMoveToNode channel.
+    onNavigate(nodeId);
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────

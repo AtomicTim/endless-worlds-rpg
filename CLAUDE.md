@@ -1,14 +1,14 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.1
-**Status:** Active Development — Map Overhaul + RegionBible Reduction Complete
+**Version:** 8.2
+**Status:** Active Development — UX Fixes + Geographic Region Restructure Complete
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Testing map overhaul, then Day 20 — Combat System
+**Current Phase:** Testing, then UI Design Session + Day 20 Combat
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -21,33 +21,40 @@
 | Gameplay Audit | 21-issue audit + full stabilization | ✅ Complete |
 | Navigation Redesign | UI-driven movement, mobile-first | ✅ Complete |
 | Map Overhaul | Icon header, type abbr, decorations, info panel | ✅ Complete |
+| UX Round 2 | Text readability, highlights, terse cap, geographic regions | ✅ Complete |
+| UI Design Session | Claude Design — modern/retro visual overhaul | ⏳ Next |
 | 20 | Combat System | ⏳ Pending |
 | 21+ | Skills, Background, Factions | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Map Overhaul + RegionBible (commit 4b9eb6c — 43/43 tests, clean build)
+### UX Round 2 + Geographic Region Restructure (43/43 tests, clean build)
 
-**1A — Header:** Reduced to `MAP` label + three icon-only tier toggles. Active = genre primary size-5. Inactive = muted size-4.
+**Fix 1 — Text readability:** Narrative 14px / #b0bec5, dialogue #d0dce8, line-height 1.8, letter-spacing 0.01em.
 
-**1B — In-body tier label:** Two-line header inside map body: small-caps tier name + bold context name in genre primary. Separated from nodes by divider.
-- Tier 1: "WORLD MAP" + world_name from WCD
-- Tier 2: "REGION MAP" + current zone name
-- Tier 3: "LOCAL MAP" + current node name (or region name if at settlement hub)
+**Fix 2 — Highlight colors:** LOCATION bright blue #60a5fa + underline. NPC genre primary + underline. ITEM amber #fbbf24 + underline. LANDMARK violet #a78bfa + underline. All hover-brighten.
 
-**1C — Auto selectedRegionId:** useEffect watches current_node_id. When zone changes, auto-updates selectedRegionId and snaps to Tier 3.
+**Fix 3 — Terse word cap:** Every sentence ≤12 words, no subordinate clauses, no atmospheric asides. Wrong/right examples in prompt.
 
-**1D — Type abbreviations:** New getNodeTypeAbbr() in map-colors.ts. 9px monospace 3-letter chip bottom-left of every Tier 3 block: INN/MKT/FRG/SHR/GLD/GAR/DNG/WLD/PRT/DAT/CRP/STN/SHP/WST/MNR/LOC etc. Names truncated at 14 chars. Blocks 56px → 72px.
+**Fix 4 — Contextual loading text:** getLoadingText() helper. "Speaking with X...", "Examining Y...", "Entering [location]...", "Thinking..."
 
-**1E — Genre decorations:** New MapDecorations.tsx component. 5 fantasy / 3 cyberpunk / 3 horror / 3 space-opera / 3 post-apoc tiny SVG glyphs + generic compass-rose fallback. Fills every empty Tier 3 grid cell with 3-5 deterministic decorations (mulberry32 seeded by zoneId:gx:gy) at 18% genre-primary opacity.
+**Fix 5 — Nav bar scroll arrows:** ‹/› arrows on desktop only, hidden on mobile.
 
-**1F — Location info panel:** Docked below map nodes. Shows: current node name + type abbr + first-sentence atmosphere (2-line clamp) + NPC dot list + Tier 1 landmark chips (max 4 + overflow count).
+**Fix 6 — Merchant dialogue flow:** setTradeItems closes dialogue on open; restores lastDialogue* snapshot on close.
 
-**RegionBible skeleton reduction:**
-- 1 hub + 1 sub-location + 2 NPCs + 1 object per location + 1 exit only
-- No breadcrumbs in RegionBible (main quest breadcrumbs are in WorldBible)
-- max_tokens 2000 → 1500
+**Fix 7 — Codex on interaction only:** Removed auto-codex on ARRIVING. Location codex writes inside NPC seed branch in step 7g, gated by world_state.flags.codex_loc_<id>.
+
+**Fix 8 — WCD landmark tooltips:** Tier 1 diamond hover shows name + public_description, Direction 3 styled.
+
+**Fix 9 — Map tier navigation:** Tier 1 click → Tier 2 only. Auto-switch stays on current tier unless already at Tier 3.
+
+**Fix 10-14 — Geographic region restructure:**
+- RegionBible: +settlement_id, +settlement_name, +region_locations[]
+- WorldBible prompt: geographic region name (landscape) + separate settlement_name + 1 standalone region_location (dungeon/wilderness)
+- apply-world-bible: 3-tier graph — geographic zone → settlement zone → sub-locations. region_locations are siblings to the settlement in the geographic zone
+- apply-regional-bible: same hierarchy
+- Tier 2 filter: excludes sub_location nodes — shows town + dungeon side by side. findRootZoneId walks up zone chain
 
 ---
 
@@ -55,9 +62,37 @@
 
 ### Four Layers ✅
 **Layer 0 — WCD** — world_consistency jsonb, formatWcdBlock() first in all AI calls
-**Layer 1 — WorldBible** — world_bible jsonb, settlement hub + sub-locations + NPCs + outlines + main quest
-**Layer 2 — RegionBible** — on-demand via navigateTo only, 1 hub + 1 sub + 2 NPCs, 1500 tokens max
+**Layer 1 — WorldBible** — geographic region + settlement + sub-locations + standalone region_locations + main quest
+**Layer 2 — RegionBible** — on-demand via navigateTo, 1500 tokens, 1 hub + 1 sub + 1 region_location + 2 NPCs
 **Layer 3 — Narrator** — YOUR ROLE HARD RULES, TIER 1 OBJECTS verbatim, NPCS PRESENT, CONNECTED LOCATIONS
+
+### Geographic Hierarchy ✅
+```
+World
+└── Geographic Region (e.g. "The Salt Plains") — Tier 1 block
+    ├── Settlement (e.g. "Salt-Iron Crossing") — Tier 2 node
+    │   ├── Sub-location (INN, MKT, FRG etc.) — Tier 3 block
+    │   └── Sub-location
+    ├── Standalone location (e.g. "The Collapsed Vault") — Tier 2 node
+    └── [Adjacent region exits]
+```
+
+- Region name = geographic area (landscape/territory name)
+- Settlement name = town/hub within that area
+- region_locations = dungeons, wilderness, shrines alongside the settlement
+- Sub-locations = buildings inside the settlement
+
+### Three-Tier Map ✅
+```
+Tier 1 — Geographic regions as blocks. WCD landmarks as ◆ with tooltips.
+          Clicking a region → Tier 2 (never Tier 3 directly)
+Tier 2 — Settlement + standalone locations within the region (side by side)
+          Clicking a settlement node → Tier 3 for that settlement
+Tier 3 — Sub-locations inside a settlement. 72px blocks, type abbr, decorations.
+          Location info panel below (atmosphere + NPCs + Tier 1 objects)
+Auto-switch: zone change → updates selectedRegionId, stays on current tier
+unless already at Tier 3.
+```
 
 ### Navigation Model ✅
 ```
@@ -70,39 +105,29 @@ Highlighted location click → navigateTo(nodeId) → GRAPH_NAVIGATE
 Adjacent region card → navigateTo(regionId) → RegionBible expansion
 ```
 
-### Map System ✅
-```
-Tier 1 — World Map: region blocks, WCD landmark diamonds, scrollable
-Tier 2 — Region Map: nodes, SVG connections, NPC dots, exit arrows
-Tier 3 — Local Map: 72px blocks, 3-letter type abbr, genre decorations,
-          location info panel below
-Auto-switches to Tier 3 when zone changes.
-Bottom sheet on mobile (<768px). Sidebar on desktop.
-```
-
-### Location Hierarchy
-```
-Region (e.g. "Hollow Veil Outskirts")
-└── Settlement Node (HUB — town square, crossroads — NEVER a building)
-    ├── Sub-location (INN, MKT, FRG etc.)
-    └── [genre decorations in empty grid cells]
-```
-
 ### Three-Tier Object System ✅
-Tier 1 (AI, tracked) → Tier 2 (templates, instant) → Tier 3 (narrator ambient)
+Tier 1 (AI, tracked, highlighted) → Tier 2 (templates, instant) → Tier 3 (narrator ambient)
 
 ### NPC Rules ✅
 Real name from birth. Pre-loaded on ARRIVING. Placeholder → real NPC via step 2b-2.
+Codex entry only on first player interaction — not on room entry.
+
+### Highlight Colors ✅
+LOCATION: #60a5fa blue + underline → navigateTo(nodeId)
+NPC: genre primary + underline → DIALOGUE
+ITEM: #fbbf24 amber + underline → EXAMINE
+LANDMARK: #a78bfa violet + underline → info tooltip
 
 ### Mobile-First ✅
-52px nav cards. 44px touch targets. Bottom sheet map. 16px input font.
+52px nav cards with scroll arrows on desktop. 44px touch targets.
+Bottom sheet map. 16px input font.
 
 ---
 
 ## ⚡ FOUNDATIONAL RULES (Read Before Every Session)
 
 ### 1. World Assets Are Permanent
-Write-once. ignoreDuplicates: true.
+Write-once. ignoreDuplicates: true. AI generates once, engine owns forever.
 
 ### 2. Navigation Is UI-Driven
 MOVE from text → INTERNAL_DESCRIBE only.
@@ -121,6 +146,7 @@ Nothing disappears. Failed checks = evasion, never absence.
 ### 6. Dialogue Is Consistent
 RESPONDING CHARACTER only. Badge matches check.
 intimidating→STR. curious→PER. deceptive→CHA+2. persuasive→CHA.
+Dialogue closes when trade opens; restores when trade closes.
 
 ### 7. The AI Has Exactly Three Roles
 Generator (Phase 1+2 only) → Bridge (describe only) → Thread (breadcrumbs)
@@ -129,15 +155,18 @@ Generator (Phase 1+2 only) → Bridge (describe only) → Thread (breadcrumbs)
 Injected first. Nothing contradicts it.
 
 ### 9. Failed Checks = Evasion Only
+NEVER means NPC left or object doesn't exist.
 
 ### 10. Highlights Are Exact Tier 1 Matches
-Objects→EXAMINE. NPCs→DIALOGUE. Locations→navigateTo(nodeId). WCD landmarks→info.
+Exact whole-word match. Colors distinct. Underlined. Hover-brightens.
 
 ---
 
 ## 🎭 NPC Dialogue System ✅
-- RESPONDING CHARACTER only. Step 2b-2 redirects placeholders to real WorldBible NPC.
-- Badge always matches check. Real names from birth. Pre-loaded on ARRIVING.
+- RESPONDING CHARACTER only. Placeholder → real NPC via step 2b-2.
+- Badge always matches check. Real names from birth.
+- Codex only on first interaction (not on room entry).
+- Dialogue restores after trade modal closes.
 
 ## 💰 Trading System ✅ | 🎨 Direction 3 UI ✅ | 🗺️ Three-Tier Map ✅
 
@@ -148,7 +177,7 @@ Objects→EXAMINE. NPCs→DIALOGUE. Locations→navigateTo(nodeId). WCD landmark
 DIALOGUE: WCD → HARD RULES → RESPONDING CHARACTER → TIER 1 OBJECTS → WORLD ASSETS → SCENE CONTEXT → VERBOSITY
 non-DIALOGUE: WCD → HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → CONNECTED LOCATIONS → WORLD ASSETS → SCENE CONTEXT → VERBOSITY
 
-Verbosity: terse (2/3/4 sentences, max 12 words each) / standard (3-4/4-5/5-7) / rich (5-7/6-8/8-12). Block last.
+Verbosity: terse (2/3/4 sentences, ≤12 words each, no clauses) / standard (3-4/4-5/5-7) / rich (5-7/6-8/8-12). Block last.
 
 ---
 
@@ -156,11 +185,14 @@ Verbosity: terse (2/3/4 sentences, max 12 words each) / standard (3-4/4-5/5-7) /
 
 | System | When | Description |
 | --- | --- | --- |
+| UI Design Session | Next | Claude Design — full visual overhaul |
 | Combat System | Day 20 | Turn-based, structured UI |
 | Object Types | Day 20 | landmark/container/item/mechanism/document |
 | Skills & Abilities | Day 21 | Skill trees, attribute thresholds |
 | Main Narrative Thread | Day 22 | Breadcrumb injection from WorldBible |
 | Lore System | Later | Codex entry updates with new information |
+| Item Interaction Depth | Later | Searching barrels/crates/desks for loot |
+| NPC dots clickable in map info | Later | Quick interact from map panel |
 | Art System | Phase 3 | Static pixel art + Replicate API |
 
 ---
@@ -174,15 +206,15 @@ Verbosity: terse (2/3/4 sentences, max 12 words each) / standard (3-4/4-5/5-7) /
 
 ## Core Philosophy
 - AI generates content once, engine owns it forever
+- Geographic region ≠ settlement name — region is landscape, settlement is town
 - Navigation is UI-driven — text input for actions only
 - WCD is the constitution — injected everywhere, never contradicted
 - Settlement node = public hub — NEVER a building
 - Location IDs canonical — never strip article prefixes
-- Assets pre-loaded before narrator on ARRIVING
 - Three object tiers: Tier 1 (AI) / Tier 2 (templates) / Tier 3 (ambient)
 - Narrator describes with exact names, never generates
+- Codex entries only on first player interaction
 - Mobile-first: 44px touch targets, bottom sheet map, 52px nav cards
-- Map auto-switches to Tier 3 on zone change
 
 ---
 
@@ -241,4 +273,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 68 — V8.1: Map overhaul complete. Icon-only header, in-body tier labels, auto-zone-switch, type abbreviations, genre SVG decorations, location info panel. RegionBible skeleton 1+1 locations 2 NPCs 1500 tokens.*
+*Last updated: Session 69 — V8.2: UX round 2 complete. Text readability, highlight colors, terse word cap, contextual loading, nav arrows, merchant dialogue flow, codex on interaction, landmark tooltips, map tier fix. Geographic region restructure: landscape name + town name + standalone region locations. Tier 2 shows town + dungeon side by side.*

@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 7.8
-**Status:** Active Development — Gameplay Stabilization Complete
+**Version:** 7.9
+**Status:** Active Development — Gameplay Stabilization Round 2
 **Objective:** To create a truly endless, fully-fledged AI-driven RPG engine — text and SVG based — with persistent worlds, real mechanics, and emergent storytelling. Genre-agnostic, infinitely replayable.
 
 ---
@@ -19,43 +19,32 @@
 | 15–18 | Dialogue, UI, World Graph, Systems Audit | ✅ Complete |
 | 19A–19F | World Generation Architecture | ✅ Complete |
 | Gameplay Audit | 21-issue audit + full stabilization | ✅ Complete |
+| Stabilization Round 2 | Connection validation, pre-load, look-around, codex notify | ✅ Complete |
 | 20 | Combat System | ⏳ Pending |
 | 21+ | Skills, Background, Factions | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed. Do not reference it anywhere in the codebase.**
 
-### Gameplay Stabilization (commit 55f25e6 — 86/86 tests, clean build)
-Full 21-issue audit implemented. See /docs/audit-report-gameplay-loop.md for details.
+### Stabilization Round 2 (commit bde032b — 86/86 tests, clean build)
 
-**Issue B** — logic-resolver.ts: intimidating unconditionally rolls STR (dropped the STR≥10 guard)
-**Issue J** — useGameLoop: roll-feedback log only warns when stat_checked set but roll missing
-**Issue A** — ID normalization (root cause of 29% of all issues):
-- codex.ts: removed stripArticles from normalizeLocationId + normalizeAssetId(LOCATION)
-- getWorldAssetsForLocation: raw↔stripped fallback for old save backward compat
-- logic-resolver.ts: if target slug matches graph node id directly → GRAPH_NAVIGATE (never overwrite canonical ID)
-- page.tsx: raw current_location_id used for starting-location lookup (no normalizeLocationId call)
-**Area 1** — WorldBible settlement node structure:
-- generate-world-bible: skeleton rewritten — first location is type:settlement hub, tavern is sub-location with parent_location_id. Hard rule added forbidding building-as-settlement-node
-- apply-world-bible: validation pass coerces building-typed settlement nodes to type:settlement
-**Issues C/G/H/P** — NPC resolution cluster (useGameLoop):
-- Step 2b-2 extended: pin-to-node-NPC fires when primary_target set but doesn't match any CHARACTER asset (Case 2)
-- Step 5 DIALOGUE filter: falls back to filtering CHARACTERs by currentNode.npc_ids when name matching fails
-- Step 7g: fourth fallback picks first CHARACTER from currentNode.npc_ids when name-based lookups fail
-**Issue F** — prompt-builder: TIER 1 OBJECTS block has imperative wording + exact wrong/right examples + NPC names imperative. Applies on both DIALOGUE and non-DIALOGUE turns.
-**Issue E** — generate-regional-bible: maxDuration=300, dynamic=force-dynamic, max_tokens 3000→2000, tight skeleton prompt (1 hub + 2 sub-locations + 3 NPCs)
-**Issues K/M** — Graph persistence:
-- apply-regional-bible: persists master_state + world_graph after merging new region
-- New patchWorldGraph in lib/game/state-persistence.ts
-- world-state route accepts optional worldGraph field
-- saveWorldGraphAsync called after step 4d, step 7-B, step 7b-2
-**Issue L/Area 2** — npc_ids validation: build validNpcIds set from bible.npcs[].id, filter each loc.npc_ids, re-stitch via home_location_id when node ends up with zero valid ids. Applied in both apply routes.
-**Cleanup (N, T, U, Q, I)**:
-- N: points_of_interest removed from narrator schema, parser, prompt (saves 50-150 tokens/response)
-- T: pre-generation hint matching requires "to the north" / "northward" not bare "north"
-- U: CHARACTER asset pass-through scoped to same session_id
-- Q: npcRegistryKey prefers actual asset.id over re-derived slug
-- I: recent_messages log clarified with explicit cap
+**Fix 1 — WorldBible connection ID validation:**
+apply-world-bible + apply-regional-bible: build validLocationIds set per region. Each location's connections[] filtered against it. Dropped IDs are warn-logged. apply-regional-bible set also includes existingGraph.nodes so the back-link to origin region survives. Prevents WORLD_EXPLORE duplicates from typo'd/aliased connection IDs.
+
+**Fix 2 — Pre-load assets BEFORE narrator runs on ARRIVING:**
+useGameLoop step 5: synchronous await getWorldAssetsForLocation() when location_status === ARRIVING before narrateAction call. NPCS PRESENT and TIER 1 OBJECTS now correctly populated on first visit. Step 7c fire-and-forget still runs for subsequent beats.
+
+**Fix 3 — "Approach person" → INTERNAL_DESCRIBE:**
+move-classifier.ts: walk up to / approach / step toward / move toward (the) (woman|man|figure|person|stranger|knight|guard|merchant|innkeeper|bartender|clerk|vendor) added to INTERNAL_DESCRIBE_PATTERNS. "Walk up to the knight" no longer creates a phantom location.
+
+**Fix 4 — CONNECTED LOCATIONS block for look-around:**
+prompt-builder.ts: when action is EXAMINE or inferred_intent matches surroundings|look around|take in|scan|survey, narrator user prompt appends CONNECTED LOCATIONS block built from currentNode.connections (each resolved to WorldNode.name) + NPCs at this location line. Narrator told to use exact names only.
+
+**Fix 5 — Codex notifications in story feed:**
+useGameLoop: store.addMessage("✦ [Name] added to codex") added after every codex save in step 7b (NOTABLE/MAJOR entries), step 7c (location on first arrival), step 7g (NPC on first dialogue). Styled as SYSTEM message — italic amber per Direction 3 UI.
+
+**Fix 6 — Verbosity toggle measurable + verified:**
+VerbosityToggle: console.log on click. useGameLoop: console.log before narrateAction. prompt-builder: console.log when verbosity block added. VERBOSITY_BLOCKS rewritten with concrete sentence caps: terse = max 2/3/4, standard = 3-4/4-5/5-7, rich = 5-7/6-8/8-12. Block appended LAST so caps are final instruction the model reads.
 
 ---
 
@@ -65,7 +54,7 @@ Full 21-issue audit implemented. See /docs/audit-report-gameplay-loop.md for det
 **Layer 0 — WCD** — world_consistency jsonb, formatWcdBlock() injected first in all AI calls
 **Layer 1 — WorldBible** — world_bible jsonb, settlement hub + sub-locations + NPCs + outlines + main quest
 **Layer 2 — RegionBible** — on-demand, maxDuration=300, background pre-generation, deduplication cache
-**Layer 3 — Narrator** — YOUR ROLE HARD RULES, TIER 1 OBJECTS verbatim imperative, NPCS PRESENT from graph npc_ids
+**Layer 3 — Narrator** — YOUR ROLE HARD RULES, TIER 1 OBJECTS verbatim imperative, NPCS PRESENT from graph npc_ids, CONNECTED LOCATIONS on look-around
 
 ### Three-Tier Object System ✅
 **Tier 1** — AI LocationObjects → key_landmarks → exact highlight → EXAMINE
@@ -76,26 +65,29 @@ Full 21-issue audit implemented. See /docs/audit-report-gameplay-loop.md for det
 ```
 Region
 └── Settlement Node (type:settlement, town square/crossroads — NEVER a building)
-    ├── Sub-location (is_interior: true, e.g. The Lowered Gaze tavern)
-    ├── Sub-location (is_interior: true, e.g. Covenant Market)
+    ├── Sub-location (is_interior: true)
+    ├── Sub-location (is_interior: true)
     └── [non-notable — grey filler blocks on Local Map]
 ```
+Connection IDs validated against location IDs at apply time. Bad IDs dropped and warn-logged.
 
 ### NPC Rules ✅
 Real name from birth. name_known always true. No reveal pipeline.
-Narrator: use exact NPC names verbatim from NPCS PRESENT.
-Graph node npc_ids validated against bible.npcs[].id at apply time.
+Narrator: use exact NPC names verbatim. NPCs highlighted on first arrival (pre-load fix).
+"Walk up to person" → INTERNAL_DESCRIBE, not MOVE.
 
-### Highlight System ✅
-Exact whole-word match against key_landmarks (verbatim), NPC names, connected location names, WCD landmarks.
-Narrator instructed: use exact names verbatim — wrong/right examples in prompt.
+### Narrator Prompt Order ✅
+For DIALOGUE: WCD → HARD RULES → RESPONDING CHARACTER → TIER 1 OBJECTS → WORLD ASSETS → SCENE CONTEXT → VERBOSITY
+For non-DIALOGUE: WCD → HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → CONNECTED LOCATIONS (on look) → WORLD ASSETS → SCENE CONTEXT → VERBOSITY
 
-### Three-Tier Map ✅
-Tier 1 World / Tier 2 Regional / Tier 3 Local. Toggleable sidebar. Breadcrumb nav.
+### Verbosity ✅
+- Terse: max 2 sentences routine / 3 NPC / 4 arrival
+- Standard: 3-4 / 4-5 / 5-7
+- Rich: 5-7 / 6-8 / 8-12
+Block appended LAST in system prompt.
 
-### Graph Persistence ✅
-world_graph persisted: after regional apply, after ZONE_EXPAND, after npc_ids update.
-apply-regional-bible persists master_state + world_graph to Supabase.
+### Codex Notifications ✅
+"✦ [Name] added to codex" SYSTEM message fires on: NOTABLE/MAJOR codex entry saves, location first arrival, NPC first dialogue.
 
 ---
 
@@ -106,7 +98,8 @@ Write-once. ignoreDuplicates: true. AI generates once, engine owns forever.
 
 ### 2. Movement Is Graph-Based
 GRAPH_NAVIGATE / INTERNAL_DESCRIBE / ZONE_EXPAND / WORLD_EXPLORE. current_node_id is truth.
-Location IDs are canonical as generated by WorldBible — never normalize by stripping articles.
+Location IDs canonical — never strip article prefixes.
+Connection IDs validated at apply time. "Walk up to person" → INTERNAL_DESCRIBE.
 
 ### 3. Location Is Authoritative State
 current_node_id saved immediately on real moves. INTERNAL_DESCRIBE does NOT update location.
@@ -119,8 +112,8 @@ Nothing ever disappears or "didn't exist." Failed checks = evasion, never absenc
 
 ### 6. Dialogue Is Consistent
 RESPONDING CHARACTER only. Option tone authoritative. Badge always matches check.
-Primary target resolved from graph node.npc_ids — placeholder descriptors redirect to real NPC.
-intimidating → STR (unconditional). aggressive → STR. curious → PER. deceptive → CHA+2. persuasive → CHA.
+Placeholder descriptors redirect to real WorldBible NPC via step 2b-2.
+intimidating → STR. aggressive → STR. curious → PER. deceptive → CHA+2. persuasive → CHA.
 
 ### 7. The AI Has Exactly Three Roles
 Generator (Phase 1+2 only) → Bridge (describe only, exact names) → Thread (breadcrumbs)
@@ -132,33 +125,24 @@ Injected first into every AI call. Nothing can contradict it.
 NEVER means NPC left or object doesn't exist.
 
 ### 10. Highlights Are Exact Tier 1 Matches
-Tier 1 objects, NPC names, connected location names, WCD landmarks. Exact whole-word match only.
+Tier 1 objects, NPC names, connected location names, WCD landmarks. Exact whole-word match.
 Narrator instructed to use exact names verbatim.
 
 ---
 
 ## 🎭 NPC Dialogue System ✅
-- RESPONDING CHARACTER only for DIALOGUE (full roster never sent to narrator)
-- Placeholder target (e.g. "solitary figure") redirected to real WorldBible NPC via step 2b-2
-- Option tone flows modal → submitAction(forcedTone) → resolver
+- Assets pre-loaded before narrator on ARRIVING — NPCs visible on first visit
+- RESPONDING CHARACTER only for DIALOGUE
+- Placeholder targets redirect to real WorldBible NPC via step 2b-2
+- Option tone: modal → submitAction(forcedTone) → resolver
 - intimidating always STR, no CHA fallback
 - Badge always matches the check that fires
 - No reveal pipeline — real names from birth
 - Failed checks = evasion, never absence
-- npc_ids validated at apply time, re-stitched via home_location_id
+- npc_ids validated + re-stitched at apply time
 
 ## 💰 Trading System (Day 16) ✅
 ## 🎨 UI System (Direction 3) ✅
-
----
-
-## Narrator Architecture ✅
-
-For DIALOGUE: WCD → YOUR ROLE HARD RULES → RESPONDING CHARACTER → TIER 1 OBJECTS (verbatim imperative) → ESTABLISHED WORLD ASSETS → SCENE CONTEXT → VERBOSITY
-For non-DIALOGUE: WCD → YOUR ROLE HARD RULES → NPCS PRESENT (graph npc_ids only) → TIER 1 OBJECTS (verbatim imperative) → ESTABLISHED WORLD ASSETS → SCENE CONTEXT → VERBOSITY
-
-Hard rules: exact names verbatim, Tier 1 objects only, failed=evasion, RESPONDING CHARACTER for DIALOGUE, WCD absolute, no invented NPCs.
-points_of_interest REMOVED from narrator schema (saves 50-150 tokens per response).
 
 ---
 
@@ -176,8 +160,8 @@ points_of_interest REMOVED from narrator schema (saves 50-150 tokens per respons
 
 ## Supabase Tables (all applied ✅)
 - game_sessions: +world_seed, +world_graph, +world_consistency, +world_bible
-- world_states: +current_node_id. Migrations 001-009.
-- world-state route: accepts optional worldGraph for graph persistence
+- world_states: +current_node_id. world-state route accepts optional worldGraph.
+- Migrations 001-009.
 
 ---
 
@@ -185,13 +169,18 @@ points_of_interest REMOVED from narrator schema (saves 50-150 tokens per respons
 - AI generates content once, engine owns it forever
 - WCD is the constitution — injected everywhere, never contradicted
 - Settlement node = public hub (square/crossroads) — NEVER a building
-- Location IDs are canonical — never strip article prefixes
-- Three object tiers: Tier 1 (AI, verbatim names) / Tier 2 (templates) / Tier 3 (ambient)
+- Location IDs canonical — never strip article prefixes
+- Connection IDs validated at apply time — no phantom locations from bad references
+- Assets pre-loaded before narrator on ARRIVING — NPCs visible on first visit
+- "Walk up to person" = INTERNAL_DESCRIBE, not MOVE
+- Look-around receives CONNECTED LOCATIONS block with exact WorldBible names
+- Codex notifications in feed on every new entry
+- Verbosity has concrete sentence caps, appended last
+- Three object tiers: Tier 1 (AI, verbatim) / Tier 2 (templates) / Tier 3 (ambient)
 - Narrator describes with exact names, never generates
-- Names permanent from birth — no reveal pipeline
 - Highlights are exact Tier 1 matches only
 - Failed checks = evasion only
-- Graph persisted after every mutation, not just on auto-save
+- Graph persisted after every mutation
 - DnD freedom: player can try anything, engine routes appropriately
 
 ---
@@ -251,4 +240,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 65 — V7.8: Full gameplay stabilization. 21-issue audit implemented. ID normalization, NPC resolution, settlement hub structure, graph persistence, stat checks, narrator exact names. Ready for testing then Day 20.*
+*Last updated: Session 66 — V7.9: Stabilization Round 2. Connection validation, pre-load assets on ARRIVING, approach-person INTERNAL_DESCRIBE, CONNECTED LOCATIONS on look-around, codex notifications, verbosity concrete caps.*

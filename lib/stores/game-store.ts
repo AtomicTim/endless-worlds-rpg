@@ -75,6 +75,14 @@ interface GameStore {
   /** Whether the three-tier WorldMap sidebar panel is currently open. */
   mapPanelOpen:           boolean;
 
+  // ── FIX (UX Round 4) — Trade panel ─────────────────────────────────────────
+  /** True when the player has explicitly requested the trade panel via
+   *  the merchant trade button. Independent of currentTradeItems so the
+   *  merchant button can be rendered "active" even before the narrator's
+   *  items_for_sale arrives. Cleared whenever setTradeItems([]) runs OR
+   *  the player switches to a different NPC. */
+  tradeOpen:              boolean;
+
   // ── FIX 7 — Examined objects cache ─────────────────────────────────────────
   /** Set of object keys (canonical landmark name lowercased) the player
    *  has already examined this session. Repeat examines short-circuit
@@ -104,6 +112,10 @@ interface GameStore {
   /** Replace the merchant's items_for_sale list. Pass [] to close the
    *  Trade Modal entirely. */
   setTradeItems:           (items: Item[]) => void;
+  /** FIX (UX 4) — open the trade panel without going through the
+   *  narrator. The merchant trade button uses this so the click never
+   *  pays for an AI call or fires a stat check. */
+  openTradePanel:          () => void;
   /** Narrator response-length toggle. Persists to localStorage. */
   setVerbosity:            (v: "terse" | "standard" | "rich") => void;
   /** Toggle the WorldMap sidebar panel open/closed. */
@@ -165,6 +177,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   currentTradeItems:      [],
   verbosity:              loadVerbosity(),
   mapPanelOpen:           false,
+  tradeOpen:              false,
   examinedObjects:        [],
 
   setMasterState:       (state) => set({ masterState: state }),
@@ -237,11 +250,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // never overlap. Closing the Trade Modal restores the cached dialogue
   // for the same NPC, so the player goes back to the conversation they
   // were in mid-merchant interaction without losing context.
+  // FIX (UX 4) — every items=[] path also clears tradeOpen so the
+  // merchant trade button reverts to inactive once the panel closes;
+  // every items.length>0 path sets tradeOpen=true so a narrator-driven
+  // items_for_sale opens the panel by the same flag the button uses.
   setTradeItems: (items) =>
     set((s) => {
       if (items.length > 0) {
         return {
           currentTradeItems:      items,
+          tradeOpen:              true,
           currentDialogueOptions: [],
           currentDialogueNpc:     null,
           currentDialogueNpcKey:  null,
@@ -253,6 +271,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (s.lastDialogueNpc && s.lastDialogueOptions.length > 0) {
         return {
           currentTradeItems:      [],
+          tradeOpen:              false,
           currentDialogueOptions: s.lastDialogueOptions,
           currentDialogueNpc:     s.lastDialogueNpc,
           currentDialogueNpcKey:  s.lastDialogueNpcKey,
@@ -260,8 +279,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           dialogueModalCollapsed: false,
         };
       }
-      return { currentTradeItems: [] };
+      return { currentTradeItems: [], tradeOpen: false };
     }),
+  // FIX (UX 4) — open the trade panel without an AI call. The merchant
+  // trade button calls this directly. Trade is always available for
+  // merchants — trust affects price (buy/sell math), never access.
+  openTradePanel: () => set({ tradeOpen: true }),
   setVerbosity: (v) => {
     saveVerbosity(v);
     set({ verbosity: v });
@@ -296,6 +319,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastDialogueNpcKey:     null,
       lastDialoguePortrait:   null,
       currentTradeItems:      [],
+      tradeOpen:              false,
       locationAssets:         [],
       lastNarrativeText:      null,
       mapPanelOpen:           false,

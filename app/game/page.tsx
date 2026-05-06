@@ -45,7 +45,7 @@ export default function GamePage() {
   const messages       = useGameStore((s) => s.messages);
   const locationAssets = useGameStore((s) => s.locationAssets);
 
-  const { submitAction, navigateTo, isProcessing, processingStep, buyItem, sellItem } = useGameLoop();
+  const { submitAction, navigateTo, isProcessing, processingStep, buyItem, sellItem, openTrade } = useGameLoop();
 
   // ── Load session on mount ─────────────────────────────────────────────────
   // Reads ?session_id= from the URL to load a specific save slot.
@@ -271,6 +271,7 @@ export default function GamePage() {
           <DialogueModal
             onSubmit={(input, opts) => { void submitAction(input, opts); }}
             onFocusInput={() => { inputBarRef.current?.focus(); }}
+            onOpenTrade={(name) => { void openTrade(name); }}
           />
           <TradeModal onBuy={buyItem} onSell={sellItem} />
           {/* Navigation redesign — UI-driven movement strip. Sits between

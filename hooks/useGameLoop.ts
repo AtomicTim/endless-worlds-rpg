@@ -536,7 +536,24 @@ export function useGameLoop() {
       if (parsedAction.action_type === ActionType.DIALOGUE) {
         const overrides: Partial<ParsedAction> = {};
         if (options?.npcName) {
-          overrides.primary_target = options.npcName;
+          // FIX 3 — DON'T pin to the active dialogue NPC if the parser
+          // already extracted a different name. The InputBar always
+          // passes the active NPC as a fallback so naked replies
+          // ("Tell me more.") resolve correctly, but it must not
+          // override the player's explicit "let me speak with Dessa"
+          // by silently swapping Dessa back to the active speaker.
+          const parsedName  = parsedAction.primary_target?.trim() ?? "";
+          const optionName  = options.npcName.trim();
+          const playerNamedDifferentNpc =
+            parsedName.length > 0 &&
+            parsedName.toLowerCase() !== optionName.toLowerCase();
+          if (!playerNamedDifferentNpc) {
+            overrides.primary_target = options.npcName;
+          } else {
+            console.log(
+              `[GameLoop/2b] Player named '${parsedName}' explicitly — keeping over active NPC '${optionName}'`
+            );
+          }
         }
         if (options?.tone) {
           const TONE_MAP: Record<typeof options.tone & string, NonNullable<ParsedAction["dialogue_tone"]>> = {
@@ -591,6 +608,50 @@ export function useGameLoop() {
             presentNpcAssets.some(
               (a) => a.name.toLowerCase() === target.toLowerCase()
             );
+
+          // FIX 3 — explicit NPC switch: when the player named a
+          // present NPC that's DIFFERENT from the active dialogue
+          // partner, snap the dialogue modal closed so step 7g seeds
+          // fresh options for the new character. Without this, options
+          // for the old NPC linger until the narrator returns the new
+          // ones, which leaks across the conversation boundary.
+          if (targetMatchesPresent) {
+            const activeNpc = useGameStore.getState().currentDialogueNpc;
+            if (activeNpc && activeNpc.toLowerCase() !== target.toLowerCase()) {
+              console.log(
+                `[GameLoop/2b-2] NPC switch: ${activeNpc} → ${target}`
+              );
+              useGameStore.getState().clearDialogueOptions();
+            }
+          }
+
+          // FIX 3 — named-but-absent flag. When the player names a
+          // specific NPC who isn't at this location, the narrator
+          // should describe that NPC as not present rather than
+          // inventing a new character. We can't reach narrative_context
+          // from here (the resolver writes that), so we tag the
+          // ParsedAction with a private field; step 5 will graft it
+          // onto resolution.narrative_context just before the narrator
+          // call.
+          const looksLikeProperName = (s: string): boolean => {
+            // Heuristic: at least one capitalised word and not a known
+            // descriptor like "the boy" / "stranger" / "merchant".
+            if (!s) return false;
+            if (/^(the\s+)?(boy|girl|kid|child|man|woman|stranger|figure|person|merchant|trader|vendor|shopkeeper|guard|innkeeper|patron)$/i.test(s)) {
+              return false;
+            }
+            return /[A-Z]/.test(s);
+          };
+          if (
+            target.length > 0 &&
+            !targetMatchesPresent &&
+            looksLikeProperName(target)
+          ) {
+            (parsedAction as ParsedAction & { _namedNpcNotPresent?: string })._namedNpcNotPresent = target;
+            console.log(
+              `[GameLoop/2b-2] Player named '${target}' but they're not at this location — narrator will describe absence.`
+            );
+          }
 
           const shouldOverride = !target || !targetMatchesPresent;
 
@@ -1027,6 +1088,13 @@ export function useGameLoop() {
                           applied.starting_node_id,
                         ])
                       ),
+                      // FIX 4 — explicitly stamp ARRIVING after RegionBible
+                      // expansion. The earlier WORLD_EXPLORE resolution set
+                      // ARRIVING already, but we re-apply it here so the
+                      // narrator's state sees ARRIVING regardless of any
+                      // intermediate mutations, and so the ◈ arrival header
+                      // fires for the new settlement on the first beat.
+                      location_status: LocationStatus.ARRIVING,
                     },
                     world_graph: newGraph,
                   };
@@ -1162,10 +1230,26 @@ export function useGameLoop() {
       // saves without a WCD pass undefined — narrate route handles it.
       const wcd = narratorState.metadata.world_consistency;
 
+      // FIX 3 — propagate the named-but-absent NPC flag from step 2b-2
+      // into the narrative_context so the narrator can describe the
+      // named character as not present rather than inventing them.
+      const namedNpcNotPresent =
+        (parsedAction as ParsedAction & { _namedNpcNotPresent?: string })._namedNpcNotPresent;
+      const resolutionForNarrator: ResolutionResult =
+        namedNpcNotPresent
+          ? {
+              ...resolution,
+              narrative_context: {
+                ...resolution.narrative_context,
+                named_npc_not_present: namedNpcNotPresent,
+              },
+            }
+          : resolution;
+
       let narratorResponse;
       try {
         narratorResponse = await narrateAction(
-          resolution,
+          resolutionForNarrator,
           narratorState,
           lastNarrative,
           parsedAction,
@@ -1199,12 +1283,30 @@ export function useGameLoop() {
       // Day 18 — for MOVE that lands on a known graph node, pin the
       // destination name onto the metadata so StoryFeed can render the
       // arrival header (◈ Name).
+      // FIX 4 — also fire when the resolver reported `arriving_at` OR
+      // updatedState.location_status is ARRIVING (which the
+      // RegionBible expansion path stamps explicitly). The previous
+      // `outcome_type === MOVE_SUCCESS` gate alone missed the
+      // RegionBible flow because the resolver returned without an
+      // arriving_at hint and step 4d's ARRIVING status update wasn't
+      // honoured by the header.
       const arrivalLocationName: string | null = (() => {
-        if (resolution.outcome_type !== "MOVE_SUCCESS") return null;
         const graph = updatedState.world_graph;
         if (!graph) return null;
+
+        const isMoveSuccess  = resolution.outcome_type === "MOVE_SUCCESS";
+        const isZoneExpand   = resolution.outcome_type === "ZONE_EXPAND";
+        const arrivingAtHint = typeof resolution.narrative_context.arriving_at === "string"
+          ? resolution.narrative_context.arriving_at
+          : null;
+        const statusArriving =
+          updatedState.world_state.location_status === LocationStatus.ARRIVING;
+
+        if (!(isMoveSuccess || isZoneExpand || arrivingAtHint || statusArriving)) {
+          return null;
+        }
         const targetId = updatedState.world_state.current_location_id;
-        return graph.nodes[targetId]?.name ?? null;
+        return graph.nodes[targetId]?.name ?? arrivingAtHint ?? null;
       })();
       store.addMessage(
         makeMessage(
@@ -1812,6 +1914,19 @@ export function useGameLoop() {
             !!effectiveNpcName &&
             existingNpc.toLowerCase() === effectiveNpcName.toLowerCase();
 
+          // FIX (UX 4) — switching to a different NPC invalidates any
+          // cached items_for_sale from the previous merchant. If we
+          // don't clear here, the trade button would briefly show with
+          // the old merchant's wares while the player is talking to
+          // someone unrelated. Run BEFORE setDialogueOptions so the
+          // store dispatches arrive in a single render pass.
+          if (!continuingSameNpc && gsBefore.currentTradeItems.length > 0) {
+            console.log(
+              "[GameLoop/7g] NPC switch detected — clearing prior items_for_sale"
+            );
+            gsBefore.setTradeItems([]);
+          }
+
           // Resolve the NPC asset for portrait fallback.
           const currentAssets = gsBefore.locationAssets;
           const npcAsset = effectiveNpcName
@@ -2374,6 +2489,87 @@ export function useGameLoop() {
     void submitAction("", { forceMoveToNode: nodeId });
   }, [submitAction]);
 
+  /**
+   * FIX (UX 4) — open trade with the named merchant WITHOUT routing
+   * through the intent parser or resolveDialogue. Trade is always
+   * available for merchants — trust affects price, not access — so a
+   * stat check on the trade button is wrong by design.
+   *
+   * Flow:
+   *   1. Open the trade panel immediately so the player gets visual
+   *      feedback while we fetch items.
+   *   2. If items_for_sale is already populated, we're done.
+   *   3. Otherwise synthesize an INTERACT/trade_available resolution
+   *      and call narrateAction directly. Items returned in the
+   *      narrator's items_for_sale flow into setTradeItems and the
+   *      panel populates without ever firing a stat check.
+   */
+  const openTrade = useCallback(async (npcName: string) => {
+    const gs    = useGameStore.getState();
+    const state = gs.masterState;
+    if (!state) return;
+
+    gs.openTradePanel();
+
+    if (gs.currentTradeItems.length > 0) {
+      // Already populated — panel just re-opens with existing wares.
+      return;
+    }
+
+    gs.setProcessing(true, `Trading with ${npcName}...`);
+    try {
+      const tradeAction: ParsedAction = {
+        action_type:     ActionType.INTERACT,
+        primary_target:  npcName,
+        inferred_intent: `open trade with ${npcName}`,
+        confidence:      1,
+      };
+      const tradeResolution: ResolutionResult = {
+        success:      true,
+        outcome_type: "INTERACT_SUCCESS",
+        state_delta:  {},
+        narrative_context: {
+          target:           npcName,
+          trade_available:  true,
+          object_confirmed: true,
+          object_name:      npcName,
+          object_exists_message:
+            "This is a merchant. Trade is open. Populate items_for_sale.",
+        },
+      };
+      const verbosity = gs.verbosity;
+      const liveAssets = gs.locationAssets;
+      const wcd        = state.metadata.world_consistency;
+      const lastNarrative = gs.lastNarrativeText;
+
+      const response = await narrateAction(
+        tradeResolution,
+        state,
+        lastNarrative,
+        tradeAction,
+        liveAssets,
+        verbosity,
+        wcd,
+      );
+
+      if (response.items_for_sale && response.items_for_sale.length > 0) {
+        gs.setTradeItems(response.items_for_sale);
+        console.log(
+          "[openTrade] items_for_sale received:",
+          response.items_for_sale.length
+        );
+      } else {
+        console.warn(
+          "[openTrade] narrator returned no items_for_sale — trade panel stays empty."
+        );
+      }
+    } catch (err) {
+      console.warn("[openTrade] narrator call failed:", err);
+    } finally {
+      gs.setProcessing(false);
+    }
+  }, []);
+
   return {
     submitAction,
     navigateTo,
@@ -2383,5 +2579,6 @@ export function useGameLoop() {
     masterState,
     buyItem,
     sellItem,
+    openTrade,
   };
 }

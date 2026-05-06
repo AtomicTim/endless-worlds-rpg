@@ -1090,6 +1090,20 @@ export function buildNarratorUserPrompt(
       "may be talking to themselves, to no one, or to an inanimate object.";
   }
 
+  // FIX 3 (UX 4) — the player named a specific NPC who isn't at this
+  // location. The narrator MUST describe that NPC as not present
+  // rather than minting a fresh character with that name. The asset
+  // (if any) for the named NPC stays canonical somewhere else in the
+  // world; we just acknowledge their absence here.
+  const namedAbsent = ctx.named_npc_not_present;
+  if (typeof namedAbsent === "string" && namedAbsent.trim().length > 0) {
+    prompt += `\n\nNAMED NPC NOT PRESENT: The player asked to speak with "${namedAbsent}". ` +
+      `That character is NOT at this location. Describe their absence in 1 sentence ` +
+      `(e.g. "${namedAbsent} isn't here right now."). Do NOT invent dialogue for them. ` +
+      `Do NOT introduce a new character of that name. After the brief absence note, ` +
+      `the scene continues normally — describe what is actually around the player.`;
+  }
+
   // Day 18 — ZONE_EXPAND: a new sub_location within the current zone.
   if (ctx.move_type === "ZONE_EXPAND") {
     const hint = String(ctx.expand_hint ?? "a sub-area");

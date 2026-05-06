@@ -16,6 +16,11 @@ interface DialogueModalProps {
    *  re-classified speech tone. */
   onSubmit:     (input: string, options?: { npcName?: string; tone?: DialogueOption["tone"] }) => void;
   onFocusInput: () => void;
+  /** FIX (UX 4) — open the trade panel directly without routing through
+   *  the intent parser or resolveDialogue. Hook handler synthesizes a
+   *  trade_available resolution and calls the narrator without firing
+   *  a stat check. Trade is always available for merchants. */
+  onOpenTrade:  (npcName: string) => void;
 }
 
 interface ToneBadge {
@@ -68,7 +73,7 @@ function ensureResponsiveSvg(svg: string): string {
  * Takes up DOM space (never overlays the story feed). Collapses to a compact
  * 40px bar that the player can re-expand without losing their options.
  */
-export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
+export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade }: DialogueModalProps) {
   const options       = useGameStore((s) => s.currentDialogueOptions);
   const npcName       = useGameStore((s) => s.currentDialogueNpc);
   const npcKey        = useGameStore((s) => s.currentDialogueNpcKey);
@@ -77,6 +82,7 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
   const setCollapsed  = useGameStore((s) => s.setDialogueModalCollapsed);
   const clear         = useGameStore((s) => s.clearDialogueOptions);
   const tradeItems    = useGameStore((s) => s.currentTradeItems);
+  const tradeOpen     = useGameStore((s) => s.tradeOpen);
   const locationAssets = useGameStore((s) => s.locationAssets);
 
   // Player's own attribute scores — used by the stat-check tooltip & badge.
@@ -166,13 +172,15 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
     }
   };
 
-  // FIX 9 — detect whether the active NPC is a merchant. We use two
-  // signals so the trade button shows up reliably:
-  //   • currentTradeItems already populated → trade UI is in flight
-  //   • the NPC asset's role/is_merchant flag → permanent merchant
-  // Either one is enough to surface the button.
-  const isMerchant = (() => {
-    if (tradeItems.length > 0) return true;
+  // FIX (UX 4 / round 5) — merchant detection now ONLY trusts the NPC
+  // asset's role. We deliberately drop the "items_for_sale > 0 means
+  // merchant" shortcut: when the player switches conversations to a
+  // non-merchant NPC, leftover items from the previous trade would
+  // otherwise keep the button visible and let the player open trade
+  // with someone who has nothing to sell. tradeOpen is honoured purely
+  // as a render flag for the active state — it never overrides the
+  // role gate.
+  const isCurrentNpcMerchant = (() => {
     if (!npcName) return false;
     const npcAsset = locationAssets.find(
       (a) => a.category === AssetCategory.CHARACTER &&
@@ -186,15 +194,16 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
         || role.includes("shopkeeper");
   })();
 
+  // FIX 1 — the trade button no longer submits a quoted dialogue line.
+  // It calls onOpenTrade(npcName) which the hook handles directly:
+  // the narrator is invoked with a synthetic trade_available resolution
+  // and never goes through resolveDialogue / parseIntent — no stat
+  // check fires. Trade is always free to open for any merchant; trust
+  // governs price (handled in buyItem/sellItem), not access.
   const handleOpenTrade = () => {
-    // If the modal is already populated, the TradeModal is rendering —
-    // nothing to do. Otherwise ask the merchant to show their wares,
-    // which trips the narrator's items_for_sale pipeline and opens the
-    // TradeModal once they respond.
-    if (tradeItems.length > 0) return;
+    if (!npcName) return;
     setInlineInputOpen(false);
-    onSubmit(`"Show me what you have for sale."`,
-      npcName ? { npcName } : {});
+    onOpenTrade(npcName);
   };
 
   // ── Collapsed bar ───────────────────────────────────────────────────────────
@@ -481,22 +490,24 @@ export function DialogueModal({ onSubmit, onFocusInput }: DialogueModalProps) {
           </button>
         )}
 
-        {/* FIX 9 — permanent trade button when the active NPC is a
-            merchant. Visible at any point during conversation so the
-            player doesn't need to fish for the right phrase. */}
-        {isMerchant && (
+        {/* FIX 9 / FIX (UX 4) — permanent trade button when the active
+            NPC is a merchant. Gated solely on the merchant's role so
+            stale items_for_sale from a previous merchant can't keep
+            the button visible after the player switches conversations.
+            tradeOpen flips the button to its "active" state. */}
+        {isCurrentNpcMerchant && (
           <button
             onClick={handleOpenTrade}
-            disabled={tradeItems.length > 0}
+            disabled={tradeOpen && tradeItems.length > 0}
             className="mt-1 w-full rounded-sm px-2 py-1 text-center text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-80 disabled:opacity-40"
             style={{
               backgroundColor: "color-mix(in srgb, #fbbf24 18%, transparent)",
               border:          "1px solid #fbbf24",
               color:           "#fbbf24",
-              cursor:          tradeItems.length > 0 ? "default" : "pointer",
+              cursor:          (tradeOpen && tradeItems.length > 0) ? "default" : "pointer",
             }}
             title={
-              tradeItems.length > 0
+              tradeOpen && tradeItems.length > 0
                 ? "Trade panel is open"
                 : "Open trade panel"
             }

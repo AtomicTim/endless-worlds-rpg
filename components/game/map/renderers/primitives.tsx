@@ -364,7 +364,7 @@ export function TownGlyph({ x, y, current = false }: XYProps & { current?: boole
           <circle r="14" fill="rgba(245,158,11,0.10)" />
           <circle r="9" fill="none" stroke="#f59e0b" strokeWidth="0.5"
             strokeDasharray="2 2" className="ew-pulse"
-            style={{ transformOrigin: "center" }} />
+            style={{ transformOrigin: "center", transformBox: "fill-box" }} />
         </>
       )}
       <g stroke={current ? "#f59e0b" : "#e8d8b0"} strokeWidth="0.9"

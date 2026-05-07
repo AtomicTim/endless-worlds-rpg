@@ -63,7 +63,7 @@ function Nodes({
             {n.isCurrent && (
               <circle r="8" fill="none" stroke="var(--accent)"
                 strokeWidth="0.8"
-                className="ew-pulse" style={{ transformOrigin: "center" }} />
+                className="ew-pulse" style={{ transformOrigin: "center", transformBox: "fill-box" }} />
             )}
             <path d="M -3.5 -3.5 L 3.5 3.5 M -3.5 3.5 L 3.5 -3.5"
               stroke={stroke} strokeWidth={n.isCurrent ? 1.6 : 1.2}
@@ -205,7 +205,7 @@ export function LocalMap(props: RendererProps) {
           {n.isCurrent && (
             <circle r="11" fill="none" stroke="var(--accent)"
               strokeWidth="0.5" strokeDasharray="2 2"
-              className="ew-pulse" style={{ transformOrigin: "center" }} />
+              className="ew-pulse" style={{ transformOrigin: "center", transformBox: "fill-box" }} />
           )}
           <path d="M -5 4 L -5 -2 L -2 -5 L 5 -2 L 5 4 Z"
             fill={n.isCurrent ? "rgba(234,88,12,0.20)" : "rgba(15,12,8,0.85)"}

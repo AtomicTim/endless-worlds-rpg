@@ -53,7 +53,7 @@ function PlanetMarker({
           strokeWidth="0.5" strokeDasharray="2 2" />
         <circle r="6" fill="none" stroke="var(--accent)"
           strokeWidth="1.0"
-          className="ew-pulse" style={{ transformOrigin: "center" }} />
+          className="ew-pulse" style={{ transformOrigin: "center", transformBox: "fill-box" }} />
         <path d="M 0 -4 L 3 3 L 0 1.5 L -3 3 Z" fill="var(--accent)" />
       </>
     );
@@ -213,7 +213,7 @@ export function LocalMap(props: RendererProps) {
               <rect x={-w / 2 - 4} y={-h / 2 - 4} width={w + 8} height={h + 8}
                 rx="3" fill="none" stroke="var(--accent)"
                 strokeWidth="0.4" strokeDasharray="2 2"
-                className="ew-pulse" style={{ transformOrigin: "center" }} />
+                className="ew-pulse" style={{ transformOrigin: "center", transformBox: "fill-box" }} />
             )}
             <rect x={-w / 2} y={-h / 2} width={w} height={h} rx="3"
               fill={n.isCurrent ? "rgba(168,85,247,0.18)" : "rgba(20,15,30,0.7)"}

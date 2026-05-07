@@ -286,7 +286,7 @@ function DrawBuilding({
           <circle r="14" fill="none" stroke="#f59e0b" strokeWidth="0.5"
             strokeDasharray="2 2"
             className="ew-pulse"
-            style={{ transformOrigin: "center" }}
+            style={{ transformOrigin: "center", transformBox: "fill-box" }}
           />
         </>
       )}

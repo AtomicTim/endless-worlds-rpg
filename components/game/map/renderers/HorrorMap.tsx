@@ -69,7 +69,7 @@ function Nodes({
                 <circle r="1.2" fill="var(--accent)" />
                 <circle r="6" fill="none" stroke="var(--accent)"
                   strokeWidth="0.6"
-                  className="ew-pulse" style={{ transformOrigin: "center" }} />
+                  className="ew-pulse" style={{ transformOrigin: "center", transformBox: "fill-box" }} />
                 <text y="-30" textAnchor="middle" fontFamily="var(--serif)"
                   fontStyle="italic" fontSize="11" fill="var(--accent)"
                   letterSpacing="2">

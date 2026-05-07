@@ -71,7 +71,7 @@ function Nodes({
                 stroke="var(--accent)" strokeWidth="0.4" strokeDasharray="2 2" />
               <rect x="-5" y="-5" width="10" height="10" fill="none"
                 stroke="var(--accent)" strokeWidth="1.1"
-                className="ew-pulse" style={{ transformOrigin: "center" }} />
+                className="ew-pulse" style={{ transformOrigin: "center", transformBox: "fill-box" }} />
             </>
           )}
           {n.isDiscovered ? (

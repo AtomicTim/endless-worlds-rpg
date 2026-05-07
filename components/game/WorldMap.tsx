@@ -3,8 +3,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AssetCategory } from "@/types/game";
 import type { MasterState, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
-import { GenreMap, project, VIEW, PAD } from "./map/renderers";
-import type { MapNode, MapConnection, MapExit, BoundsLike, Tier } from "./map/renderers";
+import { GenreMap, VIEW } from "./map/renderers";
+import type { MapNode, MapConnection, MapExit, Tier } from "./map/renderers";
 
 /**
  * Map Sidebar — redesign per /design/map-sidebar.jsx.
@@ -479,86 +479,134 @@ interface RendererPayload {
 }
 
 /**
- * Auto-position helper.
+ * Topology-based layout engine.
  *
- * The MVP location generators don't always populate `map_position` on
- * every node — and when several nodes inherit the same coords (a common
- * generator quirk), filtering by `hasMapPos` left the map looking
- * empty. autoPositionNodes resolves both issues: it projects every node
- * with a real position into the 320×320 viewBox, then arranges any
- * node without a position (or all of them, when every position is
- * identical) in a tidy ellipse around the centroid of the positioned
- * set. The returned objects carry `_px` / `_py` already in viewBox
- * space — callers should use those directly without another `project`.
+ * The WorldBible's `map_position` values are unreliable for visual
+ * layout — the generators frequently emit duplicate coordinates or a
+ * single shared x-axis value, which collapse to the viewBox edge no
+ * matter how the projection is padded. We discard them entirely and
+ * lay nodes out by their position in the connection graph instead:
+ *
+ *   • Anchor (current location, settlement hub, or most-connected
+ *     fallback) sits at the center of the 320×320 viewBox.
+ *   • A BFS through the connection graph assigns each reachable node
+ *     a ring (graph-distance from the anchor).
+ *   • Ring 1 nodes fan around the center; ring 2+ go on the outer
+ *     edge. Unreachable nodes fall to the outer ring.
+ *
+ * Result: a hub-and-spoke layout that always reads cleanly even when
+ * every node shares the same `map_position`.
  */
-function autoPositionNodes(
-  candidates: WorldNode[]
-): Array<WorldNode & { _px: number; _py: number }> {
-  const withPos    = candidates.filter(hasMapPos);
-  const withoutPos = candidates.filter((n) => !hasMapPos(n));
+function topologyLayout(
+  nodes:       WorldNode[],
+  connections: Array<[string, string]>,
+  anchorId:    string | null
+): Map<string, { x: number; y: number }> {
+  const PAD = 48;
+  const CX  = VIEW / 2;
+  const CY  = VIEW / 2;
 
-  // When every positioned node sits at the same coords, the projection
-  // collapses to a single point and the map reads as empty. Treat that
-  // case as "nothing has a real position" so the circle layout below
-  // distributes everyone uniformly instead.
-  const allSame = withPos.length > 1 &&
-    withPos.every((n) =>
-      n.map_position.x === withPos[0].map_position.x &&
-      n.map_position.y === withPos[0].map_position.y
-    );
-  const effectiveWithPos = allSame ? [] : withPos;
-  const effectiveWithout = allSame ? candidates : withoutPos;
+  // Ring radii — first ring close, second further out.
+  const RING_R = [0, VIEW * 0.28, VIEW * 0.44];
 
-  // Enforce a minimum range in both axes. When every positioned node
-  // shares an x (or y) value, the raw bounds collapse to dx=0 and
-  // project() pins the whole row to PAD (the left or top edge).
-  // Padding the bounds out to MIN_RANGE grid units keeps the row
-  // centred even in that degenerate case.
-  const MIN_RANGE = 4;
-  const rawBounds = effectiveWithPos.length > 0
-    ? boundsFor(effectiveWithPos.map((n) => n.map_position))
-    : { minX: 0, minY: 0, maxX: 0, maxY: 0 };
-  const bounds: BoundsLike = {
-    minX: rawBounds.minX,
-    minY: rawBounds.minY,
-    maxX: Math.max(rawBounds.maxX, rawBounds.minX + MIN_RANGE),
-    maxY: Math.max(rawBounds.maxY, rawBounds.minY + MIN_RANGE),
-  };
-
-  const projected = new Map<string, { x: number; y: number }>();
-  for (const n of effectiveWithPos) {
-    projected.set(n.id, project(n.map_position.x, n.map_position.y, bounds));
+  const adj = new Map<string, Set<string>>();
+  for (const n of nodes) adj.set(n.id, new Set());
+  for (const [a, b] of connections) {
+    adj.get(a)?.add(b);
+    adj.get(b)?.add(a);
   }
 
-  // Centroid of already-positioned nodes — the unpositioned ones orbit
-  // this point so the two layers compose naturally.
-  const cx = effectiveWithPos.length > 0
-    ? effectiveWithPos.reduce((s, n) => s + projected.get(n.id)!.x, 0) /
-      effectiveWithPos.length
-    : VIEW / 2;
-  const cy = effectiveWithPos.length > 0
-    ? effectiveWithPos.reduce((s, n) => s + projected.get(n.id)!.y, 0) /
-      effectiveWithPos.length
-    : VIEW / 2;
+  // Pick anchor: prefer anchorId when it's actually one of the
+  // candidate nodes; otherwise fall back to the most-connected node so
+  // the visual centre always sits on a graph hub.
+  const anchor: string | undefined = anchorId && adj.has(anchorId)
+    ? anchorId
+    : nodes.reduce<WorldNode | undefined>(
+        (best, n) =>
+          (adj.get(n.id)?.size ?? 0) > (adj.get(best?.id ?? "")?.size ?? 0) ? n : best,
+        nodes[0]
+      )?.id ?? nodes[0]?.id;
 
-  // Spread unpositioned nodes around the centroid in a flattened circle.
-  // The radius is capped so the orbit never escapes the padded
-  // viewBox — important when a single positioned node sits near an
-  // edge and the rest of the cohort needs to wrap around it.
-  const r = Math.min(VIEW * 0.32, (VIEW - PAD * 2) / 2.2);
-  effectiveWithout.forEach((n, i) => {
-    const total = effectiveWithout.length;
-    const angle = (i / (total || 1)) * 2 * Math.PI - Math.PI / 2;
-    projected.set(n.id, {
-      x: cx + Math.cos(angle) * r,
-      y: cy + Math.sin(angle) * (r * 0.75),
+  if (!anchor) return new Map();
+
+  // BFS assigns each node to a ring (graph-distance from anchor).
+  const ring  = new Map<string, number>([[anchor, 0]]);
+  const queue: string[] = [anchor];
+  while (queue.length > 0) {
+    const cur     = queue.shift()!;
+    const curRing = ring.get(cur)!;
+    adj.get(cur)?.forEach((nb) => {
+      if (!ring.has(nb)) {
+        ring.set(nb, curRing + 1);
+        queue.push(nb);
+      }
+    });
+  }
+  // Anything unreachable from the anchor goes to ring 2.
+  for (const n of nodes) {
+    if (!ring.has(n.id)) ring.set(n.id, 2);
+  }
+
+  const byRing = new Map<number, string[]>();
+  ring.forEach((r, id) => {
+    if (!byRing.has(r)) byRing.set(r, []);
+    byRing.get(r)!.push(id);
+  });
+
+  const positions = new Map<string, { x: number; y: number }>();
+
+  // Ring 0 — anchor at the centre.
+  positions.set(anchor, { x: CX, y: CY });
+
+  // Ring 1 — evenly distributed around the centre, slight vertical
+  // squash so labels don't bump the title row at the top.
+  const r1nodes = byRing.get(1) ?? [];
+  r1nodes.forEach((id, i) => {
+    const angle = (i / r1nodes.length) * 2 * Math.PI - Math.PI / 2;
+    const r     = RING_R[1];
+    positions.set(id, {
+      x: Math.max(PAD, Math.min(VIEW - PAD, CX + Math.cos(angle) * r)),
+      y: Math.max(PAD, Math.min(VIEW - PAD, CY + Math.sin(angle) * r * 0.85)),
     });
   });
 
-  return candidates.map((n) => {
-    const pos = projected.get(n.id) ?? { x: VIEW / 2, y: VIEW / 2 };
-    return { ...n, _px: pos.x, _py: pos.y };
+  // Ring 2+ — outer ring, all collapsed onto a single radius. Clamp
+  // to the padded viewBox so glyphs and labels always render visible.
+  const outerNodes: string[] = [];
+  byRing.forEach((ids, r) => {
+    if (r >= 2) outerNodes.push(...ids);
   });
+  outerNodes.forEach((id, i) => {
+    const angle = (i / Math.max(outerNodes.length, 1)) * 2 * Math.PI - Math.PI / 2;
+    const r     = RING_R[2];
+    positions.set(id, {
+      x: Math.max(PAD, Math.min(VIEW - PAD, CX + Math.cos(angle) * r)),
+      y: Math.max(PAD, Math.min(VIEW - PAD, CY + Math.sin(angle) * r * 0.85)),
+    });
+  });
+
+  return positions;
+}
+
+/** Build the deduped Array<[string,string]> connection list from a
+ *  candidate set. Each undirected edge appears once. Edges to nodes
+ *  outside the candidate set are dropped (they become exits instead). */
+function connectionPairs(
+  candidates: WorldNode[],
+  included:   Set<string>
+): Array<[string, string]> {
+  const pairs: Array<[string, string]> = [];
+  const seen  = new Set<string>();
+  for (const n of candidates) {
+    for (const c of n.connections) {
+      if (!included.has(c)) continue;
+      const key = [n.id, c].sort().join("→");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      pairs.push([n.id, c]);
+    }
+  }
+  return pairs;
 }
 
 function buildRendererPayload({
@@ -591,8 +639,6 @@ function buildWorldTier({
   wcd:        MasterState["metadata"]["world_consistency"] | undefined;
   worldGraph: WorldGraph;
 }): RendererPayload {
-  // Pull every zone — autoPositionNodes resolves the missing-coord
-  // and degenerate-coord cases that previously left the map empty.
   const allZones = Object.values(worldGraph.nodes).filter(
     (n) => n.type === "zone"
   );
@@ -613,41 +659,45 @@ function buildWorldTier({
   );
 
   const candidates = [...discoveredZones, ...undiscoveredHints];
-  const projected  = autoPositionNodes(candidates);
-  const idIndex    = new Map(projected.map((n) => [n.id, n] as const));
+  const included   = new Set<string>(candidates.map((n) => n.id));
+  const discoveredIds = new Set<string>(discoveredZones.map((n) => n.id));
 
-  const nodes: MapNode[] = projected.map((n) => ({
-    id:           n.id,
-    name:         n.name,
-    type:         n.type,
-    category:     n.category,
-    x:            n._px,
-    y:            n._py,
-    isCurrent:    n.id === worldGraph.current_node_id ||
-                  worldGraph.nodes[worldGraph.current_node_id]?.zone_id === n.id,
-    isDiscovered: n.discovered,
-    npcCount:     n.npc_ids?.length ?? 0,
-  }));
+  // Only discovered zones contribute edges to the topology — undiscovered
+  // hints should float on the outer ring rather than tug the BFS.
+  const allPairs = connectionPairs(candidates, included);
+  const connPairs = allPairs.filter(
+    ([a, b]) => discoveredIds.has(a) && discoveredIds.has(b)
+  );
 
-  // Only discovered zones emit connections so the world view stays
-  // legible — rumored hints float free until reached.
-  const connections: MapConnection[] = [];
-  const seen = new Set<string>();
-  for (const n of projected) {
-    if (!n.discovered) continue;
-    for (const c of n.connections) {
-      const target = idIndex.get(c);
-      if (!target) continue;
-      const key = [n.id, target.id].sort().join("→");
-      if (seen.has(key)) continue;
-      seen.add(key);
-      connections.push({
-        fromX: n._px, fromY: n._py,
-        toX:   target._px, toY:   target._py,
-        visited: target.discovered,
-      });
-    }
-  }
+  const anchorId = findRootZoneId(worldGraph.current_node_id, worldGraph.nodes);
+  const positions = topologyLayout(candidates, connPairs, anchorId);
+
+  const nodes: MapNode[] = candidates.map((n) => {
+    const pos = positions.get(n.id) ?? { x: VIEW / 2, y: VIEW / 2 };
+    return {
+      id:           n.id,
+      name:         n.name,
+      type:         n.type,
+      category:     n.category,
+      x:            pos.x,
+      y:            pos.y,
+      isCurrent:    n.id === worldGraph.current_node_id ||
+                    worldGraph.nodes[worldGraph.current_node_id]?.zone_id === n.id,
+      isDiscovered: n.discovered,
+      npcCount:     n.npc_ids?.length ?? 0,
+    };
+  });
+
+  const connections: MapConnection[] = connPairs.map(([a, b]) => {
+    const aPos = positions.get(a) ?? { x: VIEW / 2, y: VIEW / 2 };
+    const bPos = positions.get(b) ?? { x: VIEW / 2, y: VIEW / 2 };
+    const target = worldGraph.nodes[b];
+    return {
+      fromX: aPos.x, fromY: aPos.y,
+      toX:   bPos.x, toY:   bPos.y,
+      visited: target?.discovered ?? false,
+    };
+  });
 
   return {
     title:       wcd?.world_name ?? "World",
@@ -672,42 +722,49 @@ function buildRegionTier({
   const candidates = Object.values(worldGraph.nodes).filter(
     (n) => (n.zone_id === region.id || n.id === region.id) && n.type !== "sub_location"
   );
-  const projected = autoPositionNodes(candidates);
-  const idIndex   = new Map(projected.map((n) => [n.id, n] as const));
+  const included = new Set<string>(candidates.map((n) => n.id));
 
-  const nodes: MapNode[] = projected.map((n) => ({
-    id:           n.id,
-    name:         n.name,
-    type:         n.type,
-    category:     n.category,
-    x:            n._px,
-    y:            n._py,
-    isCurrent:    n.id === worldGraph.current_node_id,
-    isDiscovered: n.discovered,
-    npcCount:     n.npc_ids?.length ?? 0,
-  }));
+  // Anchor on the region's settlement hub when present so the town
+  // anchors the centre and standalone locations (dungeons, wilderness)
+  // fan around it. Falls back to the geographic region node itself.
+  const settlementNode = candidates.find((n) => n.is_settlement_node === true);
+  const anchorId       = settlementNode?.id ?? region.id;
 
-  const connections: MapConnection[] = [];
-  const seen = new Set<string>();
-  for (const n of projected) {
-    for (const c of n.connections) {
-      const target = idIndex.get(c);
-      if (!target) continue;
-      const key = [n.id, target.id].sort().join("→");
-      if (seen.has(key)) continue;
-      seen.add(key);
-      connections.push({
-        fromX: n._px, fromY: n._py,
-        toX:   target._px, toY:   target._py,
-        visited: target.discovered,
-      });
-    }
-  }
+  const connPairs = connectionPairs(candidates, included);
+  const positions = topologyLayout(candidates, connPairs, anchorId);
+
+  const nodes: MapNode[] = candidates.map((n) => {
+    const pos = positions.get(n.id) ?? { x: VIEW / 2, y: VIEW / 2 };
+    return {
+      id:           n.id,
+      name:         n.name,
+      type:         n.type,
+      category:     n.category,
+      x:            pos.x,
+      y:            pos.y,
+      isCurrent:    n.id === worldGraph.current_node_id,
+      isDiscovered: n.discovered,
+      npcCount:     n.npc_ids?.length ?? 0,
+    };
+  });
+
+  const connections: MapConnection[] = connPairs.map(([a, b]) => {
+    const aPos = positions.get(a) ?? { x: VIEW / 2, y: VIEW / 2 };
+    const bPos = positions.get(b) ?? { x: VIEW / 2, y: VIEW / 2 };
+    const target = worldGraph.nodes[b];
+    return {
+      fromX: aPos.x, fromY: aPos.y,
+      toX:   bPos.x, toY:   bPos.y,
+      visited: target?.discovered ?? false,
+    };
+  });
 
   // Cross-region exits: edges that leave this region's zone entirely.
   const exits: MapExit[] = [];
-  for (const n of projected) {
+  for (const n of candidates) {
     if (n.type !== "zone") continue;
+    const pos = positions.get(n.id);
+    if (!pos) continue;
     for (const c of n.connections) {
       const target = worldGraph.nodes[c];
       if (!target) continue;
@@ -719,15 +776,15 @@ function buildRegionTier({
       exits.push({
         targetId:   targetRegionId,
         targetName,
-        fromX:      n._px,
-        fromY:      n._py,
+        fromX:      pos.x,
+        fromY:      pos.y,
       });
     }
   }
 
   return {
     title:    region.name,
-    subtitle: `${projected.filter((n) => n.discovered).length} known · ${exits.length} exits`,
+    subtitle: `${candidates.filter((n) => n.discovered).length} known · ${exits.length} exits`,
     nodes,
     connections,
     exits,
@@ -797,49 +854,47 @@ function buildLocalTier({
     .map((id) => worldGraph.nodes[id])
     .filter(Boolean) as WorldNode[];
 
-  const projected = autoPositionNodes(candidates);
-  const idIndex   = new Map(projected.map((n) => [n.id, n] as const));
+  const connPairs = connectionPairs(candidates, included);
 
-  const nodes: MapNode[] = projected.map((n) => ({
-    id:           n.id,
-    name:         n.name,
-    type:         n.type,
-    category:     n.category,
-    x:            n._px,
-    y:            n._py,
-    isCurrent:    n.id === worldGraph.current_node_id,
-    isDiscovered: n.discovered,
-    npcCount:     n.npc_ids?.length ?? 0,
-  }));
+  // Anchor on the player's current location when it's in the included
+  // set so the player marker sits at the centre of the local view.
+  // Falls back to the zone hub.
+  const anchorId = included.has(worldGraph.current_node_id)
+    ? worldGraph.current_node_id
+    : zoneId;
+  const positions = topologyLayout(candidates, connPairs, anchorId);
 
-  // Connections only between included nodes — anything pointing
-  // outside the included set is treated as an exit below.
-  const connections: MapConnection[] = [];
-  const seen = new Set<string>();
-  for (const n of projected) {
-    const a = nodes.find((x) => x.id === n.id);
-    if (!a) continue;
-    for (const c of n.connections) {
-      const target = idIndex.get(c);
-      if (!target) continue;
-      const key = [n.id, c].sort().join("→");
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const b = nodes.find((x) => x.id === c);
-      if (!b) continue;
-      connections.push({
-        fromX: a.x, fromY: a.y,
-        toX:   b.x, toY:   b.y,
-        visited: target.discovered,
-      });
-    }
-  }
+  const nodes: MapNode[] = candidates.map((n) => {
+    const pos = positions.get(n.id) ?? { x: VIEW / 2, y: VIEW / 2 };
+    return {
+      id:           n.id,
+      name:         n.name,
+      type:         n.type,
+      category:     n.category,
+      x:            pos.x,
+      y:            pos.y,
+      isCurrent:    n.id === worldGraph.current_node_id,
+      isDiscovered: n.discovered,
+      npcCount:     n.npc_ids?.length ?? 0,
+    };
+  });
+
+  const connections: MapConnection[] = connPairs.map(([a, b]) => {
+    const aPos = positions.get(a) ?? { x: VIEW / 2, y: VIEW / 2 };
+    const bPos = positions.get(b) ?? { x: VIEW / 2, y: VIEW / 2 };
+    const target = worldGraph.nodes[b];
+    return {
+      fromX: aPos.x, fromY: aPos.y,
+      toX:   bPos.x, toY:   bPos.y,
+      visited: target?.discovered ?? false,
+    };
+  });
 
   // Exits: connections that leave the included set entirely.
   const exits: MapExit[] = [];
-  for (const n of projected) {
-    const a = nodes.find((x) => x.id === n.id);
-    if (!a) continue;
+  for (const n of candidates) {
+    const pos = positions.get(n.id);
+    if (!pos) continue;
     for (const c of n.connections) {
       if (included.has(c)) continue;
       const target = worldGraph.nodes[c];
@@ -847,15 +902,15 @@ function buildLocalTier({
       exits.push({
         targetId:   target.id,
         targetName: target.name,
-        fromX:      a.x,
-        fromY:      a.y,
+        fromX:      pos.x,
+        fromY:      pos.y,
       });
     }
   }
 
   const zoneNode = worldGraph.nodes[zoneId];
-  const total    = projected.length;
-  const known    = projected.filter((n) => n.discovered).length;
+  const total    = candidates.length;
+  const known    = candidates.filter((n) => n.discovered).length;
   return {
     title:    zoneNode?.name ?? "Local",
     subtitle: `${known} of ${total} known`,
@@ -1026,25 +1081,6 @@ function findRootZoneId(
     cur = nodes[cur.zone_id];
   }
   return nodeId;
-}
-
-function hasMapPos(node: WorldNode | undefined): node is WorldNode {
-  return !!node &&
-         !!node.map_position &&
-         typeof node.map_position.x === "number" &&
-         typeof node.map_position.y === "number";
-}
-
-function boundsFor(points: Array<{ x: number; y: number }>): BoundsLike {
-  if (points.length === 0) return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const p of points) {
-    if (p.x < minX) minX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y > maxY) maxY = p.y;
-  }
-  return { minX, minY, maxX, maxY };
 }
 
 function extractFirstSentence(s: string): string | null {

@@ -78,6 +78,54 @@ function npcToAsset(npc: NPCDefinition, sessionId: string): WorldAsset {
   };
 }
 
+/**
+ * Map a geographic region's `type` field to one of the open-world
+ * ambient_type templates (open_wilderness / open_road / open_ruins).
+ * Mirrors apply-world-bible so newly-expanded regions get the same
+ * Tier 2 ambient router fallback.
+ */
+function regionAmbientType(rawType: string | undefined): string {
+  const t = (rawType ?? "").toLowerCase();
+  if (t.includes("wilderness") || t.includes("forest") ||
+      t.includes("mountain")   || t.includes("swamp")) {
+    return "open_wilderness";
+  }
+  if (t.includes("road") || t.includes("crossing") ||
+      t.includes("pass") || t.includes("route")) {
+    return "open_road";
+  }
+  if (t.includes("ruin")    || t.includes("waste") ||
+      t.includes("badland") || t.includes("desert")) {
+    return "open_ruins";
+  }
+  return "open_wilderness";
+}
+
+function regionZoneToAsset(
+  regionId:  string,
+  regionName: string,
+  regionType: string | undefined,
+  atmosphere: string,
+  sessionId: string
+): WorldAsset {
+  return {
+    id:                  `location_${regionId}`,
+    category:            AssetCategory.LOCATION,
+    name:                regionName,
+    constitution: {
+      physical_description: atmosphere,
+      key_landmarks:        [],
+      ambient_type:         regionAmbientType(regionType),
+      available_services:   [],
+    },
+    significance:        "NOTABLE",
+    first_seen_location: regionId,
+    session_id:          sessionId,
+    name_known:          true,
+    created_at:          new Date().toISOString(),
+  };
+}
+
 function objectToAsset(
   obj: LocationDefinition["objects"][number],
   parentLocationId: string,
@@ -360,17 +408,86 @@ export async function POST(request: NextRequest) {
   }
 
   // ── 5. Merge the new nodes into the existing graph ─────────────────────────
-  // Remove the placeholder outline node (added by apply-world-bible at
-  // bibleNarrowed.id with discovered=false). The fully-fleshed settlement
-  // node replaces it. Keep every other existing node untouched.
+  // Replace the placeholder outline node (added by apply-world-bible at
+  // bibleNarrowed.id with discovered=false) with a fully-fleshed
+  // geographic-region zone node, mirroring step 4c of apply-world-bible.
+  // The settlement and region_locations point their zone_id at
+  // bibleNarrowed.id, so the zone node MUST exist after this pass.
   const mergedNodes: Record<string, WorldNode> = { ...existingGraph.nodes };
+  // Drop the outline first so the fresh region zone can take its place
+  // cleanly, regardless of whether the settlement uses the same id.
   if (mergedNodes[bibleNarrowed.id] && !newNodes[bibleNarrowed.id]) {
-    // Outline used the region id as its node id but the bible uses a
-    // different settlement node id — drop the placeholder before adding.
     delete mergedNodes[bibleNarrowed.id];
   }
   for (const [id, node] of Object.entries(newNodes)) {
     mergedNodes[id] = node;
+  }
+
+  // CHANGE 4 — geographic region zone node + world_asset.
+  // Skip when the bible reused the settlement id as the region id
+  // (legacy single-tier shape) — the settlement node already lives at
+  // that id and creating a second zone would orphan it.
+  const isSameAsSettlement = bibleNarrowed.id === startingNodeId;
+  if (!isSameAsSettlement && !mergedNodes[bibleNarrowed.id]) {
+    const regionConnections: string[] = [startingNodeId];
+    for (const r of regionLocations) {
+      if (!regionConnections.includes(r.id)) regionConnections.push(r.id);
+    }
+    mergedNodes[bibleNarrowed.id] = {
+      id:            bibleNarrowed.id,
+      name:          bibleNarrowed.name,
+      type:          "zone",
+      category:      bibleNarrowed.type,
+      zone_id:       bibleNarrowed.id,
+      is_expandable: true,
+      connections:   regionConnections,
+      npc_ids:       [],
+      item_ids:      [],
+      asset_id:      `location_${bibleNarrowed.id}`,
+      discovered:    true,
+      map_position:  bibleNarrowed.grid_centre,
+    };
+    // Wire the settlement back to the region zone so the player can
+    // step onto the open-world layer from town.
+    const settlement = mergedNodes[startingNodeId];
+    if (settlement && !settlement.connections.includes(bibleNarrowed.id)) {
+      mergedNodes[startingNodeId] = {
+        ...settlement,
+        connections: [...settlement.connections, bibleNarrowed.id],
+      };
+    }
+
+    // World_asset for the region zone — the narrator needs a Tier 1
+    // location asset to read when the player arrives in the
+    // open-world layer.
+    const regionZoneAsset = regionZoneToAsset(
+      bibleNarrowed.id,
+      bibleNarrowed.name,
+      bibleNarrowed.type,
+      bibleNarrowed.atmosphere,
+      sessionId
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: regionAssetErr } = await (supabase.from("world_assets") as any).upsert(
+      {
+        session_id:          sessionId,
+        asset_id:            regionZoneAsset.id,
+        category:            regionZoneAsset.category,
+        name:                regionZoneAsset.name,
+        constitution:        regionZoneAsset.constitution,
+        significance:        regionZoneAsset.significance,
+        first_seen_location: regionZoneAsset.first_seen_location,
+        name_known:          regionZoneAsset.name_known,
+      },
+      { onConflict: "session_id,asset_id", ignoreDuplicates: true }
+    );
+    if (regionAssetErr) {
+      console.error(
+        "[apply-regional-bible] region-zone world_asset write failed for",
+        regionZoneAsset.id,
+        regionAssetErr
+      );
+    }
   }
 
   // ── 6. Wire the bidirectional link from the origin node ────────────────────

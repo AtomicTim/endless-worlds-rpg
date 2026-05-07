@@ -81,6 +81,54 @@ function npcToAsset(npc: NPCDefinition, sessionId: string): WorldAsset {
   };
 }
 
+/**
+ * Map a geographic region's `type` field to one of the open-world
+ * ambient_type templates (open_wilderness / open_road / open_ruins).
+ * Drives the Tier 2 ambient router so the narrator gets a usable
+ * fallback when the player examines random objects in the region.
+ */
+function regionAmbientType(rawType: string | undefined): string {
+  const t = (rawType ?? "").toLowerCase();
+  if (t.includes("wilderness") || t.includes("forest") ||
+      t.includes("mountain")   || t.includes("swamp")) {
+    return "open_wilderness";
+  }
+  if (t.includes("road") || t.includes("crossing") ||
+      t.includes("pass") || t.includes("route")) {
+    return "open_road";
+  }
+  if (t.includes("ruin")    || t.includes("waste") ||
+      t.includes("badland") || t.includes("desert")) {
+    return "open_ruins";
+  }
+  return "open_wilderness";
+}
+
+function regionZoneToAsset(
+  regionId: string,
+  regionName: string,
+  regionType: string | undefined,
+  atmosphere: string,
+  sessionId: string
+): WorldAsset {
+  return {
+    id:                  `location_${regionId}`,
+    category:            AssetCategory.LOCATION,
+    name:                regionName,
+    constitution: {
+      physical_description: atmosphere,
+      key_landmarks:        [],
+      ambient_type:         regionAmbientType(regionType),
+      available_services:   [],
+    },
+    significance:        "NOTABLE",
+    first_seen_location: regionId,
+    session_id:          sessionId,
+    name_known:          true,
+    created_at:          new Date().toISOString(),
+  };
+}
+
 function regionOutlineToAsset(
   region: WorldBible["adjacent_regions"][number],
   sessionId: string
@@ -540,6 +588,39 @@ export async function POST(request: NextRequest) {
         ...settlement,
         connections: [...settlement.connections, geographicRegionId],
       };
+    }
+
+    // CHANGE 4 — write a world_asset for the region zone so the
+    // narrator has location data to work with when the player steps
+    // out into the open-world layer. Same upsert pattern as every
+    // other asset (write-once via ignoreDuplicates).
+    const regionZoneAsset = regionZoneToAsset(
+      geographicRegionId,
+      bibleNarrowed.starting_region.name,
+      bibleNarrowed.starting_region.type,
+      bibleNarrowed.starting_region.atmosphere,
+      sessionId
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: regionAssetErr } = await (supabase.from("world_assets") as any).upsert(
+      {
+        session_id:          sessionId,
+        asset_id:            regionZoneAsset.id,
+        category:            regionZoneAsset.category,
+        name:                regionZoneAsset.name,
+        constitution:        regionZoneAsset.constitution,
+        significance:        regionZoneAsset.significance,
+        first_seen_location: regionZoneAsset.first_seen_location,
+        name_known:          regionZoneAsset.name_known,
+      },
+      { onConflict: "session_id,asset_id", ignoreDuplicates: true }
+    );
+    if (regionAssetErr) {
+      console.error(
+        "[apply-world-bible] region-zone world_asset write failed for",
+        regionZoneAsset.id,
+        regionAssetErr
+      );
     }
   }
 

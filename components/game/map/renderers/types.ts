@@ -79,7 +79,7 @@ export interface BoundsLike {
 }
 
 export const VIEW = 320;
-export const PAD  = 30;
+export const PAD  = 64;
 
 /** Project a grid coordinate into the 320x320 viewBox space. When the
  *  bounds collapse to a single point we centre the marker. */

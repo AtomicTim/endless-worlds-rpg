@@ -18,7 +18,7 @@ import { VIEW } from "./types";
  * component is a drop-in for any of them.
  */
 
-const PAD = 44;
+const PAD = 64;
 
 const COLOR_CURRENT      = "#f59e0b";
 const COLOR_DISCOVERED   = "#e8dfd1";
@@ -139,11 +139,16 @@ export function DebugMap({
                   : edge === "left"  ? "←"
                   : edge === "top"   ? "↑"
                   : "↓";
-      const label = edge === "right"
-        ? `${e.targetName} ${arrow}`
-        : edge === "left"
-          ? `${arrow} ${e.targetName}`
-          : `${arrow} ${e.targetName}`;
+      // The local-tier "Exit to Region" exit (Change 2) ships its
+      // arrow inside targetName already; avoid double-prefixing.
+      const hasArrow = /^[←→↑↓]/.test(e.targetName);
+      const label = hasArrow
+        ? e.targetName
+        : edge === "right"
+          ? `${e.targetName} ${arrow}`
+          : edge === "left"
+            ? `${arrow} ${e.targetName}`
+            : `${arrow} ${e.targetName}`;
       exitEls.push(
         <text
           key={`exit-${edge}-${i}`}

@@ -111,16 +111,33 @@ export function WorldMap({
       setActiveTier(3);
       return;
     }
-    // Tier 3 — only sub-locations and non-expandable zone nodes are
-    // directly navigable. Expandable zones (the geographic region,
-    // adjacent-region containers) are informational only; clicking
-    // them resolves to an unexpected location otherwise.
-    if (node.type === "zone" && node.is_expandable) return;
+    // Tier 3 — sub-locations and non-expandable zone nodes navigate
+    // directly. Expandable zones (geographic regions, adjacent-region
+    // containers) are normally informational only, except for ONE
+    // case: the player's parent region zone — that's the open-world
+    // traversal layer they can step out into.
+    if (node.type === "zone" && node.is_expandable) {
+      const currentWGNode = worldGraph.nodes[worldGraph.current_node_id];
+      const isParentZone  = !!currentWGNode && currentWGNode.zone_id === node.id;
+      if (isParentZone) {
+        onNavigate(nodeId);
+      }
+      // Other expandable zones: do nothing (info only — the location
+      // info panel already reflects the click target via the active
+      // tier's selectedRegionId).
+      return;
+    }
     onNavigate(nodeId);
   }
   function handleSelectExit(targetId: string) {
-    // Exits always represent a destination region; jump to it on Tier 2
-    // and let the player decide whether to navigate.
+    // Tier 3 — the local map's single "Exit to Region" exit drops the
+    // player onto the open-world layer (the parent region zone).
+    if (activeTier === 3) {
+      onNavigate(targetId);
+      return;
+    }
+    // Tier 2 — cross-region exits are previews: jump the map view to
+    // the destination region without committing to travel.
     setSelectedRegionId(findRootZoneId(targetId, worldGraph.nodes));
     setActiveTier(2);
   }
@@ -508,7 +525,7 @@ interface RendererPayload {
  * Positions are deterministic and stable across navigation: clicking a
  * node to travel does not change layout.
  */
-const PAD = 44;
+const PAD = 64;
 
 function fitToViewBox(
   nodes: WorldNode[]
@@ -893,24 +910,31 @@ function buildLocalTier({
     };
   });
 
-  // Exits: connections that leave the included set entirely.
-  const rawExits: MapExit[] = [];
-  for (const n of candidates) {
-    const pos = positions.get(n.id);
-    if (!pos) continue;
-    for (const c of n.connections) {
-      if (included.has(c)) continue;
-      const target = worldGraph.nodes[c];
-      if (!target) continue;
-      rawExits.push({
-        targetId:   target.id,
-        targetName: target.name,
-        fromX:      pos.x,
-        fromY:      pos.y,
-      });
-    }
+  // CHANGE 2 — collapse the previous "one MapExit per leaving
+  // connection" behaviour into a single "Exit to Region" button.
+  // All cross-zone navigation flows through the parent geographic
+  // region zone, never directly from the settlement to a sibling
+  // region or a sub-location's neighbour.
+  const exits: MapExit[] = [];
+  const hubNodeForExit = worldGraph.nodes[zoneId];
+  const parentRegionId = hubNodeForExit?.zone_id;
+  const parentRegionNode = parentRegionId
+    ? worldGraph.nodes[parentRegionId]
+    : null;
+  if (
+    parentRegionNode &&
+    parentRegionNode.is_expandable === true &&
+    parentRegionNode.id !== zoneId
+  ) {
+    const hubPos = positions.get(zoneId) ?? { x: VIEW / 2, y: VIEW / 2 };
+    exits.push({
+      targetId:   parentRegionNode.id,
+      targetName: `↑ Exit to ${parentRegionNode.name}`,
+      fromX:      hubPos.x,
+      fromY:      hubPos.y,
+      edge:       "right",
+    });
   }
-  const exits = distributeExits(rawExits);
 
   const zoneNode = worldGraph.nodes[zoneId];
   const total    = candidates.length;

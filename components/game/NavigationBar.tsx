@@ -178,10 +178,21 @@ export function NavigationBar({ masterState, worldGraph, onNavigate }: Props) {
 
     // "← Return" card — when current is a region_location, find the
     // settlement zone in the same geographic region and link back to it.
+    //
+    // CHANGE 5 — when the player is AT the geographic region zone
+    // itself (a self-zoned, expandable zone), they're already at the
+    // top of this region's hierarchy and don't need a return card.
+    // The settlement reaches them via the region zone's connections
+    // list so it'll surface as a regular nav card instead.
+    const isAtRegionZone =
+      current.type === "zone" &&
+      current.is_expandable === true &&
+      current.zone_id === current.id;
     let parentSettlement: WorldNode | null = null;
     const isCandidateForReturn =
       current.type === "zone" &&
-      current.is_settlement_node !== true;
+      current.is_settlement_node !== true &&
+      !isAtRegionZone;
     if (isCandidateForReturn) {
       parentSettlement =
         Object.values(worldGraph.nodes).find(

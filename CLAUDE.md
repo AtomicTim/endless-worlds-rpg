@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.17
-**Status:** Active Development — Map Bug Fixes Complete, Bug 2 Investigation Active
+**Version:** 8.18
+**Status:** Active Development — Bug 2 Investigation Active
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -26,6 +26,7 @@
 | Map Overhaul + Debug Mode | fitToViewBox, tiers, coordinate ranges | ✅ Complete |
 | Regional Zone Traversal + Polish | Exit button, region zone, navigation | ✅ Complete |
 | Session 84 Bug Fixes | 7 map/nav fixes + Bug 2 diagnostics | ✅ Complete |
+| RegionBible 500 + Header Fixes | max_tokens, page header, node type | ✅ Complete |
 | Bug 2 Investigation | zone_id corruption — logs needed | ⏳ Active |
 | Architecture Hardening | Domain 1/2 separation, caching, gate | ⏳ Pending |
 | Genre renderers restored | After architecture confirmed | ⏳ Pending |
@@ -34,34 +35,29 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed.**
 
-### Session 84 Bug Fixes (commit 0c65a6d — 43/43 tests, clean build)
+### RegionBible + Header Fixes (commit baad961 — 43/43 tests, clean build)
 
-**Fix 1 (Bug 5):** handleSelectNode + handleSelectExit early-return when nodeId === current_node_id. navigateTo defensive guard. DebugMap suppresses cursor/click on isCurrent nodes.
+**Fix 1 — RegionBible max_tokens 1200→2000:** Skeleton requires ~1400-1600 tokens. 1200 clipped responses mid-JSON; retry also truncated → 500. Added explicit console.error logging for parse failures and API errors so the next failure surfaces in the server log immediately.
 
-**Fix 2 (Bug 1):** buildLocalTier fallback gated on `is_settlement_node === true` + zone_id filter (own children only). isAtNonSettlementZone flag disables LOCAL tab for dungeons/wilderness. buildRendererPayload Tier 3 redirects to buildRegionTier for both region zones and non-settlement zones.
+**Fix 2 — Page header type label (SceneArt.tsx):** Page header was reading node.category directly. Now mirrors buildLocationInfo rules: is_expandable+self-zoned → "REGION", standalone zone → category.toUpperCase(), default → (category ?? type).toUpperCase(). Map sidebar and page header chip now agree.
 
-**Fix 3 (Bug 3):** buildLocationInfo new branches: `REGION · N EXITS` panel for region zones, category-typed panel for standalone zones — both fire before the Tier 3 fallthrough.
-
-**Fix 4 (Bug 6):** chooseInitialTier: geographic region zone returns Tier 2, not Tier 3.
-
-**Fix 5 (Bug 8):** NavigationBar connection loop skips `id === current.id` and `id === current_node_id` defensively.
-
-**Fix 6 (Bug 4):** PAD 60 → 76 in WorldMap.tsx, types.ts, DebugMap.tsx.
-
-**Fix 7 (Bug 7):** Module-level lastArrivalNodeId ref in useGameLoop.ts. Duplicate ◆ NAME section headers suppressed when target === previously emitted arrival node.
-
-**Fix 8 (Bug 2 diagnostic):** Logging added to apply-regional-bible (zone_id assignment), regional-bible-cache (READ/WRITE with keys), useGameLoop (RegionBible expansion target).
+**Fix 3 — region_location node type verified (apply-world-bible):** Confirmed existing code correctly creates region_location nodes with type:"zone", is_expandable:false, is_settlement_node:false. Added diagnostic console.log so future LOCAL-tab disable failures immediately surface node property values in server log.
 
 ### Bug 2 — zone_id corruption (UNDER INVESTIGATION)
-**Symptom:** Nodes in a newly-generated region get zone_id pointing at the wrong region. Region map for newly-discovered areas shows incorrect parent. Dungeon connections point to correct region but zone_id points elsewhere.
+**Symptom:** Nodes in newly-generated region get zone_id pointing at wrong region. Dungeon connections correct but zone_id wrong.
 
 **Root cause candidates:**
-1. `regional-bible-cache.ts` cache key mismatch — cache key might use origin region ID instead of destination region ID, causing stale bible hit
-2. `matchedOutline.id` in useGameLoop.ts diverges from `bible.id` in the cached entry, causing zone_id to be stamped with wrong region
+1. `regional-bible-cache.ts` cache key mismatch — using origin region ID instead of destination
+2. `matchedOutline.id` in useGameLoop.ts diverges from `bible.id` in cached entry
 
-**To diagnose:** Generate a fresh world → travel to the region zone → navigate to an adjacent region → paste the `[apply-regional-bible]`, `[RegionBibleCache]`, and `[navigateTo]` server console logs here.
+**Diagnostic logging active in:**
+- `apply-regional-bible/route.ts` — logs zone_id assignment per node
+- `regional-bible-cache.ts` — logs READ/WRITE with full cache key + bible.id
+- `useGameLoop.ts` — logs RegionBible expansion target
 
-**Fix NOT yet written** — needs log analysis first.
+**To diagnose:** Generate a fresh world → travel to region zone → navigate to an adjacent region → paste ALL `[navigateTo]`, `[RegionBibleCache]`, and `[apply-regional-bible]` server terminal lines here.
+
+**NOTE:** Previous 500 from generate-regional-bible (max_tokens) was blocking adjacent region travel. That's now fixed. The next test should successfully generate a new region.
 
 ### Known issues (shelved — address after Bug 2 + architecture hardening)
 - Duplicate codex writes: two paths (7b + 7c-1) fire for same location (Bug 9)
@@ -78,7 +74,7 @@
 **Domain 2 (Content Library — frozen after generation):** WCD, locations, NPCs, items, loot tables, main quest, region outlines. Once frozen, never changed by AI.
 
 ### AI During Gameplay (Narration Only)
-1. Location arrival description — first visit only, cached permanently after (pending architecture hardening)
+1. Location arrival description — first visit only, cached permanently after (pending)
 2. NPC dialogue responses — closed context, code determines topic + check result
 3. Action narration — 1-4 sentences, cached after first examine
 4. Container search narration — 1 sentence only when item found
@@ -115,8 +111,7 @@ TIER DEFINITIONS:
   Region = settlement + region_locations. Redirected to for region zones + standalone zones.
   World  = is_expandable only. Informational.
 
-Current node: unclickable everywhere (handleSelectNode, handleSelectExit, navigateTo guards).
-Local tab: disabled when isAtRegionZone OR isAtNonSettlementZone.
+Current node: unclickable everywhere.
 Section headers: deduplicated via lastArrivalNodeId ref.
 DEBUG MODE ACTIVE in index.tsx. TO RESTORE: uncomment pickModule dispatcher.
 ```
@@ -134,7 +129,7 @@ World
 
 ### Generation Model ✅
 Zone 1: Concrete. Zone 2: Outlined. Zone 3: Name+position.
-RegionBible: claude-haiku-4-5-20251001, 1200 tokens.
+RegionBible: claude-haiku-4-5-20251001, **max_tokens: 2000**.
 WorldBible: claude-sonnet-4-5, 8000 tokens.
 
 ---
@@ -225,4 +220,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 84 — V8.17: 7 map/nav fixes (current node no-op, local fallback settlement-only, region zone label, chooseInitialTier, nav self-loop, PAD=76, duplicate header guard). Bug 2 diagnostic logging active — needs server log analysis before fix.*
+*Last updated: Session 85 — V8.18: RegionBible max_tokens 1200→2000 (500 fix), page header type label (SceneArt.tsx), region_location node type verified. Bug 2 diagnostic logging active — needs adjacent region travel test to capture logs.*

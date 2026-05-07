@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AssetCategory } from "@/types/game";
 import type { MasterState, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
-import { GenreMap, project } from "./map/renderers";
+import { GenreMap, project, VIEW } from "./map/renderers";
 import type { MapNode, MapConnection, MapExit, BoundsLike, Tier } from "./map/renderers";
 
 /**
@@ -448,6 +448,76 @@ interface RendererPayload {
   exits:       MapExit[];
 }
 
+/**
+ * Auto-position helper.
+ *
+ * The MVP location generators don't always populate `map_position` on
+ * every node — and when several nodes inherit the same coords (a common
+ * generator quirk), filtering by `hasMapPos` left the map looking
+ * empty. autoPositionNodes resolves both issues: it projects every node
+ * with a real position into the 320×320 viewBox, then arranges any
+ * node without a position (or all of them, when every position is
+ * identical) in a tidy ellipse around the centroid of the positioned
+ * set. The returned objects carry `_px` / `_py` already in viewBox
+ * space — callers should use those directly without another `project`.
+ */
+function autoPositionNodes(
+  candidates: WorldNode[]
+): Array<WorldNode & { _px: number; _py: number }> {
+  const withPos    = candidates.filter(hasMapPos);
+  const withoutPos = candidates.filter((n) => !hasMapPos(n));
+
+  // When every positioned node sits at the same coords, the projection
+  // collapses to a single point and the map reads as empty. Treat that
+  // case as "nothing has a real position" so the circle layout below
+  // distributes everyone uniformly instead.
+  const allSame = withPos.length > 1 &&
+    withPos.every((n) =>
+      n.map_position.x === withPos[0].map_position.x &&
+      n.map_position.y === withPos[0].map_position.y
+    );
+  const effectiveWithPos = allSame ? [] : withPos;
+  const effectiveWithout = allSame ? candidates : withoutPos;
+
+  const bounds = effectiveWithPos.length > 0
+    ? boundsFor(effectiveWithPos.map((n) => n.map_position))
+    : { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+
+  const projected = new Map<string, { x: number; y: number }>();
+  for (const n of effectiveWithPos) {
+    projected.set(n.id, project(n.map_position.x, n.map_position.y, bounds));
+  }
+
+  // Centroid of already-positioned nodes — the unpositioned ones orbit
+  // this point so the two layers compose naturally.
+  const cx = effectiveWithPos.length > 0
+    ? effectiveWithPos.reduce((s, n) => s + projected.get(n.id)!.x, 0) /
+      effectiveWithPos.length
+    : VIEW / 2;
+  const cy = effectiveWithPos.length > 0
+    ? effectiveWithPos.reduce((s, n) => s + projected.get(n.id)!.y, 0) /
+      effectiveWithPos.length
+    : VIEW / 2;
+
+  // Spread unpositioned nodes around the centroid in a flattened circle.
+  // Slight vertical squash keeps labels from clipping the top/bottom of
+  // the viewBox where genre headers / corner ornaments live.
+  const r = VIEW * 0.32;
+  effectiveWithout.forEach((n, i) => {
+    const total = effectiveWithout.length;
+    const angle = (i / (total || 1)) * 2 * Math.PI - Math.PI / 2;
+    projected.set(n.id, {
+      x: cx + Math.cos(angle) * r,
+      y: cy + Math.sin(angle) * (r * 0.75),
+    });
+  });
+
+  return candidates.map((n) => {
+    const pos = projected.get(n.id) ?? { x: VIEW / 2, y: VIEW / 2 };
+    return { ...n, _px: pos.x, _py: pos.y };
+  });
+}
+
 function buildRendererPayload({
   masterState,
   worldGraph,
@@ -478,8 +548,10 @@ function buildWorldTier({
   wcd:        MasterState["metadata"]["world_consistency"] | undefined;
   worldGraph: WorldGraph;
 }): RendererPayload {
+  // Pull every zone — autoPositionNodes resolves the missing-coord
+  // and degenerate-coord cases that previously left the map empty.
   const allZones = Object.values(worldGraph.nodes).filter(
-    (n) => n.type === "zone" && hasMapPos(n)
+    (n) => n.type === "zone"
   );
   const discoveredZones = allZones.filter((n) => n.discovered);
 
@@ -488,7 +560,7 @@ function buildWorldTier({
   for (const node of discoveredZones) {
     for (const c of node.connections) {
       const target = worldGraph.nodes[c];
-      if (target && !target.discovered && target.type === "zone" && hasMapPos(target)) {
+      if (target && !target.discovered && target.type === "zone") {
         reachable.add(target.id);
       }
     }
@@ -497,41 +569,38 @@ function buildWorldTier({
     (n) => !n.discovered && reachable.has(n.id)
   );
 
-  const visible = [...discoveredZones, ...undiscoveredHints];
-  const bounds  = boundsFor(visible.map((n) => n.map_position));
+  const candidates = [...discoveredZones, ...undiscoveredHints];
+  const projected  = autoPositionNodes(candidates);
+  const idIndex    = new Map(projected.map((n) => [n.id, n] as const));
 
-  const nodes: MapNode[] = visible.map((n) => {
-    const { x, y } = project(n.map_position.x, n.map_position.y, bounds);
-    return {
-      id:           n.id,
-      name:         n.name,
-      type:         n.type,
-      category:     n.category,
-      x, y,
-      isCurrent:    n.id === worldGraph.current_node_id ||
-                    worldGraph.nodes[worldGraph.current_node_id]?.zone_id === n.id,
-      isDiscovered: n.discovered,
-      npcCount:     n.npc_ids?.length ?? 0,
-    };
-  });
-  const idIndex = new Map(visible.map((n) => [n.id, n] as const));
+  const nodes: MapNode[] = projected.map((n) => ({
+    id:           n.id,
+    name:         n.name,
+    type:         n.type,
+    category:     n.category,
+    x:            n._px,
+    y:            n._py,
+    isCurrent:    n.id === worldGraph.current_node_id ||
+                  worldGraph.nodes[worldGraph.current_node_id]?.zone_id === n.id,
+    isDiscovered: n.discovered,
+    npcCount:     n.npc_ids?.length ?? 0,
+  }));
 
+  // Only discovered zones emit connections so the world view stays
+  // legible — rumored hints float free until reached.
   const connections: MapConnection[] = [];
   const seen = new Set<string>();
-  for (const n of discoveredZones) {
-    const a = nodes.find((x) => x.id === n.id);
-    if (!a) continue;
+  for (const n of projected) {
+    if (!n.discovered) continue;
     for (const c of n.connections) {
       const target = idIndex.get(c);
       if (!target) continue;
       const key = [n.id, target.id].sort().join("→");
       if (seen.has(key)) continue;
       seen.add(key);
-      const b = nodes.find((x) => x.id === target.id);
-      if (!b) continue;
       connections.push({
-        fromX: a.x, fromY: a.y,
-        toX:   b.x, toY:   b.y,
+        fromX: n._px, fromY: n._py,
+        toX:   target._px, toY:   target._py,
         visited: target.discovered,
       });
     }
@@ -560,40 +629,33 @@ function buildRegionTier({
   const candidates = Object.values(worldGraph.nodes).filter(
     (n) => (n.zone_id === region.id || n.id === region.id) && n.type !== "sub_location"
   );
-  const positioned = candidates.filter(hasMapPos);
-  const bounds     = boundsFor(positioned.map((n) => n.map_position));
+  const projected = autoPositionNodes(candidates);
+  const idIndex   = new Map(projected.map((n) => [n.id, n] as const));
 
-  const idIndex = new Map(positioned.map((n) => [n.id, n] as const));
-  const nodes: MapNode[] = positioned.map((n) => {
-    const { x, y } = project(n.map_position.x, n.map_position.y, bounds);
-    return {
-      id:           n.id,
-      name:         n.name,
-      type:         n.type,
-      category:     n.category,
-      x, y,
-      isCurrent:    n.id === worldGraph.current_node_id,
-      isDiscovered: n.discovered,
-      npcCount:     n.npc_ids?.length ?? 0,
-    };
-  });
+  const nodes: MapNode[] = projected.map((n) => ({
+    id:           n.id,
+    name:         n.name,
+    type:         n.type,
+    category:     n.category,
+    x:            n._px,
+    y:            n._py,
+    isCurrent:    n.id === worldGraph.current_node_id,
+    isDiscovered: n.discovered,
+    npcCount:     n.npc_ids?.length ?? 0,
+  }));
 
   const connections: MapConnection[] = [];
   const seen = new Set<string>();
-  for (const n of positioned) {
-    const a = nodes.find((x) => x.id === n.id);
-    if (!a) continue;
+  for (const n of projected) {
     for (const c of n.connections) {
       const target = idIndex.get(c);
       if (!target) continue;
       const key = [n.id, target.id].sort().join("→");
       if (seen.has(key)) continue;
       seen.add(key);
-      const b = nodes.find((x) => x.id === target.id);
-      if (!b) continue;
       connections.push({
-        fromX: a.x, fromY: a.y,
-        toX:   b.x, toY:   b.y,
+        fromX: n._px, fromY: n._py,
+        toX:   target._px, toY:   target._py,
         visited: target.discovered,
       });
     }
@@ -601,10 +663,8 @@ function buildRegionTier({
 
   // Cross-region exits: edges that leave this region's zone entirely.
   const exits: MapExit[] = [];
-  for (const n of positioned) {
+  for (const n of projected) {
     if (n.type !== "zone") continue;
-    const a = nodes.find((x) => x.id === n.id);
-    if (!a) continue;
     for (const c of n.connections) {
       const target = worldGraph.nodes[c];
       if (!target) continue;
@@ -616,15 +676,15 @@ function buildRegionTier({
       exits.push({
         targetId:   targetRegionId,
         targetName,
-        fromX:      a.x,
-        fromY:      a.y,
+        fromX:      n._px,
+        fromY:      n._py,
       });
     }
   }
 
   return {
     title:    region.name,
-    subtitle: `${positioned.filter((n) => n.discovered).length} known · ${exits.length} exits`,
+    subtitle: `${projected.filter((n) => n.discovered).length} known · ${exits.length} exits`,
     nodes,
     connections,
     exits,
@@ -640,40 +700,33 @@ function buildLocalTier({
   const candidates = Object.values(worldGraph.nodes).filter(
     (n) => n.zone_id === zoneId || n.id === zoneId
   );
-  const positioned = candidates.filter(hasMapPos);
-  const bounds     = boundsFor(positioned.map((n) => n.map_position));
+  const projected = autoPositionNodes(candidates);
+  const idIndex   = new Map(projected.map((n) => [n.id, n] as const));
 
-  const idIndex = new Map(positioned.map((n) => [n.id, n] as const));
-  const nodes: MapNode[] = positioned.map((n) => {
-    const { x, y } = project(n.map_position.x, n.map_position.y, bounds);
-    return {
-      id:           n.id,
-      name:         n.name,
-      type:         n.type,
-      category:     n.category,
-      x, y,
-      isCurrent:    n.id === worldGraph.current_node_id,
-      isDiscovered: n.discovered,
-      npcCount:     n.npc_ids?.length ?? 0,
-    };
-  });
+  const nodes: MapNode[] = projected.map((n) => ({
+    id:           n.id,
+    name:         n.name,
+    type:         n.type,
+    category:     n.category,
+    x:            n._px,
+    y:            n._py,
+    isCurrent:    n.id === worldGraph.current_node_id,
+    isDiscovered: n.discovered,
+    npcCount:     n.npc_ids?.length ?? 0,
+  }));
 
   const connections: MapConnection[] = [];
   const seen = new Set<string>();
-  for (const n of positioned) {
-    const a = nodes.find((x) => x.id === n.id);
-    if (!a) continue;
+  for (const n of projected) {
     for (const c of n.connections) {
       const target = idIndex.get(c);
       if (!target) continue;
       const key = [n.id, target.id].sort().join("→");
       if (seen.has(key)) continue;
       seen.add(key);
-      const b = nodes.find((x) => x.id === target.id);
-      if (!b) continue;
       connections.push({
-        fromX: a.x, fromY: a.y,
-        toX:   b.x, toY:   b.y,
+        fromX: n._px, fromY: n._py,
+        toX:   target._px, toY:   target._py,
         visited: target.discovered,
       });
     }
@@ -681,9 +734,7 @@ function buildLocalTier({
 
   // Exits that leave the zone entirely.
   const exits: MapExit[] = [];
-  for (const n of positioned) {
-    const a = nodes.find((x) => x.id === n.id);
-    if (!a) continue;
+  for (const n of projected) {
     for (const c of n.connections) {
       const target = worldGraph.nodes[c];
       if (!target) continue;
@@ -691,15 +742,15 @@ function buildLocalTier({
       exits.push({
         targetId:   target.id,
         targetName: target.name,
-        fromX:      a.x,
-        fromY:      a.y,
+        fromX:      n._px,
+        fromY:      n._py,
       });
     }
   }
 
   const zoneNode = worldGraph.nodes[zoneId];
-  const total    = positioned.length;
-  const known    = positioned.filter((n) => n.discovered).length;
+  const total    = projected.length;
+  const known    = projected.filter((n) => n.discovered).length;
   return {
     title:    zoneNode?.name ?? "Local",
     subtitle: `${known} of ${total} known`,

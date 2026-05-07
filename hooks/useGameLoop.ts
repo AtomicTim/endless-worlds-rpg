@@ -1775,16 +1775,73 @@ export function useGameLoop() {
           ? resolution.state_delta.world_state.current_location_id ?? null
           : null;
       if (arrivedAt) {
-        // FIX 7 — codex no longer writes on bare ARRIVING. Only refresh
-        // the locationAssets cache here so the next narrator/highlight
-        // pass sees the full Tier 1 / NPC roster.
-        // The location's codex entry is now written on first explicit
-        // EXAMINE (handled in step 7c-1 below) or on first DIALOGUE with
-        // an NPC at that location (handled in step 7g's seed branch) —
-        // walking through a location no longer counts as discovering it.
+        // Refresh the live cache so subsequent narrator beats see the
+        // full Tier 1 / NPC roster.
         void getWorldAssetsForLocation(sessionId, arrivedAt).then((assets) => {
           useGameStore.getState().setLocationAssets(assets);
         });
+
+        // ── 7c-1. Codex 2nd-visit fallback ───────────────────────────────────
+        // The codex entry for a location normally writes on first
+        // DIALOGUE (step 7g) or first explicit EXAMINE. Both paths can
+        // be skipped — a player who walks straight through twice still
+        // hasn't catalogued it. Track visits here and, on the second
+        // ARRIVING, force the codex write so the location lands in the
+        // encyclopedia even without NPC interaction.
+        const visitsKey = `codex_visits_${arrivedAt}`;
+        const flagKey   = `codex_loc_${arrivedAt}`;
+        const priorRaw  = updatedState.world_state.flags?.[visitsKey];
+        const prior     = typeof priorRaw === "number" ? priorRaw : 0;
+        const next      = prior + 1;
+        const alreadyWritten = updatedState.world_state.flags?.[flagKey] === true;
+
+        const flagsAfter: Record<string, boolean | number | string> = {
+          ...updatedState.world_state.flags,
+          [visitsKey]: next,
+        };
+
+        if (next >= 2 && !alreadyWritten) {
+          const liveAssets = useGameStore.getState().locationAssets;
+          const locationAsset = liveAssets.find(
+            (a) =>
+              a.category === AssetCategory.LOCATION &&
+              (a.id === arrivedAt ||
+               a.id === `location_${arrivedAt}` ||
+               normalizeLocationId(a.first_seen_location ?? "") === arrivedAt)
+          );
+          if (locationAsset) {
+            const lc = locationAsset.constitution;
+            const description =
+              (typeof lc.physical_description === "string" && lc.physical_description) ||
+              (typeof lc.notes                === "string" && lc.notes) ||
+              (typeof lc.atmosphere           === "string" && lc.atmosphere) ||
+              "A location in the world.";
+            void saveCodexEntry(sessionId, {
+              id:                  locationAsset.id,
+              category:            "LOCATION",
+              name:                locationAsset.name,
+              description,
+              first_seen_location: arrivedAt,
+              significance:        "NOTABLE",
+            }).then(({ created }) => {
+              if (created) {
+                store.addMessage(
+                  makeMessage("SYSTEM", `✦ ${locationAsset.name} added to codex`)
+                );
+              }
+            });
+            flagsAfter[flagKey] = true;
+            console.log(
+              "[GameLoop/7c-1] Location codex entry written via 2nd-visit fallback:",
+              locationAsset.name
+            );
+          }
+        }
+
+        updatedState = {
+          ...updatedState,
+          world_state: { ...updatedState.world_state, flags: flagsAfter },
+        };
       } else {
         // Late-load fallback: if locationAssets is still empty at this point,
         // page.tsx's seed must have failed (network error, race, hard reload

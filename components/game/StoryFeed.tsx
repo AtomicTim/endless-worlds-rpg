@@ -110,11 +110,10 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
 
   return (
     <div
-      className="ew-scroll min-h-0 flex-1 overflow-y-auto"
+      className="ew-scroll min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-8 md:py-6"
       style={{
         position:        "relative",
         background:      "var(--bg-0)",
-        padding:         "16px 24px",
         fontFamily:      "var(--sans)",
       }}
     >
@@ -122,7 +121,7 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
         className="ew-grain"
         style={{ ["--grain" as string]: 0.15 }}
       />
-      <div style={{ position: "relative", maxWidth: 720, margin: "0 auto" }}>
+      <div style={{ position: "relative", margin: "0 auto" }}>
         {messages.map((msg) => (
           <MessageEntry
             key={msg.id}

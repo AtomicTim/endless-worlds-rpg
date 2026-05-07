@@ -43,44 +43,40 @@ export function SceneArt({ locationId, locationName, genre }: SceneArtProps) {
     return node?.category ?? null;
   });
 
+  void colors;
   return (
     <div
-      className="shrink-0 px-4 py-3"
-      style={{ borderBottom: "1px solid var(--color-border)" }}
+      className="shrink-0"
+      style={{
+        borderBottom: "1px solid var(--line)",
+        padding:      "10px 16px",
+        background:   "var(--bg-1)",
+      }}
     >
       <div
-        className="mx-auto flex w-full max-w-[320px] flex-col items-center justify-center"
-        style={{
-          aspectRatio:     "320 / 200",
-          border:          `1px solid color-mix(in srgb, ${colors.primary} 55%, var(--color-border))`,
-          borderRadius:    6,
-          backgroundColor: `color-mix(in srgb, ${colors.primary} 4%, var(--color-bg))`,
-          fontFamily:      "var(--font-mono)",
-          padding:         "0.75rem",
-        }}
+        className="mx-auto flex w-full max-w-[640px] flex-col items-center text-center"
       >
         <div
+          className="ew-serif"
           style={{
-            color:         colors.primary,
-            fontSize:      14,
-            fontWeight:    700,
-            letterSpacing: "0.04em",
-            textAlign:     "center",
-            lineHeight:    1.3,
-            wordBreak:     "break-word",
+            color:      "var(--ink-1)",
+            fontSize:   20,
+            fontStyle:  "italic",
+            lineHeight: 1.2,
+            wordBreak:  "break-word",
           }}
         >
           {locationName}
         </div>
         {locationType && (
           <div
+            className="ew-mono"
             style={{
-              marginTop:     6,
-              fontSize:      10,
-              color:         "var(--color-muted)",
-              letterSpacing: "0.12em",
+              marginTop:     4,
+              fontSize:      9,
+              color:         "var(--ink-4)",
+              letterSpacing: "0.32em",
               textTransform: "uppercase",
-              textAlign:     "center",
             }}
           >
             {locationType}

@@ -68,7 +68,7 @@
 
     /* Highlight roles */
     --hl-loc:      #7dd3fc;  /* locations */
-    --hl-item:     #f59e0b;  /* items */
+    --hl-item:     #e8c547;  /* items — golden yellow, distinct from amber accent */
     --hl-landmark: #c4b5fd;  /* landmarks */
     --hl-pass:     #a3e635;
     --hl-fail:     #f87171;
@@ -209,7 +209,7 @@
 
 /* Inline highlight roles */
 .ew-link-loc      { color: var(--hl-loc);      border-bottom: 1px dashed color-mix(in oklab, var(--hl-loc) 60%, transparent);      cursor: pointer; }
-.ew-link-npc      { color: var(--accent);      border-bottom: 1px dashed var(--accent-soft);                                       cursor: pointer; }
+.ew-link-npc      { color: var(--accent);      border-bottom: 1px solid var(--accent-soft);                                       cursor: pointer; }
 .ew-link-item     { color: var(--hl-item);     border-bottom: 1px dashed color-mix(in oklab, var(--hl-item) 60%, transparent);     cursor: pointer; }
 .ew-link-landmark { color: var(--hl-landmark); border-bottom: 1px dashed color-mix(in oklab, var(--hl-landmark) 60%, transparent); cursor: pointer; }
 

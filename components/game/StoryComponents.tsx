@@ -149,11 +149,10 @@ export function NarrativeBlock({ children, skipQuoteWrap }: NarrativeBlockProps)
     <p
       className="ew-serif"
       style={{
-        fontSize:   15,
+        fontSize:   16,
         lineHeight: 1.85,
         color:      "var(--ink-3)",
         margin:     "12px 0",
-        maxWidth:   640,
       }}
     >
       {skipQuoteWrap ? children : wrapQuotes(children)}
@@ -186,7 +185,7 @@ interface NPCSpeechProps {
 
 export function NPCSpeech({ name, color = "var(--accent)", children }: NPCSpeechProps) {
   return (
-    <div style={{ margin: "16px 0", maxWidth: 640 }}>
+    <div style={{ margin: "16px 0" }}>
       <div
         className="ew-mono"
         style={{

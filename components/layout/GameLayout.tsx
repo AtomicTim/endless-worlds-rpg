@@ -62,9 +62,6 @@ export function GameLayout({
   // Player avatar text — first two letters of the player's name in caps.
   const masterState = useGameStore((s) => s.masterState);
   const playerName  = masterState?.player_state.name ?? "Adventurer";
-  const playerLvl   = masterState?.player_state.level ?? 1;
-  const playerHp    = masterState?.player_state.health ?? 0;
-  const playerMaxHp = masterState?.player_state.max_health ?? 0;
   const initials    = playerName.split(/\s+/).map((w) => w[0]?.toUpperCase() ?? "").join("").slice(0, 2) || "??";
 
   // ── Save & Exit ───────────────────────────────────────────────────────────
@@ -246,16 +243,6 @@ export function GameLayout({
               }}
             >
               {playerName}
-            </div>
-            <div
-              className="ew-mono"
-              style={{
-                fontSize:      8,
-                color:         "var(--ink-4)",
-                letterSpacing: "0.2em",
-              }}
-            >
-              LVL {playerLvl} · {playerHp}/{playerMaxHp} HP
             </div>
           </div>
         </div>

@@ -4,11 +4,11 @@ import React from "react";
 import {
   PaperBacking,
   FantasyNodeGlyph,
-  TownGlyph,
   TravelDots,
   PaperCompass,
 } from "./primitives";
 import type { RendererProps } from "./types";
+import { VIEW } from "./types";
 
 /**
  * Fantasy genre map — drawn paper aesthetic ported from
@@ -176,6 +176,185 @@ export function RegionMap(props: RendererProps) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// DrawBuilding — building-type-specific glyph picker for the Local tier.
+//
+// Maps a node's `category` (a substring match against ambient_type
+// keywords from lib/game/ambient-objects.ts) to a distinct paper-style
+// SVG silhouette. Falls back to the generic two-house settlement shape
+// when nothing matches.
+// ───────────────────────────────────────────────────────────────────────────
+
+function DrawBuilding({
+  x, y, category, current, visited,
+}: {
+  x:        number;
+  y:        number;
+  category?: string;
+  current:  boolean;
+  visited:  boolean;
+}) {
+  const stroke = current ? "#f59e0b" : visited ? "#e8d8b0" : "#7a6850";
+  const fill   = "#14110c";
+  const cat    = (category ?? "").toLowerCase();
+
+  const isInn     = cat.includes("tavern")  || cat.includes("inn") ||
+                    cat.includes("rest")    || cat.includes("alehouse");
+  const isForge   = cat.includes("smithy")  || cat.includes("forge") ||
+                    cat.includes("smith");
+  const isMarket  = cat.includes("market")  || cat.includes("merchant") ||
+                    cat.includes("trade")   || cat.includes("provision") ||
+                    cat.includes("shop")    || cat.includes("stall") ||
+                    cat.includes("ledger");
+  const isShrine  = cat.includes("temple")  || cat.includes("shrine") ||
+                    cat.includes("chapel")  || cat.includes("altar") ||
+                    cat.includes("church")  || cat.includes("holy");
+  const isGuild   = cat.includes("guild")   || cat.includes("hall") ||
+                    cat.includes("garrison")|| cat.includes("barracks") ||
+                    cat.includes("keep")    || cat.includes("warden");
+  const isWell    = cat.includes("well")    || cat.includes("fountain") ||
+                    cat.includes("water")   || cat.includes("pump");
+  const isStable  = cat.includes("stable")  || cat.includes("stables");
+  const isDungeon = cat.includes("dungeon") || cat.includes("ruin") ||
+                    cat.includes("vault")   || cat.includes("barrow") ||
+                    cat.includes("corridor")|| cat.includes("chamber") ||
+                    cat.includes("crypt")   || cat.includes("tomb");
+
+  const glyph = isInn ? (
+    <g stroke={stroke} strokeWidth="1" fill={fill} strokeLinejoin="round">
+      <rect x="-9" y="-3" width="18" height="9" />
+      <path d="M -10 -3 L 0 -10 L 10 -3" />
+      <path d="M -4 6 L -4 0 L -1 0 L -1 6"
+        stroke={stroke} strokeWidth="0.5" fill="none" />
+    </g>
+  ) : isForge ? (
+    <g stroke={stroke} strokeWidth="1" fill={fill} strokeLinejoin="round">
+      <rect x="-7" y="-2" width="14" height="8" />
+      <path d="M -8 -2 L 0 -8 L 8 -2" />
+      <path d="M 3 -8 L 3 -11 M 5 -8 L 5 -11"
+        stroke={stroke} strokeWidth="0.5" />
+      <path d="M 4 -11 q -2 -2 0 -4 q 2 -2 0 -4"
+        stroke={stroke} strokeWidth="0.4" fill="none" opacity="0.6" />
+    </g>
+  ) : isMarket ? (
+    <g stroke={stroke} strokeWidth="1" fill={fill} strokeLinejoin="round">
+      <path d="M -10 -2 L 10 -2 L 10 5 L -10 5 Z" />
+      <path d="M -11 -2 L -8 -6 L 8 -6 L 11 -2" />
+      <path d="M -5 5 L -5 -2 M 0 5 L 0 -2 M 5 5 L 5 -2"
+        stroke={stroke} strokeWidth="0.5" />
+    </g>
+  ) : isShrine ? (
+    <g stroke={stroke} strokeWidth="1" fill={fill} strokeLinejoin="round">
+      <path d="M -6 6 L -6 -2 Q -6 -8 0 -8 Q 6 -8 6 -2 L 6 6" />
+      <path d="M -2 6 L -2 -2 L 2 -2 L 2 6" />
+    </g>
+  ) : isGuild ? (
+    <g stroke={stroke} strokeWidth="1" fill={fill} strokeLinejoin="round">
+      <path d="M -8 6 L -8 -2 L -6 -2 L -6 -4 L -3 -4 L -3 -2 L 3 -2 L 3 -4 L 6 -4 L 6 -2 L 8 -2 L 8 6 Z" />
+      <path d="M -2 6 L -2 0 L 2 0 L 2 6"
+        stroke={stroke} strokeWidth="0.5" fill="none" />
+    </g>
+  ) : isWell ? (
+    <g stroke={stroke} strokeWidth="1" fill={fill}>
+      <ellipse cx="0" cy="2" rx="4" ry="1.5" />
+      <path d="M -4 2 L -4 -1 L 4 -1 L 4 2" />
+      <path d="M -5 -1 L -3 -5 L 3 -5 L 5 -1" />
+    </g>
+  ) : isStable ? (
+    <g stroke={stroke} strokeWidth="1" fill={fill} strokeLinejoin="round">
+      <rect x="-8" y="-2" width="16" height="7" />
+      <path d="M -9 -2 L 0 -7 L 9 -2" />
+      <path d="M -3 5 L -3 -2 M 3 5 L 3 -2"
+        stroke={stroke} strokeWidth="0.5" />
+    </g>
+  ) : isDungeon ? (
+    <g stroke={stroke} strokeWidth="0.8" fill={fill} strokeLinejoin="round">
+      <path d="M -4 3 L -3 -3 L -1 -4 L 0 -1 L 2 -5 L 3 1 L 4 3 Z" />
+    </g>
+  ) : (
+    // Default: generic two-house settlement glyph.
+    <g stroke={stroke} strokeWidth="0.9" fill={fill} strokeLinejoin="round">
+      <path d="M -4 1 L -4 -2 L -2 -4 L 0 -2 L 0 1 Z" />
+      <path d="M 0 1 L 0 -1 L 2 -3 L 4 -1 L 4 1 Z" />
+    </g>
+  );
+
+  return (
+    <g transform={`translate(${x} ${y})`}>
+      {current && (
+        <>
+          <circle r="18" fill="rgba(245,158,11,0.10)" />
+          <circle r="14" fill="none" stroke="#f59e0b" strokeWidth="0.5"
+            strokeDasharray="2 2"
+            className="ew-pulse"
+            style={{ transformOrigin: "center" }}
+          />
+        </>
+      )}
+      {glyph}
+    </g>
+  );
+}
+
+// Edge-anchored exit labels — rendered for the Local tier so the
+// player can see which way the gates open without crowding the
+// settlement glyphs themselves.
+function LocalExits({
+  exits, onSelectExit,
+}: Pick<RendererProps, "exits" | "onSelectExit">) {
+  if (!exits || exits.length === 0) return null;
+  // Bucket exits by direction (left = source on the left half of the
+  // viewBox). When two exits share a side, stagger them vertically so
+  // labels don't overlap.
+  const lefts:  Array<NonNullable<RendererProps["exits"]>[number]> = [];
+  const rights: Array<NonNullable<RendererProps["exits"]>[number]> = [];
+  for (const e of exits) {
+    if (e.fromX < VIEW / 2) lefts.push(e); else rights.push(e);
+  }
+  return (
+    <>
+      {lefts.map((e, i) => (
+        <g
+          key={`exL-${e.targetId}-${i}`}
+          onClick={onSelectExit ? () => onSelectExit(e.targetId) : undefined}
+          style={onSelectExit ? { cursor: "pointer" } : undefined}
+        >
+          <text
+            x={14}
+            y={170 + i * 12}
+            textAnchor="start"
+            fontFamily="var(--serif)"
+            fontStyle="italic"
+            fontSize="9"
+            fill="#f59e0b"
+          >
+            ← {e.targetName}
+          </text>
+        </g>
+      ))}
+      {rights.map((e, i) => (
+        <g
+          key={`exR-${e.targetId}-${i}`}
+          onClick={onSelectExit ? () => onSelectExit(e.targetId) : undefined}
+          style={onSelectExit ? { cursor: "pointer" } : undefined}
+        >
+          <text
+            x={VIEW - 14}
+            y={170 + i * 12}
+            textAnchor="end"
+            fontFamily="var(--serif)"
+            fontStyle="italic"
+            fontSize="9"
+            fill="#f59e0b"
+          >
+            {e.targetName} →
+          </text>
+        </g>
+      ))}
+    </>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Local tier — settlement layout with road dashes between buildings.
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -200,8 +379,7 @@ export function LocalMap(props: RendererProps) {
       </g>
       <CommonConnections connections={props.connections} />
 
-      {/* Use TownGlyph for everything in a settlement plan since we're
-          showing buildings, not landmarks. */}
+      {/* Building-type-specific glyph per node. */}
       {props.nodes.map((n) => {
         const labelColor = n.isCurrent ? "#f59e0b"
                          : n.isDiscovered ? "#e8d8b0" : "#7a6850";
@@ -211,19 +389,24 @@ export function LocalMap(props: RendererProps) {
             onClick={props.onSelectNode ? () => props.onSelectNode!(n.id) : undefined}
             style={props.onSelectNode ? { cursor: "pointer" } : undefined}
           >
-            {n.isDiscovered
-              ? <TownGlyph x={n.x} y={n.y} current={n.isCurrent} />
-              : (
-                <g transform={`translate(${n.x} ${n.y})`}>
-                  <rect x="-4" y="-3" width="8" height="6"
-                    fill="none" stroke="#7a6850"
-                    strokeWidth="0.6" strokeDasharray="1.5 1.5" />
-                </g>
-              )
-            }
+            {n.isDiscovered ? (
+              <DrawBuilding
+                x={n.x}
+                y={n.y}
+                category={n.category}
+                current={n.isCurrent}
+                visited={n.isDiscovered}
+              />
+            ) : (
+              <g transform={`translate(${n.x} ${n.y})`}>
+                <rect x="-4" y="-3" width="8" height="6"
+                  fill="none" stroke="#7a6850"
+                  strokeWidth="0.6" strokeDasharray="1.5 1.5" />
+              </g>
+            )}
             <text
               x={n.x}
-              y={n.y + 14}
+              y={n.y + 16}
               textAnchor="middle"
               fontFamily="var(--serif)"
               fontStyle="italic"
@@ -234,7 +417,7 @@ export function LocalMap(props: RendererProps) {
               {n.isDiscovered ? n.name : "—"}
             </text>
             {props.npcMode && n.npcCount > 0 && (
-              <g transform={`translate(${n.x + 6} ${n.y - 5})`}>
+              <g transform={`translate(${n.x + 7} ${n.y - 6})`}>
                 <circle r="1.4" fill="#f59e0b" />
                 <circle r="2.8" fill="#f59e0b" opacity="0.3" />
               </g>
@@ -243,7 +426,7 @@ export function LocalMap(props: RendererProps) {
         );
       })}
 
-      <CommonExits exits={props.exits} onSelectExit={props.onSelectExit} />
+      <LocalExits exits={props.exits} onSelectExit={props.onSelectExit} />
     </PaperBacking>
   );
 }

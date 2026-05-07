@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.12
-**Status:** Active Development — Map Debug Mode (Verifying Data Pipeline)
+**Version:** 8.13
+**Status:** Active Development — Map Debug Mode (Ready for Fresh World Verification)
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -10,7 +10,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Verify map data via debug grid → restore genre renderers → Combat System
+**Current Phase:** Generate fresh world → verify all 3 debug tiers → restore genre renderers → Combat System
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -24,30 +24,28 @@
 | Trade + Dialogue + Architecture | No-check trade, haiku model | ✅ Complete |
 | Full UI Redesign | Design tokens, 15 SVG map renderers | ✅ Complete |
 | Map Overhaul — Real Coordinates | fitToViewBox, skeleton fix, dedup | ✅ Complete |
-| Map Debug Mode | Raw grid, tier fix, undiscovered, zone click | ✅ Complete |
-| Genre renderers restored | Pending debug verification | ⏳ Next |
+| Map Debug Mode + Data Fixes | Grid renderer, tier fix, coordinate ranges | ✅ Complete |
+| Genre renderers restored | Pending fresh-world debug verification | ⏳ Next |
 | 20 | Combat System | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed.**
 
-### Map Debug Mode (commit f271f33 — 86/86 tests, clean build)
+### Latest commits
 
-**DebugMap.tsx (new):** Diagnostic SVG renderer for all genres/tiers. Shows:
-8×8 coordinate grid (every 4th line bolder), nodes as 6px circles (amber=current, white=discovered, dim grey=undiscovered with dashed outline), node name + raw (x,y) coords below each, dashed connection lines, exit labels distributed across four edges with arrow glyphs (←→↑↓), title bar (tier · node count), bottom-left legend.
+**b7a7d33 — Settlement is_expandable fix + wider coordinate ranges (86/86, clean build)**
 
-**index.tsx:** All (genre, tier) combinations route through DebugMap. Genre dispatcher preserved as commented-out code. Restore when data pipeline verified.
+Fix 1 — Settlement is_expandable=false (apply-world-bible/route.ts step 4a):
+Settlement hub (`is_settlement_node=true`) now gets `is_expandable: false` instead of `true`. Previously `!is_interior=true` made the settlement appear on the World tier filter alongside geographic regions. Now only geographic region zone (step 4c) and adjacent regions (step 4d) carry `is_expandable: true`. Added console.log confirming resolved value per location.
 
-**Tier definitions fixed:**
-- buildWorldTier: `is_expandable === true` only — geographic regions, no settlements
-- buildRegionTier: `zone_id === region.id && id !== region.id` — excludes the region zone node itself so World ≠ Region
-- Both tiers include discovered AND undiscovered nodes
+Fix 2 — Wider coordinate ranges + anti-cardinal placement (generate-world-bible/route.ts):
+- Sub-locations: `±2` → `±5` on both axes
+- region_location: `2-4 units` → `8-15 units` from hub
+- Adjacent regions: `5-10 units` → `18-35 units`
+- Added CRITICAL paragraph forbidding cardinal cross patterns, demanding diagonal/varied offsets ({-3,1}, {2,-2}, {1,4}, {-4,-1})
+- Skeleton examples updated to match new ranges and demonstrate anti-cardinal rule
 
-**Undiscovered nodes shown:** Removed all `filter(n => n.discovered)` from candidate selection. All tiers include both.
-
-**Zone click guard:** `isExpandable?: boolean` added to MapNode. handleSelectNode early-returns when `type === "zone" && isExpandable`. Geographic region containers no longer trigger navigation.
-
-**Exit label distribution:** `ExitEdge = "left"|"right"|"top"|"bottom"` + `edge?` on MapExit. distributeExits() + classifyExitEdge() helpers tag each exit by source node position. DebugMap buckets and stacks siblings per edge.
+**f271f33 — Debug map mode: raw coordinate grid, tier fix, undiscovered nodes, zone click guard, exit label distribution**
 
 ### Known issues (shelved — address after map confirmed)
 - Duplicate codex writes: two paths (7b + 7c-1) fire for same location
@@ -61,9 +59,9 @@
 ### Map System — Current State
 ```
 COORDINATE SYSTEM (shared world space, integers):
-  Hub always at {0,0}. Sub-locations cluster ±2 of hub.
-  Region landmarks 2-4 units out. Adjacent regions 5-10 units.
-  Frozen at WorldBible generation. Never changes.
+  Hub always at {0,0}. Sub-locations cluster ±5 of hub (organic/diagonal).
+  Region landmarks 8-15 units out. Adjacent regions 18-35 units.
+  No cardinal cross patterns. Frozen at WorldBible generation.
 
 LAYOUT ENGINE: fitToViewBox()
   Reads actual map_position from WorldGraph nodes.
@@ -74,14 +72,13 @@ TIER DEFINITIONS:
   Local  = hub + sub_locations (BFS from hub, zone_id match)
   Region = is_settlement_node + region_locations
            (zone_id === regionId, id !== regionId)
-  World  = is_expandable === true only (geographic regions)
+  World  = is_expandable === true only (geographic regions only —
+           settlement nodes now correctly excluded)
 
 DEBUG MODE ACTIVE: index.tsx routes all to DebugMap.tsx
-  Genre renderers (Fantasy/Cyber/Space/Apoc/Horror): unchanged,
-  preserved in their files, dispatcher commented out in index.tsx.
-
-TO RESTORE GENRE RENDERERS: uncomment pickModule dispatcher
-  in components/game/map/renderers/index.tsx
+  Genre renderers preserved, dispatcher commented out.
+  TO RESTORE: uncomment pickModule dispatcher in
+  components/game/map/renderers/index.tsx
 ```
 
 ### The Two Domains
@@ -93,7 +90,7 @@ TO RESTORE GENRE RENDERERS: uncomment pickModule dispatcher
 ```
 World
 └── Geographic Region (is_expandable=true, Tier 1)
-    ├── Settlement (is_settlement_node=true, Tier 2)
+    ├── Settlement (is_settlement_node=true, is_expandable=false, Tier 2)
     │   └── Sub-location (type=sub_location, Tier 3, zone_id=settlement)
     ├── Standalone location (type=zone, is_expandable=false, Tier 2)
     │   └── Back-connection to settlement GUARANTEED
@@ -147,11 +144,11 @@ Verbosity: terse (2/3/4 sentences ≤12 words) | standard (3-4/4-5/5-7) | rich (
 | System | When | Description |
 | --- | --- | --- |
 | Genre renderers restored | After map verified | Uncomment pickModule in index.tsx |
+| Codex dedup fix | After map | Two-path duplicate write cleanup |
 | Combat System | Day 20 | Turn-based, code resolves, AI narrates |
 | Container + Loot | Day 21 | Registry, loot tables, search flow |
 | Skills + Leveling | Day 22 | XP, stat points, level gates |
 | Main Quest Thread | Day 23 | Breadcrumb injection, quest tracking |
-| Codex dedup fix | After map | Two-path duplicate write cleanup |
 
 ---
 
@@ -201,4 +198,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 79 — V8.12: Debug map mode active. DebugMap.tsx rendering raw coordinate grid. Tier definitions fixed (World=expandable only, Region=zone children). Undiscovered nodes shown. Zone click guard. Exit label edge distribution.*
+*Last updated: Session 80 — V8.13: Settlement is_expandable=false (World tier clean). Coordinate ranges expanded (sub-locations ±5, region_locations 8-15, adjacent regions 18-35). Anti-cardinal placement instruction added. Ready for fresh-world debug verification.*

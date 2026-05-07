@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.6
-**Status:** Active Development — Architecture Hardening Complete
+**Version:** 8.7
+**Status:** Active Development — Full UI Redesign Complete
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -10,7 +10,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** UI Design Session (Claude Design) → Combat System
+**Current Phase:** Test the new UI → then Combat System
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -25,27 +25,44 @@
 | Navigation + NPC fixes | Back-links, NPC codex, stakes difficulty | ✅ Complete |
 | Trade + Dialogue + Arrival | No-check trade, NPC switch, arrival header | ✅ Complete |
 | Architecture Hardening | MOVE text removed, zone_id, haiku model | ✅ Complete |
-| UI Design Session | Claude Design — map + full UI overhaul | ⏳ Active |
-| 20 | Combat System | ⏳ Pending |
+| Full UI Redesign | Design tokens, SVG maps, 3-col layout | ✅ Complete |
+| 20 | Combat System | ⏳ Next |
 | Container + Loot | Registry, loot tables, search flow | ⏳ Pending |
 | 21+ | Skills, Background, Factions | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed.**
 
-### Architecture Hardening (commit e9a355c — 43/43 tests, clean build)
+### Full UI Redesign (commit 2fccd5e — 86/86 tests, clean build)
 
-**Change 1 — MOVE text → zero AI:**
-Text classified as MOVE now returns hardcoded SYSTEM message: "Use the navigation bar below to travel to a nearby location." Zero AI call. INTERNAL_DESCRIBE narrator path removed from text input entirely. forceMoveToNode (navigateTo) bypasses this guard.
+**Step 1 — Design tokens:**
+All tokens from /design/styles.css ported to app/globals.css. Genre primaries, surfaces (bg-0..bg-3), inks (ink-1..ink-5), highlights (hl-loc/item/landmark/pass/fail), font stacks (Cormorant Garamond / Inter Tight / JetBrains Mono), utility classes (ew-vellum, ew-grain, ew-stipple, ew-fog, ew-pulse, ew-link-*, ew-said, ew-divider, ew-scroll). Legacy aliases preserved.
 
-**Change 2 — zone_id + back-connection validation:**
-WorldNode.is_settlement_node field added. region_locations locked to geographic region zone_id. Both apply routes run stitch validation: region_location.connections ↔ settlement.connections enforced at apply time, logged.
+**Step 2 — data-genre mechanism:**
+genreSlug() maps Genre enum → fantasy/cyber/horror/space/apoc. GameLayout writes slug to data-genre on root div. All [data-genre] CSS selectors apply globally.
 
-**Change 3 — RegionBible → haiku model:**
-claude-sonnet-4-5 → claude-haiku-4-5-20251001. max_tokens 2200 → 1200. Logs [RegionBible] Using haiku model.
+**Step 3 — Inline text components (StoryComponents.tsx):**
+wrapQuotes, Said, NarrativeBlock, SceneDivider, NPCSpeech, StatPill, LocationSpan, NpcSpan, ItemSpan, LandmarkSpan.
 
-**Change 4 — NavigationBar return card robust:**
-Return card detection: type=zone, is_settlement_node≠true, search graph for sibling with same zone_id and is_settlement_node=true. Independent of connections array. Outline fallback for unresolved connections.
+**Step 4 — StoryFeed rebuilt:**
+parseStatCheck() drives StatPill rendering. Scene dividers for arrivals. Design-correct typography (serif prose, mono chrome).
+
+**Step 5 — Map renderers (/components/game/map/renderers/):**
+primitives.tsx: paper/ink/star/salvage/black-ink backings + glyphs with prefixed gradient IDs. One renderer per genre × 3 tiers. GenreMap dispatcher. project() helper maps WorldNode.map_position into 0–320 SVG viewBox. All 15 genre×tier combinations implemented.
+
+**Step 6 — WorldMap.tsx rewritten:**
+MapSidebar shell (◆ MAP header, WORLD/REGION/LOCAL tier switcher with SVG icons, square map area, location info panel with NPCs and landmarks). buildRendererPayload() projects graph data. buildLocationInfo() resolves WCD/WorldAsset constitutions into panel.
+
+**Step 7 — GameLayout.tsx redesigned:**
+Wordmark with globe SVG, genre badge, MAP/CODEX/Save/avatar pill header chrome. Three-column desktop (map sidebar 320px / story feed flex-1 / character panel 280px). Single-column mobile. Bottom-sheet map on mobile.
+
+**Step 8 — NavigationBar.tsx:**
+md:hidden on desktop (map sidebar handles navigation). Mobile: NavCard design (28px SVG icon, name + type, VISITED/HERE chips). Return-card, landmark-card, outline-fallback preserved.
+
+**Step 9 — DialogueModal.tsx redrawn:**
+56px avatar, ◆ IN CONVERSATION header, italic serif NPC name, mood/role/location chips in mono. Options as serif italic rows with stat badges and tone-coloured left border. Dashed inline free-text input. Mono "walk away" link. Merchant trade button preserved.
+
+**Step 10 — Verified:** tsc clean, 86/86 tests, next build clean.
 
 ---
 
@@ -62,10 +79,10 @@ Return card detection: type=zone, is_settlement_node≠true, search graph for si
 ```
 World
 └── Geographic Region (Tier 1 block)
-    ├── Settlement (Tier 2 node)
-    │   ├── Sub-location (Tier 3 block)
-    │   └── Sub-location (Tier 3 block)
-    ├── Standalone location — dungeon/wilderness (Tier 2 node, ≥1 NPC)
+    ├── Settlement (Tier 2 node, is_settlement_node=true)
+    │   ├── Sub-location (Tier 3 block, zone_id = settlement id)
+    │   └── Sub-location
+    ├── Standalone location (Tier 2 node, zone_id = region id)
     │   └── Back-connection to settlement GUARANTEED at apply time
     └── [Adjacent region exits — WCD landmarks navigable via ◆ cards]
 ```
@@ -74,8 +91,27 @@ World
 ```
 Text MOVE → hardcoded "Use the navigation bar" — ZERO AI CALL
 navigateTo(nodeId): NavigationBar cards, WorldMap clicks, highlight clicks
-NavigationBar: connection cards + ← Return (sibling settlement) + ◆ WCD landmarks
+NavigationBar: desktop = md:hidden | mobile = NavCard row with icons
+Return card: graph-search for sibling settlement by zone_id
 RegionBible expansion: navigateTo(adjacentRegionId) only
+```
+
+### Map System ✅
+```
+Tier 1 — World: geographic regions as styled SVG blocks by genre
+Tier 2 — Region: settlement + standalone locations side by side
+Tier 3 — Local: sub-locations, current node pulsing
+All 5 genres × 3 tiers = 15 distinct SVG renderers
+project() maps WorldNode.map_position → 0–320 viewBox coords
+```
+
+### UI Design System ✅
+```
+Fonts: Cormorant Garamond (serif prose) / Inter Tight (sans chrome) / JetBrains Mono (labels)
+Surfaces: bg-0 #0a0907 → bg-3 #211c16 (warm near-black)
+Genre accent: --accent via [data-genre] CSS attribute
+Highlights: hl-loc #7dd3fc / hl-item #f59e0b / hl-landmark #c4b5fd / hl-pass #a3e635 / hl-fail #f87171
+Design files: /design/ folder in repo
 ```
 
 ### Generation Model ✅
@@ -87,23 +123,8 @@ Zone 3 (3+ hops, WCD landmarks): Name + position only. Visible on map.
 
 ### Model Selection ✅
 - WCD + WorldBible: claude-sonnet-4-5
-- RegionBible: claude-haiku-4-5-20251001 (speed over quality)
+- RegionBible: claude-haiku-4-5-20251001
 - Live narration: claude-sonnet-4-5
-
-### Dialogue System ✅
-- Options generated by code from NPC asset data
-- Free text validation gate (movement, absent NPC, absent container, repeat examine)
-- Closed context: WCD + RESPONDING CHARACTER + TIER 1 OBJECTS + SCENE CONTEXT only
-- 💰 Trade = direct openTrade(), zero AI, zero stat check
-- Failed check → evasion only, never reveals info
-- Difficulty = difficultyForTrust + stakesBonusForIntent + tone modifier [6,18]
-
-### Container + Loot System (Pending Implementation)
-- Container registry: Tier 1 named + template ambient per location type
-- Free text gate: not in registry → "There's no [X] here." Zero AI.
-- Search flow: spawn roll → quality roll → loot table pick → item added → 1-sentence AI narration
-- One search per container, permanent
-- Regional loot tables generated at WorldBible time, frozen
 
 ---
 
@@ -138,7 +159,6 @@ Verbosity (STRICTLY ENFORCED):
 
 | System | When | Description |
 | --- | --- | --- |
-| UI Design Session | Active | Claude Design — map + full UI redesign |
 | Combat System | Day 20 | Turn-based, code resolves, AI narrates |
 | Container + Loot | Day 21 | Registry, loot tables, search flow |
 | Skills + Leveling | Day 22 | XP, stat points, level gates |
@@ -161,7 +181,7 @@ world_states: +current_node_id. world-state route accepts worldGraph.
 | Layer | Tool |
 | --- | --- |
 | Frontend | Next.js 14 (App Router) |
-| Styling | Tailwind CSS + shadcn/ui |
+| Styling | Tailwind CSS + shadcn/ui + custom design tokens |
 | Database | Supabase |
 | AI (world gen + narration) | claude-sonnet-4-5 |
 | AI (RegionBible) | claude-haiku-4-5-20251001 |
@@ -174,13 +194,13 @@ world_states: +current_node_id. world-state route accepts worldGraph.
 
 ## Genre Definitions
 
-| Genre | Primary | Currency | HP |
-| --- | --- | --- | --- |
-| Fantasy | #f59e0b amber | Gold | HP |
-| Cyberpunk | #22d3ee cyan | Credits | Integrity |
-| Horror/Lovecraftian | #84cc16 acid green | None | HP + Sanity |
-| Space Opera | #a855f7 purple | Stellar Units | Hull Integrity |
-| Post-Apocalyptic | #ea580c rust | Caps | HP |
+| Genre | data-genre | Primary | Currency | HP |
+| --- | --- | --- | --- | --- |
+| Fantasy | fantasy | #f59e0b amber | Gold | HP |
+| Cyberpunk | cyber | #22d3ee cyan | Credits | Integrity |
+| Horror/Lovecraftian | horror | #84cc16 acid green | None | HP + Sanity |
+| Space Opera | space | #a855f7 purple | Stellar Units | Hull Integrity |
+| Post-Apocalyptic | apoc | #ea580c rust | Caps | HP |
 
 ---
 
@@ -204,4 +224,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 73 — V8.6: Architecture hardening. MOVE text → zero AI hardcoded response. zone_id validation. RegionBible → haiku. Return card graph-search. Architecture spec V1.1 in /docs/architecture-spec.md.*
+*Last updated: Session 74 — V8.7: Full UI redesign. Design tokens, data-genre mechanism, StoryComponents, StoryFeed rebuilt, 15 SVG map renderers (5 genres × 3 tiers), MapSidebar rewrite, 3-column GameLayout, mobile NavBar, DialogueModal redesign.*

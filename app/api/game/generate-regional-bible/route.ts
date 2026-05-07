@@ -292,17 +292,20 @@ function validateBible(parsed: unknown): { ok: true; bible: RegionBible } | { ok
 }
 
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
-  // CHANGE 3 — per architecture spec ("Model Selection"): RegionBible
-  // generation runs on haiku because the outline already locks the
-  // region's identity. Quality from a simpler prompt is acceptable;
-  // speed matters more here than for WCD/WorldBible/narration.
-  // max_tokens drops from 2200 to 1200 to match haiku's snappier
-  // response budget — the skeleton (1 hub + 1 sub + 1 region_location
-  // + 3 NPCs) reliably fits.
+  // Architecture spec ("Model Selection"): RegionBible generation runs on
+  // haiku because the outline already locks the region's identity. Quality
+  // from a simpler prompt is acceptable; speed matters more here than for
+  // WCD/WorldBible/narration.
+  //
+  // FIX 1 — max_tokens bumped 1200 → 2000. The full skeleton (1 hub + 1
+  // sub-location + 1 region_location + 3 NPCs + 6 Tier 1 objects + back-
+  // exit) needs ~1400-1600 tokens to render. 1200 was clipping responses
+  // mid-JSON, so the JSON.parse throws and the retry truncates again →
+  // 500 with a useless "Failed to parse RegionBible JSON after retry".
   console.log("[RegionBible] Using haiku model");
   const message = await client.messages.create({
     model:      "claude-haiku-4-5-20251001",
-    max_tokens: 1200,
+    max_tokens: 2000,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });
@@ -363,6 +366,13 @@ export async function POST(request: NextRequest) {
         parsed = JSON.parse(stripJsonFences(retryRaw));
       } catch (retryErr) {
         const retryParseErr = retryErr instanceof Error ? retryErr.message : "JSON parse failed (retry)";
+        // FIX 1 — surface the actual parse errors in the server log so the
+        // next time max_tokens / prompt drift causes a 500, we can see
+        // exactly what was wrong instead of a generic client-side message.
+        console.error("[RegionBible] JSON parse failed after retry.", {
+          first: parseError,
+          retry: retryParseErr,
+        });
         return NextResponse.json(
           { error: "Failed to parse RegionBible JSON after retry", first: parseError, retry: retryParseErr },
           { status: 500 }
@@ -370,6 +380,10 @@ export async function POST(request: NextRequest) {
       }
     }
   } catch (err) {
+    // FIX 1 — same diagnostic for an Anthropic-level failure (network,
+    // rate limit, etc.) so server logs show the actual exception instead
+    // of just the swallowed message.
+    console.error("[RegionBible] Anthropic call failed:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Anthropic call failed" },
       { status: 500 }

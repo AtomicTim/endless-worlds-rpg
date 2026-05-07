@@ -501,10 +501,19 @@ export async function POST(request: NextRequest) {
     if (!validConnections.includes(startingNodeId)) {
       validConnections.push(startingNodeId);
     }
-    graphNodes[loc.id] = {
+    const regionLocNode = {
       id:                 loc.id,
       name:               loc.name,
-      type:               "zone",
+      // FIX 3 — region_locations MUST carry type: "zone" (NOT
+      // "region_location" or "dungeon") so the WorldMap's
+      // isAtNonSettlementZone predicate
+      //   player.type === "zone" &&
+      //   !player.is_settlement_node &&
+      //   !player.is_expandable
+      // disables the LOCAL tab when the player is standing on one.
+      // The specific dungeon / wilderness flavour lives on
+      // `category` instead.
+      type:               "zone" as const,
       category:           loc.type,
       // CHANGE 2 — region_locations live IN the geographic region, not
       // in their own zone. zone_id is locked to the geographic region
@@ -522,6 +531,18 @@ export async function POST(request: NextRequest) {
       // Standalone landmarks are never the settlement hub.
       is_settlement_node: false,
     };
+    // FIX 3 — diagnostic. Surface the three fields the WorldMap
+    // predicate keys off so a generation regression is immediately
+    // visible in server logs the next time a dungeon/wilderness node
+    // doesn't disable LOCAL.
+    console.log(
+      "[apply-world-bible] region_location node:",
+      loc.id,
+      "type:", regionLocNode.type,
+      "is_expandable:", regionLocNode.is_expandable,
+      "is_settlement_node:", regionLocNode.is_settlement_node
+    );
+    graphNodes[loc.id] = regionLocNode;
   }
 
   // 4b-2. CHANGE 2 — symmetric back-connection validation pass.

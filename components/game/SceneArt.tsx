@@ -33,14 +33,35 @@ export function SceneArt({ locationId, locationName, genre }: SceneArtProps) {
     : Genre.FANTASY;
   const colors    = getGenreColors(genreEnum);
 
-  // Look up the current node's category (tavern / settlement / dungeon /
-  // etc.) when a world graph is loaded so the panel can show the place's
-  // type as a subtle subtitle. Falls back to nothing when no graph yet.
+  // Look up the current node's type label. We mirror the same rules
+  // buildLocationInfo applies in the WorldMap's info panel so the page
+  // header above the story feed and the map sidebar agree:
+  //
+  //   • Geographic region zone (is_expandable + self-zoned) → "REGION"
+  //   • Standalone non-settlement zone (dungeon / wilderness)
+  //     → category.toUpperCase() (e.g. "DUNGEON")
+  //   • Anything else → category.toUpperCase() / type.toUpperCase()
+  //
+  // FIX 2 — without this guard the chip used to render the raw
+  // node.category (e.g. "settlement_hub") even when the player was
+  // standing on the geographic region zone, which read as
+  // "SETTLEMENT_HUB" instead of "REGION".
   const locationType = useGameStore((s) => {
     const graph = s.masterState?.world_graph;
     if (!graph) return null;
     const node = graph.nodes[locationId] ?? graph.nodes[graph.current_node_id];
-    return node?.category ?? null;
+    if (!node) return null;
+    if (node.is_expandable && node.zone_id === node.id) {
+      return "REGION";
+    }
+    if (
+      node.type === "zone" &&
+      !node.is_settlement_node &&
+      !node.is_expandable
+    ) {
+      return (node.category ?? node.type).toUpperCase();
+    }
+    return (node.category ?? node.type)?.toUpperCase() ?? null;
   });
 
   void colors;

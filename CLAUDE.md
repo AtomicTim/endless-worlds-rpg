@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.10
-**Status:** Active Development — Topology Map Layout Complete
+**Version:** 8.11
+**Status:** Active Development — Real Coordinate Map Layout Complete
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -26,7 +26,7 @@
 | Architecture Hardening | MOVE text removed, haiku model | ✅ Complete |
 | Full UI Redesign | Design tokens, 15 SVG map renderers, layout | ✅ Complete |
 | Map Fix + UI Polish Rounds 1-2 | Building glyphs, BFS discovery, codex | ✅ Complete |
-| Map Overhaul — Topology Layout | graph-topology positioning, pulse fix | ✅ Complete |
+| Map Overhaul — Real Coordinate Layout | fitToViewBox, skeleton fix, dedup | ✅ Complete |
 | 20 | Combat System | ⏳ Next |
 | Container + Loot | Registry, loot tables, search flow | ⏳ Pending |
 | 21+ | Skills, Background, Factions | ⏳ Pending |
@@ -34,20 +34,16 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed.**
 
-### Map Overhaul — Topology Layout (commit 6dfe18f — 86/86 tests, clean build)
+### Map Overhaul — Real Coordinate Layout (commit 525ea30 — 86/86 tests, clean build)
 
-**Fix 1 — Topology-based layout (WorldMap.tsx):**
-Discarded map_position for visual layout entirely. New topologyLayout(nodes, connections, anchorId) puts anchor at viewBox centre (160,160), runs BFS through connection graph to assign ring numbers (graph-distance from anchor), places ring 1 evenly around centre, rings 2+ on a single outer radius. Both rings clamped to PAD=48 margin. connectionPairs() helper produces deduped Array<[string,string]> for each tier.
-- Local tier: two-phase BFS discovery kept (zone_id seed → connection BFS → sub_location fallback). Anchor = player's current node or zone hub.
-- Region tier: anchor = settlement node (is_settlement_node=true) falling back to region.id.
-- World tier: anchor = findRootZoneId(current_node_id). Undiscovered hints float on outer ring.
-Dead code removed: autoPositionNodes, hasMapPos, boundsFor, MIN_RANGE. project() and BoundsLike remain exported from types.ts.
+**Fix 1 — WorldBible skeleton coordinate system (generate-world-bible/route.ts):**
+Added COORDINATE SYSTEM instruction block: settlement hub always at {0,0}, sub-locations within ±2 of hub, region landmarks 2–4 units out, adjacent regions 5–10 units. Skeleton examples fixed: tavern moved from {0,0} (collision with hub) → {-1,0}, smithy added at {0,1}, fourth sub-location at {0,-1}, region_landmark at {3,2}, adjacent region grid_centre at {6,0}. Every location must have a unique (x,y). Now generates 1 settlement + 4 sub-locations.
 
-**Fix 2 — SVG pulse drift (all genre renderers):**
-Added transformBox: "fill-box" alongside transformOrigin: "center" on all ew-pulse elements across FantasyMap.tsx, CyberMap.tsx, SpaceMap.tsx, ApocMap.tsx, HorrorMap.tsx, primitives.tsx. 9 occurrences. Pulse ring now scales relative to element's own bounding box — no more drift toward top-left SVG corner.
+**Fix 2 — deduplicatePositions (apply-world-bible/route.ts):**
+New helper groups graph nodes by serialized (x,y), keeps first node at original position, spirals subsequent collisions through cardinal then diagonal offsets. Runs immediately before WorldGraph assembly so persisted graph always has unique coordinates regardless of AI output.
 
-**Fix 3 — TS3 compatibility:**
-Replaced for...of over Map/Set with .forEach() callbacks (tsconfig target defaults to ES3 which can't iterate iterators directly).
+**Fix 3 — fitToViewBox (WorldMap.tsx):**
+Replaced topologyLayout() entirely with fitToViewBox(). Computes bounding box of all nodes with map_position, enforces MIN_RANGE=3 floor on both axes, scales linearly into padded viewBox (PAD=44). Nodes without coords fall back to centroid circle. All three tier builders (world/region/local) now call fitToViewBox(candidates) after existing discovery logic. BFS discovery for local tier preserved. Positions are stable across navigation — clicking a node never reshuffles layout. Removed topologyLayout, RING_R, ring BFS, local PAD=48. connectionPairs() kept for edge deduplication.
 
 ---
 
@@ -73,36 +69,35 @@ World
 
 ### Map System ✅
 ```
-Layout engine: topologyLayout() — graph-topology BFS positioning
-  - Anchor node at centre (160,160)
-  - Ring 1 (direct neighbours): evenly distributed circle around centre
-  - Ring 2+ (further nodes): outer ring, clamped to PAD=48 margin
-  - map_position values IGNORED for layout (unreliable from WorldBible)
-  - connectionPairs() produces deduped edge list per tier
+Coordinate system: shared world space, integers
+  Hub always at {0,0}. Sub-locations cluster ±2 of hub.
+  Region landmarks 2-4 units out. Adjacent regions 5-10 units.
+  Frozen at WorldBible generation. Never changes.
 
-Tier 3 — Local: hub at centre, sub-locations in ring 1
-  Discovery: zone_id seed → BFS admitting sub_locations/hub/shared-zone
+Layout engine: fitToViewBox()
+  - Reads actual map_position (grid_position) from WorldGraph nodes
+  - Computes bounding box, enforces MIN_RANGE=3
+  - Scales linearly into padded viewBox (PAD=44, VIEW=320)
+  - Stable: same positions every render — no reshuffling on navigate
+  - Fallback: nodes missing map_position fan in centroid circle
+
+Tier 3 — Local: hub + sub-locations in real coordinates
+  Discovery: BFS from hub through connection graph
   Fallback: include all sub_location nodes if only hub found
-  Exits: connections leaving included set, labelled at map edge
+  Exits: connections leaving included set at map edges
 
-Tier 2 — Region: settlement at centre, standalones in ring 1
-  Anchor: is_settlement_node=true node
-
-Tier 1 — World: current region at centre, adjacent in ring 1
-  Anchor: findRootZoneId(current_node_id)
-  Undiscovered: outer ring
+Tier 2 — Region: settlement + standalones at real coordinates
+Tier 1 — World: all zone nodes at real grid_centre coordinates
 
 Building glyphs (Fantasy only, by ambient_type):
-  inn/tavern → inn silhouette | smithy/forge → forge+chimney
+  inn/tavern → inn | smithy/forge → forge+chimney
   market_stall → awning | temple_shrine → arch
   guild_hall/garrison → keep | well/fountain → well
   stable → stable | dungeon/ruin/barrow → ruin
   Other genres: Cyber=squares, Space=rooms, Apoc=sheds, Horror=daggers
 
-SVG pulse: transformBox: "fill-box" + transformOrigin: "center" on all
-  ew-pulse elements — prevents drift toward SVG viewport corner
-
-Info panel: ◆ INTERACT items are buttons → submitAction("examine [name]")
+SVG pulse: transformBox: "fill-box" + transformOrigin: "center"
+Info panel: ◆ INTERACT buttons → submitAction("examine [name]")
 ```
 
 ### UI Design System ✅
@@ -122,7 +117,7 @@ Highlights:
 - Location: writes on first ARRIVING (step 7c-1, threshold ≥1)
 - Location: also writes on first NPC interaction (step 7g, takes priority)
 - NPC: writes on first player dialogue
-- Both: codex_loc_{id} flag prevents duplicate writes
+- codex_loc_{id} flag prevents duplicate writes
 
 ### Navigation Model ✅
 Text MOVE → hardcoded message. navigateTo(nodeId) only.
@@ -220,4 +215,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 77 — V8.10: Topology-based map layout (map_position abandoned), SVG pulse transformBox fix, TS3 forEach compatibility.*
+*Last updated: Session 78 — V8.11: Real coordinate map layout (fitToViewBox), WorldBible skeleton coordinate fix, position deduplication in apply-world-bible.*

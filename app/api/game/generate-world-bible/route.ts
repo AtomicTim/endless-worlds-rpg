@@ -68,14 +68,18 @@ grid_position is in a shared world coordinate space using
 integers. ONE coordinate space covers everything.
 - The settlement hub is ALWAYS at {"x": 0, "y": 0}.
 - Sub-locations cluster around the hub: use values in the
-  range -2 to +2 on both axes, e.g. {-1,0}, {1,0}, {0,1},
-  {-1,1}, {1,-1}, {0,-1}. Spread them out — do NOT put two
-  sub-locations at the same position.
-- The standalone region_location sits 2-4 units from the hub,
-  e.g. {3,1}, {-2,3}, {4,-1}.
-- Adjacent regions sit 5-10 units away, e.g. {6,0}, {-5,2}.
+  range -5 to +5 on both axes. Spread them out — do NOT put
+  two sub-locations at the same position.
+- The standalone region_location sits 8-15 units from the hub,
+  e.g. {10,-5}, {-12,4}, {7,11}.
+- Adjacent regions sit 18-35 units away, e.g. {22,8}, {-25,12}.
 - Every location MUST have a UNIQUE grid_position. No two
   locations may share the same x and y values.
+- CRITICAL: Do NOT place sub-locations in a cardinal cross
+  pattern (e.g. {-1,0}, {1,0}, {0,-1}, {0,1}). Use diagonal
+  and varied offsets instead — for example: {-3,1}, {2,-2},
+  {1,4}, {-4,-1}. The layout should look organic, not like
+  a compass rose.
 
 Return EXACTLY this JSON structure (fill in the values):
 {
@@ -108,7 +112,7 @@ Return EXACTLY this JSON structure (fill in the values):
         "is_interior": true,
         "parent_location_id": "settlement_slug",
         "atmosphere": "Tavern interior description.",
-        "grid_position": {"x": -1, "y": 0},
+        "grid_position": {"x": -2, "y": 1},
         "connections": ["settlement_slug"],
         "npc_ids": ["character_innkeeper_slug"],
         "objects": [{"id": "fireplace_slug", "name": "The Hearth", "description": "1 sentence", "is_interactable": true}],
@@ -122,7 +126,7 @@ Return EXACTLY this JSON structure (fill in the values):
         "is_interior": true,
         "parent_location_id": "settlement_slug",
         "atmosphere": "Shop interior description.",
-        "grid_position": {"x": 1, "y": 0},
+        "grid_position": {"x": 3, "y": -1},
         "connections": ["settlement_slug"],
         "npc_ids": ["character_merchant_slug"],
         "objects": [{"id": "counter_slug", "name": "The Counter", "description": "1 sentence", "is_interactable": true}],
@@ -136,7 +140,7 @@ Return EXACTLY this JSON structure (fill in the values):
         "is_interior": true,
         "parent_location_id": "settlement_slug",
         "atmosphere": "Smithy interior description.",
-        "grid_position": {"x": 0, "y": 1},
+        "grid_position": {"x": -1, "y": 3},
         "connections": ["settlement_slug"],
         "npc_ids": [],
         "objects": [{"id": "anvil_slug", "name": "The Anvil", "description": "1 sentence", "is_interactable": true}],
@@ -150,7 +154,7 @@ Return EXACTLY this JSON structure (fill in the values):
         "is_interior": true,
         "parent_location_id": "settlement_slug",
         "atmosphere": "Fourth sub-location interior description.",
-        "grid_position": {"x": 0, "y": -1},
+        "grid_position": {"x": 2, "y": 2},
         "connections": ["settlement_slug"],
         "npc_ids": [],
         "objects": [{"id": "altar_slug", "name": "The Altar", "description": "1 sentence", "is_interactable": true}],
@@ -165,7 +169,7 @@ Return EXACTLY this JSON structure (fill in the values):
         "is_settlement_node": false,
         "is_interior": false,
         "atmosphere": "1-2 sentences describing this standalone point in the geographic area.",
-        "grid_position": {"x": 3, "y": 2},
+        "grid_position": {"x": 10, "y": -5},
         "connections": ["settlement_slug"],
         "npc_ids": [],
         "objects": [{"id": "region_obj_slug", "name": "Tier 1 Object Name", "description": "1 sentence", "is_interactable": true}],
@@ -203,7 +207,7 @@ Return EXACTLY this JSON structure (fill in the values):
       "id": "region_slug",
       "name": "Region Name",
       "type": "wilderness",
-      "grid_centre": {"x": 6, "y": 0},
+      "grid_centre": {"x": 22, "y": 8},
       "direction_from_start": "north",
       "distance": "adjacent",
       "atmosphere_hint": "1 sentence",

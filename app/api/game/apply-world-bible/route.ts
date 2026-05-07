@@ -393,13 +393,24 @@ export async function POST(request: NextRequest) {
       zoneId = loc.id;
     }
 
+    // The settlement hub is a Tier 2 node that lives INSIDE the
+    // geographic region. It must never appear on the World map tier,
+    // so it gets is_expandable: false even though it isn't an
+    // interior. Only the geographic region zone (built in step 4c)
+    // and adjacent region nodes (built in step 4d) carry true.
+    const isExpandable = loc.is_settlement_node ? false : !loc.is_interior;
+    console.log(
+      `[apply-world-bible] is_expandable for ${loc.id}:`,
+      isExpandable
+    );
+
     graphNodes[loc.id] = {
       id:                 loc.id,
       name:               loc.name,
       type:               loc.is_interior ? "sub_location" : "zone",
       category:           loc.type,
       zone_id:            zoneId,
-      is_expandable:      !loc.is_interior,
+      is_expandable:      isExpandable,
       connections:        validConnections,
       npc_ids:            finalNpcIds,
       item_ids:           loc.objects.map((o) => `item_${o.id}`),

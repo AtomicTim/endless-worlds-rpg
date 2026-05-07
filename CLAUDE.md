@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.15
-**Status:** Active Development — Map Polish Complete, Architecture Hardening Next
+**Version:** 8.16
+**Status:** Active Development — Map Navigation Complete, Architecture Hardening Next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -24,7 +24,7 @@
 | Trade + Dialogue + Architecture | No-check trade, haiku model | ✅ Complete |
 | Full UI Redesign | Design tokens, 15 SVG map renderers | ✅ Complete |
 | Map Overhaul + Debug Mode | fitToViewBox, tiers, coordinate ranges | ✅ Complete |
-| Regional Zone Traversal + Polish | Exit button, region zone, map fixes | ✅ Complete |
+| Regional Zone Traversal + Polish | Exit button, region zone, navigation | ✅ Complete |
 | Architecture Hardening | Domain 1/2 separation, caching, gate | ⏳ Next |
 | Genre renderers restored | After architecture confirmed | ⏳ Pending |
 | 20 | Combat System | ⏳ Pending |
@@ -32,19 +32,26 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed.**
 
-### Map Polish (commit 2b4391d — 43/43 tests, clean build)
+### Map Navigation Round 2 (commit 840f355 — 43/43 tests, clean build)
 
-**Fix 1 — LOCAL disabled at region zone:** TierBtn gains `disabled` prop (dims, cursor not-allowed). LOCAL button disables when `isAtRegionZone`. `buildRendererPayload` detects region zone and delegates Tier 3 to `buildRegionTier` to avoid overlapping-node chaos.
+**Fix 1 — PAD 80→60:** Better balance between inward clearance and usable map space.
 
-**Fix 2 — PAD 64→80:** Pulls nodes further inward in all three places (WorldMap.tsx, types.ts, DebugMap.tsx).
+**Fix 2 — Region map clicks navigate:** handleSelectNode Tier 2 non-expandable nodes now call onNavigate + switch to Tier 3. handleSelectExit Tier 2 calls onNavigate (triggers RegionBible expansion) — gives desktop users region-to-region travel via exit arrows.
 
-**Fix 3 — Exit button above map:** `buildLocalTier` returns `exits:[]` always. A `localExit` useMemo computes parent-region target; rendered as a real `<button>` above the SVG area with hover highlight, not buried in the SVG.
+**Fix 3 — Adjacent region cards: directly adjacent only:** NavigationBar walks up to player's geographic region node and builds adjRegionIds from its connections. Only regions in that set get ◆ cards — no cross-world jumping.
 
-**Fix 4 — Settlement nav filter:** NavigationBar skips connections where `current.is_settlement_node === true && node.zone_id !== current.id` — settlement nav cards show only the settlement's own sub-locations, not region-level siblings.
+**Fix 4 — Undiscovered region empty state:** When activeTier === 2 && payload.nodes.length === 0, renders ◇ UNDISCOVERED TERRITORY + "Travel here to reveal what lies within." instead of empty grid.
 
-**Fix 5 — No EXAMINE on World/Region map:** `buildLocationInfo` returns `landmarks: []` for both Tier 1 and Tier 2. EXAMINE buttons only appear in Tier 3 (local).
+**Fix 5 — Dialogue modal: compact bottom panel:** position: fixed, bottom: 0, maxHeight: 48vh, border-radius: 12px 12px 0 0. Compact 52px NPC header row. Options list scrolls internally. Footer (free-type + walk away) always visible. Desktop: maxWidth 640px, centered.
 
-**Fix 6 — Local title fix:** Tier-3 `zoneId` resolved via explicit IIFE that walks down from region zone to settlement hub before passing to `buildLocalTier`.
+**Fix 6 — Region zone return card:** When isAtRegionZone, settlement hub surfaced as ← Return card. Connection loop guards updated accordingly.
+
+**Fix 7 — RegionBible expansion logging:** navigateTo logs when adjacent region detected and triggering expansion.
+
+### World Map — Design Decision ✅
+World map is **purely informational**. No navigation from it. Clicking a region shows its Region map (preview). Travel between regions happens via:
+- Region map exit arrows (desktop — Fix 2)
+- ◆ nav bar cards (mobile + desktop)
 
 ### Known issues (shelved — address after architecture hardening)
 - Duplicate codex writes: two paths (7b + 7c-1) fire for same location
@@ -88,11 +95,10 @@ AI currently generates options freely. Code should build them from NPC asset:
 - If trust < 30: limited options
 AI only writes response text, not the option list.
 
-**Design question for C (answer before implementing):**
-NPC knowledge[] currently contains full sentences like "The eastern road is patrolled by outriders." Dialogue option labels need short topic strings. Two options:
-- Option A: Auto-derive label from first 4-5 words of knowledge string
-- Option B: WorldBible generates knowledge items as {topic, content} pairs; full sentence as fallback for existing saves. New worlds get proper labels.
-**Recommendation: Option B** — future-proofs knowledge items, better closed context for AI.
+**Design decision for C — CONFIRMED: Option B**
+WorldBible generates knowledge items as `{topic, content}` pairs going forward.
+Full sentence strings used as fallback label for existing saves (auto-truncate to first 5 words).
+New worlds get proper topic labels. AI receives `content` as closed context.
 
 ### Navigation Model ✅
 ```
@@ -102,22 +108,26 @@ navigateTo(nodeId): NavigationBar cards, map clicks, highlight clicks
 Travel flow:
   Sub-location → Return card → Settlement hub
   Settlement hub → ↑ EXIT TO [REGION] button → Geographic Region zone
-  Region zone → nav cards → standalones / ← settlement / ◆ adjacent regions
-  ◆ adjacent region → RegionBible expansion → new region settlement
+  Region zone → nav cards / region map clicks → standalones / ← settlement
+  Region zone → ◆ adjacent region cards / region map exit arrows → new region
+  Adjacent region → RegionBible expansion → new region settlement
+
+World map: informational only. No navigation from it.
 ```
 
 ### Map System ✅
 ```
 COORDINATE SYSTEM: Hub at {0,0}. Sub-locations ±5 (organic/diagonal).
   Region_locations 8-15 units. Adjacent regions 18-35 units.
-  Frozen at generation. PAD=80.
+  Frozen at generation. PAD=60.
 
 TIER DEFINITIONS:
-  Local  = hub + sub_locations (BFS). Disabled when at region zone.
-  Region = settlement + region_locations (zone_id === regionId, id !== regionId)
-  World  = is_expandable === true only. No EXAMINE buttons.
+  Local  = hub + sub_locations (BFS). Disabled/redirects when at region zone.
+  Region = settlement + region_locations. Node clicks navigate. Exit arrows navigate.
+  World  = is_expandable === true only. Informational only — no navigation.
 
-LOCAL exit: button rendered above SVG (not in map), navigates to parent region zone.
+LOCAL exit: button above SVG → navigates to parent region zone.
+Region undiscovered: ◇ UNDISCOVERED TERRITORY message when nodes.length === 0.
 DEBUG MODE ACTIVE in index.tsx. TO RESTORE: uncomment pickModule dispatcher.
 ```
 
@@ -130,6 +140,7 @@ World
     ├── Standalone location (type=zone, is_expandable=false)
     │   └── Back-connection to settlement GUARANTEED
     └── Adjacent regions (is_expandable=true, undiscovered)
+        └── Navigable via ◆ nav cards or region map exit arrows only
 ```
 
 ### Generation Model ✅
@@ -167,7 +178,7 @@ Verbosity: terse (2/3/4 sentences ≤12 words) | standard (3-4/4-5/5-7) | rich (
 
 | System | When | Description |
 | --- | --- | --- |
-| Architecture Hardening | NOW | Arrival caching, free text gate, code-gen dialogue options |
+| Architecture Hardening | NOW | Arrival caching, free text gate, code-gen dialogue options (Option B) |
 | Genre renderers restored | After arch confirmed | Uncomment pickModule in index.tsx |
 | Codex dedup fix | After arch | Two-path duplicate write cleanup |
 | Combat System | Day 20 | Turn-based, code resolves, AI narrates |
@@ -224,4 +235,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 82 — V8.15: Map polish complete. LOCAL disabled at region zone, PAD=80, exit button above map, settlement nav filter, no EXAMINE on world/region, local title fix. Architecture hardening (items A/B/C) queued next.*
+*Last updated: Session 83 — V8.16: Map navigation complete. PAD=60, region map node/exit clicks navigate, adjacent-only region cards, undiscovered state, dialogue bottom panel, region zone return card, RegionBible expansion logging. World map informational only. Architecture hardening (A/B/C with Option B for knowledge pairs) queued next.*

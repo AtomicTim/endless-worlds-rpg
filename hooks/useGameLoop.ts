@@ -1781,13 +1781,16 @@ export function useGameLoop() {
           useGameStore.getState().setLocationAssets(assets);
         });
 
-        // ── 7c-1. Codex 2nd-visit fallback ───────────────────────────────────
+        // ── 7c-1. Codex first-visit fallback ─────────────────────────────────
         // The codex entry for a location normally writes on first
         // DIALOGUE (step 7g) or first explicit EXAMINE. Both paths can
-        // be skipped — a player who walks straight through twice still
-        // hasn't catalogued it. Track visits here and, on the second
-        // ARRIVING, force the codex write so the location lands in the
-        // encyclopedia even without NPC interaction.
+        // be skipped — a player who walks straight through still
+        // hasn't catalogued it. Track visits here and, on every
+        // ARRIVING, force the codex write so the location lands in
+        // the encyclopedia even without NPC interaction. The
+        // alreadyWritten gate keeps this idempotent — only the
+        // first ARRIVING actually fires saveCodexEntry; subsequent
+        // arrivals just bump the visit counter.
         const visitsKey = `codex_visits_${arrivedAt}`;
         const flagKey   = `codex_loc_${arrivedAt}`;
         const priorRaw  = updatedState.world_state.flags?.[visitsKey];
@@ -1800,7 +1803,7 @@ export function useGameLoop() {
           [visitsKey]: next,
         };
 
-        if (next >= 2 && !alreadyWritten) {
+        if (next >= 1 && !alreadyWritten) {
           const liveAssets = useGameStore.getState().locationAssets;
           const locationAsset = liveAssets.find(
             (a) =>
@@ -1832,7 +1835,7 @@ export function useGameLoop() {
             });
             flagsAfter[flagKey] = true;
             console.log(
-              "[GameLoop/7c-1] Location codex entry written via 2nd-visit fallback:",
+              "[GameLoop/7c-1] Location codex entry written via first-visit fallback:",
               locationAsset.name
             );
           }

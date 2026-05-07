@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AssetCategory } from "@/types/game";
 import type { MasterState, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
-import { GenreMap, project, VIEW } from "./map/renderers";
+import { GenreMap, project, VIEW, PAD } from "./map/renderers";
 import type { MapNode, MapConnection, MapExit, BoundsLike, Tier } from "./map/renderers";
 
 /**
@@ -33,6 +33,10 @@ interface Props {
    *  useGameLoop.navigateTo, which routes via submitAction's
    *  forceMoveToNode option (bypasses the text-pipeline MOVE intercept). */
   onNavigate:     (nodeId: string) => void;
+  /** Optional — when set, the ◆ INTERACT panel rows become clickable
+   *  buttons that submit "examine <landmark name>" through the normal
+   *  action pipeline. Falls back to inert rows when omitted. */
+  onExamine?:     (input: string) => void;
   /** When true, render in mobile bottom-sheet mode (no left border, top
    *  drag handle, rounded top corners). */
   asSheet?:       boolean;
@@ -43,6 +47,7 @@ export function WorldMap({
   worldGraph,
   locationAssets,
   onNavigate,
+  onExamine,
   asSheet = false,
 }: Props) {
   const player = worldGraph.nodes[worldGraph.current_node_id];
@@ -348,42 +353,67 @@ export function WorldMap({
               ◆ INTERACT
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {info.landmarks.map((lm, i) => (
-                <div
-                  key={`${lm}-${i}`}
-                  style={{
-                    display:    "flex",
-                    alignItems: "center",
-                    gap:        8,
-                    padding:    "5px 8px",
-                    border:     "1px dashed var(--line-2)",
-                  }}
-                >
-                  <span
-                    className="ew-mono"
+              {info.landmarks.map((lm, i) => {
+                const clickable = !!onExamine;
+                const submit = () => onExamine?.(`examine ${lm}`);
+                return (
+                  <button
+                    key={`${lm}-${i}`}
+                    type="button"
+                    onClick={clickable ? submit : undefined}
+                    disabled={!clickable}
+                    title={lm}
                     style={{
-                      fontSize:      9,
-                      color:         "var(--accent)",
-                      letterSpacing: "0.18em",
-                      textTransform: "uppercase",
-                      width:         56,
+                      display:        "flex",
+                      alignItems:     "center",
+                      gap:            8,
+                      padding:        "6px 8px",
+                      border:         "1px dashed var(--line-2)",
+                      background:     "transparent",
+                      cursor:         clickable ? "pointer" : "default",
+                      width:          "100%",
+                      textAlign:      "left",
+                      transition:     "background 120ms",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!clickable) return;
+                      e.currentTarget.style.background =
+                        "color-mix(in srgb, var(--accent) 6%, transparent)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent";
                     }}
                   >
-                    EXAMINE ›
-                  </span>
-                  <span
-                    className="ew-serif"
-                    style={{
-                      fontSize:  12,
-                      color:     "var(--ink-2)",
-                      fontStyle: "italic",
-                      flex:      1,
-                    }}
-                  >
-                    {lm}
-                  </span>
-                </div>
-              ))}
+                    <span
+                      className="ew-mono"
+                      style={{
+                        fontSize:      9,
+                        color:         "var(--accent)",
+                        letterSpacing: "0.18em",
+                        textTransform: "uppercase",
+                        flexShrink:    0,
+                      }}
+                    >
+                      EXAMINE ›
+                    </span>
+                    <span
+                      className="ew-serif"
+                      style={{
+                        fontSize:     12,
+                        color:        "var(--ink-2)",
+                        fontStyle:    "italic",
+                        flex:         1,
+                        minWidth:     0,
+                        overflow:     "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace:   "nowrap",
+                      }}
+                    >
+                      {lm}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -479,9 +509,21 @@ function autoPositionNodes(
   const effectiveWithPos = allSame ? [] : withPos;
   const effectiveWithout = allSame ? candidates : withoutPos;
 
-  const bounds = effectiveWithPos.length > 0
+  // Enforce a minimum range in both axes. When every positioned node
+  // shares an x (or y) value, the raw bounds collapse to dx=0 and
+  // project() pins the whole row to PAD (the left or top edge).
+  // Padding the bounds out to MIN_RANGE grid units keeps the row
+  // centred even in that degenerate case.
+  const MIN_RANGE = 4;
+  const rawBounds = effectiveWithPos.length > 0
     ? boundsFor(effectiveWithPos.map((n) => n.map_position))
     : { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  const bounds: BoundsLike = {
+    minX: rawBounds.minX,
+    minY: rawBounds.minY,
+    maxX: Math.max(rawBounds.maxX, rawBounds.minX + MIN_RANGE),
+    maxY: Math.max(rawBounds.maxY, rawBounds.minY + MIN_RANGE),
+  };
 
   const projected = new Map<string, { x: number; y: number }>();
   for (const n of effectiveWithPos) {
@@ -500,9 +542,10 @@ function autoPositionNodes(
     : VIEW / 2;
 
   // Spread unpositioned nodes around the centroid in a flattened circle.
-  // Slight vertical squash keeps labels from clipping the top/bottom of
-  // the viewBox where genre headers / corner ornaments live.
-  const r = VIEW * 0.32;
+  // The radius is capped so the orbit never escapes the padded
+  // viewBox — important when a single positioned node sits near an
+  // edge and the rest of the cohort needs to wrap around it.
+  const r = Math.min(VIEW * 0.32, (VIEW - PAD * 2) / 2.2);
   effectiveWithout.forEach((n, i) => {
     const total = effectiveWithout.length;
     const angle = (i / (total || 1)) * 2 * Math.PI - Math.PI / 2;
@@ -697,9 +740,63 @@ function buildLocalTier({
   zoneId:     string;
   worldGraph: WorldGraph;
 }): RendererPayload {
-  const candidates = Object.values(worldGraph.nodes).filter(
-    (n) => n.zone_id === zoneId || n.id === zoneId
-  );
+  // PRIMARY discovery: zone_id-based seeding.
+  // Sub-locations should belong to a settlement via zone_id, but the
+  // generators occasionally point a sub_location's zone_id at the
+  // geographic region rather than the settlement hub. The BFS below
+  // recovers those by following the connection graph instead of
+  // trusting zone_id alone.
+  const seedIds = new Set<string>();
+  for (const [id, node] of Object.entries(worldGraph.nodes)) {
+    if (id === zoneId || node.zone_id === zoneId) {
+      seedIds.add(id);
+    }
+  }
+
+  // BFS through connections from each seed. A node is included when
+  // it's a sub_location, the hub itself, OR shares zone_id with the
+  // hub — anything else is a region-level neighbour and shows up as
+  // an exit instead.
+  const included = new Set<string>(seedIds);
+  const queue    = Array.from(seedIds);
+  const hubNode  = worldGraph.nodes[zoneId];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const node    = worldGraph.nodes[current];
+    if (!node) continue;
+    for (const connId of node.connections) {
+      if (included.has(connId)) continue;
+      const conn = worldGraph.nodes[connId];
+      if (!conn) continue;
+      if (
+        conn.type === "sub_location" ||
+        conn.id === zoneId ||
+        conn.zone_id === zoneId
+      ) {
+        included.add(connId);
+        queue.push(connId);
+      }
+    }
+  }
+
+  // FALLBACK: if zone_id stitching missed every sub_location AND the
+  // hub's connections are all region-level, the included set still
+  // only has the hub. Pull every sub_location in the graph as a last
+  // resort so the local map isn't empty when interior content exists.
+  if (included.size <= 1 && hubNode) {
+    for (const [id, node] of Object.entries(worldGraph.nodes)) {
+      if (included.has(id)) continue;
+      if (node.type === "sub_location") {
+        included.add(id);
+      }
+    }
+  }
+
+  const candidates = Array.from(included)
+    .map((id) => worldGraph.nodes[id])
+    .filter(Boolean) as WorldNode[];
+
   const projected = autoPositionNodes(candidates);
   const idIndex   = new Map(projected.map((n) => [n.id, n] as const));
 
@@ -715,35 +812,43 @@ function buildLocalTier({
     npcCount:     n.npc_ids?.length ?? 0,
   }));
 
+  // Connections only between included nodes — anything pointing
+  // outside the included set is treated as an exit below.
   const connections: MapConnection[] = [];
   const seen = new Set<string>();
   for (const n of projected) {
+    const a = nodes.find((x) => x.id === n.id);
+    if (!a) continue;
     for (const c of n.connections) {
       const target = idIndex.get(c);
       if (!target) continue;
-      const key = [n.id, target.id].sort().join("→");
+      const key = [n.id, c].sort().join("→");
       if (seen.has(key)) continue;
       seen.add(key);
+      const b = nodes.find((x) => x.id === c);
+      if (!b) continue;
       connections.push({
-        fromX: n._px, fromY: n._py,
-        toX:   target._px, toY:   target._py,
+        fromX: a.x, fromY: a.y,
+        toX:   b.x, toY:   b.y,
         visited: target.discovered,
       });
     }
   }
 
-  // Exits that leave the zone entirely.
+  // Exits: connections that leave the included set entirely.
   const exits: MapExit[] = [];
   for (const n of projected) {
+    const a = nodes.find((x) => x.id === n.id);
+    if (!a) continue;
     for (const c of n.connections) {
+      if (included.has(c)) continue;
       const target = worldGraph.nodes[c];
       if (!target) continue;
-      if (target.zone_id === zoneId || target.id === zoneId) continue;
       exits.push({
         targetId:   target.id,
         targetName: target.name,
-        fromX:      n._px,
-        fromY:      n._py,
+        fromX:      a.x,
+        fromY:      a.y,
       });
     }
   }

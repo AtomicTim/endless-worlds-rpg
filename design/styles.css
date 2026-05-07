@@ -1,0 +1,145 @@
+/* Endless Worlds — design tokens */
+:root {
+  /* Genre primaries */
+  --g-fantasy: #f59e0b;
+  --g-cyber: #22d3ee;
+  --g-horror: #84cc16;
+  --g-space: #a855f7;
+  --g-apoc: #ea580c;
+
+  /* Active genre (overridden per-artboard) */
+  --accent: var(--g-fantasy);
+  --accent-soft: color-mix(in oklab, var(--accent) 35%, transparent);
+  --accent-faint: color-mix(in oklab, var(--accent) 12%, transparent);
+  --accent-dim: color-mix(in oklab, var(--accent) 60%, #0b0a09);
+
+  /* Surfaces — warm ink-on-vellum-on-night */
+  --bg-0: #0a0907;
+  --bg-1: #110f0c;
+  --bg-2: #181410;
+  --bg-3: #211c16;
+  --line: #2a2520;
+  --line-2: #3a342c;
+
+  /* Text */
+  --ink-1: #e8dfd1;     /* high emphasis prose */
+  --ink-2: #c8bfae;     /* npc dialogue */
+  --ink-3: #a89e8c;     /* narrative prose */
+  --ink-4: #6e6557;     /* meta */
+  --ink-5: #4a4339;     /* hairline */
+
+  /* Highlights */
+  --hl-loc: #7dd3fc;     /* locations */
+  --hl-item: #f59e0b;    /* items */
+  --hl-landmark: #c4b5fd;/* landmarks */
+  --hl-pass: #a3e635;
+  --hl-fail: #f87171;
+
+  --serif: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;
+  --sans: 'Inter Tight', 'Inter', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+[data-genre="cyber"]   { --accent: var(--g-cyber); }
+[data-genre="horror"]  { --accent: var(--g-horror); }
+[data-genre="space"]   { --accent: var(--g-space); }
+[data-genre="apoc"]    { --accent: var(--g-apoc); }
+
+[data-genre] {
+  --accent-soft: color-mix(in oklab, var(--accent) 35%, transparent);
+  --accent-faint: color-mix(in oklab, var(--accent) 12%, transparent);
+  --accent-dim: color-mix(in oklab, var(--accent) 60%, #0b0a09);
+}
+
+/* Paper / parchment-on-dark texture utilities */
+.ew-vellum {
+  background:
+    radial-gradient(1200px 800px at 30% 20%, rgba(245,158,11,0.04), transparent 60%),
+    radial-gradient(900px 600px at 80% 90%, rgba(245,158,11,0.025), transparent 60%),
+    var(--bg-0);
+}
+
+.ew-grain {
+  position: absolute; inset: 0; pointer-events: none;
+  opacity: var(--grain, 0.5);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.6  0 0 0 0 0.5  0 0 0 0 0.35  0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+.ew-stipple {
+  background-image:
+    radial-gradient(rgba(232,223,209,0.12) 0.5px, transparent 0.6px),
+    radial-gradient(rgba(232,223,209,0.06) 0.5px, transparent 0.6px);
+  background-size: 6px 6px, 11px 11px;
+  background-position: 0 0, 3px 3px;
+}
+
+.ew-hatch {
+  background-image: repeating-linear-gradient(45deg,
+    rgba(232,223,209,0.06) 0 1px,
+    transparent 1px 5px);
+}
+
+.ew-fog {
+  background:
+    radial-gradient(60% 60% at 50% 50%, rgba(15,12,9,0) 0%, rgba(15,12,9,0.6) 60%, rgba(15,12,9,0.95) 100%),
+    repeating-linear-gradient(135deg, rgba(110,101,87,0.04) 0 2px, transparent 2px 6px);
+}
+
+.ew-mono { font-family: var(--mono); }
+.ew-serif { font-family: var(--serif); }
+.ew-sans { font-family: var(--sans); }
+
+/* Custom scrollbars within artboards */
+.ew-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.ew-scroll::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
+.ew-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* Animations */
+@keyframes ew-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.18); opacity: 0.4; }
+}
+@keyframes ew-sway {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+.ew-pulse { animation: ew-pulse 2.4s ease-in-out infinite; }
+
+/* Map tile fixed text rendering */
+.ew-cap {
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 10px;
+  color: var(--ink-4);
+}
+
+.ew-link-loc { color: var(--hl-loc); border-bottom: 1px dashed color-mix(in oklab, var(--hl-loc) 60%, transparent); cursor: pointer; }
+.ew-link-npc { color: var(--accent); border-bottom: 1px dashed var(--accent-soft); cursor: pointer; }
+.ew-link-item { color: var(--hl-item); border-bottom: 1px dashed color-mix(in oklab, var(--hl-item) 60%, transparent); cursor: pointer; }
+.ew-link-landmark { color: var(--hl-landmark); border-bottom: 1px dashed color-mix(in oklab, var(--hl-landmark) 60%, transparent); cursor: pointer; }
+
+/* Direct character speech inside narrative paragraphs */
+.ew-said {
+  color: var(--hl-said, #e8d8b0);
+  font-style: normal;
+  font-weight: 500;
+}
+[data-genre="cyber"] .ew-said,
+[data-genre="space"] .ew-said {
+  color: var(--accent);
+  text-shadow: 0 0 6px color-mix(in oklab, var(--accent) 40%, transparent);
+}
+
+.ew-divider {
+  display: flex; align-items: center; gap: 12px;
+  color: var(--accent);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin: 18px 0;
+}
+.ew-divider::before, .ew-divider::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(to right, transparent, var(--accent-soft), transparent);
+}

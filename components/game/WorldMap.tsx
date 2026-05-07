@@ -73,6 +73,25 @@ export function WorldMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masterState?.world_graph?.current_node_id]);
 
+  // ── FIX 1: detect when player is standing on the geographic region zone ─────
+  // The LOCAL tab is meaningless there — there are no sub-locations to browse.
+  // (Hoisted above the payload/info useMemos so those memos can read it.)
+  const isAtRegionZone =
+    !!player &&
+    player.is_expandable === true &&
+    player.zone_id === player.id;
+
+  // Bug 1 — non-settlement standalone zones (dungeons, wilderness)
+  // also have no interior layer. Disable LOCAL there too. These are
+  // type=zone, is_settlement_node=false, is_expandable=false (mirrors
+  // the apply-world-bible flag set), so the predicate is the
+  // complement of "settlement hub" / "geographic region zone".
+  const isAtNonSettlementZone =
+    !!player &&
+    player.type === "zone" &&
+    player.is_settlement_node !== true &&
+    player.is_expandable === false;
+
   // ── Build the renderer payload for the active tier ────────────────────────
   const payload = useMemo(() => {
     return buildRendererPayload({
@@ -80,8 +99,9 @@ export function WorldMap({
       worldGraph,
       activeTier,
       selectedRegionId,
+      isAtNonSettlementZone,
     });
-  }, [masterState, worldGraph, activeTier, selectedRegionId]);
+  }, [masterState, worldGraph, activeTier, selectedRegionId, isAtNonSettlementZone]);
 
   // ── Resolve location-info panel data from world assets ─────────────────────
   const info = useMemo(() => {
@@ -94,13 +114,6 @@ export function WorldMap({
       masterState,
     });
   }, [player, activeTier, selectedRegionId, worldGraph, locationAssets, masterState]);
-
-  // ── FIX 1: detect when player is standing on the geographic region zone ─────
-  // The LOCAL tab is meaningless there — there are no sub-locations to browse.
-  const isAtRegionZone =
-    !!player &&
-    player.is_expandable === true &&
-    player.zone_id === player.id;
 
   // ── FIX 3: compute the exit-button target for the JSX button above the map ─
   const localExit = useMemo<{ targetId: string; name: string } | null>(() => {
@@ -126,6 +139,10 @@ export function WorldMap({
 
   // ── Click handlers ─────────────────────────────────────────────────────────
   function handleSelectNode(nodeId: string) {
+    // Bug 5 — clicking the current node is a no-op. Re-navigation to
+    // the node you're already on triggers a duplicate ARRIVING beat
+    // and a second ◆ section header in the story feed.
+    if (nodeId === worldGraph.current_node_id) return;
     const node = worldGraph.nodes[nodeId];
     if (!node) return;
     if (activeTier === 1) {
@@ -168,6 +185,9 @@ export function WorldMap({
     onNavigate(nodeId);
   }
   function handleSelectExit(targetId: string) {
+    // Bug 5 — exiting to your current node is a no-op (same reasoning
+    // as handleSelectNode).
+    if (targetId === worldGraph.current_node_id) return;
     // Tier 3 — the local map's single "Exit to Region" exit drops the
     // player onto the open-world layer (the parent region zone).
     if (activeTier === 3) {
@@ -262,7 +282,7 @@ export function WorldMap({
           />
           <TierBtn id={3} active={activeTier === 3} onSelect={setActiveTier}
             label="LOCAL"
-            disabled={isAtRegionZone}
+            disabled={isAtRegionZone || isAtNonSettlementZone}
             icon={(
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M 7 13 Q 2 8 2 5 A 5 5 0 1 1 12 5 Q 12 8 7 13 Z"
@@ -608,10 +628,14 @@ function TierBtn({ id, active, label, icon, onSelect, disabled }: TierBtnProps) 
 // ── Renderer payload builder ────────────────────────────────────────────────
 
 interface PayloadInputs {
-  masterState:      MasterState;
-  worldGraph:       WorldGraph;
-  activeTier:       Tier;
-  selectedRegionId: string | null;
+  masterState:           MasterState;
+  worldGraph:            WorldGraph;
+  activeTier:            Tier;
+  selectedRegionId:      string | null;
+  /** Bug 1 — when the player is standing on a non-settlement standalone
+   *  zone (dungeon, wilderness), Tier 3 has no content to render; redirect
+   *  to the region tier so the player still sees their position in context. */
+  isAtNonSettlementZone: boolean;
 }
 
 interface RendererPayload {
@@ -646,7 +670,11 @@ interface RendererPayload {
  * Positions are deterministic and stable across navigation: clicking a
  * node to travel does not change layout.
  */
-const PAD = 60;
+// Bug 4 — bumped 60 → 76 so node labels and exit arrows have more
+// breathing room from the 320×320 viewBox edges. Below 76, longer
+// names ("The Bellhaven Crossing") clip against the edge in the
+// Tier 2 / Tier 3 layouts.
+const PAD = 76;
 
 function fitToViewBox(
   nodes: WorldNode[]
@@ -766,6 +794,7 @@ function buildRendererPayload({
   worldGraph,
   activeTier,
   selectedRegionId,
+  isAtNonSettlementZone,
 }: PayloadInputs): RendererPayload {
   const wcd     = masterState.metadata.world_consistency;
   const player  = worldGraph.nodes[worldGraph.current_node_id];
@@ -780,10 +809,14 @@ function buildRendererPayload({
   // Tier 3
   // FIX 1 — if the player is standing on the geographic region zone itself
   // (is_expandable + self-zoned), LOCAL has no content; redirect to region.
+  // Bug 1 — same redirect for non-settlement standalone zones; the current
+  // node IS the region landmark of interest.
   const isAtRegionZoneInPayload =
     !!player && player.is_expandable === true && player.zone_id === player.id;
-  if (isAtRegionZoneInPayload) {
-    return buildRegionTier({ region: player, worldGraph });
+  if (isAtRegionZoneInPayload || isAtNonSettlementZone) {
+    if (player) {
+      return buildRegionTier({ region: player, worldGraph });
+    }
   }
 
   // FIX 6 — resolve zoneId to the settlement hub via an explicit IIFE so
@@ -1003,12 +1036,22 @@ function buildLocalTier({
 
   // FALLBACK: if zone_id stitching missed every sub_location AND the
   // hub's connections are all region-level, the included set still
-  // only has the hub. Pull every sub_location in the graph as a last
-  // resort so the local map isn't empty when interior content exists.
-  if (included.size <= 1 && hubNode) {
+  // only has the hub. Pull every sub_location whose zone_id points
+  // back at THIS settlement as a last resort.
+  //
+  // Bug 1 fix: only run this fallback for settlement hubs. Standalone
+  // region zones (dungeons, wilderness) have no interior layer, and
+  // pulling sub-locations from siblings would mis-attribute them.
+  // We additionally constrain the fallback to sub_locations whose
+  // zone_id matches this hub — even the settlement fallback only
+  // surfaces its OWN sub_locations, never another settlement's.
+  if (included.size <= 1 && hubNode?.is_settlement_node === true) {
     for (const [id, node] of Object.entries(worldGraph.nodes)) {
       if (included.has(id)) continue;
-      if (node.type === "sub_location") {
+      if (
+        node.type === "sub_location" &&
+        node.zone_id === hubNode.id
+      ) {
         included.add(id);
       }
     }
@@ -1120,6 +1163,50 @@ function buildLocationInfo({
     };
   }
 
+  // Tier 3 — Bug 3: when the player is standing on the geographic
+  // region zone (is_expandable + self-zoned), the panel must read as
+  // a REGION overview, not as a sub-location. Without this branch,
+  // the panel would label the geographic zone with whatever
+  // `category` happened to be on the node, which is misleading and
+  // doesn't surface the cross-region exit count.
+  if (
+    currentNode?.is_expandable === true &&
+    currentNode.zone_id === currentNode.id
+  ) {
+    const exits = countCrossRegionExits(currentNode, worldGraph);
+    return {
+      type:       `REGION · ${exits} EXIT${exits === 1 ? "" : "S"}`,
+      title:      currentNode.name,
+      atmosphere: extractFirstSentence(
+        firstAtmosphere(currentNode, locationAssets) ??
+        masterState.metadata.world_consistency?.atmosphere ?? ""
+      ),
+      npcs:       [],
+      landmarks:  [],
+    };
+  }
+
+  // Tier 3 — Bug 3: standalone non-settlement zones (dungeons,
+  // wilderness) deserve the dungeon/wilderness type label rather
+  // than falling through to the generic local-node branch.
+  if (
+    currentNode?.type === "zone" &&
+    !currentNode.is_settlement_node &&
+    !currentNode.is_expandable
+  ) {
+    const asset    = resolveLocationAsset(currentNode, locationAssets);
+    const typeAbbr = (currentNode.category ?? currentNode.type).toUpperCase();
+    return {
+      type:       typeAbbr,
+      title:      currentNode.name,
+      atmosphere: extractFirstSentence(
+        asset?.constitution.physical_description ?? ""
+      ),
+      npcs:       resolvePresentNpcs(currentNode, locationAssets),
+      landmarks:  asset?.constitution.key_landmarks?.slice(0, 4) ?? [],
+    };
+  }
+
   // Tier 3 — current local node
   if (!currentNode) {
     return { type: "—", title: "—", atmosphere: null, npcs: [], landmarks: [] };
@@ -1181,14 +1268,9 @@ function firstAtmosphere(region: WorldNode, assets: WorldAsset[]): string | null
   return asset?.constitution.atmosphere ?? null;
 }
 
-function resolveLandmarks(region: WorldNode, assets: WorldAsset[]): string[] {
-  const asset = assets.find(
-    (a) =>
-      a.category === AssetCategory.LOCATION &&
-      (a.id === region.id || a.id === `location_${region.id}`)
-  );
-  return asset?.constitution.key_landmarks?.slice(0, 4) ?? [];
-}
+// resolveLandmarks() helper removed — buildLocationInfo now reads
+// landmarks directly off the resolved location asset, so the
+// dedicated helper had no remaining callers.
 
 function countCrossRegionExits(region: WorldNode, worldGraph: WorldGraph): number {
   let count = 0;
@@ -1211,6 +1293,10 @@ function countCrossRegionExits(region: WorldNode, worldGraph: WorldGraph): numbe
 function chooseInitialTier(player: WorldNode | undefined): Tier {
   if (!player) return 2;
   if (player.type === "sub_location") return 3;
+  // Bug 6 — geographic region zone has no LOCAL view (it IS the region).
+  // Open the panel on Tier 2 so the player sees the region landmarks
+  // they can step into, instead of an empty/redirected Tier 3.
+  if (player.is_expandable && player.zone_id === player.id) return 2;
   if (player.is_expandable) return 3;
   return 2;
 }

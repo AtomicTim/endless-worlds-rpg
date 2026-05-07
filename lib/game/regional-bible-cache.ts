@@ -40,21 +40,44 @@ function k({ sessionId, outlineId }: CacheKey): string {
  * Look up a previously-cached RegionBible for this outline (warm hit
  * means background pre-generation already completed). Returns null on
  * miss.
+ *
+ * Bug 2 diagnostic — log every read with the full cache key + the
+ * cached bible's id (when present) so we can confirm the cache is
+ * correctly partitioned by (sessionId, outlineId) and never serving
+ * a different region's bible to the player.
  */
 export function getCachedRegionalBible(
   sessionId: string,
   outlineId: string
 ): RegionBible | null {
-  return cache.get(k({ sessionId, outlineId })) ?? null;
+  const cacheKey = k({ sessionId, outlineId });
+  const cached   = cache.get(cacheKey) ?? null;
+  console.log(
+    "[RegionBibleCache] READ key:", cacheKey,
+    "hit:", !!cached,
+    cached ? "bible.id: " + cached.id : ""
+  );
+  return cached;
 }
 
-/** Store a freshly-generated bible so the next move can use it instantly. */
+/**
+ * Store a freshly-generated bible so the next move can use it instantly.
+ *
+ * Bug 2 diagnostic — log every write so cache poisoning (same key
+ * landing on two different bibles) shows up in the logs immediately.
+ */
 export function cacheRegionalBible(
   sessionId: string,
   outlineId: string,
   bible:     RegionBible
 ): void {
-  cache.set(k({ sessionId, outlineId }), bible);
+  const cacheKey = k({ sessionId, outlineId });
+  console.log(
+    "[RegionBibleCache] WRITE key:", cacheKey,
+    "bible.id:", bible.id,
+    "bible.name:", bible.name
+  );
+  cache.set(cacheKey, bible);
 }
 
 /**
@@ -164,6 +187,15 @@ export function pregenerateRegionalBible(args: {
       if (!res.ok) return;
       const data = await res.json() as { bible?: RegionBible };
       if (data.bible) {
+        // Bug 2 diagnostic — route through the public WRITE log so
+        // pre-generated bibles appear in the same cache audit trail
+        // as live writes.
+        console.log(
+          "[RegionBibleCache] WRITE key:", cacheKey,
+          "bible.id:", data.bible.id,
+          "bible.name:", data.bible.name,
+          "(pregenerated)"
+        );
         cache.set(cacheKey, data.bible);
         console.log(
           `[RegionBible/cache] Pre-generated: ${data.bible.name} (${args.outline.id})`

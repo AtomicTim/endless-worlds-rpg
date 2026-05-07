@@ -18,7 +18,9 @@ import { VIEW } from "./types";
  * component is a drop-in for any of them.
  */
 
-const PAD = 60;
+// Bug 4 — kept in sync with WorldMap.tsx + types.ts. 76 leaves room
+// for longer node labels and the four-edge exit-label distribution.
+const PAD = 76;
 
 const COLOR_CURRENT      = "#f59e0b";
 const COLOR_DISCOVERED   = "#e8dfd1";
@@ -176,11 +178,16 @@ export function DebugMap({
                     : n.isDiscovered ? COLOR_DISCOVERED
                     : COLOR_UNDISCOVERED;
     const coordFill = "rgba(168,158,140,0.7)";
+    // Bug 5 — the current node is its own no-op target, so don't
+    // advertise it as clickable. WorldMap.handleSelectNode also
+    // short-circuits, but the pointer cursor would mislead the player
+    // into expecting a click to do something.
+    const clickable = !!onSelectNode && !n.isCurrent;
     return (
       <g
         key={n.id}
-        onClick={onSelectNode ? () => onSelectNode(n.id) : undefined}
-        style={onSelectNode ? { cursor: "pointer" } : undefined}
+        onClick={clickable ? () => onSelectNode!(n.id) : undefined}
+        style={clickable ? { cursor: "pointer" } : undefined}
       >
         {!n.isDiscovered && (
           <circle

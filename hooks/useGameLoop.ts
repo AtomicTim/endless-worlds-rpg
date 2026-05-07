@@ -36,6 +36,14 @@ const GENRE_CURRENCY_KEY: Partial<Record<Genre, string>> = {
 // Module-level counter — persists across renders, resets when the module reloads.
 let autoSaveActionCount = 0;
 
+// Bug 7 — track the last node id we emitted an arrival section header
+// for. The duplicate "◆ ◆ GRAYVEIL CROSSING" symptom comes from two
+// arrival narrations firing for the same node back-to-back (most often
+// from a re-navigation click on the current location). We guard the
+// header-emit step against this here so even if the upstream no-op
+// guards miss, the player only ever sees one header per arrival.
+let lastArrivalNodeId: string | null = null;
+
 /**
  * FIX 4 — contextual loading-state text.
  *
@@ -935,6 +943,16 @@ export function useGameLoop() {
             : null);
         const matchedOutline = matchRegionOutline(wb.adjacent_regions, target);
 
+        // Bug 2 diagnostic — show what outline (and bible) the
+        // RegionBible expansion path picked for this navigation. If
+        // we ever cache-poison or mis-match, the mismatch shows up
+        // here next to the [RegionBibleCache] READ/WRITE lines.
+        console.log("[navigateTo] expanding region:", {
+          targetId:           target,
+          matchedOutlineId:   matchedOutline?.id,
+          matchedOutlineName: matchedOutline?.name,
+        });
+
         if (matchedOutline && wcdRegion) {
           const sessionId = updatedState.metadata.session_id;
           const fromId    = String(
@@ -1257,6 +1275,21 @@ export function useGameLoop() {
           return null;
         }
         const targetId = updatedState.world_state.current_location_id;
+
+        // Bug 7 — duplicate section header guard. If the last arrival
+        // we emitted a header for is the same node, skip the metadata
+        // tag so StoryFeed doesn't render a second ◆ NAME divider.
+        // The narrative text still flows through as usual; only the
+        // section header is suppressed.
+        if (targetId && targetId === lastArrivalNodeId) {
+          console.log(
+            "[GameLoop] suppressing duplicate arrival header for", targetId
+          );
+          return null;
+        }
+        if (targetId) {
+          lastArrivalNodeId = targetId;
+        }
         return graph.nodes[targetId]?.name ?? arrivingAtHint ?? null;
       })();
       store.addMessage(
@@ -2485,6 +2518,16 @@ export function useGameLoop() {
     const gs    = useGameStore.getState();
     const state = gs.masterState;
     if (!state) return;
+
+    // Bug 5 — defense-in-depth no-op for re-navigation to the current
+    // node. WorldMap and NavigationBar should already filter this, but
+    // a stray click handler shouldn't be able to fire a second ARRIVING
+    // beat for the player's existing location.
+    const currentNodeId = state.world_graph?.current_node_id;
+    if (nodeId === currentNodeId) {
+      console.log("[navigateTo] no-op: already at", nodeId);
+      return;
+    }
 
     const graph = state.world_graph;
     const node  = graph?.nodes[nodeId];

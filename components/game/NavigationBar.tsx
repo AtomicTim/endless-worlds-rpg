@@ -174,6 +174,15 @@ export function NavigationBar({ masterState, worldGraph, onNavigate }: Props) {
     const connected: WorldNode[] = [];
     const fallbackOutlines: RegionOutline[] = [];
     for (const id of current.connections) {
+      // Bug 8 — defensive self-loop filter. The graph SHOULD never
+      // contain `current.connections.includes(current.id)`, but if a
+      // generation pass ever stitches one in, it would render a
+      // confusing nav card pointing at the player's own location.
+      // The same guard against current_node_id covers stray "fallback
+      // settlement" pointers from earlier iterations of the apply
+      // routes.
+      if (id === current.id) continue;
+      if (id === worldGraph.current_node_id) continue;
       const node = worldGraph.nodes[id];
       if (node) {
         // FIX 4 — when standing at the settlement hub, only surface its

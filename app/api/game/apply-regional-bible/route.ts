@@ -358,6 +358,18 @@ export async function POST(request: NextRequest) {
     if (!validConnections.includes(settlementIdForZone)) {
       validConnections.push(settlementIdForZone);
     }
+    // Bug 2 — diagnostic logging for region_location zone_id assignment.
+    // Captures the full context at the moment we lock zone_id to the
+    // bible's id so we can confirm the bible matches the player's
+    // intended target region (no cross-region cache leakage).
+    console.log("[apply-regional-bible] zone_id assignment:", {
+      locationId:   loc.id,
+      bibleId:      bibleNarrowed.id,
+      bibleName:    bibleNarrowed.name,
+      originNodeId,
+      sessionId,
+    });
+
     newNodes[loc.id] = {
       id:                 loc.id,
       name:               loc.name,

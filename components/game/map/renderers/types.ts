@@ -79,7 +79,10 @@ export interface BoundsLike {
 }
 
 export const VIEW = 320;
-export const PAD  = 60;
+// Bug 4 — bumped 60 → 76; long node labels were clipping against the
+// viewBox edge. The exit-label distribution math in DebugMap.tsx
+// references the same value, so it lives here as the single source.
+export const PAD  = 76;
 
 /** Project a grid coordinate into the 320x320 viewBox space. When the
  *  bounds collapse to a single point we centre the marker. */

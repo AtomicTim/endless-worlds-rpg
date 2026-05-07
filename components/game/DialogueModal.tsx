@@ -141,7 +141,6 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade }: DialogueM
       )
     : undefined;
   const npcRole = (npcAsset?.constitution.role ?? "").toLowerCase();
-  const npcLocation = npcAsset?.first_seen_location ?? "";
   const isCurrentNpcMerchant =
     npcRole.includes("merchant") ||
     npcRole.includes("trader") ||

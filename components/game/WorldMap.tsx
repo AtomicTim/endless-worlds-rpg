@@ -95,6 +95,35 @@ export function WorldMap({
     });
   }, [player, activeTier, selectedRegionId, worldGraph, locationAssets, masterState]);
 
+  // ── FIX 1: detect when player is standing on the geographic region zone ─────
+  // The LOCAL tab is meaningless there — there are no sub-locations to browse.
+  const isAtRegionZone =
+    !!player &&
+    player.is_expandable === true &&
+    player.zone_id === player.id;
+
+  // ── FIX 3: compute the exit-button target for the JSX button above the map ─
+  const localExit = useMemo<{ targetId: string; name: string } | null>(() => {
+    if (activeTier !== 3 || isAtRegionZone) return null;
+    const raw     = player
+      ? (player.type === "sub_location" ? player.zone_id : player.id)
+      : worldGraph.current_node_id;
+    const rawNode = worldGraph.nodes[raw];
+    const zoneId  =
+      rawNode?.is_expandable === true && rawNode?.zone_id === rawNode?.id
+        ? (Object.values(worldGraph.nodes).find(
+             (n) => n.zone_id === raw && n.is_settlement_node === true
+           )?.id ?? raw)
+        : raw;
+    const hubNode        = worldGraph.nodes[zoneId];
+    const parentRegionId = hubNode?.zone_id;
+    const parentNode     = parentRegionId ? worldGraph.nodes[parentRegionId] : null;
+    if (parentNode?.is_expandable === true && parentNode.id !== zoneId) {
+      return { targetId: parentNode.id, name: parentNode.name };
+    }
+    return null;
+  }, [activeTier, isAtRegionZone, worldGraph, player]);
+
   // ── Click handlers ─────────────────────────────────────────────────────────
   function handleSelectNode(nodeId: string) {
     const node = worldGraph.nodes[nodeId];
@@ -218,6 +247,7 @@ export function WorldMap({
           />
           <TierBtn id={3} active={activeTier === 3} onSelect={setActiveTier}
             label="LOCAL"
+            disabled={isAtRegionZone}
             icon={(
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M 7 13 Q 2 8 2 5 A 5 5 0 1 1 12 5 Q 12 8 7 13 Z"
@@ -228,6 +258,41 @@ export function WorldMap({
           />
         </div>
       </div>
+
+      {/* FIX 3 — "Exit to Region" as a real JSX button above the SVG, not
+           inside it. Only visible on Tier 3 when a parent region exists. */}
+      {localExit && (
+        <div style={{ padding: "6px 14px", borderBottom: "1px solid var(--line)" }}>
+          <button
+            onClick={() => onNavigate(localExit.targetId)}
+            style={{
+              display:       "flex",
+              alignItems:    "center",
+              gap:           6,
+              padding:       "5px 10px",
+              width:         "100%",
+              background:    "transparent",
+              border:        "1px solid var(--line-2)",
+              borderRadius:  2,
+              color:         "var(--accent)",
+              fontFamily:    "var(--mono)",
+              fontSize:      9,
+              letterSpacing: "0.18em",
+              cursor:        "pointer",
+              transition:    "background 120ms",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background =
+                "color-mix(in srgb, var(--accent) 8%, transparent)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+            }}
+          >
+            ↑ EXIT TO {localExit.name.toUpperCase()}
+          </button>
+        </div>
+      )}
 
       {/* Map area — square aspect ratio so renderers fit their 320×320 viewBox */}
       <div style={{ position: "relative", aspectRatio: "1", flexShrink: 0 }}>
@@ -448,18 +513,21 @@ export function WorldMap({
 // ── Tier button ─────────────────────────────────────────────────────────────
 
 interface TierBtnProps {
-  id:       Tier;
-  active:   boolean;
-  label:    string;
-  icon:     React.ReactNode;
-  onSelect: (t: Tier) => void;
+  id:        Tier;
+  active:    boolean;
+  label:     string;
+  icon:      React.ReactNode;
+  onSelect:  (t: Tier) => void;
+  /** FIX 1 — when true the button is dimmed and unclickable. */
+  disabled?: boolean;
 }
 
-function TierBtn({ id, active, label, icon, onSelect }: TierBtnProps) {
+function TierBtn({ id, active, label, icon, onSelect, disabled }: TierBtnProps) {
   return (
     <button
-      onClick={() => onSelect(id)}
+      onClick={() => { if (!disabled) onSelect(id); }}
       title={label}
+      disabled={disabled}
       style={{
         flex:           1,
         padding:        "8px 0",
@@ -467,7 +535,8 @@ function TierBtn({ id, active, label, icon, onSelect }: TierBtnProps) {
         border:         active ? "1px solid var(--accent)" : "1px solid var(--line-2)",
         borderRadius:   2,
         color:          active ? "var(--accent)" : "var(--ink-3)",
-        cursor:         "pointer",
+        cursor:         disabled ? "not-allowed" : "pointer",
+        opacity:        disabled ? 0.35 : 1,
         display:        "flex",
         flexDirection:  "column",
         alignItems:     "center",
@@ -525,7 +594,7 @@ interface RendererPayload {
  * Positions are deterministic and stable across navigation: clicking a
  * node to travel does not change layout.
  */
-const PAD = 64;
+const PAD = 80;
 
 function fitToViewBox(
   nodes: WorldNode[]
@@ -657,10 +726,30 @@ function buildRendererPayload({
     return buildRegionTier({ region, worldGraph });
   }
   // Tier 3
-  const zoneId =
-    player && player.type === "sub_location"
+  // FIX 1 — if the player is standing on the geographic region zone itself
+  // (is_expandable + self-zoned), LOCAL has no content; redirect to region.
+  const isAtRegionZoneInPayload =
+    !!player && player.is_expandable === true && player.zone_id === player.id;
+  if (isAtRegionZoneInPayload) {
+    return buildRegionTier({ region: player, worldGraph });
+  }
+
+  // FIX 6 — resolve zoneId to the settlement hub via an explicit IIFE so
+  // we never accidentally pass the geographic region zone to buildLocalTier.
+  const zoneId = (() => {
+    const raw     = player && player.type === "sub_location"
       ? player.zone_id
       : worldGraph.current_node_id;
+    const rawNode = worldGraph.nodes[raw];
+    // If raw IS the geographic region zone, walk down to the settlement hub.
+    if (rawNode?.is_expandable === true && rawNode?.zone_id === rawNode?.id) {
+      const hub = Object.values(worldGraph.nodes).find(
+        (n) => n.zone_id === raw && n.is_settlement_node === true
+      );
+      if (hub) return hub.id;
+    }
+    return raw;
+  })();
   return buildLocalTier({ zoneId, worldGraph });
 }
 
@@ -910,32 +999,9 @@ function buildLocalTier({
     };
   });
 
-  // CHANGE 2 — collapse the previous "one MapExit per leaving
-  // connection" behaviour into a single "Exit to Region" button.
-  // All cross-zone navigation flows through the parent geographic
-  // region zone, never directly from the settlement to a sibling
-  // region or a sub-location's neighbour.
-  const exits: MapExit[] = [];
-  const hubNodeForExit = worldGraph.nodes[zoneId];
-  const parentRegionId = hubNodeForExit?.zone_id;
-  const parentRegionNode = parentRegionId
-    ? worldGraph.nodes[parentRegionId]
-    : null;
-  if (
-    parentRegionNode &&
-    parentRegionNode.is_expandable === true &&
-    parentRegionNode.id !== zoneId
-  ) {
-    const hubPos = positions.get(zoneId) ?? { x: VIEW / 2, y: VIEW / 2 };
-    exits.push({
-      targetId:   parentRegionNode.id,
-      targetName: `↑ Exit to ${parentRegionNode.name}`,
-      fromX:      hubPos.x,
-      fromY:      hubPos.y,
-      edge:       "right",
-    });
-  }
-
+  // FIX 3 — the "Exit to Region" button is now a proper JSX button rendered
+  // ABOVE the SVG area (see the localExit useMemo in WorldMap).  Keeping
+  // exits:[] here prevents the DebugMap from also rendering an SVG label.
   const zoneNode = worldGraph.nodes[zoneId];
   const total    = candidates.length;
   const known    = candidates.filter((n) => n.discovered).length;
@@ -944,7 +1010,7 @@ function buildLocalTier({
     subtitle: `${known} of ${total} known`,
     nodes,
     connections,
-    exits,
+    exits:    [],
   };
 }
 
@@ -983,7 +1049,7 @@ function buildLocationInfo({
       title:      wcd?.world_name ?? "Unknown",
       atmosphere: wcd?.atmosphere ?? null,
       npcs:       [],
-      landmarks:  (wcd?.landmarks ?? []).slice(0, 4).map((lm) => lm.name),
+      landmarks:  [],  // FIX 5 — no EXAMINE buttons on world/region tiers
     };
   }
 
@@ -998,7 +1064,7 @@ function buildLocationInfo({
         masterState.metadata.world_consistency?.atmosphere ?? ""
       ),
       npcs:       [],
-      landmarks:  resolveLandmarks(selectedRegion, locationAssets),
+      landmarks:  [],  // FIX 5 — no EXAMINE buttons on world/region tiers
     };
   }
 

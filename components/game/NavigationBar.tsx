@@ -169,6 +169,13 @@ export function NavigationBar({ masterState, worldGraph, onNavigate }: Props) {
     for (const id of current.connections) {
       const node = worldGraph.nodes[id];
       if (node) {
+        // FIX 4 — when standing at the settlement hub, only surface its
+        // own sub-locations. Region-level peers (other settlements,
+        // region_locations, the geographic zone) belong on the WorldMap,
+        // not in the mobile nav bar.
+        if (current.is_settlement_node === true && node.zone_id !== current.id) {
+          continue;
+        }
         connected.push(node);
       } else {
         const outline = outlinesById.get(id);

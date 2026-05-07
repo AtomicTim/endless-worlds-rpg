@@ -18,7 +18,7 @@ import { VIEW } from "./types";
  * component is a drop-in for any of them.
  */
 
-const PAD = 80;
+const PAD = 60;
 
 const COLOR_CURRENT      = "#f59e0b";
 const COLOR_DISCOVERED   = "#e8dfd1";

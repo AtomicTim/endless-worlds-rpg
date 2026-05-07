@@ -135,7 +135,16 @@ export function WorldMap({
       return;
     }
     if (activeTier === 2) {
-      // From region tier, clicking a settlement / sub-zone moves to Tier 3.
+      const target = worldGraph.nodes[nodeId];
+      if (!target) return;
+      if (target.is_expandable) {
+        // Adjacent geographic region: preview-only, no travel.
+        setSelectedRegionId(nodeId);
+        return;
+      }
+      // Settlement or region_location: navigate the player there
+      // and zoom the map into Tier 3 for that settlement.
+      onNavigate(nodeId);
       setSelectedRegionId(findRootZoneId(nodeId, worldGraph.nodes));
       setActiveTier(3);
       return;
@@ -165,8 +174,14 @@ export function WorldMap({
       onNavigate(targetId);
       return;
     }
-    // Tier 2 — cross-region exits are previews: jump the map view to
-    // the destination region without committing to travel.
+    // Tier 2 — FIX 2: exit arrows point to adjacent regions; clicking
+    // one navigates the player there, triggering RegionBible expansion
+    // in the game loop just like the nav-bar ◆ cards do.
+    if (activeTier === 2) {
+      onNavigate(targetId);
+      return;
+    }
+    // Tier 1 — clicking a world-exit previews the destination region.
     setSelectedRegionId(findRootZoneId(targetId, worldGraph.nodes));
     setActiveTier(2);
   }
@@ -294,21 +309,58 @@ export function WorldMap({
         </div>
       )}
 
-      {/* Map area — square aspect ratio so renderers fit their 320×320 viewBox */}
-      <div style={{ position: "relative", aspectRatio: "1", flexShrink: 0 }}>
-        <GenreMap
-          genre={masterState.metadata.genre}
-          tier={activeTier}
-          title={payload.title}
-          subtitle={payload.subtitle}
-          nodes={payload.nodes}
-          connections={payload.connections}
-          exits={payload.exits}
-          onSelectNode={handleSelectNode}
-          onSelectExit={handleSelectExit}
-          npcMode
-        />
-      </div>
+      {/* Map area — square aspect ratio so renderers fit their 320×320 viewBox.
+           FIX 4: when Tier 2 has no nodes the region is undiscovered — show a
+           placeholder instead of an empty grid. */}
+      {activeTier === 2 && payload.nodes.length === 0 ? (
+        <div
+          style={{
+            aspectRatio:    "1",
+            flexShrink:     0,
+            display:        "flex",
+            flexDirection:  "column",
+            alignItems:     "center",
+            justifyContent: "center",
+            background:     "var(--bg-0)",
+            gap:            8,
+            padding:        24,
+            textAlign:      "center",
+          }}
+        >
+          <div
+            className="ew-mono"
+            style={{ fontSize: 9, letterSpacing: "0.3em", color: "var(--ink-4)" }}
+          >
+            ◇ UNDISCOVERED TERRITORY
+          </div>
+          <div
+            className="ew-serif"
+            style={{
+              fontSize:   13,
+              color:      "var(--ink-3)",
+              fontStyle:  "italic",
+              lineHeight: 1.5,
+            }}
+          >
+            Travel here to reveal what lies within.
+          </div>
+        </div>
+      ) : (
+        <div style={{ position: "relative", aspectRatio: "1", flexShrink: 0 }}>
+          <GenreMap
+            genre={masterState.metadata.genre}
+            tier={activeTier}
+            title={payload.title}
+            subtitle={payload.subtitle}
+            nodes={payload.nodes}
+            connections={payload.connections}
+            exits={payload.exits}
+            onSelectNode={handleSelectNode}
+            onSelectExit={handleSelectExit}
+            npcMode
+          />
+        </div>
+      )}
 
       {/* Location info panel */}
       <div
@@ -594,7 +646,7 @@ interface RendererPayload {
  * Positions are deterministic and stable across navigation: clicking a
  * node to travel does not change layout.
  */
-const PAD = 80;
+const PAD = 60;
 
 function fitToViewBox(
   nodes: WorldNode[]

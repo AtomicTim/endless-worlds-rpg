@@ -164,6 +164,13 @@ export function NavigationBar({ masterState, worldGraph, onNavigate }: Props) {
     for (const o of wbForOutlineFallback?.adjacent_regions ?? []) {
       outlinesById.set(o.id, o);
     }
+    // FIX 6 — compute isAtRegionZone early so the connected loop can
+    // exclude the settlement hub here (it becomes the ← Return card).
+    const isAtRegionZone =
+      current.type === "zone" &&
+      current.is_expandable === true &&
+      current.zone_id === current.id;
+
     const connected: WorldNode[] = [];
     const fallbackOutlines: RegionOutline[] = [];
     for (const id of current.connections) {
@@ -176,6 +183,11 @@ export function NavigationBar({ masterState, worldGraph, onNavigate }: Props) {
         if (current.is_settlement_node === true && node.zone_id !== current.id) {
           continue;
         }
+        // FIX 6 — at the geographic region zone, skip the settlement hub
+        // here so it appears as the dedicated ← Return card instead.
+        if (isAtRegionZone && node.is_settlement_node === true && node.zone_id === current.id) {
+          continue;
+        }
         connected.push(node);
       } else {
         const outline = outlinesById.get(id);
@@ -183,24 +195,21 @@ export function NavigationBar({ masterState, worldGraph, onNavigate }: Props) {
       }
     }
 
-    // "← Return" card — when current is a region_location, find the
-    // settlement zone in the same geographic region and link back to it.
+    // "← Return" card.
     //
-    // CHANGE 5 — when the player is AT the geographic region zone
-    // itself (a self-zoned, expandable zone), they're already at the
-    // top of this region's hierarchy and don't need a return card.
-    // The settlement reaches them via the region zone's connections
-    // list so it'll surface as a regular nav card instead.
-    const isAtRegionZone =
-      current.type === "zone" &&
-      current.is_expandable === true &&
-      current.zone_id === current.id;
+    // FIX 6 — when standing on the geographic region zone itself,
+    // find the settlement hub and show it as the ← Return card so
+    // mobile users can step into the settlement from the open world.
+    // Previously CHANGE 5 suppressed the return card here; this
+    // reverses that for the mobile nav bar.
     let parentSettlement: WorldNode | null = null;
-    const isCandidateForReturn =
-      current.type === "zone" &&
-      current.is_settlement_node !== true &&
-      !isAtRegionZone;
-    if (isCandidateForReturn) {
+    if (isAtRegionZone) {
+      parentSettlement =
+        Object.values(worldGraph.nodes).find(
+          (n) => n.zone_id === current.id && n.is_settlement_node === true
+        ) ?? null;
+    } else if (current.type === "zone" && current.is_settlement_node !== true) {
+      // Sub-zone inside a region: walk up to the parent settlement hub.
       parentSettlement =
         Object.values(worldGraph.nodes).find(
           (n) =>
@@ -218,11 +227,11 @@ export function NavigationBar({ masterState, worldGraph, onNavigate }: Props) {
               n.is_expandable === true
           ) ?? null;
       }
+      const alreadyConnected = parentSettlement
+        ? connected.some((n) => n.id === parentSettlement!.id)
+        : false;
+      if (alreadyConnected) parentSettlement = null;
     }
-    const alreadyConnected = parentSettlement
-      ? connected.some((n) => n.id === parentSettlement!.id)
-      : false;
-    if (alreadyConnected) parentSettlement = null;
 
     // Outline cards for unexplored adjacent regions.
     const wb       = masterState?.metadata.world_bible;
@@ -231,6 +240,22 @@ export function NavigationBar({ masterState, worldGraph, onNavigate }: Props) {
       ...connected.map((n) => n.id),
       ...(parentSettlement ? [parentSettlement.id] : []),
     ]);
+
+    // FIX 3 — walk up to the player's geographic region node and collect
+    // its connections list. Only adjacent regions in that set get a ◆ card;
+    // this prevents cross-world jumps from locations far from those regions.
+    const currentRegionNode = (() => {
+      if (isAtRegionZone) return current;
+      const zoneNode = current.zone_id ? worldGraph.nodes[current.zone_id] : null;
+      if (zoneNode?.is_expandable && zoneNode.zone_id === zoneNode.id) return zoneNode;
+      if (zoneNode?.zone_id) {
+        const grandparent = worldGraph.nodes[zoneNode.zone_id];
+        if (grandparent?.is_expandable && grandparent.zone_id === grandparent.id) return grandparent;
+      }
+      return null;
+    })();
+    const adjRegionIds = new Set<string>(currentRegionNode?.connections ?? []);
+
     const outlinesSeen = new Set<string>();
     const outlines: RegionOutline[] = [];
     for (const o of fallbackOutlines) {
@@ -240,6 +265,9 @@ export function NavigationBar({ masterState, worldGraph, onNavigate }: Props) {
     }
     for (const r of wb?.adjacent_regions ?? []) {
       if (knownIds.has(r.id) || outlinesSeen.has(r.id)) continue;
+      // FIX 3 — skip adjacent regions not directly connected to the
+      // player's current geographic region.
+      if (adjRegionIds.size > 0 && !adjRegionIds.has(r.id)) continue;
       outlinesSeen.add(r.id);
       outlines.push(r);
     }

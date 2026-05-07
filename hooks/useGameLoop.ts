@@ -2497,6 +2497,17 @@ export function useGameLoop() {
       return;
     }
 
+    // FIX 7 — log when navigating to an undiscovered adjacent region so
+    // we can verify RegionBible expansion fires in the game loop (step 4d).
+    const isUndiscoveredRegion =
+      !!adjacentOutline || (node?.is_expandable === true && !node?.discovered);
+    if (isUndiscoveredRegion) {
+      console.log(
+        "[navigateTo] adjacent region detected:", nodeId,
+        "triggering RegionBible expansion"
+      );
+    }
+
     void submitAction("", { forceMoveToNode: nodeId });
   }, [submitAction]);
 

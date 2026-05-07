@@ -154,100 +154,93 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade }: DialogueM
     onOpenTrade(npcName);
   };
 
-  // ── Collapsed bar ────────────────────────────────────────────────────────
-  if (collapsed) {
-    return (
-      <button
-        onClick={() => setCollapsed(false)}
-        aria-label="Expand dialogue"
-        className="ew-mono flex h-10 w-full shrink-0 items-center justify-center gap-2 transition-opacity hover:opacity-90"
-        style={{
-          borderTop:    "2px solid var(--accent)",
-          borderBottom: "1px solid var(--line)",
-          background:   "var(--accent-faint)",
-          color:        "var(--accent)",
-          fontSize:     10,
-          letterSpacing:"0.28em",
-        }}
-      >
-        <ChevronUp className="size-3.5" />
-        <span style={{ fontWeight: 600 }}>{(npcName ?? "DIALOGUE").toUpperCase()}</span>
-        <span style={{ color: "var(--ink-4)", fontStyle: "italic", fontSize: 9 }}>
-          ({options.length} options)
-        </span>
-      </button>
-    );
-  }
-
   const effectiveTrust = trustScore ?? 50;
   const disposition    = getNpcDisposition(effectiveTrust);
   const dispDot        = DISPOSITION_DOT[disposition] ?? DISPOSITION_DOT.neutral;
 
-  // ── Expanded panel ───────────────────────────────────────────────────────
+  // ── Collapsed bar (fixed at viewport bottom) ─────────────────────────────
+  if (collapsed) {
+    return (
+      // Centering wrapper so on desktop the bar stays ≤640px wide and centred.
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, display: "flex", justifyContent: "center" }}>
+        <button
+          onClick={() => setCollapsed(false)}
+          aria-label="Expand dialogue"
+          className="ew-mono"
+          style={{
+            width:         "100%",
+            maxWidth:      640,
+            height:        40,
+            display:       "flex",
+            alignItems:    "center",
+            justifyContent: "center",
+            gap:           8,
+            borderTop:     "2px solid var(--accent)",
+            background:    "var(--accent-faint)",
+            color:         "var(--accent)",
+            fontSize:      10,
+            letterSpacing: "0.28em",
+            cursor:        "pointer",
+          }}
+        >
+          <ChevronUp className="size-3.5" />
+          <span style={{ fontWeight: 600 }}>{(npcName ?? "DIALOGUE").toUpperCase()}</span>
+          <span style={{ color: "var(--ink-4)", fontStyle: "italic", fontSize: 9 }}>
+            ({options.length} options)
+          </span>
+        </button>
+      </div>
+    );
+  }
+
+  // ── Expanded panel (fixed at viewport bottom, centred on desktop) ─────────
   return (
-    <div
-      role="dialog"
-      aria-label="Dialogue options"
-      className="shrink-0"
-      style={{
-        position:   "relative",
-        background: "var(--bg-0)",
-        color:      "var(--ink-2)",
-        fontFamily: "var(--sans)",
-        borderTop:  "1px solid var(--line)",
-        padding:    16,
-      }}
-    >
+    // Outer wrapper spans the full viewport width and centres the inner panel.
+    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, display: "flex", justifyContent: "center" }}>
       <div
+        role="dialog"
+        aria-label="Dialogue options"
         style={{
-          margin:        "0 auto",
-          maxWidth:      720,
+          width:         "100%",
+          maxWidth:      640,
+          maxHeight:     "48vh",
+          borderRadius:  "12px 12px 0 0",
+          borderTop:     "1px solid var(--line)",
           background:    "var(--bg-1)",
-          border:        "1px solid var(--accent-soft)",
-          position:      "relative",
           display:       "flex",
           flexDirection: "column",
+          overflow:      "hidden",
+          fontFamily:    "var(--sans)",
+          color:         "var(--ink-2)",
         }}
       >
-        {/* Inset border — the design's classic frame-within-a-frame */}
-        <div
-          aria-hidden
-          style={{
-            position:      "absolute",
-            inset:         4,
-            border:        "1px solid var(--accent-soft)",
-            pointerEvents: "none",
-          }}
-        />
-
-        {/* Header — avatar, ◆ IN CONVERSATION, name, chips, minimize, close */}
+        {/* Compact header row — ~52px tall */}
         <div
           style={{
             display:      "flex",
             alignItems:   "center",
-            padding:      "16px 20px",
-            gap:          14,
+            padding:      "10px 14px",
+            gap:          10,
             borderBottom: "1px solid var(--line)",
-            position:     "relative",
-            zIndex:       1,
+            flexShrink:   0,
           }}
         >
-          {/* Portrait / initials avatar (56×56) */}
+          {/* 32px initials / portrait chip */}
           <div
             style={{
-              width:           56,
-              height:          56,
-              background:      "var(--bg-2)",
-              border:          "1px solid var(--accent-soft)",
-              display:         "flex",
-              alignItems:      "center",
-              justifyContent:  "center",
-              fontFamily:      "var(--mono)",
-              fontSize:        18,
-              color:           "var(--accent)",
-              letterSpacing:   "0.1em",
-              flexShrink:      0,
-              overflow:        "hidden",
+              width:          32,
+              height:         32,
+              background:     "var(--bg-2)",
+              border:         "1px solid var(--accent-soft)",
+              display:        "flex",
+              alignItems:     "center",
+              justifyContent: "center",
+              fontFamily:     "var(--mono)",
+              fontSize:       11,
+              color:          "var(--accent)",
+              letterSpacing:  "0.08em",
+              flexShrink:     0,
+              overflow:       "hidden",
             }}
           >
             {portrait ? (
@@ -261,135 +254,107 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade }: DialogueM
             )}
           </div>
 
+          {/* Name + disposition + role + trust */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div
-              className="ew-mono"
-              style={{
-                fontSize:      9,
-                letterSpacing: "0.32em",
-                color:         "var(--accent)",
-                marginBottom:  2,
-              }}
-            >
-              ◆ IN CONVERSATION
-            </div>
-            <div
-              className="ew-serif"
-              style={{
-                fontStyle: "italic",
-                fontSize:  20,
-                color:     "var(--ink-1)",
-                lineHeight: 1.2,
-              }}
-            >
-              {npcName ?? "Unknown"}
-            </div>
-            <div
-              style={{
-                display:       "flex",
-                gap:           10,
-                marginTop:     4,
-                fontFamily:    "var(--mono)",
-                fontSize:      9,
-                letterSpacing: "0.2em",
-                color:         "var(--ink-4)",
-                flexWrap:      "wrap",
-              }}
-            >
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                <span
-                  style={{
-                    width:        5,
-                    height:       5,
-                    background:   dispDot,
-                    borderRadius: 3,
-                  }}
-                />
-                {disposition.toUpperCase()}
+            <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+              <span
+                className="ew-serif"
+                style={{ fontStyle: "italic", fontSize: 15, color: "var(--ink-1)", lineHeight: 1.2 }}
+              >
+                {npcName ?? "Unknown"}
               </span>
-              {npcRole && <span>· {npcRole.toUpperCase()}</span>}
-              {npcLocation && (
-                <span>· {npcLocation.replace(/_/g, " ").toUpperCase()}</span>
+              <span
+                style={{
+                  width:        5,
+                  height:       5,
+                  background:   dispDot,
+                  borderRadius: 3,
+                  flexShrink:   0,
+                }}
+              />
+              {npcRole && (
+                <span
+                  className="ew-mono"
+                  style={{ fontSize: 8, letterSpacing: "0.2em", color: "var(--ink-4)" }}
+                >
+                  {npcRole.toUpperCase()}
+                </span>
+              )}
+              {trustScore !== null && (
+                <span
+                  className="ew-mono"
+                  style={{
+                    fontSize:      8,
+                    letterSpacing: "0.16em",
+                    color:         "var(--ink-5)",
+                    padding:       "1px 5px",
+                    border:        "1px solid var(--line-2)",
+                  }}
+                >
+                  {effectiveTrust}
+                </span>
               )}
             </div>
           </div>
 
+          {/* Minimize */}
           <button
             onClick={() => setCollapsed(true)}
             aria-label="Minimize dialogue"
             title="Minimize"
             style={{
-              width:       28,
-              height:      28,
-              border:      "1px solid var(--line-2)",
-              background:  "transparent",
-              color:       "var(--ink-3)",
-              fontFamily:  "var(--mono)",
-              fontSize:    14,
-              cursor:      "pointer",
-              display:     "inline-flex",
-              alignItems:  "center",
+              width:          28,
+              height:         28,
+              border:         "1px solid var(--line-2)",
+              background:     "transparent",
+              color:          "var(--ink-3)",
+              cursor:         "pointer",
+              display:        "inline-flex",
+              alignItems:     "center",
               justifyContent: "center",
             }}
           >
             <ChevronDown className="size-3" />
           </button>
-          <button
-            onClick={() => clear()}
-            aria-label="Close dialogue"
-            title="Walk away"
-            style={{
-              width:       28,
-              height:      28,
-              border:      "1px solid var(--line-2)",
-              background:  "transparent",
-              color:       "var(--ink-3)",
-              fontFamily:  "var(--mono)",
-              fontSize:    14,
-              cursor:      "pointer",
-            }}
-          >
-            x
-          </button>
         </div>
 
-        {/* Options list */}
+        {/* Options list — scrollable */}
         <div
           className="ew-scroll"
           style={{
-            position:      "relative",
-            zIndex:        1,
-            padding:       "12px 18px 14px",
+            flex:          1,
+            overflowY:     "auto",
+            minHeight:     0,
+            padding:       "10px 14px",
             display:       "flex",
             flexDirection: "column",
-            gap:           6,
-            maxHeight:     "calc(100vh - 320px)",
-            overflowY:     "auto",
+            gap:           5,
           }}
         >
           {options.map((option) => {
-            const badge = playerStats ? getToneBadge(option.tone, playerStats) : null;
+            const badge   = playerStats ? getToneBadge(option.tone, playerStats) : null;
             const isCheck = !!badge;
             return (
               <button
                 key={option.id}
                 onClick={() => handleOption(option)}
                 style={{
-                  display:        "flex",
-                  alignItems:     "center",
-                  gap:            12,
-                  padding:        "10px 14px",
-                  background:     "var(--bg-2)",
-                  border:         "1px solid var(--line)",
-                  borderLeft:     isCheck
+                  display:    "flex",
+                  alignItems: "center",
+                  gap:        12,
+                  minHeight:  44,
+                  padding:    "8px 12px",
+                  background: "var(--bg-2)",
+                  border:     "1px solid var(--line)",
+                  borderLeft: isCheck
                     ? "3px solid var(--accent)"
                     : "3px solid var(--line-2)",
-                  color:          "var(--ink-2)",
-                  fontFamily:     "var(--serif)",
-                  fontSize:       14,
-                  textAlign:      "left",
-                  cursor:         "pointer",
-                  transition:     "background 120ms",
+                  color:      "var(--ink-2)",
+                  fontFamily: "var(--serif)",
+                  fontSize:   14,
+                  textAlign:  "left",
+                  cursor:     "pointer",
+                  transition: "background 120ms",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = "color-mix(in srgb, var(--accent) 5%, var(--bg-2))";
@@ -432,23 +397,60 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade }: DialogueM
             );
           })}
 
-          {/* Type your own — dashed-border input */}
+          {/* Trade button (merchant only) — stays in the scrollable area */}
+          {isCurrentNpcMerchant && (
+            <button
+              onClick={handleOpenTrade}
+              disabled={tradeOpen && tradeItems.length > 0}
+              style={{
+                marginTop:     4,
+                padding:       "8px 12px",
+                border:        "1px solid #fbbf24",
+                background:    "color-mix(in srgb, #fbbf24 18%, transparent)",
+                color:         "#fbbf24",
+                fontFamily:    "var(--mono)",
+                fontSize:      10,
+                letterSpacing: "0.32em",
+                fontWeight:    600,
+                cursor:        (tradeOpen && tradeItems.length > 0) ? "default" : "pointer",
+                opacity:       (tradeOpen && tradeItems.length > 0) ? 0.4 : 1,
+                textAlign:     "center",
+              }}
+              title={
+                tradeOpen && tradeItems.length > 0
+                  ? "Trade panel is open"
+                  : "Open trade panel"
+              }
+            >
+              ◆ TRADE
+            </button>
+          )}
+        </div>
+
+        {/* Footer — free-type input + walk away; always visible (flex-shrink: 0) */}
+        <div
+          style={{
+            flexShrink:  0,
+            borderTop:   "1px solid var(--line)",
+            padding:     "8px 14px",
+            background:  "var(--bg-1)",
+          }}
+        >
           {inlineInputOpen ? (
             <div
               style={{
-                display:       "flex",
-                alignItems:    "center",
-                marginTop:     4,
-                border:        "1px dashed var(--accent-soft)",
-                background:    "var(--bg-0)",
-                padding:       "4px 4px 4px 12px",
+                display:    "flex",
+                alignItems: "center",
+                border:     "1px dashed var(--accent-soft)",
+                background: "var(--bg-0)",
+                padding:    "4px 4px 4px 10px",
               }}
             >
               <span
                 style={{
-                  color:      "var(--accent)",
-                  fontFamily: "var(--mono)",
-                  fontSize:   12,
+                  color:       "var(--accent)",
+                  fontFamily:  "var(--mono)",
+                  fontSize:    12,
                   marginRight: 8,
                 }}
               >
@@ -470,15 +472,15 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade }: DialogueM
                 }
                 maxLength={300}
                 style={{
-                  flex:        1,
-                  background:  "transparent",
-                  border:      "none",
-                  outline:     "none",
-                  fontFamily:  "var(--serif)",
-                  fontStyle:   "italic",
-                  fontSize:    13,
-                  color:       "var(--ink-1)",
-                  padding:     "6px 0",
+                  flex:       1,
+                  background: "transparent",
+                  border:     "none",
+                  outline:    "none",
+                  fontFamily: "var(--serif)",
+                  fontStyle:  "italic",
+                  fontSize:   13,
+                  color:      "var(--ink-1)",
+                  padding:    "6px 0",
                 }}
               />
               <button
@@ -502,76 +504,47 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade }: DialogueM
               </button>
             </div>
           ) : (
-            <button
-              onClick={handleTypeOwn}
-              style={{
-                marginTop:    4,
-                display:      "flex",
-                alignItems:   "center",
-                gap:          8,
-                padding:      "8px 12px",
-                border:       "1px dashed var(--line-2)",
-                background:   "transparent",
-                fontFamily:   "var(--serif)",
-                fontStyle:    "italic",
-                color:        "var(--ink-5)",
-                fontSize:     13,
-                cursor:       "pointer",
-                textAlign:    "left",
-              }}
-            >
-              ✎  type your own response…
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button
+                onClick={handleTypeOwn}
+                style={{
+                  flex:       1,
+                  display:    "flex",
+                  alignItems: "center",
+                  gap:        8,
+                  padding:    "6px 10px",
+                  border:     "1px dashed var(--line-2)",
+                  background: "transparent",
+                  fontFamily: "var(--serif)",
+                  fontStyle:  "italic",
+                  color:      "var(--ink-5)",
+                  fontSize:   13,
+                  cursor:     "pointer",
+                  textAlign:  "left",
+                }}
+              >
+                ✎  type your own response…
+              </button>
+              <button
+                onClick={() => clear()}
+                className="ew-mono"
+                style={{
+                  flexShrink:     0,
+                  fontSize:       9,
+                  letterSpacing:  "0.2em",
+                  color:          "var(--ink-5)",
+                  textDecoration: "underline",
+                  background:     "transparent",
+                  border:         "none",
+                  cursor:         "pointer",
+                  padding:        "6px 0",
+                  whiteSpace:     "nowrap",
+                }}
+              >
+                walk away
+              </button>
+            </div>
           )}
-
-          {/* Trade button (merchant only) */}
-          {isCurrentNpcMerchant && (
-            <button
-              onClick={handleOpenTrade}
-              disabled={tradeOpen && tradeItems.length > 0}
-              style={{
-                marginTop:     6,
-                padding:       "8px 12px",
-                border:        "1px solid #fbbf24",
-                background:    "color-mix(in srgb, #fbbf24 18%, transparent)",
-                color:         "#fbbf24",
-                fontFamily:    "var(--mono)",
-                fontSize:      10,
-                letterSpacing: "0.32em",
-                fontWeight:    600,
-                cursor:        (tradeOpen && tradeItems.length > 0) ? "default" : "pointer",
-                opacity:       (tradeOpen && tradeItems.length > 0) ? 0.4 : 1,
-                textAlign:     "center",
-              }}
-              title={
-                tradeOpen && tradeItems.length > 0
-                  ? "Trade panel is open"
-                  : "Open trade panel"
-              }
-            >
-              ◆ TRADE
-            </button>
-          )}
-
-          {/* Walk away link */}
-          <button
-            onClick={() => clear()}
-            className="ew-mono"
-            style={{
-              marginTop:      4,
-              alignSelf:      "flex-start",
-              fontSize:       9,
-              letterSpacing:  "0.2em",
-              color:          "var(--ink-5)",
-              textDecoration: "underline",
-              background:     "transparent",
-              border:         "none",
-              cursor:         "pointer",
-              padding:        0,
-            }}
-          >
-            walk away
-          </button>
         </div>
       </div>
     </div>

@@ -122,6 +122,70 @@ function objectToAsset(
   };
 }
 
+/**
+ * After all graphNodes are built, walk the map and spread any group of
+ * nodes that share the same `map_position`. The first node in each
+ * group keeps its coordinates (it's typically the hub or earliest-
+ * registered location); siblings get small integer offsets so the
+ * renderer always receives unique positions to project.
+ *
+ * The skeleton prompt asks the AI for unique positions, but generators
+ * still occasionally collide them — this is a runtime safety net so
+ * map layout never collapses to a single point.
+ */
+function deduplicatePositions(
+  nodes: Record<string, WorldNode>
+): Record<string, WorldNode> {
+  const byPos: Record<string, string[]> = {};
+  for (const [id, node] of Object.entries(nodes)) {
+    const pos = node.map_position;
+    if (!pos || typeof pos.x !== "number") continue;
+    const key = `${pos.x},${pos.y}`;
+    if (!byPos[key]) byPos[key] = [];
+    byPos[key].push(id);
+  }
+
+  const result = { ...nodes };
+
+  // Spread spiral: index 0 keeps the original; later siblings spiral
+  // outward through cardinal then diagonal directions. Beyond the
+  // pre-baked offsets, we fall back to the last entry — collisions of
+  // 9+ at the exact same coord are vanishingly rare in practice.
+  const OFFSETS: Array<[number, number]> = [
+    [0, 0],
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+    [1, 1],
+    [-1, 1],
+    [1, -1],
+    [-1, -1],
+  ];
+
+  for (const ids of Object.values(byPos)) {
+    if (ids.length <= 1) continue;
+    ids.forEach((id, i) => {
+      if (i === 0) return; // first node keeps its original position
+      const original = result[id].map_position!;
+      const offset   = OFFSETS[Math.min(i, OFFSETS.length - 1)];
+      result[id] = {
+        ...result[id],
+        map_position: {
+          x: original.x + offset[0],
+          y: original.y + offset[1],
+        },
+      };
+      console.log(
+        `[apply-world-bible] De-duplicated position for ${id}:`,
+        result[id].map_position
+      );
+    });
+  }
+
+  return result;
+}
+
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
@@ -488,11 +552,17 @@ export async function POST(request: NextRequest) {
     };
   }
 
+  // Spread any colliding positions before persisting — the renderer's
+  // bounding-box projection collapses to a single point when nodes
+  // share coordinates, so this is a layout-safety net regardless of
+  // how careful the upstream generator was.
+  const deduplicatedNodes = deduplicatePositions(graphNodes);
+
   // Day 20 — current_node_id starts at the SETTLEMENT, not the
   // geographic zone. The player arrives in town, not in the abstract
   // landscape around it.
   const worldGraph: WorldGraph = {
-    nodes:            graphNodes,
+    nodes:            deduplicatedNodes,
     current_node_id:  startingNodeId,
     starting_node_id: startingNodeId,
   };

@@ -479,113 +479,99 @@ interface RendererPayload {
 }
 
 /**
- * Topology-based layout engine.
+ * Fit-to-viewBox layout engine.
  *
- * The WorldBible's `map_position` values are unreliable for visual
- * layout — the generators frequently emit duplicate coordinates or a
- * single shared x-axis value, which collapse to the viewBox edge no
- * matter how the projection is padded. We discard them entirely and
- * lay nodes out by their position in the connection graph instead:
+ * The previous topology BFS ignored each node's `map_position` and
+ * laid everything out as concentric rings — which made the map
+ * visually consistent across runs but destroyed any relationship
+ * between the generated world's geography and what the player saw.
  *
- *   • Anchor (current location, settlement hub, or most-connected
- *     fallback) sits at the center of the 320×320 viewBox.
- *   • A BFS through the connection graph assigns each reachable node
- *     a ring (graph-distance from the anchor).
- *   • Ring 1 nodes fan around the center; ring 2+ go on the outer
- *     edge. Unreachable nodes fall to the outer ring.
+ * After the WorldBible skeleton was tightened (every location gets a
+ * unique grid_position) and apply-world-bible deduplicates any
+ * remaining collisions, we can trust map_position again and project
+ * those real coordinates straight into the 320×320 viewBox.
  *
- * Result: a hub-and-spoke layout that always reads cleanly even when
- * every node shares the same `map_position`.
+ *   • Compute the bounding box of every positioned node.
+ *   • Enforce a minimum range so a single node doesn't collapse to a
+ *     point and so a tightly-clustered group still gets some breathing
+ *     room.
+ *   • Linearly scale into the padded viewBox (PAD-margin on every side).
+ *   • Nodes without a `map_position` (rare — mostly legacy saves) fan
+ *     around the centroid in a synthetic circle so they stay visible.
+ *
+ * Positions are deterministic and stable across navigation: clicking a
+ * node to travel does not change layout.
  */
-function topologyLayout(
-  nodes:       WorldNode[],
-  connections: Array<[string, string]>,
-  anchorId:    string | null
+const PAD = 44;
+
+function fitToViewBox(
+  nodes: WorldNode[]
 ): Map<string, { x: number; y: number }> {
-  const PAD = 48;
-  const CX  = VIEW / 2;
-  const CY  = VIEW / 2;
+  const result = new Map<string, { x: number; y: number }>();
+  if (nodes.length === 0) return result;
 
-  // Ring radii — first ring close, second further out.
-  const RING_R = [0, VIEW * 0.28, VIEW * 0.44];
+  const withPos = nodes.filter(
+    (n) => n.map_position && typeof n.map_position.x === "number"
+  );
+  const withoutPos = nodes.filter(
+    (n) => !n.map_position || typeof n.map_position.x !== "number"
+  );
 
-  const adj = new Map<string, Set<string>>();
-  for (const n of nodes) adj.set(n.id, new Set());
-  for (const [a, b] of connections) {
-    adj.get(a)?.add(b);
-    adj.get(b)?.add(a);
+  // Bounding box from positioned nodes; default to (0,0) when nothing
+  // has a real position so the synthetic-circle fallback below sits on
+  // the viewBox centre.
+  let minX = 0, maxX = 0, minY = 0, maxY = 0;
+  if (withPos.length > 0) {
+    minX = Math.min(...withPos.map((n) => n.map_position!.x));
+    maxX = Math.max(...withPos.map((n) => n.map_position!.x));
+    minY = Math.min(...withPos.map((n) => n.map_position!.y));
+    maxY = Math.max(...withPos.map((n) => n.map_position!.y));
   }
 
-  // Pick anchor: prefer anchorId when it's actually one of the
-  // candidate nodes; otherwise fall back to the most-connected node so
-  // the visual centre always sits on a graph hub.
-  const anchor: string | undefined = anchorId && adj.has(anchorId)
-    ? anchorId
-    : nodes.reduce<WorldNode | undefined>(
-        (best, n) =>
-          (adj.get(n.id)?.size ?? 0) > (adj.get(best?.id ?? "")?.size ?? 0) ? n : best,
-        nodes[0]
-      )?.id ?? nodes[0]?.id;
-
-  if (!anchor) return new Map();
-
-  // BFS assigns each node to a ring (graph-distance from anchor).
-  const ring  = new Map<string, number>([[anchor, 0]]);
-  const queue: string[] = [anchor];
-  while (queue.length > 0) {
-    const cur     = queue.shift()!;
-    const curRing = ring.get(cur)!;
-    adj.get(cur)?.forEach((nb) => {
-      if (!ring.has(nb)) {
-        ring.set(nb, curRing + 1);
-        queue.push(nb);
-      }
-    });
+  // Enforce minimum spread so a single node (or a cohort all at the
+  // same coord that survived dedup) doesn't collapse to one point.
+  const MIN_RANGE = 3;
+  if (maxX - minX < MIN_RANGE) {
+    const mid = (minX + maxX) / 2;
+    minX = mid - MIN_RANGE / 2;
+    maxX = mid + MIN_RANGE / 2;
   }
-  // Anything unreachable from the anchor goes to ring 2.
-  for (const n of nodes) {
-    if (!ring.has(n.id)) ring.set(n.id, 2);
+  if (maxY - minY < MIN_RANGE) {
+    const mid = (minY + maxY) / 2;
+    minY = mid - MIN_RANGE / 2;
+    maxY = mid + MIN_RANGE / 2;
   }
 
-  const byRing = new Map<number, string[]>();
-  ring.forEach((r, id) => {
-    if (!byRing.has(r)) byRing.set(r, []);
-    byRing.get(r)!.push(id);
-  });
+  const dx = maxX - minX;
+  const dy = maxY - minY;
+  const usableW = VIEW - PAD * 2;
+  const usableH = VIEW - PAD * 2;
 
-  const positions = new Map<string, { x: number; y: number }>();
-
-  // Ring 0 — anchor at the centre.
-  positions.set(anchor, { x: CX, y: CY });
-
-  // Ring 1 — evenly distributed around the centre, slight vertical
-  // squash so labels don't bump the title row at the top.
-  const r1nodes = byRing.get(1) ?? [];
-  r1nodes.forEach((id, i) => {
-    const angle = (i / r1nodes.length) * 2 * Math.PI - Math.PI / 2;
-    const r     = RING_R[1];
-    positions.set(id, {
-      x: Math.max(PAD, Math.min(VIEW - PAD, CX + Math.cos(angle) * r)),
-      y: Math.max(PAD, Math.min(VIEW - PAD, CY + Math.sin(angle) * r * 0.85)),
+  // Linear scale of grid coords into the padded viewBox.
+  for (const n of withPos) {
+    result.set(n.id, {
+      x: PAD + ((n.map_position!.x - minX) / dx) * usableW,
+      y: PAD + ((n.map_position!.y - minY) / dy) * usableH,
     });
-  });
+  }
 
-  // Ring 2+ — outer ring, all collapsed onto a single radius. Clamp
-  // to the padded viewBox so glyphs and labels always render visible.
-  const outerNodes: string[] = [];
-  byRing.forEach((ids, r) => {
-    if (r >= 2) outerNodes.push(...ids);
-  });
-  outerNodes.forEach((id, i) => {
-    const angle = (i / Math.max(outerNodes.length, 1)) * 2 * Math.PI - Math.PI / 2;
-    const r     = RING_R[2];
-    positions.set(id, {
-      x: Math.max(PAD, Math.min(VIEW - PAD, CX + Math.cos(angle) * r)),
-      y: Math.max(PAD, Math.min(VIEW - PAD, CY + Math.sin(angle) * r * 0.85)),
+  // Synthetic placement for nodes missing real coords — tidy circle
+  // around the viewBox centre so they're visible but obviously not
+  // anchored to specific geography.
+  if (withoutPos.length > 0) {
+    const cx = VIEW / 2;
+    const cy = VIEW / 2;
+    const r  = Math.min(usableW, usableH) * 0.3;
+    withoutPos.forEach((n, i) => {
+      const angle = (i / withoutPos.length) * 2 * Math.PI - Math.PI / 2;
+      result.set(n.id, {
+        x: Math.max(PAD, Math.min(VIEW - PAD, cx + Math.cos(angle) * r)),
+        y: Math.max(PAD, Math.min(VIEW - PAD, cy + Math.sin(angle) * r)),
+      });
     });
-  });
+  }
 
-  return positions;
+  return result;
 }
 
 /** Build the deduped Array<[string,string]> connection list from a
@@ -658,19 +644,18 @@ function buildWorldTier({
     (n) => !n.discovered && reachable.has(n.id)
   );
 
-  const candidates = [...discoveredZones, ...undiscoveredHints];
-  const included   = new Set<string>(candidates.map((n) => n.id));
+  const candidates    = [...discoveredZones, ...undiscoveredHints];
+  const included      = new Set<string>(candidates.map((n) => n.id));
   const discoveredIds = new Set<string>(discoveredZones.map((n) => n.id));
 
-  // Only discovered zones contribute edges to the topology — undiscovered
-  // hints should float on the outer ring rather than tug the BFS.
+  // Only discovered zones contribute drawn edges so the world view stays
+  // legible — rumored hints float at their own coords until reached.
   const allPairs = connectionPairs(candidates, included);
   const connPairs = allPairs.filter(
     ([a, b]) => discoveredIds.has(a) && discoveredIds.has(b)
   );
 
-  const anchorId = findRootZoneId(worldGraph.current_node_id, worldGraph.nodes);
-  const positions = topologyLayout(candidates, connPairs, anchorId);
+  const positions = fitToViewBox(candidates);
 
   const nodes: MapNode[] = candidates.map((n) => {
     const pos = positions.get(n.id) ?? { x: VIEW / 2, y: VIEW / 2 };
@@ -724,14 +709,8 @@ function buildRegionTier({
   );
   const included = new Set<string>(candidates.map((n) => n.id));
 
-  // Anchor on the region's settlement hub when present so the town
-  // anchors the centre and standalone locations (dungeons, wilderness)
-  // fan around it. Falls back to the geographic region node itself.
-  const settlementNode = candidates.find((n) => n.is_settlement_node === true);
-  const anchorId       = settlementNode?.id ?? region.id;
-
   const connPairs = connectionPairs(candidates, included);
-  const positions = topologyLayout(candidates, connPairs, anchorId);
+  const positions = fitToViewBox(candidates);
 
   const nodes: MapNode[] = candidates.map((n) => {
     const pos = positions.get(n.id) ?? { x: VIEW / 2, y: VIEW / 2 };
@@ -855,14 +834,7 @@ function buildLocalTier({
     .filter(Boolean) as WorldNode[];
 
   const connPairs = connectionPairs(candidates, included);
-
-  // Anchor on the player's current location when it's in the included
-  // set so the player marker sits at the centre of the local view.
-  // Falls back to the zone hub.
-  const anchorId = included.has(worldGraph.current_node_id)
-    ? worldGraph.current_node_id
-    : zoneId;
-  const positions = topologyLayout(candidates, connPairs, anchorId);
+  const positions = fitToViewBox(candidates);
 
   const nodes: MapNode[] = candidates.map((n) => {
     const pos = positions.get(n.id) ?? { x: VIEW / 2, y: VIEW / 2 };

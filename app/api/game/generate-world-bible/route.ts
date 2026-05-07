@@ -63,6 +63,20 @@ ancient shrine, or abandoned structure. It is NOT inside the
 settlement (is_interior: false, no parent_location_id). It has its
 own atmosphere, 0-1 NPCs, 1-2 Tier 1 objects.
 
+COORDINATE SYSTEM — read carefully:
+grid_position is in a shared world coordinate space using
+integers. ONE coordinate space covers everything.
+- The settlement hub is ALWAYS at {"x": 0, "y": 0}.
+- Sub-locations cluster around the hub: use values in the
+  range -2 to +2 on both axes, e.g. {-1,0}, {1,0}, {0,1},
+  {-1,1}, {1,-1}, {0,-1}. Spread them out — do NOT put two
+  sub-locations at the same position.
+- The standalone region_location sits 2-4 units from the hub,
+  e.g. {3,1}, {-2,3}, {4,-1}.
+- Adjacent regions sit 5-10 units away, e.g. {6,0}, {-5,2}.
+- Every location MUST have a UNIQUE grid_position. No two
+  locations may share the same x and y values.
+
 Return EXACTLY this JSON structure (fill in the values):
 {
   "starting_region": {
@@ -81,7 +95,7 @@ Return EXACTLY this JSON structure (fill in the values):
         "is_interior": false,
         "atmosphere": "Outdoor hub description — what the player sees and hears arriving at the town centre.",
         "grid_position": {"x": 0, "y": 0},
-        "connections": ["tavern_slug", "shop_slug", "smithy_slug"],
+        "connections": ["tavern_slug", "shop_slug", "smithy_slug", "fourth_slug"],
         "npc_ids": [],
         "objects": [{"id": "well_slug", "name": "The Communal Well", "description": "1 sentence", "is_interactable": true}],
         "ambient_type": "town_square"
@@ -94,7 +108,7 @@ Return EXACTLY this JSON structure (fill in the values):
         "is_interior": true,
         "parent_location_id": "settlement_slug",
         "atmosphere": "Tavern interior description.",
-        "grid_position": {"x": 0, "y": 0},
+        "grid_position": {"x": -1, "y": 0},
         "connections": ["settlement_slug"],
         "npc_ids": ["character_innkeeper_slug"],
         "objects": [{"id": "fireplace_slug", "name": "The Hearth", "description": "1 sentence", "is_interactable": true}],
@@ -113,6 +127,34 @@ Return EXACTLY this JSON structure (fill in the values):
         "npc_ids": ["character_merchant_slug"],
         "objects": [{"id": "counter_slug", "name": "The Counter", "description": "1 sentence", "is_interactable": true}],
         "ambient_type": "market_stall"
+      },
+      {
+        "id": "smithy_slug",
+        "name": "The Smithy Name",
+        "type": "smithy",
+        "is_settlement_node": false,
+        "is_interior": true,
+        "parent_location_id": "settlement_slug",
+        "atmosphere": "Smithy interior description.",
+        "grid_position": {"x": 0, "y": 1},
+        "connections": ["settlement_slug"],
+        "npc_ids": [],
+        "objects": [{"id": "anvil_slug", "name": "The Anvil", "description": "1 sentence", "is_interactable": true}],
+        "ambient_type": "smithy"
+      },
+      {
+        "id": "fourth_slug",
+        "name": "The Fourth Sub-Location Name",
+        "type": "shrine",
+        "is_settlement_node": false,
+        "is_interior": true,
+        "parent_location_id": "settlement_slug",
+        "atmosphere": "Fourth sub-location interior description.",
+        "grid_position": {"x": 0, "y": -1},
+        "connections": ["settlement_slug"],
+        "npc_ids": [],
+        "objects": [{"id": "altar_slug", "name": "The Altar", "description": "1 sentence", "is_interactable": true}],
+        "ambient_type": "temple_shrine"
       }
     ],
     "region_locations": [
@@ -123,7 +165,7 @@ Return EXACTLY this JSON structure (fill in the values):
         "is_settlement_node": false,
         "is_interior": false,
         "atmosphere": "1-2 sentences describing this standalone point in the geographic area.",
-        "grid_position": {"x": 2, "y": 1},
+        "grid_position": {"x": 3, "y": 2},
         "connections": ["settlement_slug"],
         "npc_ids": [],
         "objects": [{"id": "region_obj_slug", "name": "Tier 1 Object Name", "description": "1 sentence", "is_interactable": true}],
@@ -161,7 +203,7 @@ Return EXACTLY this JSON structure (fill in the values):
       "id": "region_slug",
       "name": "Region Name",
       "type": "wilderness",
-      "grid_centre": {"x": 5, "y": 0},
+      "grid_centre": {"x": 6, "y": 0},
       "direction_from_start": "north",
       "distance": "adjacent",
       "atmosphere_hint": "1 sentence",
@@ -186,7 +228,7 @@ Return EXACTLY this JSON structure (fill in the values):
 }
 
 Generate exactly:
-- 1 settlement node + 3 sub-locations inside it (tavern + shop + one more) + 4-5 NPCs.
+- 1 settlement node + 4 sub-locations inside it (tavern + shop + smithy/guild + one more) + 4-5 NPCs.
 - 1 standalone region_location alongside the settlement (dungeon / wilderness / shrine).
 
 The settlement node is a town square / crossroads / hub — NEVER a

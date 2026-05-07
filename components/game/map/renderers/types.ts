@@ -20,6 +20,10 @@ export interface MapNode {
   y:            number;
   isCurrent:    boolean;
   isDiscovered: boolean;
+  /** Mirrors WorldNode.is_expandable. Geographic-region zones (and the
+   *  abstract container zones the bible builds) carry this true; clicking
+   *  them is informational only — they're not directly navigable. */
+  isExpandable?: boolean;
   /** Count of NPCs at this node (drives the optional npc dot). */
   npcCount:     number;
 }
@@ -34,12 +38,19 @@ export interface MapConnection {
   visited: boolean;
 }
 
+export type ExitEdge = "left" | "right" | "top" | "bottom";
+
 export interface MapExit {
   targetId:   string;
   targetName: string;
   /** Projected position of the source node the arrow leaves from. */
   fromX:      number;
   fromY:      number;
+  /** Pre-computed edge classification for label distribution. The
+   *  builder in WorldMap.tsx assigns this based on the source node's
+   *  relative position so renderers can stack labels per edge instead
+   *  of pile them in one corner. */
+  edge?:      ExitEdge;
 }
 
 /** Shared props each genre's WorldMap / RegionMap / LocalMap accepts. */

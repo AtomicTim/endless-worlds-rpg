@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { AssetCategory } from "@/types/game";
 import type { MasterState, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
 import { GenreMap, VIEW } from "./map/renderers";
-import type { MapNode, MapConnection, MapExit, Tier } from "./map/renderers";
+import type { ExitEdge, MapNode, MapConnection, MapExit, Tier } from "./map/renderers";
 
 /**
  * Map Sidebar — redesign per /design/map-sidebar.jsx.
@@ -103,14 +103,20 @@ export function WorldMap({
       // From world tier, clicking a region zooms to Tier 2.
       setSelectedRegionId(findRootZoneId(nodeId, worldGraph.nodes));
       setActiveTier(2);
-    } else if (activeTier === 2) {
+      return;
+    }
+    if (activeTier === 2) {
       // From region tier, clicking a settlement / sub-zone moves to Tier 3.
       setSelectedRegionId(findRootZoneId(nodeId, worldGraph.nodes));
       setActiveTier(3);
-    } else {
-      // Tier 3 — clicking a sub-location triggers navigation.
-      onNavigate(nodeId);
+      return;
     }
+    // Tier 3 — only sub-locations and non-expandable zone nodes are
+    // directly navigable. Expandable zones (the geographic region,
+    // adjacent-region containers) are informational only; clicking
+    // them resolves to an unexpected location otherwise.
+    if (node.type === "zone" && node.is_expandable) return;
+    onNavigate(nodeId);
   }
   function handleSelectExit(targetId: string) {
     // Exits always represent a destination region; jump to it on Tier 2
@@ -595,6 +601,28 @@ function connectionPairs(
   return pairs;
 }
 
+/**
+ * Tag every exit with the edge of the viewBox where its label should
+ * be rendered. Edges fall out of the source node's relative position:
+ * sources on the right half of the viewBox land their labels on the
+ * right edge, and so on. Labels that share an edge stack along the
+ * perpendicular axis in the renderer rather than pile in one corner.
+ */
+function distributeExits(exits: MapExit[]): MapExit[] {
+  return exits.map((e) => ({
+    ...e,
+    edge: classifyExitEdge(e.fromX, e.fromY),
+  }));
+}
+
+function classifyExitEdge(fromX: number, fromY: number): ExitEdge {
+  if (fromX > VIEW * 0.6) return "right";
+  if (fromX < VIEW * 0.4) return "left";
+  if (fromY < VIEW * 0.4) return "top";
+  if (fromY > VIEW * 0.6) return "bottom";
+  return "right";
+}
+
 function buildRendererPayload({
   masterState,
   worldGraph,
@@ -625,31 +653,21 @@ function buildWorldTier({
   wcd:        MasterState["metadata"]["world_consistency"] | undefined;
   worldGraph: WorldGraph;
 }): RendererPayload {
-  const allZones = Object.values(worldGraph.nodes).filter(
-    (n) => n.type === "zone"
+  // FIX 2 — World tier shows ONLY the geographic-region zones
+  // (is_expandable === true). The settlement and standalone region
+  // locations belong on the Region tier, not here. Show both
+  // discovered AND undiscovered so the player sees the broader map
+  // shape — undiscovered ones are dimmed by the renderer.
+  const candidates = Object.values(worldGraph.nodes).filter(
+    (n) => n.is_expandable === true
   );
-  const discoveredZones = allZones.filter((n) => n.discovered);
-
-  // Reachable but undiscovered zones — the design wants ??? hints.
-  const reachable = new Set<string>();
-  for (const node of discoveredZones) {
-    for (const c of node.connections) {
-      const target = worldGraph.nodes[c];
-      if (target && !target.discovered && target.type === "zone") {
-        reachable.add(target.id);
-      }
-    }
-  }
-  const undiscoveredHints = allZones.filter(
-    (n) => !n.discovered && reachable.has(n.id)
-  );
-
-  const candidates    = [...discoveredZones, ...undiscoveredHints];
   const included      = new Set<string>(candidates.map((n) => n.id));
-  const discoveredIds = new Set<string>(discoveredZones.map((n) => n.id));
+  const discoveredIds = new Set<string>(
+    candidates.filter((n) => n.discovered).map((n) => n.id)
+  );
 
-  // Only discovered zones contribute drawn edges so the world view stays
-  // legible — rumored hints float at their own coords until reached.
+  // Only discovered-zone edges produce drawn lines — rumored hints
+  // float at their own coords until reached.
   const allPairs = connectionPairs(candidates, included);
   const connPairs = allPairs.filter(
     ([a, b]) => discoveredIds.has(a) && discoveredIds.has(b)
@@ -660,16 +678,17 @@ function buildWorldTier({
   const nodes: MapNode[] = candidates.map((n) => {
     const pos = positions.get(n.id) ?? { x: VIEW / 2, y: VIEW / 2 };
     return {
-      id:           n.id,
-      name:         n.name,
-      type:         n.type,
-      category:     n.category,
-      x:            pos.x,
-      y:            pos.y,
-      isCurrent:    n.id === worldGraph.current_node_id ||
-                    worldGraph.nodes[worldGraph.current_node_id]?.zone_id === n.id,
-      isDiscovered: n.discovered,
-      npcCount:     n.npc_ids?.length ?? 0,
+      id:            n.id,
+      name:          n.name,
+      type:          n.type,
+      category:      n.category,
+      x:             pos.x,
+      y:             pos.y,
+      isCurrent:     n.id === worldGraph.current_node_id ||
+                     worldGraph.nodes[worldGraph.current_node_id]?.zone_id === n.id,
+      isDiscovered:  n.discovered,
+      isExpandable:  n.is_expandable,
+      npcCount:      n.npc_ids?.length ?? 0,
     };
   });
 
@@ -684,9 +703,11 @@ function buildWorldTier({
     };
   });
 
+  const knownCount = candidates.filter((n) => n.discovered).length;
+  const rumored    = candidates.length - knownCount;
   return {
     title:       wcd?.world_name ?? "World",
-    subtitle:    wcd?.world_tagline ?? `${discoveredZones.length} known · ${undiscoveredHints.length} rumored`,
+    subtitle:    wcd?.world_tagline ?? `${knownCount} known · ${rumored} rumored`,
     nodes,
     connections,
     exits:       [],
@@ -702,10 +723,14 @@ function buildRegionTier({
   if (!region) {
     return { title: "—", subtitle: "no region", nodes: [], connections: [], exits: [] };
   }
-  // Pull settlement + region_locations (top-level zones whose zone_id
-  // points at this region). Hide sub_locations — they belong on Tier 3.
+  // FIX 2 — Region tier shows WHAT IS INSIDE the geographic region:
+  // the settlement and any standalone region_locations. The region
+  // node itself belongs on the World tier and is excluded here so
+  // the two tiers don't render the same nodes.
+  // FIX 3 — include both discovered and undiscovered so the player
+  // sees the layout of the area even before exploring it.
   const candidates = Object.values(worldGraph.nodes).filter(
-    (n) => (n.zone_id === region.id || n.id === region.id) && n.type !== "sub_location"
+    (n) => n.zone_id === region.id && n.id !== region.id
   );
   const included = new Set<string>(candidates.map((n) => n.id));
 
@@ -715,15 +740,16 @@ function buildRegionTier({
   const nodes: MapNode[] = candidates.map((n) => {
     const pos = positions.get(n.id) ?? { x: VIEW / 2, y: VIEW / 2 };
     return {
-      id:           n.id,
-      name:         n.name,
-      type:         n.type,
-      category:     n.category,
-      x:            pos.x,
-      y:            pos.y,
-      isCurrent:    n.id === worldGraph.current_node_id,
-      isDiscovered: n.discovered,
-      npcCount:     n.npc_ids?.length ?? 0,
+      id:            n.id,
+      name:          n.name,
+      type:          n.type,
+      category:      n.category,
+      x:             pos.x,
+      y:             pos.y,
+      isCurrent:     n.id === worldGraph.current_node_id,
+      isDiscovered:  n.discovered,
+      isExpandable:  n.is_expandable,
+      npcCount:      n.npc_ids?.length ?? 0,
     };
   });
 
@@ -739,7 +765,7 @@ function buildRegionTier({
   });
 
   // Cross-region exits: edges that leave this region's zone entirely.
-  const exits: MapExit[] = [];
+  const rawExits: MapExit[] = [];
   for (const n of candidates) {
     if (n.type !== "zone") continue;
     const pos = positions.get(n.id);
@@ -752,7 +778,7 @@ function buildRegionTier({
       if (target.id === region.id) continue;
       const targetRegionId = target.type === "zone" ? target.id : target.zone_id;
       const targetName     = worldGraph.nodes[targetRegionId]?.name ?? target.name;
-      exits.push({
+      rawExits.push({
         targetId:   targetRegionId,
         targetName,
         fromX:      pos.x,
@@ -760,6 +786,7 @@ function buildRegionTier({
       });
     }
   }
+  const exits = distributeExits(rawExits);
 
   return {
     title:    region.name,
@@ -836,18 +863,22 @@ function buildLocalTier({
   const connPairs = connectionPairs(candidates, included);
   const positions = fitToViewBox(candidates);
 
+  // FIX 3 — include all candidates regardless of discovered state so
+  // the player sees the layout of unexplored sub-locations dimmed
+  // rather than missing entirely.
   const nodes: MapNode[] = candidates.map((n) => {
     const pos = positions.get(n.id) ?? { x: VIEW / 2, y: VIEW / 2 };
     return {
-      id:           n.id,
-      name:         n.name,
-      type:         n.type,
-      category:     n.category,
-      x:            pos.x,
-      y:            pos.y,
-      isCurrent:    n.id === worldGraph.current_node_id,
-      isDiscovered: n.discovered,
-      npcCount:     n.npc_ids?.length ?? 0,
+      id:            n.id,
+      name:          n.name,
+      type:          n.type,
+      category:      n.category,
+      x:             pos.x,
+      y:             pos.y,
+      isCurrent:     n.id === worldGraph.current_node_id,
+      isDiscovered:  n.discovered,
+      isExpandable:  n.is_expandable,
+      npcCount:      n.npc_ids?.length ?? 0,
     };
   });
 
@@ -863,7 +894,7 @@ function buildLocalTier({
   });
 
   // Exits: connections that leave the included set entirely.
-  const exits: MapExit[] = [];
+  const rawExits: MapExit[] = [];
   for (const n of candidates) {
     const pos = positions.get(n.id);
     if (!pos) continue;
@@ -871,7 +902,7 @@ function buildLocalTier({
       if (included.has(c)) continue;
       const target = worldGraph.nodes[c];
       if (!target) continue;
-      exits.push({
+      rawExits.push({
         targetId:   target.id,
         targetName: target.name,
         fromX:      pos.x,
@@ -879,6 +910,7 @@ function buildLocalTier({
       });
     }
   }
+  const exits = distributeExits(rawExits);
 
   const zoneNode = worldGraph.nodes[zoneId];
   const total    = candidates.length;

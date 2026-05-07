@@ -1,13 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { StoryMessage } from "@/lib/stores/game-store";
 import { useGameStore } from "@/lib/stores/game-store";
 import { Genre } from "@/types/game";
 import type { PointOfInterest } from "@/types/game";
 import { InteractionPopover } from "./InteractionPopover";
-import { POI_COLORS, POI_HOVER_COLORS } from "./poi-colors";
-import { getGenreColors } from "./genre-ui";
+import {
+  NarrativeBlock,
+  NPCSpeech,
+  SceneDivider,
+  LocationSpan,
+  NpcSpan,
+  ItemSpan,
+  LandmarkSpan,
+  StatPill,
+  wrapQuotes,
+} from "./StoryComponents";
 import {
   buildExactHighlights,
   findExactHighlights,
@@ -15,34 +24,61 @@ import {
   type HighlightMatch,
 } from "@/lib/game/highlights";
 
+/**
+ * Story Feed — redesign per /design/desktop-ui.jsx + /design/ui-pieces.jsx.
+ *
+ * Typography is serif body prose with mono dividers. Inline highlight roles
+ * (LOCATION / NPC / ITEM / LANDMARK) are rendered through the design's
+ * .ew-link-* span classes. Direct character speech ("...") is wrapped in
+ * .ew-said for the typographic accent.
+ *
+ * Messages render as:
+ *   - NARRATIVE   → NarrativeBlock (or muted player echo when isPlayerDialogue)
+ *   - DIALOGUE    → NPCSpeech (NPC name header + serif italic speech)
+ *   - SYSTEM      → SceneDivider for major events; small mono line for codex/etc.
+ *   - COMBAT      → red-tinted serif line
+ *   - ASCII_ART / LORE — preserved styles
+ *
+ * Stat-check SYSTEM messages render through StatPill so the descriptor is
+ * highlighted with pass/fail tinting and the roll annotation sits in mono.
+ */
+
 // Re-export so existing import sites keep working.
 export type { StoryMessage } from "@/lib/stores/game-store";
 export type MessageType = StoryMessage["type"];
 
 interface StoryFeedProps {
-  messages:  StoryMessage[];
-  isLoading?: boolean;
-  /** FIX 8 — contextual loading text propagated from useGameLoop's
-   *  setProcessing(true, getLoadingText(...)). Replaces the previous
-   *  hardcoded "Generating response…" so the player sees what's
-   *  actually happening (e.g. "Speaking with Korven...", "Examining
-   *  the fountain...", "Entering Salt-Iron Crossing..."). */
+  messages:    StoryMessage[];
+  isLoading?:  boolean;
   loadingText?: string | null;
-  onSubmit?: (input: string) => void;
-  /** Navigation redesign — when a LOCATION highlight has a nodeId, the
-   *  click handler routes directly through this callback instead of
-   *  opening a popover and submitting "go to <name>" text. Maps to
-   *  useGameLoop.navigateTo. */
+  onSubmit?:   (input: string) => void;
   onNavigate?: (nodeId: string) => void;
 }
 
-/** Detect SYSTEM messages that are stat-check feedback — rendered as a
- *  framed mechanical receipt. Format produced by buildRollFeedback. */
-function isStatCheckMessage(content: string): { isCheck: boolean; passed: boolean } {
-  if (!content.includes("check:")) return { isCheck: false, passed: false };
-  if (content.includes("Passed")) return { isCheck: true, passed: true };
-  if (content.includes("Failed")) return { isCheck: true, passed: false };
-  return { isCheck: false, passed: false };
+// ── Stat-check parsing ──────────────────────────────────────────────────────
+// buildRollFeedback (in useGameLoop) emits strings like:
+//   "🎭 Charisma check: 14 +0 (CHA) = 14 vs difficulty 12 — Passed!"
+//   "💪 Strength check: 5 -1 (STR) = 4 vs difficulty 12 — Failed."
+// We parse these out to a structured pill instead of rendering the raw line.
+
+interface StatCheck {
+  stat:    string;
+  total:   number;
+  dc:      number;
+  pass:    boolean;
+}
+
+function parseStatCheck(content: string): StatCheck | null {
+  // capture the short stat code in parens, the running total, the difficulty,
+  // and whether it passed.
+  const m = content.match(/\(([A-Z]{3})\)\s*=\s*(-?\d+)\s*vs\s*difficulty\s*(\d+)\s*—\s*(Passed|Failed)/i);
+  if (!m) return null;
+  return {
+    stat:  m[1],
+    total: parseInt(m[2], 10),
+    dc:    parseInt(m[3], 10),
+    pass:  /^Pass/i.test(m[4]),
+  };
 }
 
 interface PopoverState {
@@ -53,16 +89,8 @@ interface PopoverState {
 export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, onNavigate }: StoryFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [popover, setPopover] = useState<PopoverState | null>(null);
-  // Day 18 — every genre themes the feed via getGenreColors. Read once here
-  // and pass down so MessageEntry doesn't subscribe N times.
   const genre = useGameStore((s) => s.masterState?.metadata.genre) ?? Genre.FANTASY;
 
-  // Day 19E — exact-match highlight candidates computed from live state.
-  // Replaces narrator-emitted points_of_interest fuzzy scanning. Recomputed
-  // when masterState or locationAssets change (i.e. on every move/asset
-  // refresh) — earlier messages re-render with the candidates that exist
-  // RIGHT NOW; that's intentional, since highlights drive interactions
-  // available at the player's current node.
   const masterState    = useGameStore((s) => s.masterState);
   const locationAssets = useGameStore((s) => s.locationAssets);
   const highlightCandidates = useMemo<HighlightCandidate[]>(() => {
@@ -77,45 +105,56 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
   const openPopover = (point: PointOfInterest, e: React.MouseEvent) => {
     setPopover({ point, position: { x: e.clientX, y: e.clientY } });
   };
-
   const closePopover = () => setPopover(null);
-
-  const submitFromPopover = (input: string) => {
-    onSubmit?.(input);
-  };
+  const submitFromPopover = (input: string) => onSubmit?.(input);
 
   return (
-    // `min-h-0` is required so this flex child can actually shrink below its
-    // content size and scroll independently when the DialogueModal takes up
-    // its own row in the column. Without it, flex's default `min-height: auto`
-    // would let the feed grow and push the modal/InputBar off-screen.
     <div
-      className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-4 py-4"
-      style={{ fontFamily: "var(--font-mono)" }}
+      className="ew-scroll min-h-0 flex-1 overflow-y-auto"
+      style={{
+        position:        "relative",
+        background:      "var(--bg-0)",
+        padding:         "16px 24px",
+        fontFamily:      "var(--sans)",
+      }}
     >
-      {messages.map((msg) => (
-        <MessageEntry
-          key={msg.id}
-          message={msg}
-          onPoiClick={openPopover}
-          onNavigate={onNavigate}
-          genre={genre}
-          highlightCandidates={highlightCandidates}
-        />
-      ))}
+      <div
+        className="ew-grain"
+        style={{ ["--grain" as string]: 0.15 }}
+      />
+      <div style={{ position: "relative", maxWidth: 720, margin: "0 auto" }}>
+        {messages.map((msg) => (
+          <MessageEntry
+            key={msg.id}
+            message={msg}
+            onPoiClick={openPopover}
+            onNavigate={onNavigate}
+            genre={genre}
+            highlightCandidates={highlightCandidates}
+          />
+        ))}
 
-      {isLoading && (
-        <div className="flex items-center gap-2 font-mono text-sm italic">
-          <span className="cursor-blink" style={{ color: "var(--color-primary)" }}>
-            █
-          </span>
-          <span style={{ color: "var(--color-muted)" }}>
-            {loadingText ?? "Thinking…"}
-          </span>
-        </div>
-      )}
+        {isLoading && (
+          <div
+            className="ew-mono"
+            style={{
+              display:       "flex",
+              alignItems:    "center",
+              gap:           8,
+              fontSize:      11,
+              letterSpacing: "0.18em",
+              color:         "var(--ink-4)",
+              fontStyle:     "italic",
+              padding:       "8px 0",
+            }}
+          >
+            <span className="cursor-blink" style={{ color: "var(--accent)" }}>▋</span>
+            <span>{loadingText ?? "Thinking…"}</span>
+          </div>
+        )}
 
-      <div ref={bottomRef} />
+        <div ref={bottomRef} />
+      </div>
 
       {popover && (
         <InteractionPopover
@@ -129,6 +168,8 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
   );
 }
 
+// ── Message entry ───────────────────────────────────────────────────────────
+
 interface MessageEntryProps {
   message:             StoryMessage;
   onPoiClick:          (point: PointOfInterest, e: React.MouseEvent) => void;
@@ -138,331 +179,273 @@ interface MessageEntryProps {
 }
 
 function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandidates }: MessageEntryProps) {
+  void genre;
   const { type, content, metadata } = message;
-  const restored  = metadata?.restored === true;
-  const npcName   =
-    typeof metadata?.npcName === "string" ? metadata.npcName : undefined;
-  const locationName =
-    typeof metadata?.locationName === "string" ? metadata.locationName : undefined;
+  const restored         = metadata?.restored === true;
+  const npcName          = typeof metadata?.npcName === "string" ? metadata.npcName : undefined;
+  const locationName     = typeof metadata?.locationName === "string" ? metadata.locationName : undefined;
   const isPlayerDialogue = metadata?.isPlayerDialogue === true;
 
-  // Day 18 — every accent on every message ultimately reads through this.
-  const colors = getGenreColors(genre);
-
   const inner = (() => {
-  switch (type) {
-    case "NARRATIVE":
-      // FIX 4 — player dialogue echo. When the player picks an option
-      // or types in the inline DialogueModal input, the loop emits a
-      // NARRATIVE message with isPlayerDialogue=true. Render it like
-      // the existing "> action" echo (muted green, smaller text, no
-      // highlights) so the feed reads as a clean back-and-forth.
-      if (isPlayerDialogue) {
-        return (
-          <div
-            className="message-enter"
-            style={{
-              color:      "#446644",
-              fontSize:   12,
-              margin:     "10px 0 4px",
-              fontFamily: "var(--font-mono)",
-              fontStyle:  "italic",
-            }}
-          >
-            {content}
-          </div>
-        );
-      }
-      // 6a — NARRATIVE with a locationName on metadata renders the genre-themed
-      // arrival header (◈ NAME) above the body prose.
-      return (
-        <div className="message-enter">
-          {locationName && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "12px 0 8px" }}>
-              <div style={{ flex: 1, height: 1, background: "#2a3040" }} />
-              <span
-                style={{
-                  color:         colors.primary,
-                  fontSize:      13,
-                  fontWeight:    "bold",
-                  letterSpacing: "0.05em",
-                  fontFamily:    "var(--font-mono)",
-                }}
-              >
-                ◈ {locationName}
-              </span>
-              <div style={{ flex: 1, height: 1, background: "#2a3040" }} />
-            </div>
-          )}
-          <p
-            style={{
-              color:         "#b0bec5",
-              lineHeight:    1.8,
-              letterSpacing: "0.01em",
-              margin:        "8px 0",
-              fontFamily:    "var(--font-mono)",
-              fontSize:      14,
-            }}
-          >
-            {renderNarrativeText(content, highlightCandidates, onPoiClick, onNavigate)}
-          </p>
-        </div>
-      );
-
-    case "SYSTEM": {
-      // 6f — Player action echo (lines starting with "> ").
-      if (content.startsWith("> ")) {
-        return (
-          <div
-            className="message-enter"
-            style={{
-              color:      "#446644",
-              fontSize:   12,
-              margin:     "10px 0 4px",
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            ◈ &gt; {content.slice(2)}
-          </div>
-        );
-      }
-      // 6c — Stat check feedback (mechanical receipt).
-      const check = isStatCheckMessage(content);
-      if (check.isCheck) {
-        const barColor   = check.passed ? "#22aa44" : "#aa3322";
-        const labelColor = check.passed ? "#44aa66" : "#aa4433";
-        return (
-          <div
-            className="message-enter"
-            style={{
-              background:    "rgba(0,0,0,0.3)",
-              borderLeft:    `3px solid ${barColor}`,
-              padding:       "6px 10px",
-              margin:        "6px 0",
-              fontFamily:    "var(--font-mono)",
-              fontSize:      11,
-            }}
-          >
+    switch (type) {
+      case "NARRATIVE": {
+        // Player echo (DialogueModal inline submit / option click).
+        if (isPlayerDialogue) {
+          return (
             <div
+              className="message-enter ew-mono"
               style={{
-                fontSize:      10,
-                letterSpacing: "0.1em",
-                color:         "#556677",
-                marginBottom:  3,
+                color:         "var(--ink-4)",
+                fontSize:      11,
+                letterSpacing: "0.05em",
+                margin:        "10px 0 4px",
+                fontStyle:     "italic",
+                opacity:       0.85,
               }}
             >
-              stat check
+              ◈ {content.replace(/^"|"$/g, "")}
             </div>
-            <div style={{ color: labelColor }}>{content}</div>
+          );
+        }
+        // Arrival divider sits above the body paragraph.
+        return (
+          <div className="message-enter">
+            {locationName && (
+              <SceneDivider
+                label={
+                  <span style={{ color: "var(--accent)" }}>◈ {locationName}</span>
+                }
+              />
+            )}
+            <NarrativeBlock skipQuoteWrap>
+              {renderNarrativeText(content, highlightCandidates, onPoiClick, onNavigate)}
+            </NarrativeBlock>
           </div>
         );
       }
-      // 6d — Generic system event (items acquired, trust, etc.) — italic primary.
-      return (
-        <div
-          className="message-enter"
-          style={{
-            fontSize:   11,
-            color:      colors.primary,
-            fontStyle:  "italic",
-            margin:     "4px 0",
-            fontFamily: "var(--font-mono)",
-          }}
-        >
-          ✦ {content}
-        </div>
-      );
-    }
 
-    case "COMBAT":
-      return (
-        <p
-          className="message-enter"
-          style={{
-            color:      "#ef9a9a",
-            fontSize:   12,
-            margin:     "6px 0",
-            fontFamily: "var(--font-mono)",
-          }}
-        >
-          <span style={{ marginRight: 6 }}>⚔</span>
-          {content}
-        </p>
-      );
-
-    case "DIALOGUE":
-      // 6b — NPC dialogue: name in genre-primary above a quoted block.
-      return (
-        <div className="message-enter" style={{ margin: "8px 0" }}>
-          <div
-            style={{
-              fontSize:      11,
-              fontWeight:    "bold",
-              color:         colors.primary,
-              letterSpacing: "0.08em",
-              marginBottom:  4,
-              fontFamily:    "var(--font-mono)",
-              textTransform: "uppercase",
-            }}
-          >
-            {npcName ?? "Unknown"}
-          </div>
-          <div
-            style={{
-              borderLeft:    `3px solid ${colors.primary}`,
-              padding:       "4px 10px",
-              background:    "rgba(0,0,0,0.2)",
-              color:         "#d0dce8",
-              fontFamily:    "var(--font-mono)",
-              fontSize:      14,
-              lineHeight:    1.8,
-              letterSpacing: "0.01em",
-            }}
-          >
-            {parseDialogueText(content).map((seg, i) =>
-              seg.isQuote ? (
-                <span
-                  key={i}
-                  style={{ color: colors.primary, fontStyle: "italic" }}
-                >
-                  {seg.content}
-                </span>
-              ) : (
-                <span key={i} style={{ color: "#d0dce8" }}>
-                  {seg.content}
-                </span>
-              )
-            )}
-          </div>
-        </div>
-      );
-
-    case "ASCII_ART":
-      return (
-        <pre
-          className="message-enter ascii-art text-glow overflow-x-auto"
-          style={{ color: colors.primary, fontFamily: "var(--font-mono)" }}
-        >
-          {content}
-        </pre>
-      );
-
-    case "LORE": {
-      const itemName =
-        typeof metadata?.item_name === "string" ? metadata.item_name : undefined;
-      return (
-        <div
-          className="message-enter"
-          style={{
-            borderLeft:  `2px solid color-mix(in srgb, ${colors.primary} 50%, transparent)`,
-            paddingLeft: 12,
-            margin:      "8px 0",
-            fontFamily:  "var(--font-mono)",
-          }}
-        >
-          {itemName && (
-            <span
+      case "SYSTEM": {
+        // Player action echo
+        if (content.startsWith("> ")) {
+          return (
+            <div
+              className="message-enter ew-mono"
               style={{
-                display:       "block",
-                fontSize:      10,
-                fontWeight:    "bold",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                color:         colors.primary,
+                color:         "var(--ink-4)",
+                fontSize:      11,
+                letterSpacing: "0.05em",
+                margin:        "10px 0 4px",
+                fontStyle:     "italic",
+                opacity:       0.9,
               }}
             >
-              {itemName}
-            </span>
-          )}
-          <p
+              ◈ {content.slice(2)}
+            </div>
+          );
+        }
+
+        // Stat-check receipt — render as a StatPill on its own line.
+        const check = parseStatCheck(content);
+        if (check) {
+          return (
+            <div className="message-enter" style={{ margin: "8px 0" }}>
+              <StatPill
+                stat={check.stat}
+                total={check.total}
+                dc={check.dc}
+                pass={check.pass}
+                descriptor={check.pass ? "the moment turned in your favor" : "the moment slipped past you"}
+              />
+            </div>
+          );
+        }
+
+        // Codex-add notification — small mono line with accent diamond.
+        if (content.includes("added to codex")) {
+          return (
+            <div
+              className="message-enter ew-mono"
+              style={{
+                fontSize:      10,
+                letterSpacing: "0.22em",
+                color:         "var(--accent)",
+                margin:        "6px 0",
+                fontStyle:     "italic",
+                opacity:       0.9,
+              }}
+            >
+              {content}
+            </div>
+          );
+        }
+
+        // Section dividers — anything wrapped in em-dashes is a beat marker.
+        if (/^—\s.+\s—$/.test(content)) {
+          return <SceneDivider label={content.replace(/^—\s|\s—$/g, "")} />;
+        }
+
+        // Generic system event — small italic accent.
+        return (
+          <div
+            className="message-enter ew-mono"
             style={{
+              fontSize:      11,
+              letterSpacing: "0.12em",
+              color:         "var(--accent)",
+              margin:        "6px 0",
+              fontStyle:     "italic",
+            }}
+          >
+            ✦ {content}
+          </div>
+        );
+      }
+
+      case "COMBAT":
+        return (
+          <p
+            className="message-enter ew-serif"
+            style={{
+              color:      "var(--hl-fail)",
               fontSize:   13,
               fontStyle:  "italic",
-              lineHeight: 1.6,
-              color:      "color-mix(in srgb, #8899aa 90%, transparent)",
+              margin:     "6px 0",
             }}
           >
+            <span style={{ marginRight: 6 }}>⚔</span>
             {content}
           </p>
-        </div>
-      );
-    }
+        );
 
-    default:
-      return null;
-  }
+      case "DIALOGUE": {
+        // NPC speech bubble — design's NPCSpeech component.
+        return (
+          <NPCSpeech name={npcName ?? "Unknown"}>
+            {wrapQuotes(content)}
+          </NPCSpeech>
+        );
+      }
+
+      case "ASCII_ART":
+        return (
+          <pre
+            className="message-enter ascii-art text-glow overflow-x-auto"
+            style={{ color: "var(--accent)", fontFamily: "var(--mono)" }}
+          >
+            {content}
+          </pre>
+        );
+
+      case "LORE": {
+        const itemName =
+          typeof metadata?.item_name === "string" ? metadata.item_name : undefined;
+        return (
+          <div
+            className="message-enter"
+            style={{
+              borderLeft:  "2px solid color-mix(in srgb, var(--accent) 50%, transparent)",
+              paddingLeft: 12,
+              margin:      "8px 0",
+              maxWidth:    640,
+            }}
+          >
+            {itemName && (
+              <span
+                className="ew-mono"
+                style={{
+                  display:       "block",
+                  fontSize:      10,
+                  fontWeight:    "bold",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.18em",
+                  color:         "var(--accent)",
+                  marginBottom:  4,
+                }}
+              >
+                {itemName}
+              </span>
+            )}
+            <p
+              className="ew-serif"
+              style={{
+                fontSize:   13,
+                fontStyle:  "italic",
+                lineHeight: 1.7,
+                color:      "var(--ink-3)",
+                margin:     0,
+              }}
+            >
+              {content}
+            </p>
+          </div>
+        );
+      }
+
+      default:
+        return null;
+    }
   })();
 
   if (!inner) return null;
   if (!restored) return <>{inner}</>;
-  // Restored messages from a previous session — slightly muted to distinguish
-  // them from new messages in the current session.
-  return <div style={{ opacity: 0.8 }}>{inner}</div>;
+  return <div style={{ opacity: 0.78 }}>{inner}</div>;
 }
 
-// ── Dialogue text parsing ─────────────────────────────────────────────────────
-
-interface DialogueSegment {
-  content: string;
-  isQuote: boolean;
-}
-
-/**
- * Splits narrator dialogue text into prose segments and quoted segments.
- * Quoted segments are text inside "double quotes" — the narrator's speech
- * format. Prose segments stay in --color-text; quoted segments get
- * --color-accent + italic so only the spoken words pop visually.
- */
-function parseDialogueText(text: string): DialogueSegment[] {
-  const segments: DialogueSegment[] = [];
-  // Match content inside "double quotes" (the narrator's dialogue format).
-  // Simple non-greedy match — doesn't need to handle escaped quotes because
-  // the LLM output doesn't produce them in this context.
-  const quoteRegex = /"[^"]*"/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = quoteRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      segments.push({ content: text.slice(lastIndex, match.index), isQuote: false });
-    }
-    segments.push({ content: match[0], isQuote: true });
-    lastIndex = match.index + match[0].length;
-  }
-  if (lastIndex < text.length) {
-    segments.push({ content: text.slice(lastIndex), isQuote: false });
-  }
-  // If no quotes found (plain narrative fallback), return whole text as prose.
-  return segments.length > 0 ? segments : [{ content: text, isQuote: false }];
-}
-
-// ── POI rendering ─────────────────────────────────────────────────────────────
+// ── Narrative-with-highlights renderer ──────────────────────────────────────
 //
-// Day 19E: switched from narrator-emitted points_of_interest fuzzy scanning
-// to exact, whole-word, case-insensitive matching against highlight
-// candidates derived from live world state (Tier 1 objects, NPCs in the
-// graph, connected locations, WCD landmarks).
+// Produces a React node array where every match against a HighlightCandidate
+// becomes a clickable inline span with the design's role class. Plain runs
+// in between are wrapped in wrapQuotes() so direct character speech inside
+// the prose still styles via .ew-said.
+
+function spanForType(
+  type:        PointOfInterest["type"],
+  text:        string,
+  onClick:     (e: React.MouseEvent) => void,
+  onKeyDown:   (e: React.KeyboardEvent) => void,
+  key:         string
+): React.ReactNode {
+  const props = {
+    key,
+    role:       "button" as const,
+    tabIndex:   0,
+    onClick,
+    onKeyDown,
+    style:      { cursor: "pointer" } as React.CSSProperties,
+  };
+  switch (type) {
+    case "LOCATION": return <LocationSpan {...props}>{text}</LocationSpan>;
+    case "NPC":      return <NpcSpan      {...props}>{text}</NpcSpan>;
+    case "LANDMARK": return <LandmarkSpan {...props}>{text}</LandmarkSpan>;
+    case "ITEM":
+    case "CONTAINER":
+    case "HAZARD":
+    default:         return <ItemSpan     {...props}>{text}</ItemSpan>;
+  }
+}
 
 function renderNarrativeText(
-  text:       string,
-  candidates: HighlightCandidate[],
-  onPoiClick: (point: PointOfInterest, e: React.MouseEvent) => void,
+  text:        string,
+  candidates:  HighlightCandidate[],
+  onPoiClick:  (point: PointOfInterest, e: React.MouseEvent) => void,
   onNavigate?: (nodeId: string) => void
 ): React.ReactNode {
   const matches: HighlightMatch[] = findExactHighlights(text, candidates);
-  if (matches.length === 0) return text;
+  if (matches.length === 0) return wrapQuotes(text);
 
   const nodes: React.ReactNode[] = [];
   let cursor = 0;
-  matches.forEach((m, i) => {
-    if (m.start > cursor) nodes.push(text.slice(cursor, m.start));
-    const accent     = POI_COLORS[m.point.type];
-    const hoverColor = POI_HOVER_COLORS[m.point.type];
 
-    // Navigation redesign — when a LOCATION highlight carries a nodeId
-    // and the parent provided onNavigate, click goes straight to
-    // navigateTo without opening the popover. Other types (NPC, ITEM,
-    // CONTAINER, HAZARD, LANDMARK) still open the popover.
+  matches.forEach((m, i) => {
+    if (m.start > cursor) {
+      // Plain text run — pass through quote-wrapping so .ew-said styles work.
+      nodes.push(
+        <React.Fragment key={`txt-${i}-${cursor}`}>
+          {wrapQuotes(text.slice(cursor, m.start))}
+        </React.Fragment>
+      );
+    }
+
     const isDirectNav = m.point.type === "LOCATION" && !!m.nodeId && !!onNavigate;
     const handleClick = (e: React.MouseEvent) => {
       if (isDirectNav && m.nodeId) {
@@ -471,54 +454,39 @@ function renderNarrativeText(
         onPoiClick(m.point, e);
       }
     };
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      if (isDirectNav && m.nodeId) {
+        onNavigate!(m.nodeId);
+      } else {
+        const target = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        onPoiClick(m.point, {
+          clientX: target.left,
+          clientY: target.bottom,
+        } as React.MouseEvent);
+      }
+    };
+
     nodes.push(
-      <span
-        key={`poi-${i}-${m.start}`}
-        role="button"
-        tabIndex={0}
-        onClick={handleClick}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.color = hoverColor;
-          e.currentTarget.style.textDecorationColor = hoverColor;
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.color = accent;
-          e.currentTarget.style.textDecorationColor = accent;
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            if (isDirectNav && m.nodeId) {
-              onNavigate!(m.nodeId);
-            } else {
-              const target = e.currentTarget.getBoundingClientRect();
-              onPoiClick(m.point, {
-                clientX: target.left,
-                clientY: target.bottom,
-              } as React.MouseEvent);
-            }
-          }
-        }}
-        // FIX 2 — solid underline + 3px offset gives every highlight type
-        // a clear interactable affordance. Per-type colors are now
-        // distinct (LOCATION blue, NPC genre primary, ITEM amber,
-        // LANDMARK violet) so the player can tell the actions apart at
-        // a glance instead of relying on subtle hue differences.
-        style={{
-          color:                accent,
-          textDecorationLine:   "underline",
-          textDecorationColor:  accent,
-          textDecorationStyle:  "solid",
-          textUnderlineOffset:  "3px",
-          cursor:               "pointer",
-          transition:           "color 120ms ease, text-decoration-color 120ms ease",
-        }}
-      >
-        {text.slice(m.start, m.end)}
-      </span>
+      spanForType(
+        m.point.type,
+        text.slice(m.start, m.end),
+        handleClick,
+        handleKeyDown,
+        `poi-${i}-${m.start}`
+      )
     );
+
     cursor = m.end;
   });
-  if (cursor < text.length) nodes.push(text.slice(cursor));
+
+  if (cursor < text.length) {
+    nodes.push(
+      <React.Fragment key={`txt-tail-${cursor}`}>
+        {wrapQuotes(text.slice(cursor))}
+      </React.Fragment>
+    );
+  }
   return nodes;
 }

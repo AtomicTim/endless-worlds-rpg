@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo } from "react";
 import type {
   Genre,
   MasterState,
@@ -9,83 +9,134 @@ import type {
   WorldLandmark,
   WorldNode,
 } from "@/types/game";
-import { getGenreColors } from "./genre-ui";
 
 /**
- * Navigation Redesign — UI-driven movement.
+ * Navigation Bar — mobile-only horizontal nav strip.
  *
- * A persistent horizontally-scrollable strip of cards, one per
- * connected location at the player's current node, plus
- * outline-cards for any adjacent undiscovered region the WorldBible
- * declared. Every card is a touch target ≥ 52px tall.
+ * Per the redesign: desktop uses the WorldMap sidebar's tier 3 view
+ * for clickable navigation, so this bar returns null at ≥768px.
+ * Mobile (<768px) gets a horizontally-scrollable row of nav cards
+ * styled to match /design/ui-pieces.jsx → NavCard.
  *
- * Tapping a card calls onNavigate(nodeId). The hook routes that
- * through submitAction with `forceMoveToNode` set so it bypasses
- * parseIntent and the text-side MOVE intercept entirely — the only
- * sanctioned navigation channel after the redesign.
+ * Cards include:
+ *   • Connected graph nodes from the player's current node.
+ *   • A "← Return" card when the player is in a region_location and
+ *     the parent settlement isn't already in the connection list.
+ *   • WorldBible adjacent_region outlines and WCD-landmark outlines
+ *     for undiscovered destinations.
  *
- * FIX 5 — desktop (≥ 768px) gets ‹ / › overflow arrows when the row
- * scrolls. Mobile relies on touch-momentum scrolling and hides them.
+ * Tapping a card calls onNavigate(nodeId), which the parent routes
+ * through useGameLoop.navigateTo (the only sanctioned UI nav channel).
  */
 
 interface Props {
   masterState: MasterState | null;
   worldGraph:  WorldGraph | undefined;
   onNavigate:  (nodeId: string) => void;
+  /** Genre is wired through for legacy reasons; theming now lives in
+   *  CSS via [data-genre] on the GameLayout root. */
   genre:       Genre;
 }
 
-const TYPE_ICON: Record<string, string> = {
-  // Fantasy / shared
-  settlement:      "🏛",
-  settlement_hub:  "🏛",
-  tavern:          "🍺",
-  inn:             "🍺",
-  bar:             "🍺",
-  market:          "🏪",
-  shop:            "🏪",
-  smithy:          "⚒",
-  forge:           "⚒",
-  wilderness:      "🌲",
-  nature:          "🌲",
-  dungeon:         "💀",
-  ruin:            "💀",
-  stronghold:      "🏰",
-  garrison:        "🏰",
-  temple:          "✨",
-  shrine:          "✨",
-  guild:           "⚜",
-  port:            "⚓",
-  docks:           "⚓",
-  // Space Opera
-  station:         "🚀",
-  ship:            "🚀",
-  // Cyberpunk
-  "data-hub":      "🔌",
-  "corp-zone":     "🏢",
-  // Default
-  other:           "📍",
+// Type → SVG icon. Uses the design's small-stroke iconography rather
+// than emoji so the cards read consistently across genres.
+const TYPE_LABEL: Record<string, string> = {
+  settlement:      "TOWN",
+  settlement_hub:  "HUB",
+  tavern:          "INN",
+  inn:             "INN",
+  bar:             "BAR",
+  market:          "MARKET",
+  shop:            "SHOP",
+  smithy:          "FORGE",
+  forge:           "FORGE",
+  wilderness:      "WILDS",
+  nature:          "WILDS",
+  dungeon:         "RUIN",
+  ruin:            "RUIN",
+  stronghold:      "KEEP",
+  garrison:        "KEEP",
+  temple:          "SHRINE",
+  shrine:          "SHRINE",
+  guild:           "GUILD",
+  port:            "PORT",
+  docks:           "PORT",
+  station:         "STATION",
+  ship:            "SHIP",
+  "data-hub":      "NODE",
+  "corp-zone":     "CORP",
+  other:           "PLACE",
 };
 
-function iconFor(node: WorldNode): string {
-  const candidates = [
-    node.category?.toLowerCase() ?? "",
-    node.type?.toLowerCase()     ?? "",
-  ];
-  for (const c of candidates) {
-    if (c && TYPE_ICON[c]) return TYPE_ICON[c];
+function labelFor(node: WorldNode): string {
+  const cat = node.category?.toLowerCase() ?? "";
+  if (cat && TYPE_LABEL[cat]) return TYPE_LABEL[cat];
+  const t = node.type?.toLowerCase() ?? "";
+  if (t && TYPE_LABEL[t]) return TYPE_LABEL[t];
+  return TYPE_LABEL.other;
+}
+
+// Small SVG icon picker — paper-style glyph by category.
+function IconFor({ category }: { category: string }) {
+  switch (category) {
+    case "tavern":
+    case "inn":
+    case "bar":
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M 3 16 L 3 8 L 10 3 L 17 8 L 17 16 Z" stroke="currentColor" strokeWidth="1.4" />
+          <path d="M 8 16 L 8 11 L 12 11 L 12 16" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+      );
+    case "settlement":
+    case "settlement_hub":
+    case "market":
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M 3 17 L 3 9 L 8 9 L 8 5 L 14 5 L 14 9 L 17 9 L 17 17 Z" stroke="currentColor" strokeWidth="1.4" />
+          <path d="M 6 17 L 6 13 M 11 17 L 11 13" stroke="currentColor" strokeWidth="1" />
+        </svg>
+      );
+    case "ruin":
+    case "dungeon":
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M 2 17 L 2 11 L 6 11 L 6 6 L 9 11 L 13 7 L 13 11 L 18 11 L 18 17 Z"
+            stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+      );
+    case "shrine":
+    case "temple":
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M 10 3 L 10 17 M 6 8 L 14 8" stroke="currentColor" strokeWidth="1.4" />
+          <circle cx="10" cy="3" r="1.5" fill="currentColor" />
+        </svg>
+      );
+    case "wilderness":
+    case "nature":
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M 3 17 Q 6 10 10 12 Q 14 14 17 4"
+            stroke="currentColor" strokeWidth="1.4"
+            strokeDasharray="2 2" strokeLinecap="round" />
+        </svg>
+      );
+    case "fog":
+    default:
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <circle cx="10" cy="10" r="6"
+            stroke="currentColor" strokeWidth="1.2" strokeDasharray="2 2" />
+          <text x="10" y="13" fontSize="8" fontFamily="monospace" textAnchor="middle" fill="currentColor">?</text>
+        </svg>
+      );
   }
-  return TYPE_ICON.other;
 }
 
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return `${s.slice(0, max - 1)}…`;
-}
+// ────────────────────────────────────────────────────────────────────────────
 
-export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Props) {
-  const colors = getGenreColors(genre);
-
+export function NavigationBar({ masterState, worldGraph, onNavigate }: Props) {
   const { connectedNodes, returnNode, adjacentOutlines, landmarkOutlines } = useMemo(() => {
     if (!worldGraph) {
       return {
@@ -105,12 +156,9 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
       };
     }
 
-    // CHANGE 4 — outline fallback for unresolved connections. When a
-    // connection id doesn't resolve to a known graph node BUT it
-    // matches a WorldBible adjacent_region outline, we still show the
-    // outline as a navigation card. This prevents the bar from going
-    // empty for outline-only neighbours that haven't been expanded
-    // into full graph nodes yet.
+    // Outline fallback for unresolved connections — when current.connections
+    // points at an id that isn't in the graph yet but DOES have a matching
+    // adjacent_regions outline in the WorldBible, surface that as a card.
     const wbForOutlineFallback = masterState?.metadata.world_bible;
     const outlinesById: Map<string, RegionOutline> = new Map();
     for (const o of wbForOutlineFallback?.adjacent_regions ?? []) {
@@ -128,17 +176,8 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
       }
     }
 
-    // CHANGE 4 — robust "← Return" card per architecture spec
-    // (Navigation — Code Only / Region Location Back-Connections).
-    // Conditions ALL of:
-    //   1. currentNode exists in worldGraph
-    //   2. currentNode.type === "zone" (not sub_location)
-    //   3. currentNode.is_settlement_node !== true
-    //   4. there exists another node in the same zone whose
-    //      is_settlement_node === true
-    // Search runs against the live graph independently of
-    // currentNode.connections, so the player always has a way back
-    // even if generation-time stitching missed an edge.
+    // "← Return" card — when current is a region_location, find the
+    // settlement zone in the same geographic region and link back to it.
     let parentSettlement: WorldNode | null = null;
     const isCandidateForReturn =
       current.type === "zone" &&
@@ -151,9 +190,6 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
             n.zone_id === current.zone_id &&
             n.is_settlement_node === true
         ) ?? null;
-      // Backwards-compat fallback for older save files where
-      // is_settlement_node wasn't yet populated. The legacy heuristic
-      // is is_expandable === true on a zone-typed sibling.
       if (!parentSettlement) {
         parentSettlement =
           Object.values(worldGraph.nodes).find(
@@ -165,16 +201,12 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
           ) ?? null;
       }
     }
-    // Don't double-render: if the parent settlement is already in the
-    // resolved connections list, skip the return card.
     const alreadyConnected = parentSettlement
       ? connected.some((n) => n.id === parentSettlement!.id)
       : false;
     if (alreadyConnected) parentSettlement = null;
 
-    // Outline cards for adjacent undiscovered regions. Skip any outline
-    // whose id collides with an already-resolved graph node so we never
-    // double-render the same destination.
+    // Outline cards for unexplored adjacent regions.
     const wb       = masterState?.metadata.world_bible;
     const wcd      = masterState?.metadata.world_consistency;
     const knownIds = new Set([
@@ -183,10 +215,6 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
     ]);
     const outlinesSeen = new Set<string>();
     const outlines: RegionOutline[] = [];
-    // CHANGE 4 — surface outline cards for unresolved connection ids
-    // FIRST. These are the player's most-relevant exits because they
-    // already exist on currentNode.connections; the AI just hasn't
-    // expanded them into real graph nodes yet.
     for (const o of fallbackOutlines) {
       if (knownIds.has(o.id) || outlinesSeen.has(o.id)) continue;
       outlinesSeen.add(o.id);
@@ -198,23 +226,17 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
       outlines.push(r);
     }
 
-    // FIX 2 — surface WCD landmarks that aren't yet a discovered graph
-    // node but DO have a matching adjacent_region in the WorldBible.
-    // The match is loose (id OR name) because the bible/AI sometimes
-    // mints a different slug for the same place; this gives players a
-    // reliable way to reach a landmark like "Bellhaven" from the start.
+    // Landmark outlines — WCD landmarks the player can sense from
+    // anywhere in the world (e.g. "Bellhaven", "the Wound") that aren't
+    // yet a discovered graph node but DO have a matching outline.
     const adjacentRegions = wb?.adjacent_regions ?? [];
     const everyoneLandmarks = (wcd?.landmarks ?? []).filter(
       (lm) => lm.known_by === "everyone"
     );
     const landmarkPairs: Array<{ landmark: WorldLandmark; outline: RegionOutline }> = [];
     for (const lm of everyoneLandmarks) {
-      // Skip when the landmark already has a discovered graph node
-      // — the player can navigate to it via normal means.
       const existingNode = worldGraph.nodes[lm.id];
       if (existingNode && existingNode.discovered) continue;
-
-      // Find a matching adjacent_region by id or name.
       const lmNameLower = lm.name.toLowerCase();
       const match = adjacentRegions.find(
         (r) =>
@@ -223,15 +245,9 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
           r.name.toLowerCase() === lmNameLower
       );
       if (!match) continue;
-      // Skip if we're already showing this outline as a regular adjacent
-      // region card OR if it's already a known connection.
       if (knownIds.has(match.id)) continue;
-      if (outlines.some((o) => o.id === match.id)) {
-        // Promote: drop from the regular outlines list and re-render
-        // it as a landmark card so the diamond + name reads as one.
-        const idx = outlines.findIndex((o) => o.id === match.id);
-        if (idx >= 0) outlines.splice(idx, 1);
-      }
+      const idx = outlines.findIndex((o) => o.id === match.id);
+      if (idx >= 0) outlines.splice(idx, 1);
       landmarkPairs.push({ landmark: lm, outline: match });
     }
 
@@ -243,44 +259,6 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
     };
   }, [worldGraph, masterState]);
 
-  // ── Desktop overflow arrows ──────────────────────────────────────────────
-  // Track horizontal scroll position so we can show / hide the arrows
-  // when the row actually overflows. Mobile keeps using native momentum
-  // scrolling — the arrows are display: none on viewports below 768px.
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const [canScrollLeft,  setCanScrollLeft]  = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const update = () => {
-      const max = el.scrollWidth - el.clientWidth;
-      setCanScrollLeft(el.scrollLeft > 0);
-      // Account for sub-pixel rounding by giving 1px of slack at the end.
-      setCanScrollRight(el.scrollLeft < max - 1);
-    };
-    update();
-    el.addEventListener("scroll", update, { passive: true });
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
-    if (ro) ro.observe(el);
-    window.addEventListener("resize", update);
-    return () => {
-      el.removeEventListener("scroll", update);
-      if (ro) ro.disconnect();
-      window.removeEventListener("resize", update);
-    };
-    // Re-bind whenever the card list changes — the scrollWidth is what
-    // determines whether the right arrow is needed.
-  }, [connectedNodes.length, adjacentOutlines.length]);
-
-  function scrollBy(direction: -1 | 1) {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const amount = Math.max(160, Math.floor(el.clientWidth * 0.7));
-    el.scrollBy({ left: direction * amount, behavior: "smooth" });
-  }
-
   if (
     connectedNodes.length === 0 &&
     adjacentOutlines.length === 0 &&
@@ -291,90 +269,76 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
   }
 
   const visited = new Set(masterState?.world_state.visited_locations ?? []);
+  const currentId = worldGraph?.current_node_id;
 
   return (
     <div
-      className="relative shrink-0"
       role="navigation"
       aria-label="Connected locations"
+      // Mobile-only — desktop relies on the WorldMap sidebar for nav.
+      className="md:hidden shrink-0"
       style={{
-        borderTop:       "1px solid var(--color-border)",
-        backgroundColor: "color-mix(in srgb, var(--color-bg) 92%, #000)",
+        borderTop:  "1px solid var(--line)",
+        background: "var(--bg-1)",
       }}
     >
       <div
-        ref={scrollerRef}
-        className="flex gap-2 overflow-x-auto px-3 py-2"
+        className="ew-scroll"
         style={{
-          // -webkit-overflow-scrolling for momentum scroll on iOS.
+          display:                 "flex",
+          gap:                     8,
+          overflowX:               "auto",
+          padding:                 "10px 16px",
           WebkitOverflowScrolling: "touch",
-          scrollbarWidth: "none",
+          scrollbarWidth:          "none",
         }}
       >
-        {/* FIX 1b — return card pinned first when relevant so the
-            player's most likely action (walk back to town) is the
-            leftmost option. Only rendered when the connections graph
-            doesn't already contain the parent settlement. */}
         {returnNode && (
-          <NavigationCard
+          <NavCard
             key={`return-${returnNode.id}`}
-            label={`← ${returnNode.name}`}
-            icon="↩"
-            visited={visited.has(returnNode.id) || returnNode.discovered}
-            primary={colors.primary}
+            name={returnNode.name.toUpperCase()}
+            type="RETURN"
+            visited
             onClick={() => onNavigate(returnNode.id)}
+            iconCategory={returnNode.category ?? returnNode.type}
             kind="return"
           />
         )}
         {connectedNodes.map((node) => (
-          <NavigationCard
+          <NavCard
             key={node.id}
-            label={node.name}
-            icon={iconFor(node)}
+            name={node.name.toUpperCase()}
+            type={labelFor(node)}
             visited={visited.has(node.id) || node.discovered}
-            primary={colors.primary}
+            current={node.id === currentId}
             onClick={() => onNavigate(node.id)}
+            iconCategory={node.category ?? node.type}
             kind="known"
           />
         ))}
-        {/* FIX 2 — WCD landmark cards. Distinct golden border + ◆
-            prefix so the player can spot them as "world-tier"
-            destinations rather than ordinary adjacent regions.
-            Tapping them triggers RegionBible expansion via the same
-            navigateTo channel as a regular outline card. */}
         {landmarkOutlines.map(({ landmark, outline }) => (
-          <NavigationCard
+          <NavCard
             key={`landmark-${landmark.id}`}
-            label={`◆ ${landmark.name}`}
-            icon="🗺"
-            visited={false}
-            primary={colors.primary}
+            name={landmark.name.toUpperCase()}
+            type="LANDMARK"
+            undiscovered
             onClick={() => onNavigate(outline.id)}
+            iconCategory="other"
             kind="landmark"
           />
         ))}
         {adjacentOutlines.map((outline) => (
-          <NavigationCard
+          <NavCard
             key={`outline-${outline.id}`}
-            label={`→ ${outline.name}`}
-            icon="🗺"
-            visited={false}
-            primary={colors.primary}
+            name={outline.name.toUpperCase()}
+            type={(outline.type ?? "RUMORED").toUpperCase()}
+            undiscovered
             onClick={() => onNavigate(outline.id)}
+            iconCategory="fog"
             kind="outline"
           />
         ))}
       </div>
-
-      {/* FIX 5 — desktop overflow arrows. Mobile (< md) hides them
-          entirely; touch users get native momentum scroll + visible
-          card edges as the affordance. */}
-      {canScrollLeft && (
-        <ScrollArrow direction="left"  primary={colors.primary} onClick={() => scrollBy(-1)} />
-      )}
-      {canScrollRight && (
-        <ScrollArrow direction="right" primary={colors.primary} onClick={() => scrollBy(1)} />
-      )}
     </div>
   );
 }
@@ -382,122 +346,109 @@ export function NavigationBar({ masterState, worldGraph, onNavigate, genre }: Pr
 // ── Card ────────────────────────────────────────────────────────────────────
 
 interface CardProps {
-  label:   string;
-  icon:    string;
-  visited: boolean;
-  primary: string;
-  onClick: () => void;
-  kind:    "known" | "outline" | "return" | "landmark";
+  name:          string;
+  type:          string;
+  visited?:      boolean;
+  undiscovered?: boolean;
+  current?:      boolean;
+  onClick:       () => void;
+  iconCategory:  string;
+  kind:          "known" | "outline" | "return" | "landmark";
 }
 
-const LANDMARK_GOLD = "#f5b942";
-
-function NavigationCard({ label, icon, visited, primary, onClick, kind }: CardProps) {
-  const isOutline   = kind === "outline";
+function NavCard({
+  name, type, visited, undiscovered, current, onClick, iconCategory, kind,
+}: CardProps) {
+  const borderStyle = undiscovered ? "dashed" : "solid";
   const isLandmark  = kind === "landmark";
-  const isReturn    = kind === "return";
-  // Border + opacity vary per kind so the player can read intent at a
-  // glance: solid for graph-resolved connections, dashed for
-  // un-discovered outlines, gold for WCD landmarks, primary-tinted
-  // for the return-to-settlement card.
-  const border = isLandmark
-    ? `1.5px solid ${LANDMARK_GOLD}`
-    : isOutline
-      ? `1px dashed color-mix(in srgb, ${primary} 50%, var(--color-border))`
-      : isReturn
-        ? `1px solid color-mix(in srgb, ${primary} 60%, var(--color-border))`
-        : "0.5px solid var(--color-border)";
-  const opacity = isOutline ? 0.85 : 1;
   return (
     <button
       onClick={onClick}
-      title={label}
-      className="flex shrink-0 items-center gap-2 rounded-md px-3 transition-colors hover:bg-white/5 active:bg-white/10"
+      title={name}
       style={{
-        minHeight:       52,                       // touch target floor
-        minWidth:        140,
-        maxWidth:        220,
-        background:      isLandmark
-          ? `color-mix(in srgb, ${LANDMARK_GOLD} 8%, var(--color-bg))`
-          : isReturn
-            // CHANGE 4 — return card gets a faint primary tint so the
-            // "← back" reads as the most-likely action, distinct from
-            // ordinary connection cards.
-            ? `color-mix(in srgb, ${primary} 10%, color-mix(in srgb, var(--color-bg) 80%, #000))`
-            : "color-mix(in srgb, var(--color-bg) 80%, #000)",
-        border,
-        color:           isLandmark ? LANDMARK_GOLD : "var(--color-text)",
-        fontFamily:      "var(--font-mono)",
-        fontSize:        13,
-        cursor:          "pointer",
-        opacity,
+        display:        "flex",
+        alignItems:     "center",
+        gap:            10,
+        minHeight:      52,
+        padding:        "8px 14px",
+        background:     current ? "var(--accent-faint)" : "var(--bg-2)",
+        border:         `1px ${borderStyle} ${current || isLandmark ? "var(--accent)" : "var(--line)"}`,
+        borderRadius:   4,
+        color:          "var(--ink-2)",
+        fontFamily:     "var(--mono)",
+        cursor:         "pointer",
+        flexShrink:     0,
+        textAlign:      "left",
+        position:       "relative",
+        transition:     "all 120ms",
       }}
     >
-      <span aria-hidden style={{ fontSize: 16, lineHeight: 1 }}>
-        {icon}
-      </span>
-      <span
+      <div
         style={{
-          flex:        1,
-          minWidth:    0,
-          textAlign:   "left",
-          overflow:    "hidden",
-          whiteSpace:  "nowrap",
-          textOverflow:"ellipsis",
+          display:        "flex",
+          alignItems:     "center",
+          justifyContent: "center",
+          width:          28,
+          height:         28,
+          color:          undiscovered ? "var(--ink-4)"
+                         : current ? "var(--accent)"
+                         : "var(--ink-2)",
         }}
       >
-        {truncate(label, 18)}
-      </span>
-      <span
-        aria-hidden
-        title={visited ? "Visited" : "Unvisited"}
-        style={{
-          width:           8,
-          height:          8,
-          borderRadius:    "50%",
-          backgroundColor: visited ? primary : "var(--color-muted)",
-          opacity:         visited ? 1 : 0.4,
-          flexShrink:      0,
-        }}
-      />
-    </button>
-  );
-}
-
-// ── Scroll arrow ─────────────────────────────────────────────────────────────
-
-interface ScrollArrowProps {
-  direction: "left" | "right";
-  primary:   string;
-  onClick:   () => void;
-}
-
-function ScrollArrow({ direction, primary, onClick }: ScrollArrowProps) {
-  const isLeft = direction === "left";
-  return (
-    <button
-      onClick={onClick}
-      aria-label={isLeft ? "Scroll left" : "Scroll right"}
-      // Desktop only — mobile users get native touch-momentum scrolling.
-      className="absolute top-1/2 hidden -translate-y-1/2 rounded-full md:flex"
-      style={{
-        [isLeft ? "left" : "right"]: 4,
-        width:           28,
-        height:          28,
-        alignItems:      "center",
-        justifyContent:  "center",
-        color:           primary,
-        backgroundColor: "color-mix(in srgb, var(--color-bg) 80%, #000)",
-        border:          `1px solid color-mix(in srgb, ${primary} 50%, transparent)`,
-        cursor:          "pointer",
-        fontFamily:      "var(--font-mono)",
-        fontSize:        16,
-        fontWeight:      700,
-        zIndex:          2,
-        boxShadow:       "0 0 8px rgba(0,0,0,0.4)",
-      }}
-    >
-      {isLeft ? "‹" : "›"}
+        <IconFor category={iconCategory} />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <div
+          style={{
+            fontSize:      11,
+            letterSpacing: "0.16em",
+            fontWeight:    600,
+            color:         current ? "var(--accent)"
+                          : undiscovered ? "var(--ink-4)"
+                          : "var(--ink-1)",
+          }}
+        >
+          {undiscovered ? "??? " : ""}{name}
+        </div>
+        <div
+          style={{
+            fontSize:      8,
+            letterSpacing: "0.2em",
+            color:         "var(--ink-4)",
+            display:       "flex",
+            alignItems:    "center",
+            gap:           6,
+          }}
+        >
+          <span>{type}</span>
+          {visited && !current && (
+            <>
+              <span
+                style={{
+                  width:        3,
+                  height:       3,
+                  background:   "var(--ink-5)",
+                  borderRadius: 2,
+                }}
+              />
+              <span>VISITED</span>
+            </>
+          )}
+          {current && (
+            <>
+              <span
+                style={{
+                  width:        3,
+                  height:       3,
+                  background:   "var(--accent)",
+                  borderRadius: 2,
+                }}
+              />
+              <span style={{ color: "var(--accent)" }}>HERE</span>
+            </>
+          )}
+        </div>
+      </div>
     </button>
   );
 }

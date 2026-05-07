@@ -54,6 +54,25 @@ function stripJsonFences(raw: string): string {
 }
 
 /**
+ * Coerce a value that should be an array but might be a plain object
+ * (keyed by index or by name) into an actual array.
+ * e.g. { "0": {...}, "1": {...} } → [{...}, {...}]
+ * e.g. { faction_a: {...}, faction_b: {...} } → [{...}, {...}]
+ * A single non-array object is wrapped: { name: "..." } → [{ name: "..." }]
+ */
+function coerceToArray(value: unknown): unknown[] | null {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return null;
+  const vals = Object.values(value as Record<string, unknown>);
+  // If every value is an object, treat the values as the array items.
+  if (vals.length > 0 && vals.every((v) => v !== null && typeof v === "object")) {
+    return vals;
+  }
+  // Otherwise wrap the whole object as a single-element array.
+  return [value];
+}
+
+/**
  * Pre-validation normalization: derives or defaults ALL mechanical fields
  * that the AI might omit. Creative content (names, descriptions) is never
  * invented here — only structural fields with clear safe defaults.
@@ -61,6 +80,30 @@ function stripJsonFences(raw: string): string {
 function normalizeWcd(parsed: unknown): unknown {
   if (!parsed || typeof parsed !== "object") return parsed;
   const o = parsed as Record<string, unknown>;
+
+  // ── Coerce array fields that the AI sometimes returns as objects ──────────
+  // Must run BEFORE the per-item normalization loops below.
+  if (!Array.isArray(o.landmarks)) {
+    const coerced = coerceToArray(o.landmarks);
+    if (coerced) {
+      console.warn("[normalizeWcd] landmarks was non-array — coerced to array of", coerced.length);
+      o.landmarks = coerced;
+    }
+  }
+  if (!Array.isArray(o.factions)) {
+    const coerced = coerceToArray(o.factions);
+    if (coerced) {
+      console.warn("[normalizeWcd] factions was non-array — coerced to array of", coerced.length);
+      o.factions = coerced;
+    }
+  }
+  if (!Array.isArray(o.world_rules)) {
+    const coerced = coerceToArray(o.world_rules);
+    if (coerced) {
+      console.warn("[normalizeWcd] world_rules was non-array — coerced to array of", coerced.length);
+      o.world_rules = coerced;
+    }
+  }
 
   // Normalize landmarks
   if (Array.isArray(o.landmarks)) {

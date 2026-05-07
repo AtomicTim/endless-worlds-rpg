@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.14
-**Status:** Active Development — Architecture Hardening Before Combat
+**Version:** 8.15
+**Status:** Active Development — Map Polish Complete, Architecture Hardening Next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -24,7 +24,7 @@
 | Trade + Dialogue + Architecture | No-check trade, haiku model | ✅ Complete |
 | Full UI Redesign | Design tokens, 15 SVG map renderers | ✅ Complete |
 | Map Overhaul + Debug Mode | fitToViewBox, tiers, coordinate ranges | ✅ Complete |
-| Regional Zone Traversal | Exit button, region zone nav, world_asset | ✅ Complete |
+| Regional Zone Traversal + Polish | Exit button, region zone, map fixes | ✅ Complete |
 | Architecture Hardening | Domain 1/2 separation, caching, gate | ⏳ Next |
 | Genre renderers restored | After architecture confirmed | ⏳ Pending |
 | 20 | Combat System | ⏳ Pending |
@@ -32,17 +32,19 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed.**
 
-### Regional Zone Traversal (latest commit — 86/86, clean build)
+### Map Polish (commit 2b4391d — 43/43 tests, clean build)
 
-**PAD 44→64:** Pulls all projected nodes 20px inward — labels and (x,y) text no longer clip at viewBox boundary.
+**Fix 1 — LOCAL disabled at region zone:** TierBtn gains `disabled` prop (dims, cursor not-allowed). LOCAL button disables when `isAtRegionZone`. `buildRendererPayload` detects region zone and delegates Tier 3 to `buildRegionTier` to avoid overlapping-node chaos.
 
-**Single "Exit to Region" button (buildLocalTier):** Replaced per-connection rawExits loop with one MapExit pointing to the hub's parent geographic region zone. Label reads `↑ Exit to <region name>`. DebugMap skips double-arrowing labels already containing a glyph.
+**Fix 2 — PAD 64→80:** Pulls nodes further inward in all three places (WorldMap.tsx, types.ts, DebugMap.tsx).
 
-**Parent-zone navigation:** handleSelectNode now allows navigation when clicked expandable zone IS the player's parent zone (currentNode.zone_id === clicked.id). Other expandable zones still info-only. handleSelectExit Tier 3 calls onNavigate(targetId) directly.
+**Fix 3 — Exit button above map:** `buildLocalTier` returns `exits:[]` always. A `localExit` useMemo computes parent-region target; rendered as a real `<button>` above the SVG area with hover highlight, not buried in the SVG.
 
-**Region zone world_asset:** regionAmbientType() helper maps region type to open_wilderness / open_road / open_ruins. regionZoneToAsset() builds a WorldAsset from the region's atmosphere. Both apply-world-bible (step 4c) and apply-regional-bible (step 5) now upsert this asset. apply-regional-bible also fixed: it was deleting the placeholder outline and leaving nothing, orphaning region_location zone_ids.
+**Fix 4 — Settlement nav filter:** NavigationBar skips connections where `current.is_settlement_node === true && node.zone_id !== current.id` — settlement nav cards show only the settlement's own sub-locations, not region-level siblings.
 
-**NavigationBar guard:** isAtRegionZone test prevents spurious return card when standing at a geographic region zone. Connection cards (settlement + region_locations) show normally.
+**Fix 5 — No EXAMINE on World/Region map:** `buildLocationInfo` returns `landmarks: []` for both Tier 1 and Tier 2. EXAMINE buttons only appear in Tier 3 (local).
+
+**Fix 6 — Local title fix:** Tier-3 `zoneId` resolved via explicit IIFE that walks down from region zone to settlement hub before passing to `buildLocalTier`.
 
 ### Known issues (shelved — address after architecture hardening)
 - Duplicate codex writes: two paths (7b + 7c-1) fire for same location
@@ -66,28 +68,31 @@
 5. Region zone arrival — first visit only, cached
 
 ### Pending Architecture Items (implement before combat)
-Three items from architecture-spec.md V1.1 still outstanding:
 
 **A — Location arrival descriptions cached permanently**
 Currently AI is called every session load for arrival narration. Should write result to world_assets on first visit and serve the cached version on all subsequent visits. No AI call on re-visit.
 
 **B — Free text validation gate**
 Before any AI call, code must check in order:
-1. Movement intent → hardcoded "Use the navigation bar" (DONE)
-2. NPC not at current location → hardcoded "[Name] isn't here"
-3. Container not in registry → hardcoded "There's no [X] here" (future — after container system built)
-4. Repeat examine of same Tier 1 object → hardcoded canned response (DONE)
-Only if all pass does the AI receive the input.
-Items 2 needs implementation confirmation — currently may still reach the narrator.
+1. Movement intent → hardcoded "Use the navigation bar" (DONE ✅)
+2. NPC not at current location → hardcoded "[Name] isn't here" (needs confirmation)
+3. Container not in registry → future (after container system)
+4. Repeat examine of same Tier 1 object → canned response (DONE ✅)
 
 **C — Dialogue options generated by code from NPC knowledge array**
-Currently the AI generates dialogue options freely. Per spec, code should build options from NPC asset data:
+AI currently generates options freely. Code should build them from NPC asset:
 - Always: [Farewell] [Free type]
-- If merchant: [Browse wares] — direct openTrade(), no AI
+- If merchant: [Browse wares] → openTrade() directly, no AI
 - For each topic in NPC.knowledge[]: [Ask about: {topic}]
-- If quest_relevance=key + quest flag set: [Quest option]
+- If quest_relevance=key + quest flag: [Quest option]
 - If trust < 30: limited options
-The AI only writes the response text, not the option list.
+AI only writes response text, not the option list.
+
+**Design question for C (answer before implementing):**
+NPC knowledge[] currently contains full sentences like "The eastern road is patrolled by outriders." Dialogue option labels need short topic strings. Two options:
+- Option A: Auto-derive label from first 4-5 words of knowledge string
+- Option B: WorldBible generates knowledge items as {topic, content} pairs; full sentence as fallback for existing saves. New worlds get proper labels.
+**Recommendation: Option B** — future-proofs knowledge items, better closed context for AI.
 
 ### Navigation Model ✅
 ```
@@ -96,8 +101,8 @@ navigateTo(nodeId): NavigationBar cards, map clicks, highlight clicks
 
 Travel flow:
   Sub-location → Return card → Settlement hub
-  Settlement hub → ↑ Exit button → Geographic Region zone (persistent, AI-narrated first visit)
-  Region zone → nav cards → standalone locations / ← settlement / ◆ adjacent regions
+  Settlement hub → ↑ EXIT TO [REGION] button → Geographic Region zone
+  Region zone → nav cards → standalones / ← settlement / ◆ adjacent regions
   ◆ adjacent region → RegionBible expansion → new region settlement
 ```
 
@@ -105,13 +110,14 @@ Travel flow:
 ```
 COORDINATE SYSTEM: Hub at {0,0}. Sub-locations ±5 (organic/diagonal).
   Region_locations 8-15 units. Adjacent regions 18-35 units.
-  Frozen at generation. PAD=64.
+  Frozen at generation. PAD=80.
 
 TIER DEFINITIONS:
-  Local  = hub + sub_locations (BFS)
+  Local  = hub + sub_locations (BFS). Disabled when at region zone.
   Region = settlement + region_locations (zone_id === regionId, id !== regionId)
-  World  = is_expandable === true only
+  World  = is_expandable === true only. No EXAMINE buttons.
 
+LOCAL exit: button rendered above SVG (not in map), navigates to parent region zone.
 DEBUG MODE ACTIVE in index.tsx. TO RESTORE: uncomment pickModule dispatcher.
 ```
 
@@ -218,4 +224,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 81 — V8.14: Regional zone traversal complete (single exit button, parent zone nav, region zone world_asset, PAD=64). Architecture hardening queued next: arrival caching, free text gate, code-generated dialogue options.*
+*Last updated: Session 82 — V8.15: Map polish complete. LOCAL disabled at region zone, PAD=80, exit button above map, settlement nav filter, no EXAMINE on world/region, local title fix. Architecture hardening (items A/B/C) queued next.*

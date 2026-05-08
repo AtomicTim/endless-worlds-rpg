@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.21
-**Status:** Active Development — UI Polish Active, Bug 2 Investigation Pending
+**Version:** 8.22
+**Status:** Active Development — Adjacent Region Travel Next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -10,7 +10,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Dialogue modal reposition → Bug 2 investigation → architecture hardening
+**Current Phase:** Adjacent region travel → Bug 2 fix → architecture hardening
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -30,8 +30,8 @@
 | Nav Bar Refactor + Map Visual-Only | Typed cards, map stripped of navigation | ✅ Complete |
 | Nav UX Polish Round 1 | Panel labels, visited badges, routing, breadcrumb | ✅ Complete |
 | Nav UX Polish Round 2 | 10 fixes: colors, cards, NPC buttons, narration | ✅ Complete |
-| Dialogue Modal Reposition | Inline in story feed, not fixed overlay | ⏳ Next |
-| Bug 2 Investigation | zone_id corruption — logs needed | ⏳ Pending |
+| Dialogue Modal Inline | In-flow in story feed, minimize, no fixed overlay | ✅ Complete |
+| Adjacent Region Travel | End-to-end verify + Bug 2 fix | ⏳ Next |
 | Architecture Hardening | Domain 1/2 separation, caching, gate | ⏳ Pending |
 | Genre renderers restored | After architecture confirmed | ⏳ Pending |
 | 20 | Combat System | ⏳ Pending |
@@ -39,18 +39,18 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed.**
 
-### Nav UX Polish Round 2 (commit 566797a — 43/43 tests, clean build)
+### Dialogue Modal Inline (commit bdcb1da — 43/43 tests, clean build)
 
-**Fix 1** — Exit card hub-only: Type C requires `isAtSettlementHub`. Sub-locations show back-only.
-**Fix 2** — NPC not present: hardcoded "[Name] isn't here" + early return. Redirect-to-NPC logic removed. Descriptor matching ("the merchant") preserved.
-**Fix 3** — Trade/dialogue close on nav: `navigateTo` calls `clearDialogueOptions()` + `setTradeItems([])` at start.
-**Fix 4** — NPC quoted speech: `.ew-said` → italic + `#e8d5b0` warm cream.
-**Fix 5** — Player actions: `#7ab8c8` 12px mono italic in both player echo paths.
-**Fix 6** — Section headers centered: `width:100%`, `display:flex`, `justifyContent:center`, removed maxWidth cap.
-**Fix 7** — Nav card visual distinction: peer-known = solid accent border + bg-2 + badge; deeper = transparent + 60% accent; peer-unknown = dashed 35% + UNDISCOVERED badge.
-**Fix 8** — World map tier: info panel hidden entirely (activeTier !== 1 guard).
-**Fix 9** — NPC buttons: bg-2 + border + hover accent + "TALK →" chip.
-**Fix 10** — Region narration: region_locations get compass direction `(category, to the NW)` from map_position delta vs settlement hub.
+- Removed both `position:fixed` wrappers. Panel is a normal in-flow block inside the story feed scroll container.
+- `bottomSlot` prop on StoryFeed renders any node after message list inside the scroll container.
+- `useEffect` watches `currentDialogueOptions.length > 0` → smooth-scrolls feed to bottom on open.
+- Minimize is local `useState` — `dialogueModalCollapsed` removed from global store + 6 call sites.
+- Header: 32px initials chip, name + role + trust, ─ minimize + × close right-aligned.
+- Options: 44px min-height, serif 14px, stat badge var(--bg-3), hover → bg-2 + 3px accent left border.
+- Free-type: bg-0, no border, serif italic placeholder.
+- Walk away: centered mono 9px, fires `clear()`.
+- DialogueModal moved from sibling-of-StoryFeed to `bottomSlot` prop — nav bar never covered.
+- World map eyebrow: `◆ CURRENT LOCATION` label hidden on Tier 1 only; rest of info panel shows on all tiers.
 
 ### Navigation Rules ✅ (Final)
 ```
@@ -59,26 +59,25 @@ Map = PURELY VISUAL. All navigation via nav bar cards only.
 Card grammar (left to right):
   [← BACK]  [→ DEEPER...]  [↑ EXIT]  [◆ PEER...]  [◇ UNDISCOVERED...]
 
-Routing rules (hardened):
-  Sub-location   → ← back to hub ONLY (no ↑ exit, no siblings)
-  Settlement hub → → deeper to sub-locations + ↑ exit to region zone
-  Region zone    → ← back to settlement + ◆ known locations + ◇ undiscovered
+Routing rules:
+  Sub-location   → ← back to hub ONLY
+  Settlement hub → → deeper + ↑ exit to region zone
+  Region zone    → ← back + ◆ known + ◇ undiscovered adjacent
   Dungeon        → ← back to region zone ONLY
 
-Exit card: settlement hub only. Never sub-locations, never dungeons.
+Exit card: settlement hub only.
 NPC not at location: hardcoded "X isn't here." — zero AI call.
-Trade/dialogue modal: closes automatically on any navigation.
+Trade/dialogue: closes on any navigation.
 ```
 
 ### Story Feed Colors ✅
 ```
-Narrator prose:      var(--ink-1) default
-NPC quoted speech:   #e8d5b0 warm cream, italic (.ew-said)
+Narrator prose:      var(--ink-1)
+NPC quoted speech:   #e8d5b0 warm cream, italic
 Player actions:      #7ab8c8 teal-blue, 12px mono italic
 Item highlights:     #e8c547 yellow (hl-item)
 Location highlights: #7dd3fc sky blue (hl-loc)
-NPC highlights:      var(--accent) orange — NOTE: too similar to item yellow
-                     in Fantasy genre. Consider differentiation in future pass.
+NPC highlights:      var(--accent) orange — too similar to item yellow in Fantasy (future fix)
 ```
 
 ### Bug 2 — zone_id corruption (UNDER INVESTIGATION)
@@ -89,9 +88,9 @@ NPC highlights:      var(--accent) orange — NOTE: too similar to item yellow
 - `regional-bible-cache.ts` — READ/WRITE with cache key + bible.id
 - `useGameLoop.ts` — RegionBible expansion target
 
-**To diagnose:** Generate fresh world → reach region zone → travel to adjacent undiscovered region via ◇ card → paste ALL `[navigateTo]`, `[RegionBibleCache]`, `[apply-regional-bible]` server terminal lines.
+**Adjacent region travel is the trigger for Bug 2.** The fix prompt will verify the full end-to-end flow and resolve the zone_id corruption simultaneously.
 
-### Known issues (shelved — address after dialogue modal + Bug 2)
+### Known issues (shelved — address after adjacent region travel)
 - Duplicate codex writes: two paths (7b + 7c-1) fire for same location
 - NPC highlight color (orange) too similar to item highlight (yellow) in Fantasy
 - React key-prop-spread warnings in LocationSpan/ItemSpan/NpcSpan
@@ -111,15 +110,15 @@ NPC highlights:      var(--accent) orange — NOTE: too similar to item yellow
 3. Action narration — 1-4 sentences
 4. Container search narration — 1 sentence only when item found
 
-### Pending Architecture Items (after dialogue modal)
+### Pending Architecture Items (after adjacent region travel)
 **A** — Arrival descriptions cached permanently (write-once to world_assets).
-**B** — Free text validation gate (NPC not present → hardcoded — DONE ✅).
+**B** — Free text validation gate (NPC not present → hardcoded ✅ DONE).
 **C** — Dialogue options from NPC knowledge array (Option B: {topic, content} pairs).
 
 ### Map System ✅ (Visual Only)
 ```
 PAD=76. Tier switcher works. Current node highlighted.
-World tier: no info panel.
+World tier: no CURRENT LOCATION eyebrow, full info panel otherwise.
 DEBUG MODE ACTIVE in index.tsx. TO RESTORE: uncomment pickModule.
 ```
 
@@ -149,7 +148,7 @@ WorldBible: claude-sonnet-4-5, 8000 tokens.
 DIALOGUE: WCD → HARD RULES → RESPONDING CHARACTER → TIER 1 OBJECTS → WORLD ASSETS → SCENE → VERBOSITY
 non-DIALOGUE: WCD → HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → CONNECTED LOCATIONS → WORLD ASSETS → SCENE → VERBOSITY
 
-Region zone special case: inject settlement hub (labeled "settlement") + region_locations with compass direction — NOT sub-location names.
+Region zone special case: inject settlement hub (labeled "settlement") + region_locations with compass direction.
 
 Verbosity: terse | standard | rich
 
@@ -159,9 +158,8 @@ Verbosity: terse | standard | rich
 
 | System | When | Description |
 | --- | --- | --- |
-| Dialogue modal reposition | NOW | Inline in story feed, not fixed overlay |
-| Bug 2 Fix | After modal | zone_id corruption fix |
-| Architecture Hardening | After Bug 2 | Arrival caching, code-gen dialogue options |
+| Adjacent Region Travel | NOW | End-to-end verify + Bug 2 zone_id fix |
+| Architecture Hardening | After travel | Arrival caching, code-gen dialogue options |
 | Genre renderers restored | After arch | Uncomment pickModule |
 | Codex dedup fix | After arch | Two-path duplicate write cleanup |
 | Combat System | Day 20 | Turn-based, code resolves, AI narrates |
@@ -218,4 +216,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 87 — V8.21: 10 UX fixes landed (exit card hub-only, NPC not-here hardcoded, trade closes on nav, quote/player colors, centered headers, card glyphs, world tier panel, NPC buttons, region narration compass). Dialogue modal reposition next.*
+*Last updated: Session 88 — V8.22: Dialogue modal inline in story feed (bottomSlot, minimize, no fixed). World map eyebrow fix. Adjacent region travel + Bug 2 fix queued next.*

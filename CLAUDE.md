@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.23
-**Status:** Active Development — Adjacent Region Travel Complete, Architecture Hardening Next
+**Version:** 8.24
+**Status:** Active Development — Adjacent Region Travel Stabilized, Architecture Hardening Next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -32,6 +32,7 @@
 | Nav UX Polish Round 2 | 10 fixes: colors, cards, NPC buttons, narration | ✅ Complete |
 | Dialogue Modal Inline | In-flow in story feed, minimize, no fixed overlay | ✅ Complete |
 | Adjacent Region Travel | End-to-end flow fixed, Bug 2 zone_id fixed | ✅ Complete |
+| RegionBible Stabilization | max_tokens 3500, failure recovery | ✅ Complete |
 | Architecture Hardening | Domain 1/2 separation, caching, gate | ⏳ Next |
 | Genre renderers restored | After architecture confirmed | ⏳ Pending |
 | 20 | Combat System | ⏳ Pending |
@@ -39,26 +40,23 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed.**
 
-### Adjacent Region Travel (43/43 tests, clean build)
+### RegionBible Stabilization (commit 076763a — 43/43 tests, clean build)
 
-**Root causes found and fixed:**
+**Fix 1 — max_tokens 2000→3500:** JSON was clipping at ~1740 tokens. 3500 leaves comfortable headroom for all region sizes.
 
-1. **NavigationBar ◇ filter broken** — required `current.connections.includes(r.id)` but `apply-world-bible` never wired adjacent region placeholders into the geographic region zone's connections. Fixed: `apply-world-bible/route.ts:583-602` now adds adjacent placeholders to the region zone's connections array and back-links placeholders to the region zone.
+**Fix 2 — Failure recovery:** Captured `previousNodeId = fromId` before expansion. `expansionFailed` flag covers all failure paths (generate/apply non-2xx, throw, missing fields). On failure: restores `current_location_id` / `current_node_id` / `world_graph.current_node_id` via `setMasterState`, posts "The road to {region} is impassable. You turn back.", clears `generatingRegionId`, sets processing false, returns early. Narrator never runs on empty placeholder.
 
-2. **Step 4d never fired for adjacent regions** — `classifyMove` returned `GRAPH_NAVIGATE` for the placeholder node, but step 4d only fired on `WORLD_EXPLORE`. Fixed: `useGameLoop.ts:911-988` step 4d now also fires when move is `GRAPH_NAVIGATE` to an undiscovered adjacent-region placeholder.
+### Adjacent Region Travel Flow ✅
+```
+1. Player at region zone → ◇ card appears for undiscovered adjacent region
+2. Click ◇ → "Venturing into unknown territory..." + all cards disabled
+3. generate-regional-bible (haiku, max_tokens:3500) → builds RegionBible JSON
+4. apply-regional-bible → extends world graph, correct zone_ids via expected_region_id
+5. Player lands at new settlement hub → arrival narration fires
+6. Region/Local map update via setMasterState
 
-3. **locationAssets pre-load reading stale state** — was reading `resolution.state_delta` (placeholder) instead of `updatedState.world_state.current_location_id` (post-expansion settlement). Fixed: `useGameLoop.ts:1108-1124`.
-
-**Bug 2 — zone_id corruption fixed:**
-- `apply-regional-bible/route.ts:184-203` accepts `expected_region_id`, 400s on mismatch with `[apply-regional-bible] ZONE_ID MISMATCH:` log.
-- `useGameLoop.ts:1067-1071` sends `matchedOutline.id` as `expected_region_id` on every apply call.
-
-**Loading state:**
-- `game-store.ts` — new `generatingRegionId` + `setGeneratingRegionId`.
-- `navigateTo` sets lock + emits "Venturing into unknown territory..." on ◇ click. `finally` block always clears lock.
-- All nav cards disabled (`cursor:wait`, opacity 0.45) while generation in flight. Targeted ◇ card shows "GENERATING..." instead of "UNDISCOVERED".
-
-**Map updates:** existing `world_graph: newGraph` + `store.setMasterState(updatedState)` at end of `submitAction` triggers re-render with new region nodes. No additional change needed.
+ON FAILURE: player restored to previousNodeId + "impassable road" message.
+```
 
 ### Navigation Rules ✅ (Complete)
 ```
@@ -73,17 +71,15 @@ Routing rules:
   Region zone    → ← back + ◆ known + ◇ undiscovered adjacent
   Dungeon        → ← back to region zone ONLY
 
-Adjacent region ◇ cards → generates new region → lands at new settlement hub.
-Generation in flight → all cards disabled, targeted card shows GENERATING...
-Exit card: settlement hub only.
-NPC not at location: hardcoded "X isn't here." — zero AI call.
-Trade/dialogue: closes on any navigation.
+◇ card → generates new region (3500 token budget) → lands at new settlement.
+Generation failure → restore to previous node, no stuck state.
 ```
 
 ### Known issues (shelved — address after architecture hardening)
 - Duplicate codex writes: two paths (7b + 7c-1) fire for same location
 - NPC highlight color (orange) too similar to item highlight (yellow) in Fantasy
 - React key-prop-spread warnings in LocationSpan/ItemSpan/NpcSpan
+- After successful region generation: Region map may show "undiscovered" until nav card used (map tier state not auto-switching)
 
 ---
 
@@ -95,7 +91,7 @@ Trade/dialogue: closes on any navigation.
 **Domain 2 (Content Library — frozen after generation):** WCD, locations, NPCs, items, loot tables, main quest, region outlines.
 
 ### AI During Gameplay (Narration Only)
-1. Location arrival description — first visit only, cached permanently after (pending)
+1. Location arrival description — first visit only, cached permanently after (PENDING — Architecture item A)
 2. NPC dialogue responses — closed context, code determines topic + check result
 3. Action narration — 1-4 sentences
 4. Container search narration — 1 sentence only when item found
@@ -103,13 +99,13 @@ Trade/dialogue: closes on any navigation.
 ### Pending Architecture Items (implement next)
 
 **A — Location arrival descriptions cached permanently**
-Write result to world_assets on first visit, serve cached on re-visit. No AI call on re-visit.
+Currently AI is called on every session load for arrival narration. Fix: write result to `world_assets` on first visit, serve cached on all subsequent visits. No AI call on re-visit. This also fixes the duplicate codex write bug (Bug 9) since the asset check gates everything.
 
 **B — Free text validation gate** ✅ DONE
 NPC not at location → hardcoded "[Name] isn't here."
 
 **C — Dialogue options generated by code from NPC knowledge array**
-Option B confirmed: WorldBible generates `{topic, content}` pairs. Code builds option list. AI writes response text only.
+Option B confirmed: WorldBible generates `{topic, content}` pairs. Code builds option list from NPC asset. AI writes response text only.
 
 ### Map System ✅ (Visual Only)
 ```
@@ -119,7 +115,7 @@ DEBUG MODE ACTIVE in index.tsx. TO RESTORE: uncomment pickModule.
 ```
 
 ### Generation Model ✅
-RegionBible: claude-haiku-4-5-20251001, max_tokens: 2000.
+RegionBible: claude-haiku-4-5-20251001, max_tokens: 3500.
 WorldBible: claude-sonnet-4-5, 8000 tokens.
 
 ---
@@ -166,9 +162,9 @@ NPC highlights:      var(--accent) orange — too similar to item yellow in Fant
 
 | System | When | Description |
 | --- | --- | --- |
-| Architecture Hardening | NOW | Arrival caching, code-gen dialogue options |
+| Architecture Hardening | NOW | Arrival caching (item A), code-gen dialogue options (item C) |
 | Genre renderers restored | After arch | Uncomment pickModule |
-| Codex dedup fix | After arch | Two-path duplicate write cleanup |
+| Codex dedup fix | Covered by item A | Two-path duplicate write cleanup |
 | Combat System | Day 20 | Turn-based, code resolves, AI narrates |
 | Container + Loot | Day 21 | Registry, loot tables, dungeon sub-levels |
 | Skills + Leveling | Day 22 | XP, stat points, level gates |
@@ -223,4 +219,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 88 — V8.23: Adjacent region travel end-to-end fixed. Two root causes: ◇ filter broken (placeholders not in connections), step 4d not firing for GRAPH_NAVIGATE. Bug 2 zone_id corruption fixed via expected_region_id validation. Loading state with GENERATING... badge. Architecture hardening next.*
+*Last updated: Session 89 — V8.24: RegionBible max_tokens 3500, failure recovery (restore previous node). Adjacent region travel flow complete. Architecture hardening (items A + C) next.*

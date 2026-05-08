@@ -20,7 +20,7 @@ function SpaceHeader({ title, subtitle }: { title: string; subtitle: string }) {
         fill="var(--accent)" letterSpacing="3" fontWeight="600">
         {title}
       </text>
-      <text x="14" y="34" fontFamily="var(--mono)" fontSize="7"
+      <text x="14" y="34" fontFamily="var(--mono)" fontSize="10"
         fill="var(--ink-4)" letterSpacing="2.5">
         {subtitle}
       </text>
@@ -49,28 +49,28 @@ function PlanetMarker({
   if (isCurrent) {
     return (
       <>
-        <circle r="9" fill="none" stroke="var(--accent)"
+        <circle r="11" fill="none" stroke="var(--accent)"
           strokeWidth="0.5" strokeDasharray="2 2" />
-        <circle r="6" fill="none" stroke="var(--accent)"
+        <circle r="9" fill="none" stroke="var(--accent)"
           strokeWidth="1.0"
           className="ew-pulse" style={{ transformOrigin: "center", transformBox: "fill-box" }} />
-        <path d="M 0 -4 L 3 3 L 0 1.5 L -3 3 Z" fill="var(--accent)" />
+        <path d="M 0 -5 L 4 4 L 0 2 L -4 4 Z" fill="var(--accent)" />
       </>
     );
   }
   if (isDiscovered) {
     return (
       <>
-        <ellipse cx="0" cy="0" rx="6" ry="2" fill="none"
+        <ellipse cx="0" cy="0" rx="8" ry="2.5" fill="none"
           stroke="var(--accent)" strokeWidth="0.5" opacity="0.55"
           transform="rotate(-18)" />
-        <circle r="2.4" fill="var(--accent)" />
+        <circle r="3.5" fill="var(--accent)" />
       </>
     );
   }
   return (
     <>
-      <circle r="2" fill="none" stroke="var(--ink-4)"
+      <circle r="3" fill="none" stroke="var(--ink-4)"
         strokeWidth="0.5" strokeDasharray="1.2 1.2" />
     </>
   );
@@ -89,14 +89,14 @@ function Nodes({
           <title>{n.name}</title>
           <PlanetMarker isCurrent={n.isCurrent} isDiscovered={n.isDiscovered} />
           {n.isCurrent && (
-            <text y="-12" textAnchor="middle" fontFamily="var(--mono)"
-              fontSize="6.5" fill="var(--accent)" letterSpacing="2"
+            <text y="-15" textAnchor="middle" fontFamily="var(--mono)"
+              fontSize="9" fill="var(--accent)" letterSpacing="2"
               fontWeight="600">
               ◇ YOU ARE HERE
             </text>
           )}
-          <text y="14" textAnchor="middle" fontFamily="var(--mono)"
-            fontSize="7"
+          <text y="18" textAnchor="middle" fontFamily="var(--mono)"
+            fontSize="11"
             fill={n.isCurrent ? "var(--accent)"
                  : n.isDiscovered ? "var(--ink-1)" : "var(--ink-4)"}
             letterSpacing="1.2"
@@ -125,9 +125,9 @@ function Exits({
         <g key={`${e.targetId}-${i}`}>
           <text
             x={e.fromX + 12}
-            y={e.fromY + i * 10}
+            y={e.fromY + i * 12}
             fontFamily="var(--mono)"
-            fontSize="7"
+            fontSize="10"
             fill="var(--accent)"
             letterSpacing="1"
           >
@@ -214,7 +214,7 @@ export function LocalMap(props: RendererProps) {
               strokeWidth={n.isCurrent ? 1.1 : 0.7}
               strokeDasharray={n.isDiscovered || n.isCurrent ? undefined : "1.5 1.5"} />
             <text y="2" textAnchor="middle" fontFamily="var(--mono)"
-              fontSize="7"
+              fontSize="11"
               fill={n.isCurrent ? "var(--accent)"
                    : n.isDiscovered ? "var(--ink-1)" : "var(--ink-4)"}
               letterSpacing="1"

@@ -1462,32 +1462,139 @@ export function useGameLoop() {
         }
       }
 
-      let narratorResponse;
+      // FIX 6 — on arrival-cache hit, emit the cached description and
+      // exit submitAction entirely. The narrator AI is the only thing
+      // that should write arrival prose; with a cached description we
+      // already have the prose, so falling through to step 6 onward
+      // would only invite a downstream AI call (e.g. step 7-C's
+      // generateLocationStub when the resolver mis-classified the move
+      // as WORLD_EXPLORE). We replicate the minimum arrival pipeline
+      // here — section header, lastNarrativeText, mark-discovered,
+      // log entry, persist — and return.
       if (cachedArrivalText) {
-        // Synthesize a minimal narrator response so the rest of the
-        // pipeline (step 6 add-message, step 7 graph maintenance, step
-        // 9 log entry) keeps its existing shape without branching.
-        // codex_entries / new_npcs / dialogue_options stay empty —
-        // first-visit codex fires from step 7c-1 and dialogue options
-        // are now built by code (CHANGE 4).
-        narratorResponse = {
-          response_tier:      2 as const,
-          narrative_text:     cachedArrivalText,
-          ascii_art:          null,
-          sound_id:           null,
-          new_npcs:           [],
-          items_acquired:     [],
-          points_of_interest: [],
-          codex_entries:      [],
-          log_summary:        undefined,
-          dialogue_options:   [],
-          trust_changes:      [],
-          items_for_sale:     [],
-        };
         console.log(
-          "[GameLoop/5] Arrival cache hit — using cached physical_description for", arriveLocId
+          "[GameLoop/5] Arrival cache hit — skipping narrator pipeline for", arriveLocId
         );
-      } else try {
+
+        // FIX 2 — mark the destination as discovered so NavigationBar
+        // and the world map treat it as a known node. Some arrival
+        // paths (cache-hit re-entry, region-zone return) reach here
+        // without step 7-A's GRAPH_NAVIGATE branch having flipped the
+        // flag; do it inline so the player never sees "undiscovered
+        // territory" while standing in the place.
+        if (updatedState.world_graph) {
+          const cur = updatedState.world_graph.nodes[arriveLocId];
+          if (cur && !cur.discovered) {
+            updatedState = {
+              ...updatedState,
+              world_graph: {
+                ...updatedState.world_graph,
+                nodes: {
+                  ...updatedState.world_graph.nodes,
+                  [arriveLocId]: { ...cur, discovered: true },
+                },
+              },
+            };
+          }
+        }
+
+        // FIX 3 — section header. Reuses the same dedup logic as the
+        // narrator path (lastArrivalNodeId guard, but the navigateTo
+        // reset above means cross-node moves always emit).
+        const arrivalLocationName: string | null = (() => {
+          const graph = updatedState.world_graph;
+          if (!graph) return null;
+          if (arriveLocId && arriveLocId === lastArrivalNodeId) {
+            return null;
+          }
+          if (arriveLocId) lastArrivalNodeId = arriveLocId;
+          return graph.nodes[arriveLocId]?.name ?? null;
+        })();
+
+        store.addMessage(
+          makeMessage("NARRATIVE", cachedArrivalText, {
+            outcome_type:  resolution.outcome_type,
+            sound_id:      null,
+            response_tier: 2,
+            ...(arrivalLocationName ? { locationName: arrivalLocationName } : {}),
+          })
+        );
+        store.setLastNarrativeText(cachedArrivalText);
+
+        // Refresh location assets fire-and-forget so the next action
+        // (e.g. "look around") sees the canonical Tier 1 / NPC roster.
+        const sessionIdCache = updatedState.metadata.session_id;
+        void getWorldAssetsForLocation(sessionIdCache, arriveLocId).then(
+          (assets) => {
+            if (assets.length > 0) useGameStore.getState().setLocationAssets(assets);
+          }
+        );
+
+        // First-visit codex flag — gated by the same world_state flag
+        // the narrator path uses, so revisits stay idempotent.
+        const flagKey = `codex_loc_${arriveLocId}`;
+        const alreadyWritten = updatedState.world_state.flags?.[flagKey] === true;
+        if (!alreadyWritten) {
+          const liveAssets = useGameStore.getState().locationAssets;
+          const locationAsset = liveAssets.find(
+            (a) =>
+              a.category === AssetCategory.LOCATION &&
+              (a.id === arriveLocId ||
+               a.id === `location_${arriveLocId}` ||
+               normalizeLocationId(a.first_seen_location ?? "") === arriveLocId)
+          );
+          if (locationAsset) {
+            void saveCodexEntry(sessionIdCache, {
+              id:                  locationAsset.id,
+              category:            "LOCATION",
+              name:                locationAsset.name,
+              description:         cachedArrivalText,
+              first_seen_location: arriveLocId,
+              significance:        "NOTABLE",
+            }).then(({ created }) => {
+              if (created) {
+                store.addMessage(
+                  makeMessage("SYSTEM", `✦ ${locationAsset.name} added to codex`)
+                );
+              }
+            });
+            updatedState = {
+              ...updatedState,
+              world_state: {
+                ...updatedState.world_state,
+                flags: { ...updatedState.world_state.flags, [flagKey]: true },
+              },
+            };
+          }
+        }
+
+        // Log entry + persist + commit. Mirrors steps 9–10 of the
+        // full pipeline but skips the narrator-derived bits.
+        const arrivalLogName = arrivalLocationName ?? arriveLocId;
+        updatedState = persistLogEntry(
+          updatedState,
+          LogEntryType.STORY,
+          `Arrived at ${arrivalLogName}.`
+        );
+        saveLogEntriesAsync(sessionIdCache, updatedState.log_book);
+        if (updatedState.world_graph) {
+          saveWorldGraphAsync(sessionIdCache, updatedState.world_graph);
+        }
+        const stamped: MasterState = {
+          ...updatedState,
+          metadata: { ...updatedState.metadata, last_played: new Date().toISOString() },
+        };
+        store.setMasterState(stamped);
+        autoSaveActionCount++;
+        if (autoSaveActionCount % AUTO_SAVE_INTERVAL === 0) {
+          await persistState(stamped, store.addMessage);
+        }
+        store.setProcessing(false);
+        return;
+      }
+
+      let narratorResponse;
+      try {
         narratorResponse = await narrateAction(
           resolutionForNarrator,
           narratorState,
@@ -1925,6 +2032,38 @@ export function useGameLoop() {
 
         // Art generation removed — SceneArt now renders a genre-themed
         // placeholder for any location. No SVG fetch, no cache, no backfill.
+
+        // FIX 2 — generic safety net. The branch-specific logic above
+        // (7-A GRAPH_NAVIGATE) sets discovered=true on the destination,
+        // but legacy paths and edge cases (a directHit lookup that
+        // routed through a different branch, a re-visit where the node
+        // never had its flag flipped) sometimes leave the player
+        // standing on a node still flagged undiscovered. Without this,
+        // NavigationBar's region-zone branches and WorldMap's Tier 2
+        // builder both render "undiscovered territory" while the
+        // player is in the place. Apply the flip unconditionally — the
+        // flag is monotonic, never reverts — so every successful
+        // arrival ends with the destination marked discovered.
+        if (updatedState.world_graph) {
+          const arrivedNodeId =
+            updatedState.world_state.current_node_id ??
+            updatedState.world_graph.current_node_id;
+          const arrivedNode = arrivedNodeId
+            ? updatedState.world_graph.nodes[arrivedNodeId]
+            : undefined;
+          if (arrivedNode && !arrivedNode.discovered) {
+            updatedState = {
+              ...updatedState,
+              world_graph: {
+                ...updatedState.world_graph,
+                nodes: {
+                  ...updatedState.world_graph.nodes,
+                  [arrivedNode.id]: { ...arrivedNode, discovered: true },
+                },
+              },
+            };
+          }
+        }
       }
 
       // ── 7b. Process codex_entries — only NOTABLE/MAJOR are saved ──────────
@@ -2829,10 +2968,40 @@ export function useGameLoop() {
    *      branch (GRAPH_NAVIGATE vs WORLD_EXPLORE → step 4d Region
    *      expansion) downstream.
    */
-  const navigateTo = useCallback((nodeId: string) => {
+  const navigateTo = useCallback((rawId: string) => {
     const gs    = useGameStore.getState();
     const state = gs.masterState;
     if (!state) return;
+
+    const graph = state.world_graph;
+
+    // FIX 1 — resolve a display name to its canonical node id when a
+    // caller passes the wrong shape. The text-feed highlight click
+    // path historically passed `nodeId` correctly, but other entry
+    // points (popover "go to" submissions, ambient handlers) sometimes
+    // hand us the display name. Treat that as a recoverable error:
+    // look up the matching node and re-route through its id. If we
+    // can't resolve the input to a real node, bail with a warning
+    // rather than passing the unrecognized string downstream where it
+    // would get slugified and produce a phantom WORLD_EXPLORE node.
+    let nodeId = rawId;
+    if (graph && !graph.nodes[rawId]) {
+      const byName = Object.values(graph.nodes).find(
+        (n) => n.name.toLowerCase() === rawId.toLowerCase()
+      );
+      if (byName) {
+        console.log(`[navigateTo] resolved display name "${rawId}" → id "${byName.id}"`);
+        nodeId = byName.id;
+      } else {
+        const outline = state.metadata.world_bible?.adjacent_regions?.find(
+          (r) => r.name.toLowerCase() === rawId.toLowerCase()
+        );
+        if (outline) {
+          console.log(`[navigateTo] resolved outline name "${rawId}" → id "${outline.id}"`);
+          nodeId = outline.id;
+        }
+      }
+    }
 
     // Bug 5 — defense-in-depth no-op for re-navigation to the current
     // node. WorldMap and NavigationBar should already filter this, but
@@ -2844,6 +3013,16 @@ export function useGameLoop() {
       return;
     }
 
+    // FIX 3 — reset the section-header dedup guard so a legit cross-node
+    // move always emits a fresh ◈ header. The guard exists to suppress
+    // re-firing a header when the SAME node re-triggers ARRIVING within
+    // a single submit cycle (e.g. cache hit + step 7-A both touching
+    // current_node_id); for actual navigation between two distinct
+    // nodes the previous header should not block the next one.
+    if (lastArrivalNodeId !== null && lastArrivalNodeId !== nodeId) {
+      lastArrivalNodeId = null;
+    }
+
     // Fix 3 — close any open dialogue or trade modal before leaving the
     // location. Modals belong to the location the player is leaving;
     // carrying them across navigation produces stale partner refs and
@@ -2851,7 +3030,6 @@ export function useGameLoop() {
     gs.clearDialogueOptions();
     gs.setTradeItems([]);
 
-    const graph = state.world_graph;
     const node  = graph?.nodes[nodeId];
     const adjacentOutline = state.metadata.world_bible?.adjacent_regions?.find(
       (r) => r.id === nodeId

@@ -20,7 +20,7 @@ function InkHeader({ title, subtitle }: { title: string; subtitle: string }) {
         fill="var(--accent)" letterSpacing="3" fontWeight="600">
         {title}
       </text>
-      <text x="14" y="34" fontFamily="var(--mono)" fontSize="7"
+      <text x="14" y="34" fontFamily="var(--mono)" fontSize="10"
         fill="var(--ink-4)" letterSpacing="2.5">
         {subtitle}
       </text>
@@ -66,31 +66,31 @@ function Nodes({
           <title>{n.name}</title>
           {n.isCurrent && (
             <>
-              <rect x="-7" y="-7" width="14" height="14" fill="none"
+              <rect x="-9" y="-9" width="18" height="18" fill="none"
                 stroke="var(--accent)" strokeWidth="0.4" strokeDasharray="2 2" />
-              <rect x="-5" y="-5" width="10" height="10" fill="none"
+              <rect x="-7" y="-7" width="14" height="14" fill="none"
                 stroke="var(--accent)" strokeWidth="1.1"
                 className="ew-pulse" style={{ transformOrigin: "center", transformBox: "fill-box" }} />
             </>
           )}
           {n.isDiscovered ? (
             <>
-              <rect x="-3" y="-3" width="6" height="6"
+              <rect x="-5" y="-5" width="10" height="10"
                 fill={n.isCurrent ? "var(--accent)" : "var(--bg-0)"}
                 stroke="var(--accent)" strokeWidth="0.8" />
               {!n.isCurrent && (
-                <rect x="-1.5" y="-1.5" width="3" height="3" fill="var(--accent)" />
+                <rect x="-2" y="-2" width="4" height="4" fill="var(--accent)" />
               )}
             </>
           ) : (
-            <rect x="-3" y="-3" width="6" height="6" fill="none"
+            <rect x="-4" y="-4" width="8" height="8" fill="none"
               stroke="var(--ink-4)" strokeWidth="0.6" strokeDasharray="1.5 1.5" />
           )}
           <text
-            y="14"
+            y="18"
             textAnchor="middle"
             fontFamily="var(--mono)"
-            fontSize="7"
+            fontSize="11"
             fill={n.isCurrent ? "var(--accent)"
                  : n.isDiscovered ? "var(--ink-1)" : "var(--ink-4)"}
             letterSpacing="1.2"
@@ -120,9 +120,9 @@ function Exits({
         <g key={`${e.targetId}-${i}`}>
           <text
             x={e.fromX + 12}
-            y={e.fromY + i * 10}
+            y={e.fromY + i * 12}
             fontFamily="var(--mono)"
-            fontSize="7"
+            fontSize="10"
             fill="var(--accent)"
             letterSpacing="1"
           >

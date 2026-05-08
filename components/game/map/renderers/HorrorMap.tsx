@@ -20,7 +20,7 @@ function HorrorHeader({ title, subtitle }: { title: string; subtitle: string }) 
         fontSize="14" fill="var(--accent)" letterSpacing="2">
         {title}
       </text>
-      <text x="14" y="34" fontFamily="var(--mono)" fontSize="7"
+      <text x="14" y="34" fontFamily="var(--mono)" fontSize="10"
         fill="var(--ink-4)" letterSpacing="2.5">
         {subtitle}
       </text>
@@ -76,15 +76,15 @@ function Nodes({
                 </text>
               </>
             ) : (
-              <path d="M 0 -5 L 0 4 M -2 -3 L 2 -3"
+              <path d="M 0 -7 L 0 6 M -3 -4 L 3 -4"
                 stroke={stroke}
-                strokeWidth={n.isDiscovered ? 1.0 : 0.7}
+                strokeWidth={n.isDiscovered ? 1.2 : 0.9}
                 strokeLinecap="round"
                 strokeDasharray={n.isDiscovered ? undefined : "1.2 1.2"} />
             )}
-            <text y={n.isCurrent ? 30 : 14} textAnchor="middle"
+            <text y={n.isCurrent ? 32 : 18} textAnchor="middle"
               fontFamily="var(--serif)" fontStyle="italic"
-              fontSize={n.isCurrent ? 13 : 10.5}
+              fontSize={n.isCurrent ? 13 : 11}
               fill={n.isCurrent ? "var(--accent)"
                    : n.isDiscovered ? "var(--ink-1)" : "var(--ink-4)"}
               letterSpacing="0.8"
@@ -145,7 +145,7 @@ export function WorldMap(props: RendererProps) {
       />
       <Exits exits={props.exits} />
       <text x="14" y="300" fontFamily="var(--serif)" fontStyle="italic"
-        fontSize="9.5" fill="var(--ink-4)" opacity="0.75" letterSpacing="0.4">
+        fontSize="11" fill="var(--ink-4)" opacity="0.75" letterSpacing="0.4">
         the eye opens at the dark of the moon
       </text>
     </BlackInkBacking>

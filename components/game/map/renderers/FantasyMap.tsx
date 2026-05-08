@@ -30,7 +30,7 @@ function PaperHeader({ title, subtitle }: { title: string; subtitle: string }) {
         {title}
       </text>
       <text x="14" y="34" fontFamily="var(--serif)" fontStyle="italic"
-        fontSize="8" fill="#a08868" letterSpacing="1.5">
+        fontSize="10" fill="#a08868" letterSpacing="1.5">
         {subtitle}
       </text>
     </>
@@ -56,20 +56,27 @@ function CommonNodes({
               />
             ) : (
               <g transform={`translate(${n.x} ${n.y})`}>
-                <circle r="4" fill="none" stroke="#7a6850"
+                <circle r="7" fill="none" stroke="#7a6850"
                   strokeWidth="0.6" strokeDasharray="1.5 1.5" />
+                {/* FIX 5 — explicit textDecoration:none on the "?" glyph
+                    overrides any inherited underline cascading from the
+                    parent .ew-link-loc / story-feed styling. Map glyphs
+                    must NEVER underline — only the in-prose location
+                    highlights do. */}
                 <text y="2.5" textAnchor="middle"
                   fontFamily="var(--serif)" fontStyle="italic"
-                  fontSize="6" fill="#7a6850">?</text>
+                  fontSize="8" fill="#7a6850"
+                  textDecoration="none"
+                  style={{ textDecoration: "none" }}>?</text>
               </g>
             )}
             <text
               x={n.x}
-              y={n.y + 14}
+              y={n.y + 16}
               textAnchor="middle"
               fontFamily="var(--serif)"
               fontStyle="italic"
-              fontSize="9"
+              fontSize="11"
               fill={labelColor}
               fontWeight={n.isCurrent ? 600 : 400}
             >
@@ -117,7 +124,7 @@ function CommonExits({
             y={e.fromY + i * 10}
             fontFamily="var(--serif)"
             fontStyle="italic"
-            fontSize="8"
+            fontSize="10"
             fill="#f59e0b"
           >
             → {e.targetName}
@@ -311,7 +318,7 @@ function LocalExits({
             textAnchor="start"
             fontFamily="var(--serif)"
             fontStyle="italic"
-            fontSize="9"
+            fontSize="10"
             fill="#f59e0b"
           >
             ← {e.targetName}
@@ -326,7 +333,7 @@ function LocalExits({
             textAnchor="end"
             fontFamily="var(--serif)"
             fontStyle="italic"
-            fontSize="9"
+            fontSize="10"
             fill="#f59e0b"
           >
             {e.targetName} →
@@ -379,18 +386,18 @@ export function LocalMap(props: RendererProps) {
               />
             ) : (
               <g transform={`translate(${n.x} ${n.y})`}>
-                <rect x="-4" y="-3" width="8" height="6"
+                <rect x="-5" y="-4" width="10" height="8"
                   fill="none" stroke="#7a6850"
                   strokeWidth="0.6" strokeDasharray="1.5 1.5" />
               </g>
             )}
             <text
               x={n.x}
-              y={n.y + 16}
+              y={n.y + 18}
               textAnchor="middle"
               fontFamily="var(--serif)"
               fontStyle="italic"
-              fontSize="9"
+              fontSize="11"
               fill={labelColor}
               fontWeight={n.isCurrent ? 600 : 400}
             >

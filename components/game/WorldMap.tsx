@@ -33,6 +33,9 @@ interface Props {
    *  buttons that submit "examine <landmark name>" through the normal
    *  action pipeline. Falls back to inert rows when omitted. */
   onExamine?:     (input: string) => void;
+  /** Optional — when set, NPC rows in the location panel become clickable
+   *  buttons that open dialogue with that NPC. */
+  onOpenDialogue?: (npcName: string) => void;
   /** When true, render in mobile bottom-sheet mode (no left border, top
    *  drag handle, rounded top corners). */
   asSheet?:       boolean;
@@ -43,6 +46,7 @@ export function WorldMap({
   worldGraph,
   locationAssets,
   onExamine,
+  onOpenDialogue,
   asSheet = false,
 }: Props) {
   const player = worldGraph.nodes[worldGraph.current_node_id];
@@ -265,6 +269,17 @@ export function WorldMap({
           className="ew-mono"
           style={{
             fontSize:      8,
+            letterSpacing: "0.25em",
+            color:         "var(--ink-4)",
+            marginBottom:  4,
+          }}
+        >
+          ◆ CURRENT LOCATION
+        </div>
+        <div
+          className="ew-mono"
+          style={{
+            fontSize:      9,
             letterSpacing: "0.3em",
             color:         "var(--accent)",
             marginBottom:  4,
@@ -277,7 +292,7 @@ export function WorldMap({
           className="ew-serif"
           style={{
             fontStyle:    "italic",
-            fontSize:     17,
+            fontSize:     18,
             color:        "var(--ink-1)",
             marginBottom: 8,
             lineHeight:   1.2,
@@ -289,9 +304,9 @@ export function WorldMap({
           <div
             className="ew-serif"
             style={{
-              fontSize:     12,
-              color:        "var(--ink-3)",
-              lineHeight:   1.65,
+              fontSize:     13,
+              color:        "var(--ink-2)",
+              lineHeight:   1.6,
               marginBottom: 14,
               fontStyle:    "italic",
             }}
@@ -306,61 +321,60 @@ export function WorldMap({
               className="ew-mono"
               style={{
                 fontSize:      8,
-                letterSpacing: "0.3em",
+                letterSpacing: "0.2em",
                 color:         "var(--ink-4)",
                 marginBottom:  6,
               }}
             >
-              ◆ PRESENT — {info.npcs.length}
+              PRESENT
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", flexDirection: "column" }}>
               {info.npcs.map((npc) => (
-                <div
+                <button
                   key={npc.id}
+                  type="button"
+                  onClick={onOpenDialogue ? () => onOpenDialogue(npc.name) : undefined}
+                  disabled={!onOpenDialogue}
                   style={{
-                    display:    "flex",
-                    alignItems: "center",
-                    gap:        8,
-                    padding:    "5px 8px",
-                    background: "var(--bg-2)",
-                    border:     "1px solid var(--line)",
-                    borderLeft: "2px solid var(--accent)",
+                    display:       "flex",
+                    alignItems:    "center",
+                    gap:           8,
+                    width:         "100%",
+                    padding:       "6px 0",
+                    background:    "transparent",
+                    border:        "none",
+                    borderBottom:  "1px solid var(--line)",
+                    cursor:        onOpenDialogue ? "pointer" : "default",
+                    color:         "var(--ink-1)",
+                    fontFamily:    "var(--mono)",
+                    fontSize:      10,
+                    textAlign:     "left",
                   }}
                 >
                   <span
                     style={{
-                      width:        5,
-                      height:       5,
+                      width:        6,
+                      height:       6,
                       borderRadius: "50%",
                       background:   "var(--accent)",
                       flexShrink:   0,
                     }}
                   />
-                  <span
-                    className="ew-mono"
-                    style={{
-                      fontSize:      10,
-                      color:         "var(--ink-1)",
-                      letterSpacing: "0.06em",
-                      flex:          1,
-                    }}
-                  >
-                    {npc.name}
-                  </span>
+                  {npc.name}
                   {npc.role && (
                     <span
-                      className="ew-mono"
                       style={{
-                        fontSize:       8,
-                        color:          "var(--ink-4)",
-                        letterSpacing:  "0.16em",
-                        textTransform:  "uppercase",
+                        marginLeft:    "auto",
+                        fontSize:      8,
+                        color:         "var(--ink-4)",
+                        letterSpacing: "0.15em",
+                        textTransform: "uppercase" as const,
                       }}
                     >
                       {npc.role}
                     </span>
                   )}
-                </div>
+                </button>
               ))}
             </div>
           </div>

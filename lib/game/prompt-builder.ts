@@ -1000,11 +1000,36 @@ export function buildNarratorUserPrompt(
     /\b(surroundings|look around|take in|scan|survey)\b/i.test(lookIntent);
   if (isLookAround && graph && currentNode) {
     const connectedLines: string[] = [];
-    for (const connId of currentNode.connections) {
-      const node = graph.nodes[connId];
-      if (!node) continue;
-      connectedLines.push(`- ${node.name}`);
+
+    const isRegionZone =
+      currentNode.type === "zone" &&
+      currentNode.is_expandable === true &&
+      currentNode.zone_id === currentNode.id;
+
+    if (isRegionZone) {
+      // At a geographic region zone: name the settlement hub as a whole unit
+      // and list standalone region_locations (dungeons/wilderness).
+      // Do NOT list individual sub-locations inside the settlement.
+      for (const node of Object.values(graph.nodes)) {
+        if (node.id === currentNode.id) continue;
+        if (node.zone_id !== currentNode.id) continue;
+        if (node.is_settlement_node === true) {
+          connectedLines.push(`- ${node.name} (settlement)`);
+        } else if (
+          node.type === "zone" &&
+          node.is_expandable === false
+        ) {
+          connectedLines.push(`- ${node.name}`);
+        }
+      }
+    } else {
+      for (const connId of currentNode.connections) {
+        const node = graph.nodes[connId];
+        if (!node) continue;
+        connectedLines.push(`- ${node.name}`);
+      }
     }
+
     if (connectedLines.length > 0) {
       prompt +=
         "\n\nCONNECTED LOCATIONS (use these EXACT names when describing what " +

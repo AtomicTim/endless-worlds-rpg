@@ -312,10 +312,10 @@ export default function GamePage() {
             masterState={masterState}
             worldGraph={masterState.world_graph}
             locationAssets={locationAssets}
-            // ◆ INTERACT rows submit "examine <landmark>" through the
-            // normal action pipeline so the player can probe key
-            // landmarks without typing.
             onExamine={(input) => { void submitAction(input); }}
+            onOpenDialogue={(npcName) => {
+              void submitAction(`talk to ${npcName}`, { npcName });
+            }}
           />
         ) : null
       }

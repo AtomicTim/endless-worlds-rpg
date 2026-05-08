@@ -166,7 +166,7 @@ interface SceneDividerProps {
 
 export function SceneDivider({ label }: SceneDividerProps) {
   return (
-    <div className="ew-divider" style={{ maxWidth: 640 }}>
+    <div className="ew-divider" style={{ maxWidth: 640, width: "100%", textAlign: "center" }}>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
           <path d="M 5 0 L 10 5 L 5 10 L 0 5 Z" fill="currentColor" />

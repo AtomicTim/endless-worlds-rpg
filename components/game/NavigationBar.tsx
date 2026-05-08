@@ -41,14 +41,16 @@ type CardKind = "back" | "deeper" | "exit" | "peer-known" | "peer-unknown";
 
 interface Card {
   /** Stable key for React. */
-  key:      string;
-  kind:     CardKind;
+  key:        string;
+  kind:       CardKind;
   /** Node id (or adjacent region outline id) handed to onNavigate. */
-  targetId: string;
+  targetId:   string;
   /** Primary label — destination name, ALL CAPS. */
-  name:     string;
+  name:       string;
   /** Secondary label — category / "EXIT TO REGION" / etc., ALL CAPS. */
-  sublabel: string;
+  sublabel:   string;
+  /** Whether the player has already visited this node. */
+  discovered: boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -57,6 +59,11 @@ export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
   const cards = useMemo<Card[]>(
     () => buildCards(worldGraph, masterState),
     [worldGraph, masterState]
+  );
+
+  const breadcrumb = useMemo<string>(
+    () => buildBreadcrumb(worldGraph),
+    [worldGraph]
   );
 
   if (cards.length === 0) return null;
@@ -71,6 +78,22 @@ export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
         background: "var(--bg-1)",
       }}
     >
+      {breadcrumb && (
+        <div
+          style={{
+            padding:       "6px 16px 0",
+            fontFamily:    "var(--mono)",
+            fontSize:      8,
+            letterSpacing: "0.2em",
+            color:         "var(--ink-4)",
+            whiteSpace:    "nowrap",
+            overflow:      "hidden",
+            textOverflow:  "ellipsis",
+          }}
+        >
+          {breadcrumb}
+        </div>
+      )}
       <div
         className="ew-scroll"
         style={{
@@ -92,6 +115,43 @@ export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
       </div>
     </div>
   );
+}
+
+// ── Breadcrumb builder ───────────────────────────────────────────────────────
+
+function buildBreadcrumb(worldGraph: WorldGraph | undefined): string {
+  if (!worldGraph) return "";
+  const current = worldGraph.nodes[worldGraph.current_node_id];
+  if (!current) return "";
+
+  const parts: string[] = [];
+
+  const isRegionZone =
+    current.type === "zone" &&
+    current.is_expandable === true &&
+    current.zone_id === current.id;
+
+  if (isRegionZone) {
+    parts.push(current.name.toUpperCase());
+  } else if (current.zone_id && current.zone_id !== current.id) {
+    const parent = worldGraph.nodes[current.zone_id];
+    if (parent) {
+      // If parent is a settlement hub, its geographic region is the grandparent
+      const grandparentId = parent.zone_id && parent.zone_id !== parent.id
+        ? parent.zone_id
+        : null;
+      const grandparent = grandparentId ? worldGraph.nodes[grandparentId] : null;
+      if (grandparent) {
+        parts.push(grandparent.name.toUpperCase());
+      }
+      parts.push(parent.name.toUpperCase());
+    }
+    parts.push(current.name.toUpperCase());
+  } else {
+    parts.push(current.name.toUpperCase());
+  }
+
+  return parts.join(" › ");
 }
 
 // ── Card builder ────────────────────────────────────────────────────────────
@@ -159,11 +219,12 @@ function buildCards(
     const parent = worldGraph.nodes[current.zone_id];
     if (parent && parent.id !== current.id) {
       backCards.push({
-        key:      `back-${parent.id}`,
-        kind:     "back",
-        targetId: parent.id,
-        name:     parent.name.toUpperCase(),
-        sublabel: typeLabel(parent),
+        key:        `back-${parent.id}`,
+        kind:       "back",
+        targetId:   parent.id,
+        name:       parent.name.toUpperCase(),
+        sublabel:   typeLabel(parent),
+        discovered: parent.discovered,
       });
     }
   } else if (isAtDungeon) {
@@ -171,61 +232,41 @@ function buildCards(
     const parent = worldGraph.nodes[current.zone_id];
     if (parent && parent.id !== current.id) {
       backCards.push({
-        key:      `back-${parent.id}`,
-        kind:     "back",
-        targetId: parent.id,
-        name:     parent.name.toUpperCase(),
-        sublabel: typeLabel(parent),
+        key:        `back-${parent.id}`,
+        kind:       "back",
+        targetId:   parent.id,
+        name:       parent.name.toUpperCase(),
+        sublabel:   typeLabel(parent),
+        discovered: parent.discovered,
       });
     }
   } else if (isAtRegionZone && settlementHub) {
     backCards.push({
-      key:      `back-${settlementHub.id}`,
-      kind:     "back",
-      targetId: settlementHub.id,
-      name:     settlementHub.name.toUpperCase(),
-      sublabel: typeLabel(settlementHub),
+      key:        `back-${settlementHub.id}`,
+      kind:       "back",
+      targetId:   settlementHub.id,
+      name:       settlementHub.name.toUpperCase(),
+      sublabel:   typeLabel(settlementHub),
+      discovered: settlementHub.discovered,
     });
   }
 
   // ── TYPE B — deeper ──────────────────────────────────────────────────────
   const deeperCards: Card[] = [];
   if (isAtSettlementHub) {
-    // sub_locations connected to the hub (i.e. nodes whose zone_id === hub.id
-    // and which are sub_locations).
     for (const id of current.connections) {
       const node = worldGraph.nodes[id];
       if (!node) continue;
       if (node.type !== "sub_location") continue;
       if (node.zone_id !== current.id) continue;
       deeperCards.push({
-        key:      `deeper-${node.id}`,
-        kind:     "deeper",
-        targetId: node.id,
-        name:     node.name.toUpperCase(),
-        sublabel: typeLabel(node),
+        key:        `deeper-${node.id}`,
+        kind:       "deeper",
+        targetId:   node.id,
+        name:       node.name.toUpperCase(),
+        sublabel:   typeLabel(node),
+        discovered: node.discovered,
       });
-    }
-  } else if (isAtSubLocation) {
-    // Siblings: sub_locations of the parent hub, excluding self and the
-    // back target (which is the hub itself).
-    const hubId = current.zone_id;
-    const hub   = worldGraph.nodes[hubId];
-    if (hub) {
-      for (const id of hub.connections) {
-        if (id === current.id) continue;
-        const node = worldGraph.nodes[id];
-        if (!node) continue;
-        if (node.type !== "sub_location") continue;
-        if (node.zone_id !== hubId) continue;
-        deeperCards.push({
-          key:      `deeper-${node.id}`,
-          kind:     "deeper",
-          targetId: node.id,
-          name:     node.name.toUpperCase(),
-          sublabel: typeLabel(node),
-        });
-      }
     }
   } else if (isAtDungeon) {
     // Future-proof: sub_locations of the dungeon. Today there are none,
@@ -236,32 +277,31 @@ function buildCards(
       if (node.type !== "sub_location") continue;
       if (node.zone_id !== current.id) continue;
       deeperCards.push({
-        key:      `deeper-${node.id}`,
-        kind:     "deeper",
-        targetId: node.id,
-        name:     node.name.toUpperCase(),
-        sublabel: typeLabel(node),
+        key:        `deeper-${node.id}`,
+        kind:       "deeper",
+        targetId:   node.id,
+        name:       node.name.toUpperCase(),
+        sublabel:   typeLabel(node),
+        discovered: node.discovered,
       });
     }
   }
+  // At sub_location: no sibling deeper cards — the player must return to
+  // the hub to choose another building (Fix 3).
 
   // ── TYPE C — exit ────────────────────────────────────────────────────────
+  // Only for settlement hub and sub-locations (↑ exit to region zone).
+  // Dungeon/wilderness have no Type C card — the ← back card returns to
+  // the region zone and the player chooses from there (Fix 4).
   const exitCards: Card[] = [];
   if ((isAtSettlementHub || isAtSubLocation) && regionZone) {
     exitCards.push({
-      key:      `exit-${regionZone.id}`,
-      kind:     "exit",
-      targetId: regionZone.id,
-      name:     regionZone.name.toUpperCase(),
-      sublabel: "EXIT TO REGION",
-    });
-  } else if (isAtDungeon && settlementHub) {
-    exitCards.push({
-      key:      `exit-${settlementHub.id}`,
-      kind:     "exit",
-      targetId: settlementHub.id,
-      name:     settlementHub.name.toUpperCase(),
-      sublabel: "EXIT DUNGEON",
+      key:        `exit-${regionZone.id}`,
+      kind:       "exit",
+      targetId:   regionZone.id,
+      name:       regionZone.name.toUpperCase(),
+      sublabel:   "EXIT TO REGION",
+      discovered: regionZone.discovered,
     });
   }
 
@@ -276,11 +316,12 @@ function buildCards(
       if (node.type !== "zone") continue;
       if (node.is_expandable === true) continue;
       peerCards.push({
-        key:      `peer-known-${node.id}`,
-        kind:     "peer-known",
-        targetId: node.id,
-        name:     node.name.toUpperCase(),
-        sublabel: typeLabel(node),
+        key:        `peer-known-${node.id}`,
+        kind:       "peer-known",
+        targetId:   node.id,
+        name:       node.name.toUpperCase(),
+        sublabel:   typeLabel(node),
+        discovered: node.discovered,
       });
     }
 
@@ -296,11 +337,12 @@ function buildCards(
       if (seen.has(r.id)) continue;
       seen.add(r.id);
       peerCards.push({
-        key:      `peer-unknown-${r.id}`,
-        kind:     "peer-unknown",
-        targetId: r.id,
-        name:     r.name.toUpperCase(),
-        sublabel: "UNDISCOVERED REGION",
+        key:        `peer-unknown-${r.id}`,
+        kind:       "peer-unknown",
+        targetId:   r.id,
+        name:       r.name.toUpperCase(),
+        sublabel:   "UNDISCOVERED REGION",
+        discovered: false,
       });
     }
   }
@@ -322,19 +364,24 @@ function NavCard({ card, onClick }: { card: Card; onClick: () => void }) {
   const isBack       = card.kind === "back";
   const isExit       = card.kind === "exit";
   const isUnknown    = card.kind === "peer-unknown";
+  const isNew        = !card.discovered && !isUnknown && !isBack;
   const arrow        = ARROW[card.kind];
 
   const arrowColor =
     isBack ? "var(--ink-3)" : isUnknown ? "var(--ink-4)" : "var(--accent)";
   const nameColor =
-    isBack ? "var(--ink-3)" : isUnknown ? "var(--ink-4)" : "var(--ink-1)";
+    isBack    ? "var(--ink-3)"
+    : isUnknown ? "var(--ink-4)"
+    : isNew   ? "var(--ink-3)"
+    : "var(--ink-1)";
   const subColor   = "var(--ink-4)";
   const background = isExit ? "var(--bg-3)" : "var(--bg-2)";
   const borderColor =
     isUnknown ? "var(--line-2)"
     : isBack  ? "var(--line)"
+    : isNew   ? "color-mix(in srgb, var(--accent) 40%, transparent)"
     : "var(--accent)";
-  const borderStyle = isUnknown ? "dashed" : "solid";
+  const borderStyle = isUnknown || isNew ? "dashed" : "solid";
 
   return (
     <button
@@ -382,17 +429,40 @@ function NavCard({ card, onClick }: { card: Card; onClick: () => void }) {
       >
         <span
           style={{
-            fontFamily:    "var(--mono)",
-            fontSize:      9,
-            letterSpacing: "0.18em",
-            fontWeight:    600,
-            color:         nameColor,
+            display:       "flex",
+            alignItems:    "center",
+            gap:           4,
             overflow:      "hidden",
-            textOverflow:  "ellipsis",
-            whiteSpace:    "nowrap",
           }}
         >
-          {card.name}
+          <span
+            style={{
+              fontFamily:    "var(--mono)",
+              fontSize:      9,
+              letterSpacing: "0.18em",
+              fontWeight:    600,
+              color:         nameColor,
+              overflow:      "hidden",
+              textOverflow:  "ellipsis",
+              whiteSpace:    "nowrap",
+              minWidth:      0,
+            }}
+          >
+            {card.name}
+          </span>
+          {isNew && (
+            <span style={{
+              fontSize:      7,
+              fontFamily:    "var(--mono)",
+              letterSpacing: "0.2em",
+              color:         "var(--accent)",
+              border:        "1px solid var(--accent)",
+              padding:       "1px 4px",
+              flexShrink:    0,
+            }}>
+              NEW
+            </span>
+          )}
         </span>
         <span
           style={{

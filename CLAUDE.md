@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.26
-**Status:** Active Development — Architecture Hardening + Bug Fix Round Complete, Combat System Next
+**Version:** 8.27
+**Status:** Active Development — Regression Fixes Complete, Combat System Next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -10,7 +10,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Bug fix round complete → combat system (Day 20)
+**Current Phase:** Regression fix round complete → combat system (Day 20)
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -29,6 +29,7 @@
 | Adjacent Region Travel | End-to-end flow, Bug 2 fixed | ✅ Complete |
 | Architecture Hardening | Caching, codex dedup, code-built dialogue | ✅ Complete |
 | Bug Fix Round (57b0300) | Highlight nav, discovered, headers, map polish | ✅ Complete |
+| Regression Fix Round (75a7cd4) | Cache pipeline, map sizes, tier descriptions | ✅ Complete |
 | 20 | Combat System | ⏳ Next |
 | 21 | Container + Loot | ⏳ Pending |
 | 22 | Skills + Leveling | ⏳ Pending |
@@ -36,6 +37,27 @@
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir removed. Genre renderers restored (pickModule re-enabled).**
+
+### Regression Fix Round (commit 75a7cd4 — 43/43 tests, clean build)
+
+**Fix A1 — Cache hit preserves post-arrival pipeline:**
+`useGameLoop.ts:1465-1511` — Replaced the prior early-return mini-pipeline with a synthesized `narratorResponse` object (cached text + empty arrays). Steps 5/6/7 run unchanged, so step 7-A's GRAPH_NAVIGATE branch updates `world_graph.current_node_id` — which NavigationBar, WorldMap, and the info panel all read. AI narrator API call still bypassed (Fix 6 goal preserved). The previous mini-pipeline's emit/discovered/codex/log/persist work is now handled by the existing pipeline naturally.
+
+**Fix A2 — Sub-location nav cards back-to-hub only (auto-resolved by A1):**
+NavigationBar's `buildCards` already restricts `isAtSubLocation` to back-only. The exit-to-region cards visible from sub-locations (Morrow's Provisions case) were a symptom of stale `world_graph.current_node_id` after cache-hit moves — A1's fall-through propagates the new current node id properly, so the existing card builder logic now sees the right state.
+
+**Fix B1 — Map text and icons visually larger:**
+All 5 genre renderers (Fantasy, Cyber, Space, Apoc, Horror) bumped to readable SVG-unit values: titles 11-15 → 16-22, subtitles 7-10 → 13, node labels 7-11 → 14-18, exit labels 7-10 → 14, undiscovered glyph radii enlarged proportionally. DebugMap unchanged.
+
+**Fix B2 — `?` underline removed across all renderers and tiers:**
+Every `<text>` element across every renderer (labels, exits, "?" glyph, undiscovered placeholders) now carries the SVG attribute `textDecoration="none"` AND `style={{ textDecoration: "none", textDecorationLine: "none" }}` to override any inherited underline regardless of which form the browser respects. Replaces the Fantasy-only fix from V8.26.
+
+**Fix B3 — Description sourcing per map tier:**
+- New optional field `world_description` in `types/game.ts:281-287` — 2-3 sentence world summary. `generate-wcd` prompt requests it; legacy saves fall back to `wcd.atmosphere`.
+- Tier 1 (World) panel renders full `world_description` (no first-sentence extract).
+- Tier 2 (Region) and Tier 3 (Local) on region zone drop the WCD fallback so world prose can't bleed into region/local panels.
+- `components/game/WorldMap.tsx:1187-1202` — region zone description reads `constitution.physical_description` first (where `regionZoneToAsset` writes), then `atmosphere`.
+- `components/game/WorldMap.tsx:807-820` — world tagline removed from subtitle, replaced with `<n> known · <n> rumored` summary count.
 
 ### Bug Fix Round (commit 57b0300 — 43/43 tests, clean build)
 
@@ -48,14 +70,14 @@
 **Fix 3 — Section header on cross-node navigation:**
 `useGameLoop.ts:2880-2887` — `navigateTo` resets `lastArrivalNodeId = null` whenever the requested nodeId differs from the current one. Same-node re-triggers stay suppressed (no duplicate ◈ headers), legit cross-node moves always emit a fresh header. Fixes the missing header on dungeon → region zone return.
 
-**Fix 4 — Map text size pass:**
-All 5 genre renderers (FantasyMap, CyberMap, SpaceMap, ApocMap, HorrorMap) bumped: node labels → 11px, exit labels → 10px, subtitles → 10px, undiscovered shapes enlarged proportionally. DebugMap unchanged. No genre renderer was ever drawing coordinate text — that was a misread of older code.
+**Fix 4 — Map text size pass (superseded by V8.27 Fix B1):**
+Initial bump to 11/10/10 SVG-units was insufficient at the rendered viewBox scale. See V8.27 Fix B1 for final sizes.
 
-**Fix 5 — Map "?" glyph underline removed:**
-`FantasyMap.tsx:60-71` — Only renderer using the `?` character. Added `textDecoration="none"` + `style={{ textDecoration: "none" }}` to override any inherited link underline. Story-feed location highlight underlines were intentionally left as-is. If other genre renderers ever add an unknown-marker glyph, they need the same treatment.
+**Fix 5 — Map "?" glyph underline removed (Fantasy only — superseded by V8.27 Fix B2):**
+Initial fix only covered FantasyMap. See V8.27 Fix B2 for cross-renderer fix.
 
-**Fix 6 — Cache hit skips arrival narrator:**
-`useGameLoop.ts:1465-1591` — Cache-hit on ARRIVING now runs an inline mini-pipeline (emit message with arrival header → mark discovered → refresh assets → first-visit codex → log entry → persist) and `return`s. No narrator pipeline at all. Eliminates the downstream AI call risk from step 7-C's `generateLocationStub` when a return move gets mis-classified as WORLD_EXPLORE. The cached `physical_description` IS the arrival narration.
+**Fix 6 — Cache hit skips arrival narrator (refined by V8.27 Fix A1):**
+Original implementation used an early-return mini-pipeline that bypassed downstream state updates (broke current location panel, nav cards, map auto-switch). V8.27 Fix A1 retains the goal (zero narrator API call on cache hit) but lets the rest of the pipeline run.
 
 ### Architecture Hardening (commit 57d27f3 — 43/43 tests, clean build)
 
@@ -108,6 +130,17 @@ Routing:
   New region     → lands at region zone (not settlement hub)
 ```
 
+### Map Description Sourcing ✅ (V8.27)
+```
+World tier  → wcd.world_description (2-3 sentence world summary, never changes)
+Region tier → currentRegion.atmosphere (region-specific prose)
+Local tier  → currentLocation.atmosphere (location-specific prose)
+Region zone → constitution.physical_description, then atmosphere fallback
+
+Legacy saves without world_description: fall back to wcd.atmosphere.
+World tagline under world name: REMOVED (replaced with known/rumored count).
+```
+
 ### NPC Dialogue System ✅
 ```
 Option list: built by code from NPC.knowledge[] asset
@@ -125,10 +158,9 @@ Legacy format: plain string → auto-converted to {topic: first-5-words, content
 
 ### Known issues (deferred to post-combat)
 - NPC highlight color (orange) too similar to item highlight (yellow) in Fantasy
-- React key-prop-spread warnings in LocationSpan/ItemSpan/NpcSpan
+- React key-prop-spread warnings in LocationSpan/ItemSpan/NpcSpan/LandmarkSpan
 - Hub node not added to codex on first arrival to new region (deferred)
 - Step 7 individual branches: confirm each branch sets `discovered: true` (currently relying on Fix 2 safety net)
-- Cyber/Space/Apoc/Horror renderers don't currently use `?` glyph; if added later, replicate Fix 5 textDecoration="none" override
 
 ---
 
@@ -141,16 +173,25 @@ Legacy format: plain string → auto-converted to {topic: first-5-words, content
 ### Generation Model ✅
 RegionBible: claude-haiku-4-5-20251001, max_tokens: 3500.
 WorldBible: claude-sonnet-4-5, 8000 tokens.
+WCD now includes `world_description` (2-3 sentence world summary).
 Knowledge format: `{topic, content}` pairs. Legacy string → auto-converted.
 
 ### Map System ✅
 ```
 Genre renderers active (pickModule enabled).
 PAD=76. Tier switcher. Current node highlighted.
-World tier: CURRENT LOCATION eyebrow hidden.
+World tier: tagline removed; subtitle = "<n> known · <n> rumored" (V8.27).
 New region nodes: collision-checked, nudged if overlap.
-Text sizes: node labels 11px, exit labels 10px, subtitles 10px (V8.26).
-Fantasy "?" glyph: textDecoration none (V8.26).
+
+Text sizes (V8.27):
+  Titles    16-22 SVG units
+  Subtitles 13
+  Node labels 14-18
+  Exit labels 14
+  Undiscovered glyph radii enlarged proportionally
+
+Underline strip: textDecoration="none" + style on every <text> across
+all renderers (V8.27).
 ```
 
 ---
@@ -169,7 +210,8 @@ Fantasy "?" glyph: textDecoration none (V8.26).
 10. Highlights Are Exact Tier 1 Matches.
 11. Highlight clicks resolve display-name → node id before navigateTo. Never pass display names. (V8.26)
 12. Every successful arrival flips `discovered = true` at end of step 7. (V8.26)
-13. Cache hit on ARRIVING runs inline mini-pipeline and exits. Zero narrator calls on cached re-visits. (V8.26)
+13. Cache hit on ARRIVING synthesizes a `narratorResponse` and falls through. AI API bypassed; downstream pipeline (current_node_id update, panel/nav/map refresh, codex, log, persist) runs unchanged. (V8.27 — supersedes V8.26 mini-pipeline approach)
+14. Map description sourcing: World = `wcd.world_description`, Region = `currentRegion.atmosphere`, Local = `currentLocation.atmosphere`. No cross-tier bleed. (V8.27)
 
 ---
 
@@ -189,7 +231,7 @@ Narrator prose:      var(--ink-1)
 NPC quoted speech:   #e8d5b0 warm cream, italic
 Player actions:      #7ab8c8 teal-blue, 12px mono italic
 Item highlights:     #e8c547 yellow
-Location highlights: #7dd3fc sky blue (underline intentional, retained V8.26)
+Location highlights: #7dd3fc sky blue (underline intentional, retained)
 NPC highlights:      var(--accent) orange (too similar to item yellow — future fix)
 ```
 
@@ -254,4 +296,4 @@ Claude Code pushes → user reports commit + test results → Claude.ai updates 
 
 ---
 
-*Last updated: V8.26 — Bug fix round (commit 57b0300): highlight nav resolves display-name → id, discovered safety net at end of step 7, lastArrivalNodeId resets on cross-node navigateTo, all 5 genre renderers bumped to 11/10/10px, Fantasy "?" glyph underline stripped, ARRIVING cache hit runs inline mini-pipeline with zero narrator calls. Combat system (Day 20) next.*
+*Last updated: V8.27 — Regression fix round (commit 75a7cd4): cache-hit synthesizes narratorResponse and falls through (no more bypassed pipeline), all 5 renderers bumped to readable SVG sizes (16-22/13/14-18/14), `?` underline stripped across every renderer and tier, world_description field added to WCD, map descriptions sourced per tier (no cross-tier bleed), world tagline replaced with known/rumored count. Combat system (Day 20) next.*

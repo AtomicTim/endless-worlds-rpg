@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.22
-**Status:** Active Development — Adjacent Region Travel Next
+**Version:** 8.23
+**Status:** Active Development — Adjacent Region Travel Complete, Architecture Hardening Next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -10,7 +10,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Adjacent region travel → Bug 2 fix → architecture hardening
+**Current Phase:** Test adjacent region travel → architecture hardening → genre renderers
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -31,28 +31,36 @@
 | Nav UX Polish Round 1 | Panel labels, visited badges, routing, breadcrumb | ✅ Complete |
 | Nav UX Polish Round 2 | 10 fixes: colors, cards, NPC buttons, narration | ✅ Complete |
 | Dialogue Modal Inline | In-flow in story feed, minimize, no fixed overlay | ✅ Complete |
-| Adjacent Region Travel | End-to-end verify + Bug 2 fix | ⏳ Next |
-| Architecture Hardening | Domain 1/2 separation, caching, gate | ⏳ Pending |
+| Adjacent Region Travel | End-to-end flow fixed, Bug 2 zone_id fixed | ✅ Complete |
+| Architecture Hardening | Domain 1/2 separation, caching, gate | ⏳ Next |
 | Genre renderers restored | After architecture confirmed | ⏳ Pending |
 | 20 | Combat System | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed.**
 
-### Dialogue Modal Inline (commit bdcb1da — 43/43 tests, clean build)
+### Adjacent Region Travel (43/43 tests, clean build)
 
-- Removed both `position:fixed` wrappers. Panel is a normal in-flow block inside the story feed scroll container.
-- `bottomSlot` prop on StoryFeed renders any node after message list inside the scroll container.
-- `useEffect` watches `currentDialogueOptions.length > 0` → smooth-scrolls feed to bottom on open.
-- Minimize is local `useState` — `dialogueModalCollapsed` removed from global store + 6 call sites.
-- Header: 32px initials chip, name + role + trust, ─ minimize + × close right-aligned.
-- Options: 44px min-height, serif 14px, stat badge var(--bg-3), hover → bg-2 + 3px accent left border.
-- Free-type: bg-0, no border, serif italic placeholder.
-- Walk away: centered mono 9px, fires `clear()`.
-- DialogueModal moved from sibling-of-StoryFeed to `bottomSlot` prop — nav bar never covered.
-- World map eyebrow: `◆ CURRENT LOCATION` label hidden on Tier 1 only; rest of info panel shows on all tiers.
+**Root causes found and fixed:**
 
-### Navigation Rules ✅ (Final)
+1. **NavigationBar ◇ filter broken** — required `current.connections.includes(r.id)` but `apply-world-bible` never wired adjacent region placeholders into the geographic region zone's connections. Fixed: `apply-world-bible/route.ts:583-602` now adds adjacent placeholders to the region zone's connections array and back-links placeholders to the region zone.
+
+2. **Step 4d never fired for adjacent regions** — `classifyMove` returned `GRAPH_NAVIGATE` for the placeholder node, but step 4d only fired on `WORLD_EXPLORE`. Fixed: `useGameLoop.ts:911-988` step 4d now also fires when move is `GRAPH_NAVIGATE` to an undiscovered adjacent-region placeholder.
+
+3. **locationAssets pre-load reading stale state** — was reading `resolution.state_delta` (placeholder) instead of `updatedState.world_state.current_location_id` (post-expansion settlement). Fixed: `useGameLoop.ts:1108-1124`.
+
+**Bug 2 — zone_id corruption fixed:**
+- `apply-regional-bible/route.ts:184-203` accepts `expected_region_id`, 400s on mismatch with `[apply-regional-bible] ZONE_ID MISMATCH:` log.
+- `useGameLoop.ts:1067-1071` sends `matchedOutline.id` as `expected_region_id` on every apply call.
+
+**Loading state:**
+- `game-store.ts` — new `generatingRegionId` + `setGeneratingRegionId`.
+- `navigateTo` sets lock + emits "Venturing into unknown territory..." on ◇ click. `finally` block always clears lock.
+- All nav cards disabled (`cursor:wait`, opacity 0.45) while generation in flight. Targeted ◇ card shows "GENERATING..." instead of "UNDISCOVERED".
+
+**Map updates:** existing `world_graph: newGraph` + `store.setMasterState(updatedState)` at end of `submitAction` triggers re-render with new region nodes. No additional change needed.
+
+### Navigation Rules ✅ (Complete)
 ```
 Map = PURELY VISUAL. All navigation via nav bar cards only.
 
@@ -65,32 +73,14 @@ Routing rules:
   Region zone    → ← back + ◆ known + ◇ undiscovered adjacent
   Dungeon        → ← back to region zone ONLY
 
+Adjacent region ◇ cards → generates new region → lands at new settlement hub.
+Generation in flight → all cards disabled, targeted card shows GENERATING...
 Exit card: settlement hub only.
 NPC not at location: hardcoded "X isn't here." — zero AI call.
 Trade/dialogue: closes on any navigation.
 ```
 
-### Story Feed Colors ✅
-```
-Narrator prose:      var(--ink-1)
-NPC quoted speech:   #e8d5b0 warm cream, italic
-Player actions:      #7ab8c8 teal-blue, 12px mono italic
-Item highlights:     #e8c547 yellow (hl-item)
-Location highlights: #7dd3fc sky blue (hl-loc)
-NPC highlights:      var(--accent) orange — too similar to item yellow in Fantasy (future fix)
-```
-
-### Bug 2 — zone_id corruption (UNDER INVESTIGATION)
-**Symptom:** Nodes in newly-generated region get zone_id pointing at wrong region.
-
-**Diagnostic logging active in:**
-- `apply-regional-bible/route.ts` — zone_id assignment per node
-- `regional-bible-cache.ts` — READ/WRITE with cache key + bible.id
-- `useGameLoop.ts` — RegionBible expansion target
-
-**Adjacent region travel is the trigger for Bug 2.** The fix prompt will verify the full end-to-end flow and resolve the zone_id corruption simultaneously.
-
-### Known issues (shelved — address after adjacent region travel)
+### Known issues (shelved — address after architecture hardening)
 - Duplicate codex writes: two paths (7b + 7c-1) fire for same location
 - NPC highlight color (orange) too similar to item highlight (yellow) in Fantasy
 - React key-prop-spread warnings in LocationSpan/ItemSpan/NpcSpan
@@ -110,15 +100,21 @@ NPC highlights:      var(--accent) orange — too similar to item yellow in Fant
 3. Action narration — 1-4 sentences
 4. Container search narration — 1 sentence only when item found
 
-### Pending Architecture Items (after adjacent region travel)
-**A** — Arrival descriptions cached permanently (write-once to world_assets).
-**B** — Free text validation gate (NPC not present → hardcoded ✅ DONE).
-**C** — Dialogue options from NPC knowledge array (Option B: {topic, content} pairs).
+### Pending Architecture Items (implement next)
+
+**A — Location arrival descriptions cached permanently**
+Write result to world_assets on first visit, serve cached on re-visit. No AI call on re-visit.
+
+**B — Free text validation gate** ✅ DONE
+NPC not at location → hardcoded "[Name] isn't here."
+
+**C — Dialogue options generated by code from NPC knowledge array**
+Option B confirmed: WorldBible generates `{topic, content}` pairs. Code builds option list. AI writes response text only.
 
 ### Map System ✅ (Visual Only)
 ```
 PAD=76. Tier switcher works. Current node highlighted.
-World tier: no CURRENT LOCATION eyebrow, full info panel otherwise.
+World tier: CURRENT LOCATION eyebrow hidden, full info panel otherwise.
 DEBUG MODE ACTIVE in index.tsx. TO RESTORE: uncomment pickModule.
 ```
 
@@ -154,12 +150,23 @@ Verbosity: terse | standard | rich
 
 ---
 
+## Story Feed Colors ✅
+```
+Narrator prose:      var(--ink-1)
+NPC quoted speech:   #e8d5b0 warm cream, italic
+Player actions:      #7ab8c8 teal-blue, 12px mono italic
+Item highlights:     #e8c547 yellow (hl-item)
+Location highlights: #7dd3fc sky blue (hl-loc)
+NPC highlights:      var(--accent) orange — too similar to item yellow in Fantasy (future fix)
+```
+
+---
+
 ## Planned Systems
 
 | System | When | Description |
 | --- | --- | --- |
-| Adjacent Region Travel | NOW | End-to-end verify + Bug 2 zone_id fix |
-| Architecture Hardening | After travel | Arrival caching, code-gen dialogue options |
+| Architecture Hardening | NOW | Arrival caching, code-gen dialogue options |
 | Genre renderers restored | After arch | Uncomment pickModule |
 | Codex dedup fix | After arch | Two-path duplicate write cleanup |
 | Combat System | Day 20 | Turn-based, code resolves, AI narrates |
@@ -216,4 +223,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 88 — V8.22: Dialogue modal inline in story feed (bottomSlot, minimize, no fixed). World map eyebrow fix. Adjacent region travel + Bug 2 fix queued next.*
+*Last updated: Session 88 — V8.23: Adjacent region travel end-to-end fixed. Two root causes: ◇ filter broken (placeholders not in connections), step 4d not firing for GRAPH_NAVIGATE. Bug 2 zone_id corruption fixed via expected_region_id validation. Loading state with GENERATING... badge. Architecture hardening next.*

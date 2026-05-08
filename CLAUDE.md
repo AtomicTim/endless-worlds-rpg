@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.24
-**Status:** Active Development — Adjacent Region Travel Stabilized, Architecture Hardening Next
+**Version:** 8.25
+**Status:** Active Development — Architecture Hardening Complete, Combat System Next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -10,7 +10,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Test adjacent region travel → architecture hardening → genre renderers
+**Current Phase:** Test architecture hardening → combat system (Day 20)
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -24,99 +24,109 @@
 | Trade + Dialogue + Architecture | No-check trade, haiku model | ✅ Complete |
 | Full UI Redesign | Design tokens, 15 SVG map renderers | ✅ Complete |
 | Map Overhaul + Debug Mode | fitToViewBox, tiers, coordinate ranges | ✅ Complete |
-| Regional Zone Traversal + Polish | Exit button, region zone, navigation | ✅ Complete |
-| Session 84 Bug Fixes | 7 map/nav fixes + Bug 2 diagnostics | ✅ Complete |
-| RegionBible 500 + Header Fixes | max_tokens, page header, node type | ✅ Complete |
-| Nav Bar Refactor + Map Visual-Only | Typed cards, map stripped of navigation | ✅ Complete |
-| Nav UX Polish Round 1 | Panel labels, visited badges, routing, breadcrumb | ✅ Complete |
-| Nav UX Polish Round 2 | 10 fixes: colors, cards, NPC buttons, narration | ✅ Complete |
-| Dialogue Modal Inline | In-flow in story feed, minimize, no fixed overlay | ✅ Complete |
-| Adjacent Region Travel | End-to-end flow fixed, Bug 2 zone_id fixed | ✅ Complete |
-| RegionBible Stabilization | max_tokens 3500, failure recovery | ✅ Complete |
-| Architecture Hardening | Domain 1/2 separation, caching, gate | ⏳ Next |
-| Genre renderers restored | After architecture confirmed | ⏳ Pending |
-| 20 | Combat System | ⏳ Pending |
+| Regional Zone Traversal + Polish | Full nav refactor, typed cards | ✅ Complete |
+| Session 84–89 Bug Fixes | Nav, map, RegionBible, zone_id, UX | ✅ Complete |
+| Adjacent Region Travel | End-to-end flow, Bug 2 fixed | ✅ Complete |
+| Architecture Hardening | Caching, codex dedup, code-built dialogue | ✅ Complete |
+| 20 | Combat System | ⏳ Next |
+| 21 | Container + Loot | ⏳ Pending |
+| 22 | Skills + Leveling | ⏳ Pending |
+| 23 | Main Quest Thread | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
-**⚠️ Noir has been removed.**
+**⚠️ Noir removed. Genre renderers restored (pickModule re-enabled).**
 
-### RegionBible Stabilization (commit 076763a — 43/43 tests, clean build)
+### Architecture Hardening (commit 57d27f3 — 43/43 tests, clean build)
 
-**Fix 1 — max_tokens 2000→3500:** JSON was clipping at ~1740 tokens. 3500 leaves comfortable headroom for all region sizes.
+**Change 1 — Land at region zone after generation:**
+`apply-regional-bible` computes `regionZoneId` and sets it as current node. `useGameLoop` step 4d uses `matchedOutline.id` as landing target. Settlement reachable via ← BACK from region zone.
 
-**Fix 2 — Failure recovery:** Captured `previousNodeId = fromId` before expansion. `expansionFailed` flag covers all failure paths (generate/apply non-2xx, throw, missing fields). On failure: restores `current_location_id` / `current_node_id` / `world_graph.current_node_id` via `setMasterState`, posts "The road to {region} is impassable. You turn back.", clears `generatingRegionId`, sets processing false, returns early. Narrator never runs on empty placeholder.
+**Change 2 — World map overlap fix:**
+`apply-regional-bible` gathers existing is_expandable positions, runs 20-unit collision check, nudges by 12 (wrap at +80 → -40, y+=12) up to 50 iterations.
 
-### Adjacent Region Travel Flow ✅
+**Change 3 — Write-once arrival cache + codex dedup (Bug 9 fixed):**
+Step 5 reads `physical_description` from world_asset before narrator call. On cache hit → synthesizes minimal narratorResponse, skips AI entirely. `codexWrittenBy7b` flag gates 7c-1 fallback — codex entry written exactly once per location.
+
+**Change 4 — Code-built dialogue options:**
+- Types: `DialogueOption.type|content`, `NPCKnowledgeItem`, `WorldAssetConstitution.knowledge[]`
+- WorldBible + RegionBible prompts request `{topic, content}` knowledge pairs
+- `apply-world-bible` + `apply-regional-bible` normalize knowledge array (legacy string fallback)
+- `buildDialogueOptions()` in useGameLoop builds from NPC asset: knowledge topics + trade + free-type + farewell
+- `CLOSED CONTEXT — SELECTED KNOWLEDGE` block in prompt-builder gives narrator exactly the selected knowledge item
+- DialogueModal dispatches by option.type (trade/free/farewell/knowledge)
+- AI no longer generates option list — only writes response text
+
+**Change 5 — Genre renderers restored:**
+`pickModule` dispatcher re-enabled in index.tsx. DebugMap import dropped. All 5 renderers (Fantasy/Cyber/Space/Apoc/Horror) compile cleanly.
+
+### Architecture Status ✅
 ```
-1. Player at region zone → ◇ card appears for undiscovered adjacent region
-2. Click ◇ → "Venturing into unknown territory..." + all cards disabled
-3. generate-regional-bible (haiku, max_tokens:3500) → builds RegionBible JSON
-4. apply-regional-bible → extends world graph, correct zone_ids via expected_region_id
-5. Player lands at new settlement hub → arrival narration fires
-6. Region/Local map update via setMasterState
+Domain 1 (Engine):     World graph, navigation, stat checks, dialogue option
+                       generation, combat (pending), loot (pending) — pure code
+Domain 2 (Content):    WCD, WorldBible, RegionBible, NPCs, items — frozen
 
-ON FAILURE: player restored to previousNodeId + "impassable road" message.
+AI during gameplay:
+  ✅ Arrival narration  — first visit only, cached permanently after
+  ✅ Dialogue options   — built by code, AI writes response only
+  ✅ Action narration   — 1-4 sentences
+  ✅ NPC not present    — hardcoded "X isn't here"
+  ⏳ Container search  — pending Container+Loot system
 ```
 
 ### Navigation Rules ✅ (Complete)
 ```
-Map = PURELY VISUAL. All navigation via nav bar cards only.
+Map = PURELY VISUAL. Genre renderers active. All navigation via nav bar.
 
-Card grammar (left to right):
-  [← BACK]  [→ DEEPER...]  [↑ EXIT]  [◆ PEER...]  [◇ UNDISCOVERED...]
+Card grammar: [← BACK] [→ DEEPER...] [↑ EXIT] [◆ PEER...] [◇ UNDISCOVERED...]
 
-Routing rules:
+Routing:
   Sub-location   → ← back to hub ONLY
   Settlement hub → → deeper + ↑ exit to region zone
-  Region zone    → ← back + ◆ known + ◇ undiscovered adjacent
+  Region zone    → ← back + ◆ known + ◇ undiscovered
   Dungeon        → ← back to region zone ONLY
-
-◇ card → generates new region (3500 token budget) → lands at new settlement.
-Generation failure → restore to previous node, no stuck state.
+  New region     → lands at region zone (not settlement hub)
 ```
 
-### Known issues (shelved — address after architecture hardening)
-- Duplicate codex writes: two paths (7b + 7c-1) fire for same location
+### NPC Dialogue System ✅
+```
+Option list: built by code from NPC.knowledge[] asset
+  - Knowledge topics (up to 4, from {topic, content} pairs)
+  - Browse wares (if merchant role)
+  - Free type
+  - Farewell
+
+AI receives: selected knowledge content + stat check result
+AI writes: response text only (not option list)
+
+Knowledge format: {topic: "Short label", content: "Full sentence"}
+Legacy format: plain string → auto-converted to {topic: first-5-words, content: string}
+```
+
+### Known issues (deferred to post-combat)
 - NPC highlight color (orange) too similar to item highlight (yellow) in Fantasy
 - React key-prop-spread warnings in LocationSpan/ItemSpan/NpcSpan
-- After successful region generation: Region map may show "undiscovered" until nav card used (map tier state not auto-switching)
+- Hub node not added to codex on first arrival to new region (deferred)
 
 ---
 
 ## 🏗️ Architecture
 
-### The Two Domains (Must Never Touch)
-**Domain 1 (Engine — pure code):** World graph, player state, combat, quests, map, navigation, dialogue option generation, stat checks, container registry, loot resolution.
-
-**Domain 2 (Content Library — frozen after generation):** WCD, locations, NPCs, items, loot tables, main quest, region outlines.
-
-### AI During Gameplay (Narration Only)
-1. Location arrival description — first visit only, cached permanently after (PENDING — Architecture item A)
-2. NPC dialogue responses — closed context, code determines topic + check result
-3. Action narration — 1-4 sentences
-4. Container search narration — 1 sentence only when item found
-
-### Pending Architecture Items (implement next)
-
-**A — Location arrival descriptions cached permanently**
-Currently AI is called on every session load for arrival narration. Fix: write result to `world_assets` on first visit, serve cached on all subsequent visits. No AI call on re-visit. This also fixes the duplicate codex write bug (Bug 9) since the asset check gates everything.
-
-**B — Free text validation gate** ✅ DONE
-NPC not at location → hardcoded "[Name] isn't here."
-
-**C — Dialogue options generated by code from NPC knowledge array**
-Option B confirmed: WorldBible generates `{topic, content}` pairs. Code builds option list from NPC asset. AI writes response text only.
-
-### Map System ✅ (Visual Only)
-```
-PAD=76. Tier switcher works. Current node highlighted.
-World tier: CURRENT LOCATION eyebrow hidden, full info panel otherwise.
-DEBUG MODE ACTIVE in index.tsx. TO RESTORE: uncomment pickModule.
-```
+### The Two Domains ✅
+**Domain 1 (Engine — pure code):** Navigation, stat checks, dialogue option generation, combat (pending), loot resolution (pending).
+**Domain 2 (Content Library — frozen):** WCD, locations, NPCs, items, loot tables, main quest.
 
 ### Generation Model ✅
 RegionBible: claude-haiku-4-5-20251001, max_tokens: 3500.
 WorldBible: claude-sonnet-4-5, 8000 tokens.
+Knowledge format: `{topic, content}` pairs. Legacy string → auto-converted.
+
+### Map System ✅
+```
+Genre renderers active (pickModule enabled).
+PAD=76. Tier switcher. Current node highlighted.
+World tier: CURRENT LOCATION eyebrow hidden.
+New region nodes: collision-checked, nudged if overlap.
+```
 
 ---
 
@@ -137,11 +147,10 @@ WorldBible: claude-sonnet-4-5, 8000 tokens.
 
 ## Narrator Prompt Order ✅
 
-DIALOGUE: WCD → HARD RULES → RESPONDING CHARACTER → TIER 1 OBJECTS → WORLD ASSETS → SCENE → VERBOSITY
+DIALOGUE: WCD → HARD RULES → RESPONDING CHARACTER → CLOSED CONTEXT (selected knowledge) → TIER 1 OBJECTS → WORLD ASSETS → SCENE → VERBOSITY
 non-DIALOGUE: WCD → HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → CONNECTED LOCATIONS → WORLD ASSETS → SCENE → VERBOSITY
 
-Region zone special case: inject settlement hub (labeled "settlement") + region_locations with compass direction.
-
+Region zone: inject settlement hub (labeled "settlement") + region_locations with compass direction.
 Verbosity: terse | standard | rich
 
 ---
@@ -151,9 +160,9 @@ Verbosity: terse | standard | rich
 Narrator prose:      var(--ink-1)
 NPC quoted speech:   #e8d5b0 warm cream, italic
 Player actions:      #7ab8c8 teal-blue, 12px mono italic
-Item highlights:     #e8c547 yellow (hl-item)
-Location highlights: #7dd3fc sky blue (hl-loc)
-NPC highlights:      var(--accent) orange — too similar to item yellow in Fantasy (future fix)
+Item highlights:     #e8c547 yellow
+Location highlights: #7dd3fc sky blue
+NPC highlights:      var(--accent) orange (too similar to item yellow — future fix)
 ```
 
 ---
@@ -162,14 +171,12 @@ NPC highlights:      var(--accent) orange — too similar to item yellow in Fant
 
 | System | When | Description |
 | --- | --- | --- |
-| Architecture Hardening | NOW | Arrival caching (item A), code-gen dialogue options (item C) |
-| Genre renderers restored | After arch | Uncomment pickModule |
-| Codex dedup fix | Covered by item A | Two-path duplicate write cleanup |
-| Combat System | Day 20 | Turn-based, code resolves, AI narrates |
+| Combat System | NOW (Day 20) | Turn-based, code resolves, AI narrates |
 | Container + Loot | Day 21 | Registry, loot tables, dungeon sub-levels |
 | Skills + Leveling | Day 22 | XP, stat points, level gates |
 | Main Quest Thread | Day 23 | Breadcrumb injection, quest tracking |
 | Random Events | After combat | Region zone + travel encounters |
+| Genre UI polish | Post-systems | NPC color, key-prop warnings |
 
 ---
 
@@ -219,4 +226,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 89 — V8.24: RegionBible max_tokens 3500, failure recovery (restore previous node). Adjacent region travel flow complete. Architecture hardening (items A + C) next.*
+*Last updated: Session 89 — V8.25: Architecture hardening complete. Arrival caching, codex dedup (Bug 9), code-built dialogue options, region zone landing, world map overlap fix, genre renderers restored. Combat system (Day 20) next.*

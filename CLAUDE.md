@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
 **Version:** 8.30
-**Status:** Active Development — Region Description / Region Travel / Resilience Round Complete, Combat System Next
+**Status:** Active Development — Movement Track Frozen, Combat System Next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -10,7 +10,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Region/resilience round complete → combat system (Day 20). Map visual rework queued for dedicated session post-combat.
+**Current Phase:** Movement track is functional end-to-end (multi-region travel, descriptions, dialogue, cache pipeline all working). Three minor polish items deferred to bundle with combat work. → combat system (Day 20).
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -33,6 +33,7 @@
 | Targeted Fix Round (dc5bcd8) | Region travel 500, region zone description | ✅ Complete |
 | Polish Round (b7032f9) | Tier-aware highlight colors, NPC speech, region cards, key warnings | ✅ Complete |
 | Region/Resilience Round (87c89a3) | Region desc from any node, default tier, landmark color, origin region card, RegionBible stub fallback | ✅ Complete |
+| **Movement Track** | **Verified end-to-end through multi-region playtest** | ✅ **FROZEN — minor polish bundled into combat round** |
 | 20 | Combat System | ⏳ Next |
 | Map Visual Rework | Dedicated session | ⏳ Deferred (post-combat) |
 | 21 | Container + Loot | ⏳ Pending |
@@ -248,7 +249,8 @@ Knowledge format: {topic: "Short label", content: "Full sentence"}
 Legacy format: plain string → auto-converted to {topic: first-5-words, content: string}
 
 NPC quoted speech: rendered via .ew-said class — #e8d5b0 warm cream,
-italic, weight 600 (V8.29).
+italic, weight 600 (V8.29). Pending higher-contrast pass — see
+"Wrap-up Polish" in Known Issues.
 ```
 
 ### RegionBible Resilience ✅ (V8.30)
@@ -266,7 +268,14 @@ Failure modes:
 Player is never blocked from traversal by an LLM JSON malformation.
 ```
 
-### Known issues (deferred to post-combat / map visual rework)
+### Known issues
+
+**Wrap-up Polish (bundle into Combat round or post-combat polish round):**
+These are minor visual/UX issues identified in the V8.30 multi-region playtest. Movement is functional with these in place — they don't block combat work and can be cleaned up alongside the Combat round at minimal extra cost.
+
+- **Settlement hub card on new region arrival reads as back-from-settlement.** When player arrives at a new region zone via expansion, the nav card pointing to the settlement hub renders with the same visual treatment as a "you just came from here" card. Functionally works (clicks land correctly at the hub), but visually misleading on a fresh region. Likely a card-typing issue in NavigationBar's region-zone D2 branch — needs to distinguish "settlement hub of CURRENT region" (deeper-into card) from "place player just left" (back card).
+- **Map does not auto-switch tiers on cross-region arrival.** V8.30 Fix 2 set the initial-mount tier default but does not re-apply on arrival at a new region zone or new settlement hub. Should auto-flip to the appropriate tier on each cross-zone arrival, while still respecting in-session manual tier choices for same-zone navigation.
+- **NPC dialogue text needs higher contrast.** Current `.ew-said` (#e8d5b0 warm cream, italic, weight 600 from V8.29) doesn't read distinctly enough from surrounding ink-2 narrator prose in playtest. Pick a more contrasting color or add a subtle background tint / left-border accent to make NPC speech pop visually.
 
 **Map visual rework (dedicated session, post-combat):**
 - Per-node decorative shelf line under every node (visible under both discovered and undiscovered) — looks like an underline but is a separate SVG element. Cleanup needed across all renderers.
@@ -279,6 +288,7 @@ Player is never blocked from traversal by an LLM JSON malformation.
 - NPC highlight color (orange) too similar to item highlight (yellow) in Fantasy
 - Hub node not added to codex on first arrival to new region
 - Step 7 individual branches: confirm each branch sets `discovered: true` (currently relying on Fix 2 safety net)
+- Starting region nodes consistently lack `grid_position` — currently masked by V8.28 isValidPos guard with `console.warn`. Worth investigating data path at world generation eventually so the warn stops firing on every new region apply.
 
 ---
 
@@ -317,6 +327,7 @@ Collision check on apply-regional-bible: isValidPos guards prevent
 NPE from malformed grid_position entries (V8.28).
 
 ⚠️ Map visual rework deferred to dedicated post-combat session.
+⚠️ Tier auto-switch on cross-zone arrival pending — see Known Issues.
 ```
 
 ---
@@ -363,6 +374,7 @@ Verbosity: terse | standard | rich
 ```
 Narrator prose:        var(--ink-1)
 NPC quoted speech:     #e8d5b0 warm cream, italic, weight 600 (--hl-said)
+                       — pending higher-contrast pass per V8.30 playtest
 Player actions:        #7ab8c8 teal-blue, 12px mono italic
 Item highlights:       #e8c547 yellow (--hl-item)
 Region highlights:     #c4b5fd lavender (--hl-region)  — Tier 2 / region zones
@@ -377,7 +389,7 @@ NPC highlights:        var(--accent) orange (too similar to item yellow — futu
 
 | System | When | Description |
 | --- | --- | --- |
-| Combat System | NOW (Day 20) | Turn-based, code resolves, AI narrates |
+| Combat System | NOW (Day 20) | Turn-based, code resolves, AI narrates. Bundle Wrap-up Polish (3 items). |
 | Map Visual Rework | After combat | Dedicated session: decoration, geometry, sizing, hierarchy, label collision |
 | Container + Loot | Day 21 | Registry, loot tables, dungeon sub-levels |
 | Skills + Leveling | Day 22 | XP, stat points, level gates |
@@ -433,4 +445,4 @@ Claude Code pushes → user reports commit + test results → Claude.ai updates 
 
 ---
 
-*Last updated: V8.30 — Region/resilience round (commit 87c89a3): region tier description resolves from parent region zone for any node via parentRegionId chain walk, map defaults to Local on startup, landmark color flipped to mint for distinction from region lavender, new region creation wires origin region symmetrically into adjacent-region connections, RegionBible bumped to 6000 tokens with stub-fallback on double-parse-failure (player never blocked). Combat system (Day 20) up next.*
+*Last updated: V8.30 — Movement track frozen after end-to-end multi-region playtest. Three minor polish items (settlement card label on new region arrival, tier auto-switch on cross-zone arrival, NPC dialogue contrast bump) deferred to bundle with Combat round. Combat system (Day 20) up next.*

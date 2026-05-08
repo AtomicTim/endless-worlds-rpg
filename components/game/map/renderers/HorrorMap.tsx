@@ -16,11 +16,11 @@ import type { RendererProps } from "./types";
 function HorrorHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <>
-      <text x="14" y="22" fontFamily="var(--serif)" fontStyle="italic"
-        fontSize="14" fill="var(--accent)" letterSpacing="2">
+      <text x="14" y="26" fontFamily="var(--serif)" fontStyle="italic"
+        fontSize="20" fill="var(--accent)" letterSpacing="2">
         {title}
       </text>
-      <text x="14" y="34" fontFamily="var(--mono)" fontSize="10"
+      <text x="14" y="44" fontFamily="var(--mono)" fontSize="13"
         fill="var(--ink-4)" letterSpacing="2.5">
         {subtitle}
       </text>
@@ -58,37 +58,39 @@ function Nodes({
             <title>{n.name}</title>
             {n.isCurrent ? (
               <>
-                <circle r="22" fill="none" stroke="var(--accent)"
-                  strokeWidth="0.4" strokeDasharray="1 2" />
-                <circle r="14" fill="none" stroke="var(--accent)" strokeWidth="0.4" />
-                <path d="M 0 -10 L 9 7 L -9 7 Z" fill="none"
-                  stroke="var(--accent)" strokeWidth="0.7" />
-                <ellipse rx="5" ry="2.4" fill="none"
-                  stroke="var(--accent)" strokeWidth="0.7" />
-                <circle r="1.2" fill="var(--accent)" />
-                <circle r="6" fill="none" stroke="var(--accent)"
-                  strokeWidth="0.6"
+                <circle r="28" fill="none" stroke="var(--accent)"
+                  strokeWidth="0.5" strokeDasharray="1.5 2.5" />
+                <circle r="18" fill="none" stroke="var(--accent)" strokeWidth="0.5" />
+                <path d="M 0 -13 L 12 9 L -12 9 Z" fill="none"
+                  stroke="var(--accent)" strokeWidth="0.9" />
+                <ellipse rx="6.5" ry="3" fill="none"
+                  stroke="var(--accent)" strokeWidth="0.9" />
+                <circle r="1.6" fill="var(--accent)" />
+                <circle r="8" fill="none" stroke="var(--accent)"
+                  strokeWidth="0.8"
                   className="ew-pulse" style={{ transformOrigin: "center", transformBox: "fill-box" }} />
-                <text y="-30" textAnchor="middle" fontFamily="var(--serif)"
-                  fontStyle="italic" fontSize="11" fill="var(--accent)"
+                <text y="-38" textAnchor="middle" fontFamily="var(--serif)"
+                  fontStyle="italic" fontSize="14" fill="var(--accent)"
                   letterSpacing="2">
                   — here —
                 </text>
               </>
             ) : (
-              <path d="M 0 -7 L 0 6 M -3 -4 L 3 -4"
+              <path d="M 0 -10 L 0 8 M -4 -6 L 4 -6"
                 stroke={stroke}
-                strokeWidth={n.isDiscovered ? 1.2 : 0.9}
+                strokeWidth={n.isDiscovered ? 1.6 : 1.1}
                 strokeLinecap="round"
-                strokeDasharray={n.isDiscovered ? undefined : "1.2 1.2"} />
+                strokeDasharray={n.isDiscovered ? undefined : "1.6 1.6"} />
             )}
-            <text y={n.isCurrent ? 32 : 18} textAnchor="middle"
+            <text y={n.isCurrent ? 42 : 24} textAnchor="middle"
               fontFamily="var(--serif)" fontStyle="italic"
-              fontSize={n.isCurrent ? 13 : 11}
+              fontSize={n.isCurrent ? 18 : 16}
               fill={n.isCurrent ? "var(--accent)"
                    : n.isDiscovered ? "var(--ink-1)" : "var(--ink-4)"}
               letterSpacing="0.8"
-              fontWeight={n.isCurrent ? 500 : 400}>
+              fontWeight={n.isCurrent ? 500 : 400}
+              textDecoration="none"
+              style={{ textDecoration: "none", textDecorationLine: "none" }}>
               {n.isDiscovered ? n.name : "—"}
             </text>
             {npcMode && n.npcCount > 0 && (
@@ -113,11 +115,11 @@ function Exits({
       {exits.map((e, i) => (
         <g key={`${e.targetId}-${i}`}>
           <text
-            x={e.fromX + 12}
-            y={e.fromY + i * 10}
+            x={e.fromX + 14}
+            y={e.fromY + i * 18}
             fontFamily="var(--serif)"
             fontStyle="italic"
-            fontSize="10"
+            fontSize="14"
             fill="var(--accent)"
           >
             → {e.targetName}
@@ -145,7 +147,7 @@ export function WorldMap(props: RendererProps) {
       />
       <Exits exits={props.exits} />
       <text x="14" y="300" fontFamily="var(--serif)" fontStyle="italic"
-        fontSize="11" fill="var(--ink-4)" opacity="0.75" letterSpacing="0.4">
+        fontSize="14" fill="var(--ink-4)" opacity="0.75" letterSpacing="0.4">
         the eye opens at the dark of the moon
       </text>
     </BlackInkBacking>

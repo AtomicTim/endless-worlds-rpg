@@ -279,6 +279,13 @@ export interface WorldConsistencyDocument {
   world_tagline: string;
   /** 1-2 sentences of tonal truth. */
   atmosphere:    string;
+  /** 2-3 sentences describing the world as a whole — its premise,
+   *  what makes it unique. Distinct from `atmosphere` (per-place
+   *  sensory prose) and the WorldBible's per-region atmospheres.
+   *  Rendered in the World tier description panel. Optional so
+   *  legacy saves without this field still load (callers fall back
+   *  to `atmosphere`). */
+  world_description?: string;
   landmarks:     WorldLandmark[];
   factions:      WorldFaction[];
   /** Universal truths — plain sentences. */

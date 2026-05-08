@@ -25,12 +25,12 @@ import { VIEW } from "./types";
 function PaperHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <>
-      <text x="14" y="22" fontFamily="var(--serif)" fontStyle="italic"
-        fontSize="15" fill="#e8d8b0">
+      <text x="14" y="26" fontFamily="var(--serif)" fontStyle="italic"
+        fontSize="22" fill="#e8d8b0">
         {title}
       </text>
-      <text x="14" y="34" fontFamily="var(--serif)" fontStyle="italic"
-        fontSize="10" fill="#a08868" letterSpacing="1.5">
+      <text x="14" y="44" fontFamily="var(--serif)" fontStyle="italic"
+        fontSize="13" fill="#a08868" letterSpacing="1.5">
         {subtitle}
       </text>
     </>
@@ -56,29 +56,32 @@ function CommonNodes({
               />
             ) : (
               <g transform={`translate(${n.x} ${n.y})`}>
-                <circle r="7" fill="none" stroke="#7a6850"
-                  strokeWidth="0.6" strokeDasharray="1.5 1.5" />
-                {/* FIX 5 — explicit textDecoration:none on the "?" glyph
-                    overrides any inherited underline cascading from the
-                    parent .ew-link-loc / story-feed styling. Map glyphs
-                    must NEVER underline — only the in-prose location
-                    highlights do. */}
-                <text y="2.5" textAnchor="middle"
+                <circle r="11" fill="none" stroke="#7a6850"
+                  strokeWidth="0.8" strokeDasharray="2 2" />
+                {/* FIX B2 — strip every flavor of underline that could be
+                    inherited by an SVG <text>: SVG attribute, CSS prop,
+                    and the explicit text-decoration-line override that
+                    some browsers respect when the legacy attribute
+                    fights the style block. Map glyphs must NEVER look
+                    underlined — only in-prose location highlights do. */}
+                <text y="4" textAnchor="middle"
                   fontFamily="var(--serif)" fontStyle="italic"
-                  fontSize="8" fill="#7a6850"
+                  fontSize="14" fill="#7a6850"
                   textDecoration="none"
-                  style={{ textDecoration: "none" }}>?</text>
+                  style={{ textDecoration: "none", textDecorationLine: "none" }}>?</text>
               </g>
             )}
             <text
               x={n.x}
-              y={n.y + 16}
+              y={n.y + 22}
               textAnchor="middle"
               fontFamily="var(--serif)"
               fontStyle="italic"
-              fontSize="11"
+              fontSize="18"
               fill={labelColor}
               fontWeight={n.isCurrent ? 600 : 400}
+              textDecoration="none"
+              style={{ textDecoration: "none", textDecorationLine: "none" }}
             >
               {n.isDiscovered ? n.name : "—"}
             </text>
@@ -121,10 +124,10 @@ function CommonExits({
         <g key={`${e.targetId}-${i}`}>
           <text
             x={e.fromX + 14}
-            y={e.fromY + i * 10}
+            y={e.fromY + i * 16}
             fontFamily="var(--serif)"
             fontStyle="italic"
-            fontSize="10"
+            fontSize="14"
             fill="#f59e0b"
           >
             → {e.targetName}
@@ -314,11 +317,11 @@ function LocalExits({
         <g key={`exL-${e.targetId}-${i}`}>
           <text
             x={14}
-            y={170 + i * 12}
+            y={170 + i * 18}
             textAnchor="start"
             fontFamily="var(--serif)"
             fontStyle="italic"
-            fontSize="10"
+            fontSize="14"
             fill="#f59e0b"
           >
             ← {e.targetName}
@@ -329,11 +332,11 @@ function LocalExits({
         <g key={`exR-${e.targetId}-${i}`}>
           <text
             x={VIEW - 14}
-            y={170 + i * 12}
+            y={170 + i * 18}
             textAnchor="end"
             fontFamily="var(--serif)"
             fontStyle="italic"
-            fontSize="10"
+            fontSize="14"
             fill="#f59e0b"
           >
             {e.targetName} →
@@ -386,20 +389,22 @@ export function LocalMap(props: RendererProps) {
               />
             ) : (
               <g transform={`translate(${n.x} ${n.y})`}>
-                <rect x="-5" y="-4" width="10" height="8"
+                <rect x="-7" y="-6" width="14" height="12"
                   fill="none" stroke="#7a6850"
-                  strokeWidth="0.6" strokeDasharray="1.5 1.5" />
+                  strokeWidth="0.8" strokeDasharray="2 2" />
               </g>
             )}
             <text
               x={n.x}
-              y={n.y + 18}
+              y={n.y + 24}
               textAnchor="middle"
               fontFamily="var(--serif)"
               fontStyle="italic"
-              fontSize="11"
+              fontSize="18"
               fill={labelColor}
               fontWeight={n.isCurrent ? 600 : 400}
+              textDecoration="none"
+              style={{ textDecoration: "none", textDecorationLine: "none" }}
             >
               {n.isDiscovered ? n.name : "—"}
             </text>

@@ -1462,139 +1462,44 @@ export function useGameLoop() {
         }
       }
 
-      // FIX 6 — on arrival-cache hit, emit the cached description and
-      // exit submitAction entirely. The narrator AI is the only thing
-      // that should write arrival prose; with a cached description we
-      // already have the prose, so falling through to step 6 onward
-      // would only invite a downstream AI call (e.g. step 7-C's
-      // generateLocationStub when the resolver mis-classified the move
-      // as WORLD_EXPLORE). We replicate the minimum arrival pipeline
-      // here — section header, lastNarrativeText, mark-discovered,
-      // log entry, persist — and return.
+      // FIX A1 — on arrival-cache hit, synthesize a minimal
+      // narratorResponse and let the rest of the pipeline (step 6
+      // arrival header, step 7-A GRAPH_NAVIGATE graph maintenance,
+      // step 7c asset refresh, step 7c-1 codex first-visit, step 9
+      // log entry, step 10 persist) run unchanged. Earlier this
+      // branch did its own mini-pipeline and `return`ed — that
+      // skipped step 7-A's `world_graph.current_node_id = newId`
+      // update, so NavigationBar and the map both kept reading the
+      // OLD current node and the player saw stale nav cards / info
+      // panel / tier after a re-visit move.
+      //
+      // The original Fix 6 goal — "no AI narrator call on cache
+      // hit" — is preserved: we synthesize the response and skip
+      // narrateAction. Step 7-C's WORLD_EXPLORE generateLocationStub
+      // is gated by `!graph.nodes[newLocationId]`, and any cache hit
+      // implies the destination's world_asset already exists, so 7-C
+      // will not fire either.
+      let narratorResponse;
       if (cachedArrivalText) {
         console.log(
-          "[GameLoop/5] Arrival cache hit — skipping narrator pipeline for", arriveLocId
+          "[GameLoop/5] Arrival cache hit — synthesizing response, skipping narrator API for",
+          arriveLocId
         );
-
-        // FIX 2 — mark the destination as discovered so NavigationBar
-        // and the world map treat it as a known node. Some arrival
-        // paths (cache-hit re-entry, region-zone return) reach here
-        // without step 7-A's GRAPH_NAVIGATE branch having flipped the
-        // flag; do it inline so the player never sees "undiscovered
-        // territory" while standing in the place.
-        if (updatedState.world_graph) {
-          const cur = updatedState.world_graph.nodes[arriveLocId];
-          if (cur && !cur.discovered) {
-            updatedState = {
-              ...updatedState,
-              world_graph: {
-                ...updatedState.world_graph,
-                nodes: {
-                  ...updatedState.world_graph.nodes,
-                  [arriveLocId]: { ...cur, discovered: true },
-                },
-              },
-            };
-          }
-        }
-
-        // FIX 3 — section header. Reuses the same dedup logic as the
-        // narrator path (lastArrivalNodeId guard, but the navigateTo
-        // reset above means cross-node moves always emit).
-        const arrivalLocationName: string | null = (() => {
-          const graph = updatedState.world_graph;
-          if (!graph) return null;
-          if (arriveLocId && arriveLocId === lastArrivalNodeId) {
-            return null;
-          }
-          if (arriveLocId) lastArrivalNodeId = arriveLocId;
-          return graph.nodes[arriveLocId]?.name ?? null;
-        })();
-
-        store.addMessage(
-          makeMessage("NARRATIVE", cachedArrivalText, {
-            outcome_type:  resolution.outcome_type,
-            sound_id:      null,
-            response_tier: 2,
-            ...(arrivalLocationName ? { locationName: arrivalLocationName } : {}),
-          })
-        );
-        store.setLastNarrativeText(cachedArrivalText);
-
-        // Refresh location assets fire-and-forget so the next action
-        // (e.g. "look around") sees the canonical Tier 1 / NPC roster.
-        const sessionIdCache = updatedState.metadata.session_id;
-        void getWorldAssetsForLocation(sessionIdCache, arriveLocId).then(
-          (assets) => {
-            if (assets.length > 0) useGameStore.getState().setLocationAssets(assets);
-          }
-        );
-
-        // First-visit codex flag — gated by the same world_state flag
-        // the narrator path uses, so revisits stay idempotent.
-        const flagKey = `codex_loc_${arriveLocId}`;
-        const alreadyWritten = updatedState.world_state.flags?.[flagKey] === true;
-        if (!alreadyWritten) {
-          const liveAssets = useGameStore.getState().locationAssets;
-          const locationAsset = liveAssets.find(
-            (a) =>
-              a.category === AssetCategory.LOCATION &&
-              (a.id === arriveLocId ||
-               a.id === `location_${arriveLocId}` ||
-               normalizeLocationId(a.first_seen_location ?? "") === arriveLocId)
-          );
-          if (locationAsset) {
-            void saveCodexEntry(sessionIdCache, {
-              id:                  locationAsset.id,
-              category:            "LOCATION",
-              name:                locationAsset.name,
-              description:         cachedArrivalText,
-              first_seen_location: arriveLocId,
-              significance:        "NOTABLE",
-            }).then(({ created }) => {
-              if (created) {
-                store.addMessage(
-                  makeMessage("SYSTEM", `✦ ${locationAsset.name} added to codex`)
-                );
-              }
-            });
-            updatedState = {
-              ...updatedState,
-              world_state: {
-                ...updatedState.world_state,
-                flags: { ...updatedState.world_state.flags, [flagKey]: true },
-              },
-            };
-          }
-        }
-
-        // Log entry + persist + commit. Mirrors steps 9–10 of the
-        // full pipeline but skips the narrator-derived bits.
-        const arrivalLogName = arrivalLocationName ?? arriveLocId;
-        updatedState = persistLogEntry(
-          updatedState,
-          LogEntryType.STORY,
-          `Arrived at ${arrivalLogName}.`
-        );
-        saveLogEntriesAsync(sessionIdCache, updatedState.log_book);
-        if (updatedState.world_graph) {
-          saveWorldGraphAsync(sessionIdCache, updatedState.world_graph);
-        }
-        const stamped: MasterState = {
-          ...updatedState,
-          metadata: { ...updatedState.metadata, last_played: new Date().toISOString() },
+        narratorResponse = {
+          response_tier:      2 as const,
+          narrative_text:     cachedArrivalText,
+          ascii_art:          null,
+          sound_id:           null,
+          new_npcs:           [],
+          items_acquired:     [],
+          points_of_interest: [],
+          codex_entries:      [],
+          log_summary:        undefined,
+          dialogue_options:   [],
+          trust_changes:      [],
+          items_for_sale:     [],
         };
-        store.setMasterState(stamped);
-        autoSaveActionCount++;
-        if (autoSaveActionCount % AUTO_SAVE_INTERVAL === 0) {
-          await persistState(stamped, store.addMessage);
-        }
-        store.setProcessing(false);
-        return;
-      }
-
-      let narratorResponse;
-      try {
+      } else try {
         narratorResponse = await narrateAction(
           resolutionForNarrator,
           narratorState,

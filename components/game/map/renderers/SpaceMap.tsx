@@ -16,11 +16,11 @@ import type { RendererProps } from "./types";
 function SpaceHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <>
-      <text x="14" y="22" fontFamily="var(--mono)" fontSize="11"
+      <text x="14" y="26" fontFamily="var(--mono)" fontSize="16"
         fill="var(--accent)" letterSpacing="3" fontWeight="600">
         {title}
       </text>
-      <text x="14" y="34" fontFamily="var(--mono)" fontSize="10"
+      <text x="14" y="44" fontFamily="var(--mono)" fontSize="13"
         fill="var(--ink-4)" letterSpacing="2.5">
         {subtitle}
       </text>
@@ -49,29 +49,29 @@ function PlanetMarker({
   if (isCurrent) {
     return (
       <>
-        <circle r="11" fill="none" stroke="var(--accent)"
-          strokeWidth="0.5" strokeDasharray="2 2" />
-        <circle r="9" fill="none" stroke="var(--accent)"
-          strokeWidth="1.0"
+        <circle r="14" fill="none" stroke="var(--accent)"
+          strokeWidth="0.6" strokeDasharray="2 2" />
+        <circle r="12" fill="none" stroke="var(--accent)"
+          strokeWidth="1.2"
           className="ew-pulse" style={{ transformOrigin: "center", transformBox: "fill-box" }} />
-        <path d="M 0 -5 L 4 4 L 0 2 L -4 4 Z" fill="var(--accent)" />
+        <path d="M 0 -7 L 5 6 L 0 3 L -5 6 Z" fill="var(--accent)" />
       </>
     );
   }
   if (isDiscovered) {
     return (
       <>
-        <ellipse cx="0" cy="0" rx="8" ry="2.5" fill="none"
-          stroke="var(--accent)" strokeWidth="0.5" opacity="0.55"
+        <ellipse cx="0" cy="0" rx="11" ry="3.5" fill="none"
+          stroke="var(--accent)" strokeWidth="0.7" opacity="0.55"
           transform="rotate(-18)" />
-        <circle r="3.5" fill="var(--accent)" />
+        <circle r="5" fill="var(--accent)" />
       </>
     );
   }
   return (
     <>
-      <circle r="3" fill="none" stroke="var(--ink-4)"
-        strokeWidth="0.5" strokeDasharray="1.2 1.2" />
+      <circle r="5" fill="none" stroke="var(--ink-4)"
+        strokeWidth="0.7" strokeDasharray="1.6 1.6" />
     </>
   );
 }
@@ -89,18 +89,20 @@ function Nodes({
           <title>{n.name}</title>
           <PlanetMarker isCurrent={n.isCurrent} isDiscovered={n.isDiscovered} />
           {n.isCurrent && (
-            <text y="-15" textAnchor="middle" fontFamily="var(--mono)"
-              fontSize="9" fill="var(--accent)" letterSpacing="2"
+            <text y="-20" textAnchor="middle" fontFamily="var(--mono)"
+              fontSize="12" fill="var(--accent)" letterSpacing="2"
               fontWeight="600">
               ◇ YOU ARE HERE
             </text>
           )}
-          <text y="18" textAnchor="middle" fontFamily="var(--mono)"
-            fontSize="11"
+          <text y="26" textAnchor="middle" fontFamily="var(--mono)"
+            fontSize="16"
             fill={n.isCurrent ? "var(--accent)"
                  : n.isDiscovered ? "var(--ink-1)" : "var(--ink-4)"}
             letterSpacing="1.2"
-            fontWeight={n.isCurrent ? 700 : 500}>
+            fontWeight={n.isCurrent ? 700 : 500}
+            textDecoration="none"
+            style={{ textDecoration: "none", textDecorationLine: "none" }}>
             {n.isDiscovered ? n.name.toUpperCase() : "[UNCHARTED]"}
           </text>
           {npcMode && n.npcCount > 0 && (
@@ -124,10 +126,10 @@ function Exits({
       {exits.map((e, i) => (
         <g key={`${e.targetId}-${i}`}>
           <text
-            x={e.fromX + 12}
-            y={e.fromY + i * 12}
+            x={e.fromX + 14}
+            y={e.fromY + i * 18}
             fontFamily="var(--mono)"
-            fontSize="10"
+            fontSize="14"
             fill="var(--accent)"
             letterSpacing="1"
           >
@@ -213,12 +215,14 @@ export function LocalMap(props: RendererProps) {
                      : n.isDiscovered ? "var(--accent)" : "var(--ink-4)"}
               strokeWidth={n.isCurrent ? 1.1 : 0.7}
               strokeDasharray={n.isDiscovered || n.isCurrent ? undefined : "1.5 1.5"} />
-            <text y="2" textAnchor="middle" fontFamily="var(--mono)"
-              fontSize="11"
+            <text y="3" textAnchor="middle" fontFamily="var(--mono)"
+              fontSize="14"
               fill={n.isCurrent ? "var(--accent)"
                    : n.isDiscovered ? "var(--ink-1)" : "var(--ink-4)"}
               letterSpacing="1"
-              fontWeight={n.isCurrent ? 700 : 500}>
+              fontWeight={n.isCurrent ? 700 : 500}
+              textDecoration="none"
+              style={{ textDecoration: "none", textDecorationLine: "none" }}>
               {n.isDiscovered ? n.name.toUpperCase() : "[SEALED]"}
             </text>
             {props.npcMode && n.npcCount > 0 && (

@@ -16,11 +16,11 @@ import type { RendererProps } from "./types";
 function InkHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <>
-      <text x="14" y="22" fontFamily="var(--mono)" fontSize="11"
+      <text x="14" y="26" fontFamily="var(--mono)" fontSize="16"
         fill="var(--accent)" letterSpacing="3" fontWeight="600">
         {title}
       </text>
-      <text x="14" y="34" fontFamily="var(--mono)" fontSize="10"
+      <text x="14" y="44" fontFamily="var(--mono)" fontSize="13"
         fill="var(--ink-4)" letterSpacing="2.5">
         {subtitle}
       </text>
@@ -66,35 +66,37 @@ function Nodes({
           <title>{n.name}</title>
           {n.isCurrent && (
             <>
-              <rect x="-9" y="-9" width="18" height="18" fill="none"
-                stroke="var(--accent)" strokeWidth="0.4" strokeDasharray="2 2" />
-              <rect x="-7" y="-7" width="14" height="14" fill="none"
-                stroke="var(--accent)" strokeWidth="1.1"
+              <rect x="-13" y="-13" width="26" height="26" fill="none"
+                stroke="var(--accent)" strokeWidth="0.5" strokeDasharray="2 2" />
+              <rect x="-10" y="-10" width="20" height="20" fill="none"
+                stroke="var(--accent)" strokeWidth="1.4"
                 className="ew-pulse" style={{ transformOrigin: "center", transformBox: "fill-box" }} />
             </>
           )}
           {n.isDiscovered ? (
             <>
-              <rect x="-5" y="-5" width="10" height="10"
+              <rect x="-7" y="-7" width="14" height="14"
                 fill={n.isCurrent ? "var(--accent)" : "var(--bg-0)"}
-                stroke="var(--accent)" strokeWidth="0.8" />
+                stroke="var(--accent)" strokeWidth="1.0" />
               {!n.isCurrent && (
-                <rect x="-2" y="-2" width="4" height="4" fill="var(--accent)" />
+                <rect x="-3" y="-3" width="6" height="6" fill="var(--accent)" />
               )}
             </>
           ) : (
-            <rect x="-4" y="-4" width="8" height="8" fill="none"
-              stroke="var(--ink-4)" strokeWidth="0.6" strokeDasharray="1.5 1.5" />
+            <rect x="-6" y="-6" width="12" height="12" fill="none"
+              stroke="var(--ink-4)" strokeWidth="0.8" strokeDasharray="2 2" />
           )}
           <text
-            y="18"
+            y="26"
             textAnchor="middle"
             fontFamily="var(--mono)"
-            fontSize="11"
+            fontSize="16"
             fill={n.isCurrent ? "var(--accent)"
                  : n.isDiscovered ? "var(--ink-1)" : "var(--ink-4)"}
             letterSpacing="1.2"
             fontWeight={n.isCurrent ? 700 : 500}
+            textDecoration="none"
+            style={{ textDecoration: "none", textDecorationLine: "none" }}
           >
             {n.isDiscovered ? n.name.toUpperCase() : "[NO_DATA]"}
           </text>
@@ -119,10 +121,10 @@ function Exits({
       {exits.map((e, i) => (
         <g key={`${e.targetId}-${i}`}>
           <text
-            x={e.fromX + 12}
-            y={e.fromY + i * 12}
+            x={e.fromX + 14}
+            y={e.fromY + i * 18}
             fontFamily="var(--mono)"
-            fontSize="10"
+            fontSize="14"
             fill="var(--accent)"
             letterSpacing="1"
           >

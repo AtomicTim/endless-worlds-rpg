@@ -16,11 +16,11 @@ import type { RendererProps } from "./types";
 function ApocHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <>
-      <text x="14" y="22" fontFamily="var(--mono)" fontSize="11"
+      <text x="14" y="26" fontFamily="var(--mono)" fontSize="16"
         fill="var(--accent)" letterSpacing="3" fontWeight="700">
         {title}
       </text>
-      <text x="14" y="34" fontFamily="var(--mono)" fontSize="10"
+      <text x="14" y="44" fontFamily="var(--mono)" fontSize="13"
         fill="var(--ink-4)" letterSpacing="2.5">
         {subtitle}
       </text>
@@ -60,31 +60,33 @@ function Nodes({
           >
             <title>{n.name}</title>
             {n.isCurrent && (
-              <circle r="11" fill="none" stroke="var(--accent)"
-                strokeWidth="0.8"
+              <circle r="14" fill="none" stroke="var(--accent)"
+                strokeWidth="1.0"
                 className="ew-pulse" style={{ transformOrigin: "center", transformBox: "fill-box" }} />
             )}
-            <path d="M -5 -5 L 5 5 M -5 5 L 5 -5"
-              stroke={stroke} strokeWidth={n.isCurrent ? 1.8 : 1.4}
+            <path d="M -7 -7 L 7 7 M -7 7 L 7 -7"
+              stroke={stroke} strokeWidth={n.isCurrent ? 2.2 : 1.8}
               strokeLinecap="round" />
             {!n.isCurrent && (
-              <circle r="7" fill="none" stroke={stroke}
-                strokeWidth="0.6" opacity="0.7" />
+              <circle r="9" fill="none" stroke={stroke}
+                strokeWidth="0.8" opacity="0.7" />
             )}
             {n.isCurrent && (
-              <text y="-15" textAnchor="middle" fontFamily="var(--mono)"
-                fontSize="10" fill="var(--accent)" letterSpacing="2.5"
+              <text y="-20" textAnchor="middle" fontFamily="var(--mono)"
+                fontSize="13" fill="var(--accent)" letterSpacing="2.5"
                 fontWeight="700">
                 ★ HERE ★
               </text>
             )}
-            <text y="18" textAnchor="middle" fontFamily="var(--mono)"
-              fontSize="11"
+            <text y="26" textAnchor="middle" fontFamily="var(--mono)"
+              fontSize="16"
               fill={!n.isDiscovered ? "var(--ink-4)"
                    : n.isCurrent ? "var(--accent)"
                    : danger ? "var(--hl-fail)" : "var(--ink-1)"}
               letterSpacing="1"
-              fontWeight={n.isCurrent ? 700 : 600}>
+              fontWeight={n.isCurrent ? 700 : 600}
+              textDecoration="none"
+              style={{ textDecoration: "none", textDecorationLine: "none" }}>
               {n.isDiscovered ? n.name.toUpperCase() : "▓▓▓▓▓▓"}
             </text>
             {npcMode && n.npcCount > 0 && (
@@ -109,10 +111,10 @@ function Exits({
       {exits.map((e, i) => (
         <g key={`${e.targetId}-${i}`}>
           <text
-            x={e.fromX + 12}
-            y={e.fromY + i * 12}
+            x={e.fromX + 14}
+            y={e.fromY + i * 18}
             fontFamily="var(--mono)"
-            fontSize="10"
+            fontSize="14"
             fill="var(--accent)"
             letterSpacing="1.5"
             fontWeight="700"
@@ -141,7 +143,7 @@ export function WorldMap(props: RendererProps) {
         npcMode={props.npcMode}
       />
       <Exits exits={props.exits} />
-      <text x="14" y="298" fontFamily="var(--mono)" fontSize="9"
+      <text x="14" y="298" fontFamily="var(--mono)" fontSize="12"
         fill="var(--ink-4)" letterSpacing="1.5" fontStyle="italic"
         opacity="0.75">
         ✱ don&apos;t take the river road past sundown
@@ -205,12 +207,14 @@ export function LocalMap(props: RendererProps) {
                    : n.isDiscovered ? "var(--accent)" : "var(--ink-4)"}
             strokeWidth={n.isCurrent ? 1.2 : 0.7}
             strokeDasharray={n.isDiscovered || n.isCurrent ? undefined : "1.5 1.5"} />
-          <text y="20" textAnchor="middle" fontFamily="var(--mono)"
-            fontSize="11"
+          <text y="26" textAnchor="middle" fontFamily="var(--mono)"
+            fontSize="14"
             fill={n.isCurrent ? "var(--accent)"
                  : n.isDiscovered ? "var(--ink-1)" : "var(--ink-4)"}
             letterSpacing="1"
-            fontWeight={n.isCurrent ? 700 : 500}>
+            fontWeight={n.isCurrent ? 700 : 500}
+            textDecoration="none"
+            style={{ textDecoration: "none", textDecorationLine: "none" }}>
             {n.isDiscovered ? n.name.toUpperCase() : "▓▓▓▓"}
           </text>
           {props.npcMode && n.npcCount > 0 && (
@@ -224,8 +228,8 @@ export function LocalMap(props: RendererProps) {
 
       <Exits exits={props.exits} />
       {cur && (
-        <text x={cur.x} y={cur.y - 25} textAnchor="middle"
-          fontFamily="var(--mono)" fontSize="10" fill="var(--accent)"
+        <text x={cur.x} y={cur.y - 30} textAnchor="middle"
+          fontFamily="var(--mono)" fontSize="13" fill="var(--accent)"
           letterSpacing="2" fontWeight="700">
           ★ HERE ★
         </text>

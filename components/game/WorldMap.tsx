@@ -808,7 +808,12 @@ function buildWorldTier({
   const rumored    = candidates.length - knownCount;
   return {
     title:       wcd?.world_name ?? "World",
-    subtitle:    wcd?.world_tagline ?? `${knownCount} known · ${rumored} rumored`,
+    // FIX B3 — drop the world_tagline subtitle. It duplicated the
+    // world prose now rendered in the description panel below the
+    // map and crowded the title row at the top of the canvas.
+    // Show region counts instead so the player has at-a-glance
+    // discovery progress on the World tier.
+    subtitle:    `${knownCount} known · ${rumored} rumored`,
     nodes,
     connections,
     exits:       [],
@@ -1045,28 +1050,45 @@ function buildLocationInfo({
   locationAssets,
   masterState,
 }: InfoInputs): InfoPanel {
-  // Tier 1 — entire world overview
+  // Tier 1 — entire world overview.
+  // FIX B3 — pull world-level prose from `wcd.world_description` (the
+  // dedicated 2-3 sentence world summary); fall back to the legacy
+  // `wcd.atmosphere` for old saves generated before that field
+  // existed. Render the FULL paragraph here — no first-sentence
+  // extract — because the world panel is the only place this prose
+  // lives in the UI and players need the whole pitch.
   if (activeTier === 1) {
     const wcd = masterState.metadata.world_consistency;
+    const worldText = (
+      (wcd?.world_description && wcd.world_description.trim()) ||
+      (wcd?.atmosphere && wcd.atmosphere.trim()) ||
+      ""
+    );
     return {
       type:       wcd ? "WORLD" : "—",
       title:      wcd?.world_name ?? "Unknown",
-      atmosphere: wcd?.atmosphere ?? null,
+      atmosphere: worldText.length > 0 ? worldText : null,
       npcs:       [],
       landmarks:  [],  // FIX 5 — no EXAMINE buttons on world/region tiers
     };
   }
 
-  // Tier 2 — region overview
+  // Tier 2 — region overview.
+  // FIX B3 — region atmosphere is region-specific prose written by
+  // apply-world-bible / apply-regional-bible into the region zone's
+  // world_asset. The earlier fallback to `wcd.atmosphere` produced
+  // wrong results because it bled the world tier's prose down here;
+  // drop the WCD fallback so the region panel only ever shows
+  // region-level text.
   if (activeTier === 2 && selectedRegion) {
     const exits = countCrossRegionExits(selectedRegion, worldGraph);
+    const regionText = firstAtmosphere(selectedRegion, locationAssets) ?? "";
     return {
       type:       `REGION · ${exits} EXIT${exits === 1 ? "" : "S"}`,
       title:      selectedRegion.name,
-      atmosphere: extractFirstSentence(
-        firstAtmosphere(selectedRegion, locationAssets) ??
-        masterState.metadata.world_consistency?.atmosphere ?? ""
-      ),
+      atmosphere: regionText.trim().length > 0
+        ? extractFirstSentence(regionText)
+        : null,
       npcs:       [],
       landmarks:  [],  // FIX 5 — no EXAMINE buttons on world/region tiers
     };
@@ -1078,18 +1100,20 @@ function buildLocationInfo({
   // the panel would label the geographic zone with whatever
   // `category` happened to be on the node, which is misleading and
   // doesn't surface the cross-region exit count.
+  // FIX B3 — drop the WCD atmosphere fallback (same reason as the
+  // Tier 2 region branch above); show only region-specific prose.
   if (
     currentNode?.is_expandable === true &&
     currentNode.zone_id === currentNode.id
   ) {
     const exits = countCrossRegionExits(currentNode, worldGraph);
+    const regionText = firstAtmosphere(currentNode, locationAssets) ?? "";
     return {
       type:       `REGION · ${exits} EXIT${exits === 1 ? "" : "S"}`,
       title:      currentNode.name,
-      atmosphere: extractFirstSentence(
-        firstAtmosphere(currentNode, locationAssets) ??
-        masterState.metadata.world_consistency?.atmosphere ?? ""
-      ),
+      atmosphere: regionText.trim().length > 0
+        ? extractFirstSentence(regionText)
+        : null,
       npcs:       [],
       landmarks:  [],
     };
@@ -1174,7 +1198,15 @@ function firstAtmosphere(region: WorldNode, assets: WorldAsset[]): string | null
       a.category === AssetCategory.LOCATION &&
       (a.id === region.id || a.id === `location_${region.id}`)
   );
-  return asset?.constitution.atmosphere ?? null;
+  // FIX B3 — apply-world-bible / apply-regional-bible's regionZoneToAsset
+  // writes the region atmosphere into `physical_description`, not
+  // `atmosphere`. Read both so the region panel finds the prose
+  // regardless of which write path produced the asset.
+  return (
+    asset?.constitution.physical_description ??
+    asset?.constitution.atmosphere ??
+    null
+  );
 }
 
 // resolveLandmarks() helper removed — buildLocationInfo now reads

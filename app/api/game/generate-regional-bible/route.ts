@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { Genre } from "@/types/game";
 import type {
   RegionBible,
+  RegionExit,
   RegionOutline,
   WorldConsistencyDocument,
 } from "@/types/game";
@@ -256,7 +257,96 @@ array must be objects of shape {topic, content}. The topic is a
 3-5 word button label the player sees ("The cult below",
 "Roads east"); content is the full WCD-consistent sentence the
 NPC reveals on a passed stat check. Generate 1-2 entries per NPC.
-Do NOT emit plain strings — always {topic, content}.`;
+Do NOT emit plain strings — always {topic, content}.
+
+CRITICAL: Keep total response under 5000 tokens. Be concise.
+Atmosphere: max 2 sentences. NPC fields: 1 sentence each.
+Object descriptions: 1 short sentence. Do not elaborate beyond
+the template lengths shown above.`;
+}
+
+/**
+ * FIX 5 — minimal stub RegionBible returned when both Haiku attempts
+ * produce unparseable JSON. The stub passes validateBible (2 locations,
+ * 1 NPC, a settlement node) and includes a back-stitch exit so
+ * apply-regional-bible can wire the nav bar return card. The player
+ * can still enter the region; content is sparse but the game doesn't
+ * hard-wall on a 500.
+ */
+function buildStubBible(
+  outline:             RegionOutline,
+  originRegionId:      string,
+  originRegionName:    string,
+  directionFromOrigin: string,
+): RegionBible {
+  const hubId  = outline.id;
+  const subId  = `${outline.id}_inn`;
+  const npcId  = `character_${outline.id}_npc1`;
+  const opposite = OPPOSITE[directionFromOrigin.toLowerCase()] ?? "south";
+  return {
+    id:          outline.id,
+    name:        outline.name,
+    type:        outline.type,
+    grid_centre: outline.grid_centre,
+    grid_radius: 3,
+    atmosphere:  outline.atmosphere_hint,
+    locations: [
+      {
+        id:                 hubId,
+        name:               `${outline.name} Approach`,
+        type:               "settlement",
+        grid_position:      outline.grid_centre,
+        region_id:          outline.id,
+        is_settlement_node: true,
+        is_interior:        false,
+        atmosphere:         outline.atmosphere_hint,
+        connections:        [subId],
+        npc_ids:            [],
+        objects:            [],
+        ambient_type:       "town_square",
+      },
+      {
+        id:                 subId,
+        name:               "Traveler's Rest",
+        type:               "tavern",
+        grid_position:      { x: outline.grid_centre.x - 1, y: outline.grid_centre.y },
+        region_id:          outline.id,
+        is_settlement_node: false,
+        is_interior:        true,
+        parent_location_id: hubId,
+        atmosphere:         "A sparse waystation offering shelter to weary travelers.",
+        connections:        [hubId],
+        npc_ids:            [npcId],
+        objects:            [],
+        ambient_type:       "tavern_common_room",
+      },
+    ],
+    npcs: [
+      {
+        id:               npcId,
+        name:             "A Traveling Merchant",
+        home_location_id: subId,
+        role:             "traveler",
+        archetype:        "wanderer",
+        appearance:       "A road-worn figure with little to say.",
+        personality:      "Guarded and brief.",
+        speech_style:     "terse",
+        knowledge: [
+          { topic: "The road ahead", content: `The path from ${originRegionName} winds on through uncertain country.` },
+        ],
+        default_trust:    30,
+      },
+    ],
+    region_locations: [],
+    exits: [
+      {
+        direction:        opposite as RegionExit["direction"],
+        target_region_id: originRegionId,
+        from_location_id: hubId,
+        description:      `The track leads back toward ${originRegionName}.`,
+      },
+    ],
+  };
 }
 
 function stripJsonFences(raw: string): string {
@@ -304,17 +394,14 @@ async function callClaude(client: Anthropic, userPrompt: string): Promise<string
   // from a simpler prompt is acceptable; speed matters more here than for
   // WCD/WorldBible/narration.
   //
-  // FIX 1 — max_tokens bumped 2000 → 3500. With creative content
-  // (atmosphere prose, NPC personality/appearance/speech, object lore
-  // hints) the full skeleton was clipping at ~6957 chars (~1740 tokens
-  // of pure response, more after formatting). 2000 wasn't headroom
-  // enough for the haiku to close the JSON cleanly, so the parse
-  // failed, the retry re-truncated, and the route 500'd. 3500 covers
-  // the worst observed cases with margin to spare.
+  // FIX 5 — max_tokens bumped 3500 → 6000. Haiku was truncating the
+  // JSON at ~13 K chars when creative content filled all 3500 tokens.
+  // 6000 gives enough headroom for the full skeleton plus atmospheric
+  // prose while keeping Haiku's sub-second latency advantage over Sonnet.
   console.log("[RegionBible] Using haiku model");
   const message = await client.messages.create({
     model:      "claude-haiku-4-5-20251001",
-    max_tokens: 3500,
+    max_tokens: 6000,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });
@@ -375,17 +462,29 @@ export async function POST(request: NextRequest) {
         parsed = JSON.parse(stripJsonFences(retryRaw));
       } catch (retryErr) {
         const retryParseErr = retryErr instanceof Error ? retryErr.message : "JSON parse failed (retry)";
-        // FIX 1 — surface the actual parse errors in the server log so the
-        // next time max_tokens / prompt drift causes a 500, we can see
-        // exactly what was wrong instead of a generic client-side message.
+        // FIX 5 — surface parse errors in logs for diagnostics, then
+        // return a minimal stub RegionBible (200) instead of 500. The
+        // player can still enter the region; content is sparse but the
+        // game doesn't hard-wall. A warning tag lets us grep for stub
+        // incidents to investigate the truncation root cause later.
         console.error("[RegionBible] JSON parse failed after retry.", {
-          first: parseError,
-          retry: retryParseErr,
+          first:        parseError,
+          retry:        retryParseErr,
+          regionId:     outline?.id,
+          regionName:   outline?.name,
         });
-        return NextResponse.json(
-          { error: "Failed to parse RegionBible JSON after retry", first: parseError, retry: retryParseErr },
-          { status: 500 }
+        const originRegionId = (origin_region_name ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "_");
+        const stubBible = buildStubBible(
+          outline!,
+          originRegionId,
+          origin_region_name ?? "the origin region",
+          direction_from_origin ?? "south"
         );
+        console.warn(
+          `[RegionBible] Returning stub fallback for ${outline?.name} (${outline?.id}). ` +
+          "Full content will be unavailable until the region is re-generated."
+        );
+        return NextResponse.json({ bible: stubBible, stub: true });
       }
     }
   } catch (err) {

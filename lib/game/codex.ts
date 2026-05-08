@@ -308,7 +308,14 @@ export async function saveCodexEntry(
  */
 export async function getWorldAssetsForLocation(
   sessionId: string,
-  locationId: string
+  locationId: string,
+  /** FIX 1 — optional parent region zone id. When the player is at a
+   *  settlement hub or sub-location the region zone asset
+   *  (first_seen_location = regionId) is normally filtered out.
+   *  Passing the root zone id here widens the filter so the region
+   *  zone asset lands in locationAssets and the Region map panel can
+   *  show its atmosphere prose. */
+  parentRegionId?: string
 ): Promise<WorldAsset[]> {
   console.log("[getWorldAssetsForLocation] querying for:", sessionId, locationId);
   try {
@@ -332,6 +339,13 @@ export async function getWorldAssetsForLocation(
       ? locationId.slice(4)            // "the_lowered_gaze" → "lowered_gaze"
       : `the_${locationId}`;           // "lowered_gaze"     → "the_lowered_gaze"
 
+    // FIX 1 — alt form of the parent region id (article stripping parity).
+    const altParentRegionId = parentRegionId
+      ? (parentRegionId.startsWith("the_")
+          ? parentRegionId.slice(4)
+          : `the_${parentRegionId}`)
+      : undefined;
+
     // Audit Issue U fix: CHARACTER pass-through is scoped to the same
     // session_id (every row already shares the session id thanks to the
     // outer .eq, but we keep the predicate explicit for clarity).
@@ -341,6 +355,13 @@ export async function getWorldAssetsForLocation(
         if (!r.first_seen_location)     return false;
         if (r.first_seen_location === locationId)    return true;
         if (r.first_seen_location === altLocationId) return true;
+        // FIX 1 — also include assets whose first_seen_location is the
+        // parent region zone id (e.g. "the_rustveil_commons"). This pulls
+        // the geographic region zone's location asset into locationAssets
+        // even when the player is at a settlement hub or sub-location,
+        // so WorldMap's Region tier panel can display the region prose.
+        if (parentRegionId    && r.first_seen_location === parentRegionId)    return true;
+        if (altParentRegionId && r.first_seen_location === altParentRegionId) return true;
         const normalized = normalizeLocationId(r.first_seen_location);
         return normalized === locationId || normalized === altLocationId;
       })

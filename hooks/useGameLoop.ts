@@ -1308,9 +1308,26 @@ export function useGameLoop() {
           ? updatedState.world_state.current_location_id ?? null
           : null;
       if (arrivingAt) {
+        // FIX 1 — compute parent region zone id so the region zone asset
+        // is included even when landing on a hub or sub-location.
+        const _wg5 = updatedState.world_graph;
+        const _parentReg5 = (() => {
+          if (!_wg5) return undefined;
+          let cur = _wg5.nodes[arrivingAt];
+          const vis = new Set<string>();
+          while (cur && !vis.has(cur.id)) {
+            vis.add(cur.id);
+            if (!cur.zone_id || cur.zone_id === cur.id) {
+              return cur.id !== arrivingAt ? cur.id : undefined;
+            }
+            cur = _wg5.nodes[cur.zone_id];
+          }
+          return undefined;
+        })();
         const arrivedAssets = await getWorldAssetsForLocation(
           updatedState.metadata.session_id,
-          arrivingAt
+          arrivingAt,
+          _parentReg5
         );
         if (arrivedAssets.length > 0) {
           useGameStore.getState().setLocationAssets(arrivedAssets);
@@ -2138,7 +2155,23 @@ export function useGameLoop() {
       if (arrivedAt) {
         // Refresh the live cache so subsequent narrator beats see the
         // full Tier 1 / NPC roster.
-        void getWorldAssetsForLocation(sessionId, arrivedAt).then((assets) => {
+        // FIX 1 — also pass parent region zone id so region zone asset
+        // is included when landing on a hub or sub-location.
+        const _wg7c = updatedState.world_graph;
+        const _parentReg7c = (() => {
+          if (!_wg7c) return undefined;
+          let cur = _wg7c.nodes[arrivedAt];
+          const vis = new Set<string>();
+          while (cur && !vis.has(cur.id)) {
+            vis.add(cur.id);
+            if (!cur.zone_id || cur.zone_id === cur.id) {
+              return cur.id !== arrivedAt ? cur.id : undefined;
+            }
+            cur = _wg7c.nodes[cur.zone_id];
+          }
+          return undefined;
+        })();
+        void getWorldAssetsForLocation(sessionId, arrivedAt, _parentReg7c).then((assets) => {
           useGameStore.getState().setLocationAssets(assets);
         });
 

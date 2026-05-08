@@ -507,8 +507,29 @@ export async function POST(request: NextRequest) {
   // (legacy single-tier shape) — the settlement node already lives at
   // that id and creating a second zone would orphan it.
   const isSameAsSettlement = bibleNarrowed.id === startingNodeId;
+
+  // FIX 4 — resolve the origin's geographic region zone id so it can be
+  // wired into the new region zone's connections. NavigationBar's D2
+  // branch reads current.connections for expanded (non-starting) regions
+  // to find peer region zones; without this the player has no nav-bar
+  // card to travel back to the region they came from.
+  const originRegionZoneId = (() => {
+    let cur = mergedNodes[originNodeId];
+    const vis = new Set<string>();
+    while (cur && !vis.has(cur.id)) {
+      vis.add(cur.id);
+      if (!cur.zone_id || cur.zone_id === cur.id) return cur.id;
+      cur = mergedNodes[cur.zone_id];
+    }
+    return originNodeId;
+  })();
+
   if (!isSameAsSettlement && !mergedNodes[bibleNarrowed.id]) {
+    // FIX 4 — include the origin region zone so the player can nav back.
     const regionConnections: string[] = [startingNodeId];
+    if (originRegionZoneId && originRegionZoneId !== bibleNarrowed.id) {
+      regionConnections.push(originRegionZoneId);
+    }
     for (const r of regionLocations) {
       if (!regionConnections.includes(r.id)) regionConnections.push(r.id);
     }
@@ -693,6 +714,12 @@ export async function POST(request: NextRequest) {
     );
     if (!filteredConnections.includes(startingNodeId)) {
       filteredConnections.push(startingNodeId);
+    }
+    // FIX 4 — also wire origin region zone → new region zone so
+    // NavigationBar's D2 connections path works bidirectionally when
+    // the origin region is itself an expanded (non-starting) region.
+    if (!isSameAsSettlement && !filteredConnections.includes(bibleNarrowed.id)) {
+      filteredConnections.push(bibleNarrowed.id);
     }
     mergedNodes[originNodeId] = {
       ...originNode,

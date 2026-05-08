@@ -336,36 +336,64 @@ function buildCards(
       });
     }
 
-    // D2 — adjacent regions from the WorldBible. FIX 3 — list ALL
-    // adjacent regions regardless of expansion state or current
-    // graph connection state. The previous version filtered on
-    // current.connections, which dropped a region as soon as
-    // apply-regional-bible's step 6 stripped the placeholder link
-    // — so already-expanded regions silently disappeared from the
-    // nav bar after one trip. Now:
-    //   - Already-expanded regions render as ◆ peer-known cards
-    //     (the graph node exists and is discovered).
-    //   - Never-expanded regions render as ◇ peer-unknown cards
-    //     (still trigger RegionBible expansion via navigateTo).
+    // D2 — adjacent regions.
+    //
+    // For the STARTING REGION: use WorldBible.adjacent_regions — the
+    // authoritative list generated at WorldBible time, which remains
+    // stable even after individual regions are expanded.
+    //
+    // For EXPANDED (non-starting) REGIONS: use the current region zone's
+    // graph connections. apply-regional-bible FIX 4 now writes the origin
+    // region zone id into the new region zone's connections, so we can
+    // discover peer regions by scanning connections for is_expandable nodes.
+    //
     // Self-skip prevents the current region from listing itself.
     const wb           = masterState?.metadata.world_bible;
     const knownPeerIds = new Set(peerCards.map((c) => c.targetId));
     const seen         = new Set<string>();
-    for (const r of wb?.adjacent_regions ?? []) {
-      if (r.id === current.id) continue;
-      if (knownPeerIds.has(r.id)) continue;
-      if (seen.has(r.id)) continue;
-      seen.add(r.id);
-      const graphNode = worldGraph.nodes[r.id];
-      const isExpanded = !!graphNode && graphNode.discovered === true;
-      peerCards.push({
-        key:        isExpanded ? `peer-known-${r.id}` : `peer-unknown-${r.id}`,
-        kind:       isExpanded ? "peer-known" : "peer-unknown",
-        targetId:   r.id,
-        name:       r.name.toUpperCase(),
-        sublabel:   isExpanded ? "REGION" : "UNDISCOVERED REGION",
-        discovered: isExpanded,
-      });
+
+    const isStartingRegion = !!wb && wb.starting_region.id === current.id;
+
+    if (isStartingRegion) {
+      // Starting region — trust the WorldBible adjacent_regions list.
+      for (const r of wb?.adjacent_regions ?? []) {
+        if (r.id === current.id) continue;
+        if (knownPeerIds.has(r.id)) continue;
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        const graphNode  = worldGraph.nodes[r.id];
+        const isExpanded = !!graphNode && graphNode.discovered === true;
+        peerCards.push({
+          key:        isExpanded ? `peer-known-${r.id}` : `peer-unknown-${r.id}`,
+          kind:       isExpanded ? "peer-known" : "peer-unknown",
+          targetId:   r.id,
+          name:       r.name.toUpperCase(),
+          sublabel:   isExpanded ? "REGION" : "UNDISCOVERED REGION",
+          discovered: isExpanded,
+        });
+      }
+    } else {
+      // Expanded region — scan graph connections for adjacent region zones.
+      // A region zone is: type=zone, is_expandable=true, zone_id=self.
+      for (const connId of current.connections) {
+        const connNode = worldGraph.nodes[connId];
+        if (!connNode) continue;
+        if (connNode.is_expandable !== true) continue;
+        if (connNode.zone_id !== connNode.id)  continue; // must be self-zoned
+        if (connNode.id === current.id)         continue; // not self
+        if (knownPeerIds.has(connNode.id))      continue;
+        if (seen.has(connNode.id))              continue;
+        seen.add(connNode.id);
+        const isExpanded = connNode.discovered === true;
+        peerCards.push({
+          key:        isExpanded ? `peer-known-${connNode.id}` : `peer-unknown-${connNode.id}`,
+          kind:       isExpanded ? "peer-known" : "peer-unknown",
+          targetId:   connNode.id,
+          name:       connNode.name.toUpperCase(),
+          sublabel:   isExpanded ? "REGION" : "UNDISCOVERED REGION",
+          discovered: isExpanded,
+        });
+      }
     }
   }
 

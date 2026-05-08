@@ -1239,12 +1239,17 @@ function countCrossRegionExits(region: WorldNode, worldGraph: WorldGraph): numbe
 function chooseInitialTier(player: WorldNode | undefined): Tier {
   if (!player) return 2;
   if (player.type === "sub_location") return 3;
-  // Bug 6 — geographic region zone has no LOCAL view (it IS the region).
-  // Open the panel on Tier 2 so the player sees the region landmarks
-  // they can step into, instead of an empty/redirected Tier 3.
+  // Geographic region zone has no LOCAL view (it IS the region).
+  // Open on Region so the player sees the landmarks they can step into.
   if (player.is_expandable && player.zone_id === player.id) return 2;
   if (player.is_expandable) return 3;
-  return 2;
+  // FIX 2 — default to LOCAL (3) on mount. Players start at a settlement
+  // hub where Local shows the most actionable info (nearby sub-locations,
+  // NPCs, landmarks). Region/World are wider-scope views the player opts
+  // into manually. The useEffect that snaps selectedRegionId on region
+  // changes preserves any manual tier choice the player has made
+  // (setActiveTier((cur) => (cur === 3 ? 3 : cur))).
+  return 3;
 }
 
 function findRootZoneId(

@@ -70,7 +70,7 @@
     --hl-loc:      #7dd3fc;  /* locations — settlements, hubs, sub-locations (Tier 3) */
     --hl-region:   #c4b5fd;  /* region-tier locations (Tier 2 nav targets) */
     --hl-item:     #e8c547;  /* items — golden yellow, distinct from amber accent */
-    --hl-landmark: #c4b5fd;  /* landmarks (WCD-known places) — shares region's lavender */
+    --hl-landmark: #94d8b8;  /* landmarks (WCD-known places) — soft mint, distinct from region lavender */
     --hl-said:     #e8d5b0;  /* NPC quoted speech — warm cream */
     --hl-pass:     #a3e635;
     --hl-fail:     #f87171;

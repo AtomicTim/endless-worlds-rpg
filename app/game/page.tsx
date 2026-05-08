@@ -171,9 +171,29 @@ export default function GamePage() {
       // first_seen_location values don't match current_location_id after
       // a fresh apply-world-bible), pull every asset for the session so
       // the narrator and Tier 1 highlight system have something to read.
+      // FIX 1 — compute parent region zone id so the region zone asset
+      // (first_seen_location = regionId) is included alongside hub /
+      // sub-location assets on initial load. Walk the zone_id chain
+      // from the current node up to its root geographic-region zone.
+      const _initWg = state.world_graph;
+      const _initLocId = state.world_state.current_location_id;
+      const _initParentRegionId = (() => {
+        if (!_initWg) return undefined;
+        let cur = _initWg.nodes[_initLocId];
+        const vis = new Set<string>();
+        while (cur && !vis.has(cur.id)) {
+          vis.add(cur.id);
+          if (!cur.zone_id || cur.zone_id === cur.id) {
+            return cur.id !== _initLocId ? cur.id : undefined;
+          }
+          cur = _initWg.nodes[cur.zone_id];
+        }
+        return undefined;
+      })();
       void getWorldAssetsForLocation(
         state.metadata.session_id,
-        state.world_state.current_location_id
+        state.world_state.current_location_id,
+        _initParentRegionId
       ).then(async (assets) => {
         if (assets.length === 0) {
           const allAssets = await getAllWorldAssets(state.metadata.session_id);

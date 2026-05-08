@@ -2947,8 +2947,17 @@ export function useGameLoop() {
 
     // FIX 7 — log when navigating to an undiscovered adjacent region so
     // we can verify RegionBible expansion fires in the game loop (step 4d).
+    //
+    // FIX 3 — only treat as "undiscovered" when the destination genuinely
+    // needs RegionBible expansion. The previous predicate fired on any
+    // entry in world_bible.adjacent_regions, which meant the
+    // "Venturing into unknown territory..." system message and the
+    // generation lock kicked in EVERY time the player re-visited an
+    // already-expanded region. Now require either no graph node OR an
+    // expandable-but-undiscovered placeholder.
     const isUndiscoveredRegion =
-      !!adjacentOutline || (node?.is_expandable === true && !node?.discovered);
+      (!!adjacentOutline && !node) ||
+      (node?.is_expandable === true && !node?.discovered);
     if (isUndiscoveredRegion) {
       console.log(
         "[navigateTo] adjacent region detected:", nodeId,

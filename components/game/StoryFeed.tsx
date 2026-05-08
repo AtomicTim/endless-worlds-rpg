@@ -11,6 +11,7 @@ import {
   NPCSpeech,
   SceneDivider,
   LocationSpan,
+  RegionSpan,
   NpcSpan,
   ItemSpan,
   LandmarkSpan,
@@ -424,10 +425,17 @@ function spanForType(
   text:        string,
   onClick:     (e: React.MouseEvent) => void,
   onKeyDown:   (e: React.KeyboardEvent) => void,
-  key:         string
+  key:         string,
+  /** FIX 1 — when true, the highlight resolves to a region-tier node
+   *  (e.g. "The Drift Barrens") and renders through RegionSpan with
+   *  the lavender hl-region token instead of the sky-blue hl-loc. */
+  isRegion:    boolean
 ): React.ReactNode {
-  const props = {
-    key,
+  // FIX 4 — separate `key` from the rest of props. Spreading an object
+  // that contains `key` into JSX is a React warning ("React keys must
+  // be passed directly to JSX without using spread"); pass it on its
+  // own attribute and spread only the remaining props.
+  const rest = {
     role:       "button" as const,
     tabIndex:   0,
     onClick,
@@ -435,13 +443,15 @@ function spanForType(
     style:      { cursor: "pointer" } as React.CSSProperties,
   };
   switch (type) {
-    case "LOCATION": return <LocationSpan {...props}>{text}</LocationSpan>;
-    case "NPC":      return <NpcSpan      {...props}>{text}</NpcSpan>;
-    case "LANDMARK": return <LandmarkSpan {...props}>{text}</LandmarkSpan>;
+    case "LOCATION": return isRegion
+      ? <RegionSpan   key={key} {...rest}>{text}</RegionSpan>
+      : <LocationSpan key={key} {...rest}>{text}</LocationSpan>;
+    case "NPC":      return <NpcSpan      key={key} {...rest}>{text}</NpcSpan>;
+    case "LANDMARK": return <LandmarkSpan key={key} {...rest}>{text}</LandmarkSpan>;
     case "ITEM":
     case "CONTAINER":
     case "HAZARD":
-    default:         return <ItemSpan     {...props}>{text}</ItemSpan>;
+    default:         return <ItemSpan     key={key} {...rest}>{text}</ItemSpan>;
   }
 }
 
@@ -495,7 +505,8 @@ function renderNarrativeText(
         text.slice(m.start, m.end),
         handleClick,
         handleKeyDown,
-        `poi-${i}-${m.start}`
+        `poi-${i}-${m.start}`,
+        m.isRegion === true
       )
     );
 

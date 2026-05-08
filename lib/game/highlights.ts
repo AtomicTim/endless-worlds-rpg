@@ -31,6 +31,12 @@ export interface HighlightCandidate {
    *  uses this id to call useGameLoop.navigateTo directly, bypassing
    *  text parsing and the popover. */
   nodeId?:     string;
+  /** FIX 1 — true when this LOCATION candidate is a region-tier node
+   *  (geographic region zone). Drives StoryFeed's spanForType to use
+   *  RegionSpan (lavender hl-region) instead of LocationSpan (sky
+   *  blue hl-loc) so the player can tell wider areas from settlement
+   *  / sub-location names at a glance. */
+  isRegion?:   boolean;
 }
 
 /**
@@ -83,22 +89,76 @@ export function buildExactHighlights(
   }
 
   // ── Connected LOCATION highlights ──────────────────────────────────────────
+  // FIX 1 — flag region-tier nodes (`is_expandable && zone_id === id`)
+  // so StoryFeed renders them through RegionSpan (lavender hl-region)
+  // instead of LocationSpan (sky-blue hl-loc). The classifier mirrors
+  // the same predicate used by NavigationBar's isAtRegionZone branch
+  // so the two surfaces stay consistent on what counts as "region".
+  const isRegionNode = (n: { type: string; is_expandable?: boolean; zone_id: string; id: string }): boolean =>
+    n.type === "zone" && n.is_expandable === true && n.zone_id === n.id;
+
   if (currentNode && graph) {
+    const seenIds = new Set<string>();
     for (const connId of currentNode.connections) {
       const node = graph.nodes[connId];
       if (!node) continue;
+      seenIds.add(node.id);
       out.push({
         label:       node.name,
         type:        "LOCATION",
         description:
           node.type === "sub_location"
             ? "A connected sub-location."
-            : "A connected location.",
+            : isRegionNode(node)
+              ? "A connected region."
+              : "A connected location.",
         // Navigation redesign — store the canonical node id so a click
         // on a LOCATION highlight can route through navigateTo without
         // parsing the display name back into a slug.
         nodeId:      node.id,
+        isRegion:    isRegionNode(node),
       });
+    }
+
+    // FIX 1 — also include EVERY region-zone node in the graph as a
+    // LOCATION highlight candidate, even those not directly connected
+    // to the player's current node. Region names appear in narrator
+    // prose throughout the session ("travel north toward The Drift
+    // Barrens"); without this, those mentions stayed plain text after
+    // the player moved away from the region zone. Click handler still
+    // routes through navigateTo, which resolves discovered regions
+    // via GRAPH_NAVIGATE and falls through to RegionBible expansion
+    // for the rest.
+    for (const node of Object.values(graph.nodes)) {
+      if (seenIds.has(node.id)) continue;
+      if (!isRegionNode(node)) continue;
+      seenIds.add(node.id);
+      out.push({
+        label:       node.name,
+        type:        "LOCATION",
+        description: "A region in this world.",
+        nodeId:      node.id,
+        isRegion:    true,
+      });
+    }
+
+    // FIX 1 — and the WorldBible's adjacent_regions, so even
+    // never-expanded regions highlight when the narrator names them.
+    // Click triggers RegionBible expansion through navigateTo's
+    // existing isUndiscoveredRegion branch.
+    const wb = state.metadata.world_bible;
+    if (wb?.adjacent_regions) {
+      for (const r of wb.adjacent_regions) {
+        if (seenIds.has(r.id)) continue;
+        seenIds.add(r.id);
+        out.push({
+          label:       r.name,
+          type:        "LOCATION",
+          description: "An adjacent region — not yet visited.",
+          nodeId:      r.id,
+          isRegion:    true,
+        });
+      }
     }
   }
 
@@ -151,6 +211,10 @@ export interface HighlightMatch {
    *  handler in StoryFeed can route directly via navigateTo(nodeId)
    *  without round-tripping through text parsing. */
   nodeId?: string;
+  /** FIX 1 — propagated from HighlightCandidate; signals StoryFeed
+   *  to render this match through RegionSpan (lavender) rather than
+   *  LocationSpan (sky-blue). */
+  isRegion?: boolean;
 }
 
 /**
@@ -176,6 +240,7 @@ export function findExactHighlights(
       end:   idx + needle.length,
       point: { label: c.label, type: c.type, description: c.description },
       ...(c.nodeId ? { nodeId: c.nodeId } : {}),
+      ...(c.isRegion ? { isRegion: true } : {}),
     });
   }
 

@@ -315,10 +315,11 @@ function buildCards(
     });
   }
 
-  // ── TYPE D — peer (region_locations + adjacent undiscovered) ─────────────
+  // ── TYPE D — peer (region_locations + adjacent regions) ─────────────────
   const peerCards: Card[] = [];
   if (isAtRegionZone) {
-    // D1 — known region_locations under this region.
+    // D1 — known region_locations under this region (dungeons,
+    // wilderness, shrines).
     for (const node of Object.values(worldGraph.nodes)) {
       if (node.id === current.id) continue;
       if (node.zone_id !== current.id) continue;
@@ -335,24 +336,35 @@ function buildCards(
       });
     }
 
-    // D2 — adjacent undiscovered regions, filtered to direct connections
-    // of this region zone. Pull from world_bible.adjacent_regions.
+    // D2 — adjacent regions from the WorldBible. FIX 3 — list ALL
+    // adjacent regions regardless of expansion state or current
+    // graph connection state. The previous version filtered on
+    // current.connections, which dropped a region as soon as
+    // apply-regional-bible's step 6 stripped the placeholder link
+    // — so already-expanded regions silently disappeared from the
+    // nav bar after one trip. Now:
+    //   - Already-expanded regions render as ◆ peer-known cards
+    //     (the graph node exists and is discovered).
+    //   - Never-expanded regions render as ◇ peer-unknown cards
+    //     (still trigger RegionBible expansion via navigateTo).
+    // Self-skip prevents the current region from listing itself.
     const wb           = masterState?.metadata.world_bible;
-    const adjRegionIds = new Set<string>(current.connections);
     const knownPeerIds = new Set(peerCards.map((c) => c.targetId));
     const seen         = new Set<string>();
     for (const r of wb?.adjacent_regions ?? []) {
-      if (!adjRegionIds.has(r.id)) continue;
+      if (r.id === current.id) continue;
       if (knownPeerIds.has(r.id)) continue;
       if (seen.has(r.id)) continue;
       seen.add(r.id);
+      const graphNode = worldGraph.nodes[r.id];
+      const isExpanded = !!graphNode && graphNode.discovered === true;
       peerCards.push({
-        key:        `peer-unknown-${r.id}`,
-        kind:       "peer-unknown",
+        key:        isExpanded ? `peer-known-${r.id}` : `peer-unknown-${r.id}`,
+        kind:       isExpanded ? "peer-known" : "peer-unknown",
         targetId:   r.id,
         name:       r.name.toUpperCase(),
-        sublabel:   "UNDISCOVERED REGION",
-        discovered: false,
+        sublabel:   isExpanded ? "REGION" : "UNDISCOVERED REGION",
+        discovered: isExpanded,
       });
     }
   }

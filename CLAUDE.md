@@ -272,12 +272,14 @@ Verbosity: terse | standard | rich
 
 ## Story Feed Colors ✅
 ```
-Narrator prose:      var(--ink-1)
-NPC quoted speech:   #e8d5b0 warm cream, italic
-Player actions:      #7ab8c8 teal-blue, 12px mono italic
-Item highlights:     #e8c547 yellow
-Location highlights: #7dd3fc sky blue (underline intentional, retained)
-NPC highlights:      var(--accent) orange (too similar to item yellow — future fix)
+Narrator prose:        var(--ink-1)
+NPC quoted speech:     #e8d5b0 warm cream, italic, weight 600 (--hl-said)
+Player actions:        #7ab8c8 teal-blue, 12px mono italic
+Item highlights:       #e8c547 yellow (--hl-item)
+Region highlights:     #c4b5fd lavender (--hl-region)  — Tier 2 / region zones
+Location highlights:   #7dd3fc sky blue (--hl-loc)     — Tier 3 settlements/sub-locations
+Landmark highlights:   #c4b5fd lavender (--hl-landmark) — WCD-known landmarks
+NPC highlights:        var(--accent) orange (too similar to item yellow — future fix)
 ```
 
 ---

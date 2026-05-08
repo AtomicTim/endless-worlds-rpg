@@ -125,6 +125,16 @@ interface SpanProps extends React.HTMLAttributes<HTMLSpanElement> {
 export function LocationSpan({ children, ...rest }: SpanProps) {
   return <span {...rest} className="ew-link-loc" data-said-skip>{children}</span>;
 }
+/**
+ * FIX 1 — region-tier locations (e.g. "The Drift Barrens") render
+ * through their own span class so the player can tell at a glance
+ * whether a highlighted name is a Tier 2 region or a Tier 3
+ * settlement / sub-location. Lavender (--hl-region) reads as
+ * "wider area"; sky-blue (--hl-loc) reads as "specific place".
+ */
+export function RegionSpan({ children, ...rest }: SpanProps) {
+  return <span {...rest} className="ew-link-region" data-said-skip>{children}</span>;
+}
 export function NpcSpan({ children, ...rest }: SpanProps) {
   return <span {...rest} className="ew-link-npc" data-said-skip>{children}</span>;
 }

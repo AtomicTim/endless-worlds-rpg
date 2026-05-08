@@ -67,9 +67,11 @@
     --ink-5: #4a4339; /* hairline */
 
     /* Highlight roles */
-    --hl-loc:      #7dd3fc;  /* locations */
+    --hl-loc:      #7dd3fc;  /* locations — settlements, hubs, sub-locations (Tier 3) */
+    --hl-region:   #c4b5fd;  /* region-tier locations (Tier 2 nav targets) */
     --hl-item:     #e8c547;  /* items — golden yellow, distinct from amber accent */
-    --hl-landmark: #c4b5fd;  /* landmarks */
+    --hl-landmark: #c4b5fd;  /* landmarks (WCD-known places) — shares region's lavender */
+    --hl-said:     #e8d5b0;  /* NPC quoted speech — warm cream */
     --hl-pass:     #a3e635;
     --hl-fail:     #f87171;
 
@@ -209,16 +211,19 @@
 
 /* Inline highlight roles */
 .ew-link-loc      { color: var(--hl-loc);      border-bottom: 1px dashed color-mix(in oklab, var(--hl-loc) 60%, transparent);      cursor: pointer; }
+.ew-link-region   { color: var(--hl-region);   border-bottom: 1px dashed color-mix(in oklab, var(--hl-region) 60%, transparent);   cursor: pointer; }
 .ew-link-npc      { color: var(--accent);      border-bottom: 1px solid var(--accent-soft);                                       cursor: pointer; }
 .ew-link-item     { color: var(--hl-item);     border-bottom: 1px dashed color-mix(in oklab, var(--hl-item) 60%, transparent);     cursor: pointer; }
 .ew-link-landmark { color: var(--hl-landmark); border-bottom: 1px dashed color-mix(in oklab, var(--hl-landmark) 60%, transparent); cursor: pointer; }
 
-/* Direct character speech inside narrative paragraphs (Fix 4 — warm
-   cream + italic so quoted NPC dialogue reads distinct from narration). */
+/* Direct character speech inside narrative paragraphs — warm cream,
+   italic, slightly heavier so quoted NPC dialogue reads clearly
+   distinct from the surrounding ink-2 narrator prose. The CLAUDE.md
+   "Story Feed Colors" section documents this token. */
 .ew-said {
-  color: var(--hl-said, #e8d5b0);
+  color: var(--hl-said);
   font-style: italic;
-  font-weight: 500;
+  font-weight: 600;
 }
 [data-genre="cyber"] .ew-said,
 [data-genre="space"] .ew-said,

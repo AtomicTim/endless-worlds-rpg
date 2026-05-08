@@ -54,17 +54,16 @@ function Connections({ connections }: Pick<RendererProps, "connections">) {
 }
 
 function Nodes({
-  nodes, onSelectNode, npcMode,
-}: Pick<RendererProps, "nodes" | "onSelectNode" | "npcMode">) {
+  nodes, npcMode,
+}: Pick<RendererProps, "nodes" | "npcMode">) {
   return (
     <>
       {nodes.map((n) => (
         <g
           key={n.id}
           transform={`translate(${n.x} ${n.y})`}
-          onClick={onSelectNode ? () => onSelectNode(n.id) : undefined}
-          style={onSelectNode ? { cursor: "pointer" } : undefined}
         >
+          <title>{n.name}</title>
           {n.isCurrent && (
             <>
               <rect x="-7" y="-7" width="14" height="14" fill="none"
@@ -112,17 +111,13 @@ function Nodes({
 }
 
 function Exits({
-  exits, onSelectExit,
-}: Pick<RendererProps, "exits" | "onSelectExit">) {
+  exits,
+}: Pick<RendererProps, "exits">) {
   if (!exits || exits.length === 0) return null;
   return (
     <>
       {exits.map((e, i) => (
-        <g
-          key={`${e.targetId}-${i}`}
-          onClick={onSelectExit ? () => onSelectExit(e.targetId) : undefined}
-          style={onSelectExit ? { cursor: "pointer" } : undefined}
-        >
+        <g key={`${e.targetId}-${i}`}>
           <text
             x={e.fromX + 12}
             y={e.fromY + i * 10}
@@ -153,10 +148,9 @@ export function WorldMap(props: RendererProps) {
       <Connections connections={props.connections} />
       <Nodes
         nodes={props.nodes}
-        onSelectNode={props.onSelectNode}
         npcMode={props.npcMode}
       />
-      <Exits exits={props.exits} onSelectExit={props.onSelectExit} />
+      <Exits exits={props.exits} />
     </InkBacking>
   );
 }
@@ -172,10 +166,9 @@ export function RegionMap(props: RendererProps) {
       <Connections connections={props.connections} />
       <Nodes
         nodes={props.nodes}
-        onSelectNode={props.onSelectNode}
         npcMode={props.npcMode}
       />
-      <Exits exits={props.exits} onSelectExit={props.onSelectExit} />
+      <Exits exits={props.exits} />
     </InkBacking>
   );
 }
@@ -193,10 +186,9 @@ export function LocalMap(props: RendererProps) {
       <Connections connections={props.connections} />
       <Nodes
         nodes={props.nodes}
-        onSelectNode={props.onSelectNode}
         npcMode={props.npcMode}
       />
-      <Exits exits={props.exits} onSelectExit={props.onSelectExit} />
+      <Exits exits={props.exits} />
     </InkBacking>
   );
 }

@@ -45,8 +45,8 @@ function Connections({ connections }: Pick<RendererProps, "connections">) {
 }
 
 function Nodes({
-  nodes, onSelectNode, npcMode,
-}: Pick<RendererProps, "nodes" | "onSelectNode" | "npcMode">) {
+  nodes, npcMode,
+}: Pick<RendererProps, "nodes" | "npcMode">) {
   return (
     <>
       {nodes.map((n) => {
@@ -57,9 +57,8 @@ function Nodes({
           <g
             key={n.id}
             transform={`translate(${n.x} ${n.y})`}
-            onClick={onSelectNode ? () => onSelectNode(n.id) : undefined}
-            style={onSelectNode ? { cursor: "pointer" } : undefined}
           >
+            <title>{n.name}</title>
             {n.isCurrent && (
               <circle r="8" fill="none" stroke="var(--accent)"
                 strokeWidth="0.8"
@@ -102,17 +101,13 @@ function Nodes({
 }
 
 function Exits({
-  exits, onSelectExit,
-}: Pick<RendererProps, "exits" | "onSelectExit">) {
+  exits,
+}: Pick<RendererProps, "exits">) {
   if (!exits || exits.length === 0) return null;
   return (
     <>
       {exits.map((e, i) => (
-        <g
-          key={`${e.targetId}-${i}`}
-          onClick={onSelectExit ? () => onSelectExit(e.targetId) : undefined}
-          style={onSelectExit ? { cursor: "pointer" } : undefined}
-        >
+        <g key={`${e.targetId}-${i}`}>
           <text
             x={e.fromX + 12}
             y={e.fromY + i * 10}
@@ -143,10 +138,9 @@ export function WorldMap(props: RendererProps) {
       )}
       <Nodes
         nodes={props.nodes}
-        onSelectNode={props.onSelectNode}
         npcMode={props.npcMode}
       />
-      <Exits exits={props.exits} onSelectExit={props.onSelectExit} />
+      <Exits exits={props.exits} />
       <text x="14" y="298" fontFamily="var(--mono)" fontSize="6.5"
         fill="var(--ink-4)" letterSpacing="1.5" fontStyle="italic"
         opacity="0.75">
@@ -167,10 +161,9 @@ export function RegionMap(props: RendererProps) {
       )}
       <Nodes
         nodes={props.nodes}
-        onSelectNode={props.onSelectNode}
         npcMode={props.npcMode}
       />
-      <Exits exits={props.exits} onSelectExit={props.onSelectExit} />
+      <Exits exits={props.exits} />
     </SalvageBacking>
   );
 }
@@ -199,9 +192,8 @@ export function LocalMap(props: RendererProps) {
         <g
           key={n.id}
           transform={`translate(${n.x} ${n.y})`}
-          onClick={props.onSelectNode ? () => props.onSelectNode!(n.id) : undefined}
-          style={props.onSelectNode ? { cursor: "pointer" } : undefined}
         >
+          <title>{n.name}</title>
           {n.isCurrent && (
             <circle r="11" fill="none" stroke="var(--accent)"
               strokeWidth="0.5" strokeDasharray="2 2"
@@ -230,7 +222,7 @@ export function LocalMap(props: RendererProps) {
         </g>
       ))}
 
-      <Exits exits={props.exits} onSelectExit={props.onSelectExit} />
+      <Exits exits={props.exits} />
       {cur && (
         <text x={cur.x} y={cur.y - 22} textAnchor="middle"
           fontFamily="var(--mono)" fontSize="6.5" fill="var(--accent)"

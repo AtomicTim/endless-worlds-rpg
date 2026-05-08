@@ -38,19 +38,16 @@ function PaperHeader({ title, subtitle }: { title: string; subtitle: string }) {
 }
 
 function CommonNodes({
-  nodes, onSelectNode, npcMode,
-}: Pick<RendererProps, "nodes" | "onSelectNode" | "npcMode">) {
+  nodes, npcMode,
+}: Pick<RendererProps, "nodes" | "npcMode">) {
   return (
     <>
       {nodes.map((n) => {
         const labelColor = n.isCurrent ? "#f59e0b"
                          : n.isDiscovered ? "#e8d8b0" : "#7a6850";
         return (
-          <g
-            key={n.id}
-            onClick={onSelectNode ? () => onSelectNode(n.id) : undefined}
-            style={onSelectNode ? { cursor: "pointer" } : undefined}
-          >
+          <g key={n.id}>
+            <title>{n.name}</title>
             {n.isDiscovered ? (
               <FantasyNodeGlyph
                 x={n.x} y={n.y}
@@ -108,17 +105,13 @@ function CommonConnections({
 }
 
 function CommonExits({
-  exits, onSelectExit,
-}: Pick<RendererProps, "exits" | "onSelectExit">) {
+  exits,
+}: Pick<RendererProps, "exits">) {
   if (!exits || exits.length === 0) return null;
   return (
     <>
       {exits.map((e, i) => (
-        <g
-          key={`${e.targetId}-${i}`}
-          onClick={onSelectExit ? () => onSelectExit(e.targetId) : undefined}
-          style={onSelectExit ? { cursor: "pointer" } : undefined}
-        >
+        <g key={`${e.targetId}-${i}`}>
           <text
             x={e.fromX + 14}
             y={e.fromY + i * 10}
@@ -146,10 +139,9 @@ export function WorldMap(props: RendererProps) {
       <CommonConnections connections={props.connections} />
       <CommonNodes
         nodes={props.nodes}
-        onSelectNode={props.onSelectNode}
         npcMode={props.npcMode}
       />
-      <CommonExits exits={props.exits} onSelectExit={props.onSelectExit} />
+      <CommonExits exits={props.exits} />
       <PaperCompass x={290} y={290} r={14} />
     </PaperBacking>
   );
@@ -166,10 +158,9 @@ export function RegionMap(props: RendererProps) {
       <CommonConnections connections={props.connections} />
       <CommonNodes
         nodes={props.nodes}
-        onSelectNode={props.onSelectNode}
         npcMode={props.npcMode}
       />
-      <CommonExits exits={props.exits} onSelectExit={props.onSelectExit} />
+      <CommonExits exits={props.exits} />
       <PaperCompass x={290} y={50} r={12} />
     </PaperBacking>
   );
@@ -299,8 +290,8 @@ function DrawBuilding({
 // player can see which way the gates open without crowding the
 // settlement glyphs themselves.
 function LocalExits({
-  exits, onSelectExit,
-}: Pick<RendererProps, "exits" | "onSelectExit">) {
+  exits,
+}: Pick<RendererProps, "exits">) {
   if (!exits || exits.length === 0) return null;
   // Bucket exits by direction (left = source on the left half of the
   // viewBox). When two exits share a side, stagger them vertically so
@@ -313,11 +304,7 @@ function LocalExits({
   return (
     <>
       {lefts.map((e, i) => (
-        <g
-          key={`exL-${e.targetId}-${i}`}
-          onClick={onSelectExit ? () => onSelectExit(e.targetId) : undefined}
-          style={onSelectExit ? { cursor: "pointer" } : undefined}
-        >
+        <g key={`exL-${e.targetId}-${i}`}>
           <text
             x={14}
             y={170 + i * 12}
@@ -332,11 +319,7 @@ function LocalExits({
         </g>
       ))}
       {rights.map((e, i) => (
-        <g
-          key={`exR-${e.targetId}-${i}`}
-          onClick={onSelectExit ? () => onSelectExit(e.targetId) : undefined}
-          style={onSelectExit ? { cursor: "pointer" } : undefined}
-        >
+        <g key={`exR-${e.targetId}-${i}`}>
           <text
             x={VIEW - 14}
             y={170 + i * 12}
@@ -384,11 +367,8 @@ export function LocalMap(props: RendererProps) {
         const labelColor = n.isCurrent ? "#f59e0b"
                          : n.isDiscovered ? "#e8d8b0" : "#7a6850";
         return (
-          <g
-            key={n.id}
-            onClick={props.onSelectNode ? () => props.onSelectNode!(n.id) : undefined}
-            style={props.onSelectNode ? { cursor: "pointer" } : undefined}
-          >
+          <g key={n.id}>
+            <title>{n.name}</title>
             {n.isDiscovered ? (
               <DrawBuilding
                 x={n.x}
@@ -426,7 +406,7 @@ export function LocalMap(props: RendererProps) {
         );
       })}
 
-      <LocalExits exits={props.exits} onSelectExit={props.onSelectExit} />
+      <LocalExits exits={props.exits} />
     </PaperBacking>
   );
 }

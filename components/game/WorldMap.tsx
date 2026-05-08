@@ -29,10 +29,6 @@ interface Props {
   masterState:    MasterState;
   worldGraph:     WorldGraph;
   locationAssets: WorldAsset[];
-  /** Navigation redesign — receives a raw node id. Wire to
-   *  useGameLoop.navigateTo, which routes via submitAction's
-   *  forceMoveToNode option (bypasses the text-pipeline MOVE intercept). */
-  onNavigate:     (nodeId: string) => void;
   /** Optional — when set, the ◆ INTERACT panel rows become clickable
    *  buttons that submit "examine <landmark name>" through the normal
    *  action pipeline. Falls back to inert rows when omitted. */
@@ -46,7 +42,6 @@ export function WorldMap({
   masterState,
   worldGraph,
   locationAssets,
-  onNavigate,
   onExamine,
   asSheet = false,
 }: Props) {
@@ -114,97 +109,6 @@ export function WorldMap({
       masterState,
     });
   }, [player, activeTier, selectedRegionId, worldGraph, locationAssets, masterState]);
-
-  // ── FIX 3: compute the exit-button target for the JSX button above the map ─
-  const localExit = useMemo<{ targetId: string; name: string } | null>(() => {
-    if (activeTier !== 3 || isAtRegionZone) return null;
-    const raw     = player
-      ? (player.type === "sub_location" ? player.zone_id : player.id)
-      : worldGraph.current_node_id;
-    const rawNode = worldGraph.nodes[raw];
-    const zoneId  =
-      rawNode?.is_expandable === true && rawNode?.zone_id === rawNode?.id
-        ? (Object.values(worldGraph.nodes).find(
-             (n) => n.zone_id === raw && n.is_settlement_node === true
-           )?.id ?? raw)
-        : raw;
-    const hubNode        = worldGraph.nodes[zoneId];
-    const parentRegionId = hubNode?.zone_id;
-    const parentNode     = parentRegionId ? worldGraph.nodes[parentRegionId] : null;
-    if (parentNode?.is_expandable === true && parentNode.id !== zoneId) {
-      return { targetId: parentNode.id, name: parentNode.name };
-    }
-    return null;
-  }, [activeTier, isAtRegionZone, worldGraph, player]);
-
-  // ── Click handlers ─────────────────────────────────────────────────────────
-  function handleSelectNode(nodeId: string) {
-    // Bug 5 — clicking the current node is a no-op. Re-navigation to
-    // the node you're already on triggers a duplicate ARRIVING beat
-    // and a second ◆ section header in the story feed.
-    if (nodeId === worldGraph.current_node_id) return;
-    const node = worldGraph.nodes[nodeId];
-    if (!node) return;
-    if (activeTier === 1) {
-      // From world tier, clicking a region zooms to Tier 2.
-      setSelectedRegionId(findRootZoneId(nodeId, worldGraph.nodes));
-      setActiveTier(2);
-      return;
-    }
-    if (activeTier === 2) {
-      const target = worldGraph.nodes[nodeId];
-      if (!target) return;
-      if (target.is_expandable) {
-        // Adjacent geographic region: preview-only, no travel.
-        setSelectedRegionId(nodeId);
-        return;
-      }
-      // Settlement or region_location: navigate the player there
-      // and zoom the map into Tier 3 for that settlement.
-      onNavigate(nodeId);
-      setSelectedRegionId(findRootZoneId(nodeId, worldGraph.nodes));
-      setActiveTier(3);
-      return;
-    }
-    // Tier 3 — sub-locations and non-expandable zone nodes navigate
-    // directly. Expandable zones (geographic regions, adjacent-region
-    // containers) are normally informational only, except for ONE
-    // case: the player's parent region zone — that's the open-world
-    // traversal layer they can step out into.
-    if (node.type === "zone" && node.is_expandable) {
-      const currentWGNode = worldGraph.nodes[worldGraph.current_node_id];
-      const isParentZone  = !!currentWGNode && currentWGNode.zone_id === node.id;
-      if (isParentZone) {
-        onNavigate(nodeId);
-      }
-      // Other expandable zones: do nothing (info only — the location
-      // info panel already reflects the click target via the active
-      // tier's selectedRegionId).
-      return;
-    }
-    onNavigate(nodeId);
-  }
-  function handleSelectExit(targetId: string) {
-    // Bug 5 — exiting to your current node is a no-op (same reasoning
-    // as handleSelectNode).
-    if (targetId === worldGraph.current_node_id) return;
-    // Tier 3 — the local map's single "Exit to Region" exit drops the
-    // player onto the open-world layer (the parent region zone).
-    if (activeTier === 3) {
-      onNavigate(targetId);
-      return;
-    }
-    // Tier 2 — FIX 2: exit arrows point to adjacent regions; clicking
-    // one navigates the player there, triggering RegionBible expansion
-    // in the game loop just like the nav-bar ◆ cards do.
-    if (activeTier === 2) {
-      onNavigate(targetId);
-      return;
-    }
-    // Tier 1 — clicking a world-exit previews the destination region.
-    setSelectedRegionId(findRootZoneId(targetId, worldGraph.nodes));
-    setActiveTier(2);
-  }
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -294,41 +198,6 @@ export function WorldMap({
         </div>
       </div>
 
-      {/* FIX 3 — "Exit to Region" as a real JSX button above the SVG, not
-           inside it. Only visible on Tier 3 when a parent region exists. */}
-      {localExit && (
-        <div style={{ padding: "6px 14px", borderBottom: "1px solid var(--line)" }}>
-          <button
-            onClick={() => onNavigate(localExit.targetId)}
-            style={{
-              display:       "flex",
-              alignItems:    "center",
-              gap:           6,
-              padding:       "5px 10px",
-              width:         "100%",
-              background:    "transparent",
-              border:        "1px solid var(--line-2)",
-              borderRadius:  2,
-              color:         "var(--accent)",
-              fontFamily:    "var(--mono)",
-              fontSize:      9,
-              letterSpacing: "0.18em",
-              cursor:        "pointer",
-              transition:    "background 120ms",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background =
-                "color-mix(in srgb, var(--accent) 8%, transparent)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent";
-            }}
-          >
-            ↑ EXIT TO {localExit.name.toUpperCase()}
-          </button>
-        </div>
-      )}
-
       {/* Map area — square aspect ratio so renderers fit their 320×320 viewBox.
            FIX 4: when Tier 2 has no nodes the region is undiscovered — show a
            placeholder instead of an empty grid. */}
@@ -375,8 +244,6 @@ export function WorldMap({
             nodes={payload.nodes}
             connections={payload.connections}
             exits={payload.exits}
-            onSelectNode={handleSelectNode}
-            onSelectExit={handleSelectExit}
             npcMode
           />
         </div>
@@ -1094,9 +961,8 @@ function buildLocalTier({
     };
   });
 
-  // FIX 3 — the "Exit to Region" button is now a proper JSX button rendered
-  // ABOVE the SVG area (see the localExit useMemo in WorldMap).  Keeping
-  // exits:[] here prevents the DebugMap from also rendering an SVG label.
+  // The map is display-only; cross-tier exits no longer render as
+  // clickable SVG arrows. Navigation lives in the nav bar.
   const zoneNode = worldGraph.nodes[zoneId];
   const total    = candidates.length;
   const known    = candidates.filter((n) => n.discovered).length;

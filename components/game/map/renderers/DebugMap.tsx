@@ -48,7 +48,7 @@ function classifyEdge(fromX: number, fromY: number): ExitEdge {
 }
 
 export function DebugMap({
-  title, subtitle, nodes, connections, exits = [], onSelectNode, onSelectExit,
+  title, subtitle, nodes, connections, exits = [],
 }: RendererProps) {
   // ── Grid lines ─────────────────────────────────────────────────────────────
   // Pull min/max of node screen-coords so the grid spans the same
@@ -160,8 +160,6 @@ export function DebugMap({
           fontFamily="var(--mono)"
           fontSize="8"
           fill={COLOR_ACCENT}
-          style={onSelectExit ? { cursor: "pointer" } : undefined}
-          onClick={onSelectExit ? () => onSelectExit(e.targetId) : undefined}
         >
           {label}
         </text>
@@ -178,17 +176,9 @@ export function DebugMap({
                     : n.isDiscovered ? COLOR_DISCOVERED
                     : COLOR_UNDISCOVERED;
     const coordFill = "rgba(168,158,140,0.7)";
-    // Bug 5 — the current node is its own no-op target, so don't
-    // advertise it as clickable. WorldMap.handleSelectNode also
-    // short-circuits, but the pointer cursor would mislead the player
-    // into expecting a click to do something.
-    const clickable = !!onSelectNode && !n.isCurrent;
     return (
-      <g
-        key={n.id}
-        onClick={clickable ? () => onSelectNode!(n.id) : undefined}
-        style={clickable ? { cursor: "pointer" } : undefined}
-      >
+      <g key={n.id}>
+        <title>{n.name}</title>
         {!n.isDiscovered && (
           <circle
             cx={n.x} cy={n.y} r="9"

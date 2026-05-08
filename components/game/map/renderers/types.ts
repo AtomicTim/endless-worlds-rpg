@@ -62,8 +62,6 @@ export interface RendererProps {
   nodes:        MapNode[];
   connections:  MapConnection[];
   exits?:       MapExit[];
-  onSelectNode?: (id: string) => void;
-  onSelectExit?: (id: string) => void;
   /** When true, places small NPC dots near nodes that have npcCount>0. */
   npcMode?: boolean;
 }

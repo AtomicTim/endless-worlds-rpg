@@ -312,8 +312,6 @@ export default function GamePage() {
             masterState={masterState}
             worldGraph={masterState.world_graph}
             locationAssets={locationAssets}
-            // Navigation redesign — direct, UI-driven movement via nodeId.
-            onNavigate={(nodeId) => navigateTo(nodeId)}
             // ◆ INTERACT rows submit "examine <landmark>" through the
             // normal action pipeline so the player can probe key
             // landmarks without typing.

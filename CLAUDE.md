@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.27
-**Status:** Active Development — Regression Fixes Complete, Combat System Next
+**Version:** 8.28
+**Status:** Active Development — Regional Travel + Region Description Fixes Complete, Map Visual Rework Deferred, Combat System Next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -10,7 +10,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Regression fix round complete → combat system (Day 20)
+**Current Phase:** Targeted bug fixes complete → combat system (Day 20). Map visual rework queued for dedicated session post-combat.
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -30,13 +30,31 @@
 | Architecture Hardening | Caching, codex dedup, code-built dialogue | ✅ Complete |
 | Bug Fix Round (57b0300) | Highlight nav, discovered, headers, map polish | ✅ Complete |
 | Regression Fix Round (75a7cd4) | Cache pipeline, map sizes, tier descriptions | ✅ Complete |
+| Targeted Fix Round (dc5bcd8) | Region travel 500, region zone description | ✅ Complete |
 | 20 | Combat System | ⏳ Next |
+| Map Visual Rework | Dedicated session | ⏳ Deferred (post-combat) |
 | 21 | Container + Loot | ⏳ Pending |
 | 22 | Skills + Leveling | ⏳ Pending |
 | 23 | Main Quest Thread | ⏳ Pending |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir removed. Genre renderers restored (pickModule re-enabled).**
+
+### Targeted Fix Round (commit dc5bcd8 — 43/43 tests, clean build)
+
+**Fix 1 — apply-regional-bible 500 (collision-check NPE):**
+`apply-regional-bible/route.ts:507-606` — Added `isValidPos` type guard at three points so the world-map overlap nudge can never dereference `.x` on an undefined entry:
+1. Gather time — skip and `console.warn` any expandable node missing a numeric x/y.
+2. Inside `hasConflict` — defensive return-false on either side of the comparison.
+3. `bibleNarrowed.grid_centre` — fall back to `{0,0}` (logged) if malformed.
+
+Unblocks all new-region travel. Stack trace was `TypeError: Cannot read properties of undefined (reading 'x')` at line 450 — root cause was an expandable node with missing grid_position making it into the collision iterator.
+
+**Fix 2 — Region zone description populates correctly (three layers):**
+- `regionZoneToAsset` in `apply-world-bible/route.ts:144-173` and `apply-regional-bible/route.ts:142-172` now writes BOTH `constitution.physical_description` AND `constitution.atmosphere` from the same source prose.
+- Region-zone upsert in both apply routes drops `ignoreDuplicates` so re-applied bibles refresh stale prose. Diagnostic logs (`atmosphereLen`, 80-char preview) make a blank panel traceable to either an empty `bible.atmosphere` or an upsert error.
+- New single-tier branch in `apply-world-bible:693-738`: when `region.id === settlement.id`, step 3 was writing the settlement's interior-hub atmosphere into the shared asset — now overwrites with `starting_region.atmosphere` so the Region map shows landscape prose instead of "Outdoor hub description".
+- `WorldMap.tsx::firstAtmosphere` now prefers whichever of `physical_description` / `atmosphere` has actual trimmed content, so legacy rows (only one populated) and future variants both resolve, and empty strings no longer render as a stray empty paragraph.
 
 ### Regression Fix Round (commit 75a7cd4 — 43/43 tests, clean build)
 
@@ -85,7 +103,7 @@ Original implementation used an early-return mini-pipeline that bypassed downstr
 `apply-regional-bible` computes `regionZoneId` and sets it as current node. `useGameLoop` step 4d uses `matchedOutline.id` as landing target. Settlement reachable via ← BACK from region zone.
 
 **Change 2 — World map overlap fix:**
-`apply-regional-bible` gathers existing is_expandable positions, runs 20-unit collision check, nudges by 12 (wrap at +80 → -40, y+=12) up to 50 iterations.
+`apply-regional-bible` gathers existing is_expandable positions, runs 20-unit collision check, nudges by 12 (wrap at +80 → -40, y+=12) up to 50 iterations. (Hardened in V8.28 Fix 1 — see above.)
 
 **Change 3 — Write-once arrival cache + codex dedup (Bug 9 fixed):**
 Step 5 reads `physical_description` from world_asset before narrator call. On cache hit → synthesizes minimal narratorResponse, skips AI entirely. `codexWrittenBy7b` flag gates 7c-1 fallback — codex entry written exactly once per location.
@@ -130,12 +148,23 @@ Routing:
   New region     → lands at region zone (not settlement hub)
 ```
 
-### Map Description Sourcing ✅ (V8.27)
+### Map Description Sourcing ✅ (V8.27, hardened V8.28)
 ```
 World tier  → wcd.world_description (2-3 sentence world summary, never changes)
 Region tier → currentRegion.atmosphere (region-specific prose)
 Local tier  → currentLocation.atmosphere (location-specific prose)
-Region zone → constitution.physical_description, then atmosphere fallback
+
+Region zone asset:
+  - constitution.physical_description AND constitution.atmosphere
+    both written from same prose source (V8.28)
+  - WorldMap firstAtmosphere prefers whichever has trimmed content
+  - Legacy single-tier worlds (region.id === settlement.id):
+    apply-world-bible overwrites step-3 settlement prose with
+    starting_region.atmosphere so Region map shows landscape prose
+    not interior-hub prose
+
+Apply routes drop ignoreDuplicates on region-zone upserts so
+re-applied bibles refresh stale prose (V8.28).
 
 Legacy saves without world_description: fall back to wcd.atmosphere.
 World tagline under world name: REMOVED (replaced with known/rumored count).
@@ -156,10 +185,18 @@ Knowledge format: {topic: "Short label", content: "Full sentence"}
 Legacy format: plain string → auto-converted to {topic: first-5-words, content: string}
 ```
 
-### Known issues (deferred to post-combat)
+### Known issues (deferred to post-combat / map visual rework)
+
+**Map visual rework (dedicated session, post-combat):**
+- Per-node decorative shelf line under every node (visible under both discovered and undiscovered) — looks like an underline but is a separate SVG element. Cleanup needed across all renderers.
+- Connection lines pass through node icons instead of terminating at icon edges — endpoint geometry / z-order issue.
+- Overall sizing and visual hierarchy still feels cramped relative to panel size even after V8.27 bumps.
+- Whole-renderer redesign needed: decoration cleanup, line-endpoint geometry, sizing pass, current-node emphasis.
+
+**Other deferred:**
 - NPC highlight color (orange) too similar to item highlight (yellow) in Fantasy
 - React key-prop-spread warnings in LocationSpan/ItemSpan/NpcSpan/LandmarkSpan
-- Hub node not added to codex on first arrival to new region (deferred)
+- Hub node not added to codex on first arrival to new region
 - Step 7 individual branches: confirm each branch sets `discovered: true` (currently relying on Fix 2 safety net)
 
 ---
@@ -175,6 +212,7 @@ RegionBible: claude-haiku-4-5-20251001, max_tokens: 3500.
 WorldBible: claude-sonnet-4-5, 8000 tokens.
 WCD now includes `world_description` (2-3 sentence world summary).
 Knowledge format: `{topic, content}` pairs. Legacy string → auto-converted.
+Region zone assets: constitution.physical_description AND constitution.atmosphere both populated from same source (V8.28).
 
 ### Map System ✅
 ```
@@ -192,6 +230,11 @@ Text sizes (V8.27):
 
 Underline strip: textDecoration="none" + style on every <text> across
 all renderers (V8.27).
+
+Collision check on apply-regional-bible: isValidPos guards prevent
+NPE from malformed grid_position entries (V8.28).
+
+⚠️ Map visual rework deferred to dedicated post-combat session.
 ```
 
 ---
@@ -212,6 +255,8 @@ all renderers (V8.27).
 12. Every successful arrival flips `discovered = true` at end of step 7. (V8.26)
 13. Cache hit on ARRIVING synthesizes a `narratorResponse` and falls through. AI API bypassed; downstream pipeline (current_node_id update, panel/nav/map refresh, codex, log, persist) runs unchanged. (V8.27 — supersedes V8.26 mini-pipeline approach)
 14. Map description sourcing: World = `wcd.world_description`, Region = `currentRegion.atmosphere`, Local = `currentLocation.atmosphere`. No cross-tier bleed. (V8.27)
+15. Region zone assets always populate both `constitution.physical_description` AND `constitution.atmosphere` from the same source prose. WorldMap prefers whichever has trimmed content. (V8.28)
+16. Collision-check loops over expandable node positions must guard each entry with `isValidPos`. Malformed entries are skipped + warned, never dereferenced. (V8.28)
 
 ---
 
@@ -242,6 +287,7 @@ NPC highlights:      var(--accent) orange (too similar to item yellow — future
 | System | When | Description |
 | --- | --- | --- |
 | Combat System | NOW (Day 20) | Turn-based, code resolves, AI narrates |
+| Map Visual Rework | After combat | Dedicated session: decoration cleanup, line geometry, sizing, hierarchy |
 | Container + Loot | Day 21 | Registry, loot tables, dungeon sub-levels |
 | Skills + Leveling | Day 22 | XP, stat points, level gates |
 | Main Quest Thread | Day 23 | Breadcrumb injection, quest tracking |
@@ -296,4 +342,4 @@ Claude Code pushes → user reports commit + test results → Claude.ai updates 
 
 ---
 
-*Last updated: V8.27 — Regression fix round (commit 75a7cd4): cache-hit synthesizes narratorResponse and falls through (no more bypassed pipeline), all 5 renderers bumped to readable SVG sizes (16-22/13/14-18/14), `?` underline stripped across every renderer and tier, world_description field added to WCD, map descriptions sourced per tier (no cross-tier bleed), world tagline replaced with known/rumored count. Combat system (Day 20) next.*
+*Last updated: V8.28 — Targeted fix round (commit dc5bcd8): apply-regional-bible 500 fixed via isValidPos guards on collision check, region zone description populates correctly across world bible + region bible apply paths (both physical_description and atmosphere fields written, single-tier overwrite, ignoreDuplicates dropped, WorldMap firstAtmosphere prefers populated field). Map visual rework queued for dedicated session post-combat. Combat system (Day 20) up next.*

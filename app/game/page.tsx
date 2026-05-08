@@ -267,11 +267,15 @@ export default function GamePage() {
             // Navigation redesign — LOCATION highlights with a nodeId
             // route through navigateTo directly (no popover, no text).
             onNavigate={(nodeId) => navigateTo(nodeId)}
-          />
-          <DialogueModal
-            onSubmit={(input, opts) => { void submitAction(input, opts); }}
-            onFocusInput={() => { inputBarRef.current?.focus(); }}
-            onOpenTrade={(name) => { void openTrade(name); }}
+            // Dialogue panel renders inline at the bottom of the feed so
+            // it pushes earlier messages up rather than overlaying them.
+            bottomSlot={
+              <DialogueModal
+                onSubmit={(input, opts) => { void submitAction(input, opts); }}
+                onFocusInput={() => { inputBarRef.current?.focus(); }}
+                onOpenTrade={(name) => { void openTrade(name); }}
+              />
+            }
           />
           <TradeModal onBuy={buyItem} onSell={sellItem} />
           {/* Navigation redesign — UI-driven movement strip. Sits between

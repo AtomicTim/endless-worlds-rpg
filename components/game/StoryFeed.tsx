@@ -53,6 +53,10 @@ interface StoryFeedProps {
   loadingText?: string | null;
   onSubmit?:   (input: string) => void;
   onNavigate?: (nodeId: string) => void;
+  /** In-flow slot rendered at the bottom of the scroll container, after
+   *  the last message. Used to host the inline DialogueModal so the panel
+   *  pushes the feed up rather than overlaying it as a fixed element. */
+  bottomSlot?: React.ReactNode;
 }
 
 // ── Stat-check parsing ──────────────────────────────────────────────────────
@@ -86,13 +90,15 @@ interface PopoverState {
   position: { x: number; y: number };
 }
 
-export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, onNavigate }: StoryFeedProps) {
+export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, onNavigate, bottomSlot }: StoryFeedProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const genre = useGameStore((s) => s.masterState?.metadata.genre) ?? Genre.FANTASY;
 
   const masterState    = useGameStore((s) => s.masterState);
   const locationAssets = useGameStore((s) => s.locationAssets);
+  const dialogueOpen   = useGameStore((s) => s.currentDialogueOptions.length > 0);
   const highlightCandidates = useMemo<HighlightCandidate[]>(() => {
     if (!masterState) return [];
     return buildExactHighlights(masterState, locationAssets);
@@ -102,6 +108,16 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
+  // Auto-scroll the feed when the dialogue panel opens so the new in-flow
+  // panel comes into view rather than appearing under the player's
+  // current scroll position.
+  useEffect(() => {
+    if (!dialogueOpen) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [dialogueOpen]);
+
   const openPopover = (point: PointOfInterest, e: React.MouseEvent) => {
     setPopover({ point, position: { x: e.clientX, y: e.clientY } });
   };
@@ -110,6 +126,7 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
 
   return (
     <div
+      ref={scrollRef}
       className="ew-scroll min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-8 md:py-6"
       style={{
         position:        "relative",
@@ -151,6 +168,8 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
             <span>{loadingText ?? "Thinking…"}</span>
           </div>
         )}
+
+        {bottomSlot}
 
         <div ref={bottomRef} />
       </div>

@@ -253,23 +253,22 @@ export function WorldMap({
         </div>
       )}
 
-      {/* Location info panel.
-           Fix 8 — at the World tier the "current location" reads as the
-           geographic region zone, which is misleading; the World map is
-           a pure overview, so we hide the panel entirely. The flex:1
-           slot stays so the map still snaps to the top of the column. */}
+      {/* Location info panel — visible on every tier. The "◆ CURRENT
+           LOCATION" eyebrow hides at the World tier, where the panel
+           describes the geographic region instead of a discrete current
+           location and the eyebrow would read as misleading. */}
       <div
         className="ew-scroll"
         style={{
           flex:        1,
           minHeight:   0,
           overflowY:   "auto",
-          padding:     activeTier === 1 ? 0 : "14px 16px",
-          borderTop:   activeTier === 1 ? "none" : "1px solid var(--line)",
+          padding:     "14px 16px",
+          borderTop:   "1px solid var(--line)",
           background:  "var(--bg-0)",
         }}
       >
-        {activeTier !== 1 && <>
+        {activeTier !== 1 && (
         <div
           className="ew-mono"
           style={{
@@ -281,6 +280,7 @@ export function WorldMap({
         >
           ◆ CURRENT LOCATION
         </div>
+        )}
         <div
           className="ew-mono"
           style={{
@@ -487,7 +487,6 @@ export function WorldMap({
             </div>
           </div>
         )}
-        </>}
       </div>
     </div>
   );

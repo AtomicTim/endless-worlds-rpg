@@ -49,7 +49,6 @@ interface GameStore {
   /** npc_registry key for the active NPC — authoritative source for trust/disposition. */
   currentDialogueNpcKey:  string | null;
   currentNpcPortrait:     string | null;
-  dialogueModalCollapsed: boolean;
   /** FIX 6 — last dialogue options + npc key, kept around so the
    *  Dialogue Modal can be restored after the Trade Modal closes.
    *  setDialogueOptions writes these whenever it stores fresh options;
@@ -107,8 +106,6 @@ interface GameStore {
   setDialogueOptions:      (options: DialogueOption[], npcName: string | null, portrait: string | null, npcKey?: string | null) => void;
   /** Hide the Dialogue Modal and clear all dialogue state. */
   clearDialogueOptions:    () => void;
-  /** Toggle the modal between full and collapsed views without clearing options. */
-  setDialogueModalCollapsed: (collapsed: boolean) => void;
   /** Replace the merchant's items_for_sale list. Pass [] to close the
    *  Trade Modal entirely. */
   setTradeItems:           (items: Item[]) => void;
@@ -169,7 +166,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
   currentDialogueNpc:     null,
   currentDialogueNpcKey:  null,
   currentNpcPortrait:     null,
-  dialogueModalCollapsed: false,
   lastDialogueOptions:    [],
   lastDialogueNpc:        null,
   lastDialogueNpcKey:     null,
@@ -225,8 +221,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastDialogueNpc:        npcName,
       lastDialogueNpcKey:     npcKey ?? null,
       lastDialoguePortrait:   portrait,
-      // New options always re-expand the modal so the player sees them.
-      dialogueModalCollapsed: false,
     }),
   clearDialogueOptions: () =>
     set({
@@ -242,10 +236,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastDialogueNpc:        null,
       lastDialogueNpcKey:     null,
       lastDialoguePortrait:   null,
-      dialogueModalCollapsed: false,
     }),
-  setDialogueModalCollapsed: (collapsed) =>
-    set({ dialogueModalCollapsed: collapsed }),
   // FIX 6 — opening the Trade Modal hides the Dialogue Modal so the two
   // never overlap. Closing the Trade Modal restores the cached dialogue
   // for the same NPC, so the player goes back to the conversation they
@@ -264,7 +255,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
           currentDialogueNpc:     null,
           currentDialogueNpcKey:  null,
           currentNpcPortrait:     null,
-          dialogueModalCollapsed: false,
         };
       }
       // items === [] → trade closed. Restore dialogue if we cached one.
@@ -276,7 +266,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
           currentDialogueNpc:     s.lastDialogueNpc,
           currentDialogueNpcKey:  s.lastDialogueNpcKey,
           currentNpcPortrait:     s.lastDialoguePortrait,
-          dialogueModalCollapsed: false,
         };
       }
       return { currentTradeItems: [], tradeOpen: false };
@@ -313,7 +302,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentDialogueNpc:     null,
       currentDialogueNpcKey:  null,
       currentNpcPortrait:     null,
-      dialogueModalCollapsed: false,
       lastDialogueOptions:    [],
       lastDialogueNpc:        null,
       lastDialogueNpcKey:     null,

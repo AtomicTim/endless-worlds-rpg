@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.18
-**Status:** Active Development — Bug 2 Investigation Active
+**Version:** 8.19
+**Status:** Active Development — Nav Bar Refactor Complete, Bug 2 Investigation Active
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -10,7 +10,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Bug 2 investigation (zone_id corruption) → architecture hardening → genre renderers → Combat
+**Current Phase:** Test nav bar refactor → Bug 2 investigation → architecture hardening
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -27,6 +27,7 @@
 | Regional Zone Traversal + Polish | Exit button, region zone, navigation | ✅ Complete |
 | Session 84 Bug Fixes | 7 map/nav fixes + Bug 2 diagnostics | ✅ Complete |
 | RegionBible 500 + Header Fixes | max_tokens, page header, node type | ✅ Complete |
+| Nav Bar Refactor + Map Visual-Only | Typed cards, map stripped of navigation | ✅ Complete |
 | Bug 2 Investigation | zone_id corruption — logs needed | ⏳ Active |
 | Architecture Hardening | Domain 1/2 separation, caching, gate | ⏳ Pending |
 | Genre renderers restored | After architecture confirmed | ⏳ Pending |
@@ -35,29 +36,50 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed.**
 
-### RegionBible + Header Fixes (commit baad961 — 43/43 tests, clean build)
+### Nav Bar Refactor (commit d616be2 — 43/43 tests, clean build)
 
-**Fix 1 — RegionBible max_tokens 1200→2000:** Skeleton requires ~1400-1600 tokens. 1200 clipped responses mid-JSON; retry also truncated → 500. Added explicit console.error logging for parse failures and API errors so the next failure surfaces in the server log immediately.
+**Map is now purely visual.** onNavigate removed from WorldMap entirely. handleSelectNode, handleSelectExit, localExit useMemo, and the "↑ EXIT TO REGION" JSX button all deleted. All renderers (DebugMap + genre renderers) had click props removed; node tooltips added via `<title>`. RendererProps no longer carries click props.
 
-**Fix 2 — Page header type label (SceneArt.tsx):** Page header was reading node.category directly. Now mirrors buildLocationInfo rules: is_expandable+self-zoned → "REGION", standalone zone → category.toUpperCase(), default → (category ?? type).toUpperCase(). Map sidebar and page header chip now agree.
+**NavigationBar rebuilt with four typed card categories** in fixed left-to-right order:
 
-**Fix 3 — region_location node type verified (apply-world-bible):** Confirmed existing code correctly creates region_location nodes with type:"zone", is_expandable:false, is_settlement_node:false. Added diagnostic console.log so future LOCAL-tab disable failures immediately surface node property values in server log.
+| Type | Icon | When shown | Target |
+|------|------|-----------|--------|
+| Back | ← | At sub_location or standalone dungeon | Parent hub |
+| Deeper | → | Sub-locations of current hub | Sibling sub-locations |
+| Exit | ↑ | At settlement hub, sub_location, or dungeon | Region zone or settlement |
+| Peer-known | ◆ | At region zone | region_locations in this region |
+| Peer-unknown | ◇ | At region zone | Adjacent undiscovered regions |
+
+Card sizing: 140–200px × 64px, mono labels, accent borders for active types, dashed border for unknown, var(--bg-3) for exit card. Nav bar now visible on desktop (removed md:hidden).
+
+### Navigation Model ✅ (Updated)
+```
+Map = PURELY VISUAL. No click handlers navigate. View-only.
+All navigation via NavigationBar typed cards only.
+
+Card grammar (always left to right):
+  [← BACK]  [→ DEEPER...]  [↑ EXIT]  [◆ PEER...]  [◇ UNDISCOVERED...]
+
+Travel flow:
+  Sub-location  →  ← back  →  Settlement hub
+  Settlement hub  →  → deeper cards  →  sub-locations
+  Settlement hub  →  ↑ exit  →  Region zone
+  Region zone  →  ← back  →  Settlement hub
+  Region zone  →  ◆ cards  →  region_locations (dungeons/wilderness)
+  Region zone  →  ◇ cards  →  adjacent undiscovered regions
+  Dungeon  →  ← back  →  Region zone
+  Dungeon  →  ↑ exit  →  Settlement hub
+```
 
 ### Bug 2 — zone_id corruption (UNDER INVESTIGATION)
-**Symptom:** Nodes in newly-generated region get zone_id pointing at wrong region. Dungeon connections correct but zone_id wrong.
-
-**Root cause candidates:**
-1. `regional-bible-cache.ts` cache key mismatch — using origin region ID instead of destination
-2. `matchedOutline.id` in useGameLoop.ts diverges from `bible.id` in cached entry
+**Symptom:** Nodes in newly-generated region get zone_id pointing at wrong region.
 
 **Diagnostic logging active in:**
-- `apply-regional-bible/route.ts` — logs zone_id assignment per node
-- `regional-bible-cache.ts` — logs READ/WRITE with full cache key + bible.id
-- `useGameLoop.ts` — logs RegionBible expansion target
+- `apply-regional-bible/route.ts` — zone_id assignment per node
+- `regional-bible-cache.ts` — READ/WRITE with cache key + bible.id
+- `useGameLoop.ts` — RegionBible expansion target
 
-**To diagnose:** Generate a fresh world → travel to region zone → navigate to an adjacent region → paste ALL `[navigateTo]`, `[RegionBibleCache]`, and `[apply-regional-bible]` server terminal lines here.
-
-**NOTE:** Previous 500 from generate-regional-bible (max_tokens) was blocking adjacent region travel. That's now fixed. The next test should successfully generate a new region.
+**To diagnose:** Generate fresh world → reach region zone → travel to adjacent undiscovered region via ◇ card → paste ALL `[navigateTo]`, `[RegionBibleCache]`, `[apply-regional-bible]` server terminal lines.
 
 ### Known issues (shelved — address after Bug 2 + architecture hardening)
 - Duplicate codex writes: two paths (7b + 7c-1) fire for same location (Bug 9)
@@ -86,50 +108,39 @@
 Write result to world_assets on first visit, serve cached on re-visit. No AI call on re-visit.
 
 **B — Free text validation gate**
-NPC not at current location → hardcoded "[Name] isn't here" (other gates already done).
+NPC not at current location → hardcoded "[Name] isn't here".
 
 **C — Dialogue options generated by code from NPC knowledge array**
 Option B confirmed: WorldBible generates `{topic, content}` pairs. Code builds option list. AI writes response text only.
 
-### Navigation Model ✅
+### Map System ✅ (Visual Only)
 ```
-Text MOVE → hardcoded — ZERO AI CALL
-Travel flow:
-  Sub-location → Return card → Settlement hub
-  Settlement hub → ↑ EXIT TO [REGION] button → Region zone
-  Region zone → nav cards / region map clicks → standalones / settlement / adjacent
-  Adjacent region → RegionBible expansion → new settlement
-World map: informational only.
-```
+Map = display component. Zero navigation side effects.
+Tier switcher (WORLD/REGION/LOCAL tabs) still works for viewing.
+Current node highlighted on all tiers.
+DEBUG MODE ACTIVE in index.tsx. TO RESTORE: uncomment pickModule.
 
-### Map System ✅
-```
-PAD=76. COORDINATE SYSTEM: Hub {0,0}, sub-locations ±5, region_locations 8-15, adjacent 18-35.
+PAD=76. COORDINATE SYSTEM: Hub {0,0}, sub-locations ±5,
+region_locations 8-15, adjacent 18-35.
 
-TIER DEFINITIONS:
-  Local  = hub + sub_locations (BFS). Disabled at region zones AND non-settlement zones.
-  Region = settlement + region_locations. Redirected to for region zones + standalone zones.
-  World  = is_expandable only. Informational.
-
-Current node: unclickable everywhere.
-Section headers: deduplicated via lastArrivalNodeId ref.
-DEBUG MODE ACTIVE in index.tsx. TO RESTORE: uncomment pickModule dispatcher.
+TIER DEFINITIONS (view only):
+  Local  = hub + sub_locations. Disabled at region zones + non-settlement zones.
+  Region = settlement + region_locations.
+  World  = is_expandable nodes only.
 ```
 
 ### Geographic Hierarchy ✅
 ```
 World
-└── Geographic Region (is_expandable=true, persistent explorable zone)
+└── Geographic Region (is_expandable=true)
     ├── Settlement (is_settlement_node=true)
     │   └── Sub-location (type=sub_location)
-    ├── Standalone location (type=zone, is_expandable=false) — dungeon/wilderness
-    │   └── No sub-locations yet (dungeon levels planned for Container+Loot phase)
+    ├── Standalone location (type=zone, is_expandable=false)
     └── Adjacent regions (is_expandable=true, undiscovered)
 ```
 
 ### Generation Model ✅
-Zone 1: Concrete. Zone 2: Outlined. Zone 3: Name+position.
-RegionBible: claude-haiku-4-5-20251001, **max_tokens: 2000**.
+RegionBible: claude-haiku-4-5-20251001, max_tokens: 2000.
 WorldBible: claude-sonnet-4-5, 8000 tokens.
 
 ---
@@ -137,7 +148,7 @@ WorldBible: claude-sonnet-4-5, 8000 tokens.
 ## ⚡ FOUNDATIONAL RULES
 
 1. World Assets Are Permanent. Write-once.
-2. Navigation Is UI-Only. Text MOVE → hardcoded.
+2. Navigation Is Nav Bar Only. Map is visual only.
 3. Location Is Authoritative State. current_node_id on navigateTo.
 4. Actions Permitted By Default. Tier 1→AI. Tier 2→template. Tier 3→ambient.
 5. Objects Mentioned Exist. Failed checks = evasion, never absence.
@@ -162,7 +173,8 @@ Verbosity: terse (2/3/4 sentences ≤12 words) | standard (3-4/4-5/5-7) | rich (
 
 | System | When | Description |
 | --- | --- | --- |
-| Bug 2 Fix | NOW | zone_id corruption — after log analysis |
+| Nav bar refinement | NOW | Test + polish after refactor |
+| Bug 2 Fix | After nav test | zone_id corruption — after log analysis |
 | Architecture Hardening | After Bug 2 | Arrival caching, NPC gate, code-gen dialogue options |
 | Genre renderers restored | After arch | Uncomment pickModule in index.tsx |
 | Codex dedup fix | After arch | Two-path duplicate write cleanup |
@@ -220,4 +232,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 85 — V8.18: RegionBible max_tokens 1200→2000 (500 fix), page header type label (SceneArt.tsx), region_location node type verified. Bug 2 diagnostic logging active — needs adjacent region travel test to capture logs.*
+*Last updated: Session 86 — V8.19: Map navigation fully removed. NavigationBar rebuilt with typed cards (back/deeper/exit/peer-known/peer-unknown) in fixed left-to-right order. Nav bar now desktop-visible. Bug 2 diagnostic logging still active.*

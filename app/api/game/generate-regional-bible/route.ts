@@ -297,15 +297,17 @@ async function callClaude(client: Anthropic, userPrompt: string): Promise<string
   // from a simpler prompt is acceptable; speed matters more here than for
   // WCD/WorldBible/narration.
   //
-  // FIX 1 — max_tokens bumped 1200 → 2000. The full skeleton (1 hub + 1
-  // sub-location + 1 region_location + 3 NPCs + 6 Tier 1 objects + back-
-  // exit) needs ~1400-1600 tokens to render. 1200 was clipping responses
-  // mid-JSON, so the JSON.parse throws and the retry truncates again →
-  // 500 with a useless "Failed to parse RegionBible JSON after retry".
+  // FIX 1 — max_tokens bumped 2000 → 3500. With creative content
+  // (atmosphere prose, NPC personality/appearance/speech, object lore
+  // hints) the full skeleton was clipping at ~6957 chars (~1740 tokens
+  // of pure response, more after formatting). 2000 wasn't headroom
+  // enough for the haiku to close the JSON cleanly, so the parse
+  // failed, the retry re-truncated, and the route 500'd. 3500 covers
+  // the worst observed cases with margin to spare.
   console.log("[RegionBible] Using haiku model");
   const message = await client.messages.create({
     model:      "claude-haiku-4-5-20251001",
-    max_tokens: 2000,
+    max_tokens: 3500,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });

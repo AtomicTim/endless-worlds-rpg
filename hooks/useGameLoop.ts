@@ -993,6 +993,12 @@ export function useGameLoop() {
             resolution.narrative_context.from_node_id ??
               updatedState.world_graph.current_node_id
           );
+          // FIX 2 — node id to roll back to if generate-regional-bible
+          // or apply-regional-bible fails. resolveMove already pushed
+          // current_node_id forward to the placeholder; without this
+          // restore, a 500 leaves the player stranded on a placeholder
+          // that has no nav cards and the only escape is a refresh.
+          const previousNodeId = fromId;
           const fromNode  = updatedState.world_graph.nodes[fromId];
           const fromName  = fromNode?.name ?? wb.starting_region.name;
 
@@ -1017,6 +1023,9 @@ export function useGameLoop() {
           // Cache hit short-circuits the AI call entirely (~5s saved).
           const cached = getCachedRegionalBible(sessionId, matchedOutline.id);
           let regionBible: RegionBible | null = cached;
+          // FIX 2 — track which step failed so the failure handler can
+          // roll back the player and skip narration for this turn.
+          let expansionFailed = false;
 
           if (!regionBible) {
             try {
@@ -1038,15 +1047,22 @@ export function useGameLoop() {
                 regionBible = data.bible ?? null;
                 if (regionBible) {
                   cacheRegionalBible(sessionId, matchedOutline.id, regionBible);
+                } else {
+                  console.error(
+                    "[GameLoop/4d] generate-regional-bible returned 200 but no bible"
+                  );
+                  expansionFailed = true;
                 }
               } else {
-                console.warn(
+                console.error(
                   "[GameLoop/4d] generate-regional-bible failed:",
                   await genRes.text()
                 );
+                expansionFailed = true;
               }
             } catch (err) {
-              console.warn("[GameLoop/4d] generate-regional-bible threw:", err);
+              console.error("[GameLoop/4d] generate-regional-bible threw:", err);
+              expansionFailed = true;
             }
           } else {
             console.log(
@@ -1054,7 +1070,7 @@ export function useGameLoop() {
             );
           }
 
-          if (regionBible) {
+          if (!expansionFailed && regionBible) {
             try {
               const applyRes = await fetch("/api/game/apply-regional-bible", {
                 method:  "POST",
@@ -1119,16 +1135,55 @@ export function useGameLoop() {
                   console.log(
                     `[GameLoop/4d] RegionBible applied: ${regionBible.name} → ${applied.starting_node_id}`
                   );
+                } else {
+                  console.error(
+                    "[GameLoop/4d] apply-regional-bible 200 but missing fields:",
+                    applied
+                  );
+                  expansionFailed = true;
                 }
               } else {
-                console.warn(
+                console.error(
                   "[GameLoop/4d] apply-regional-bible failed:",
                   await applyRes.text()
                 );
+                expansionFailed = true;
               }
             } catch (err) {
-              console.warn("[GameLoop/4d] apply-regional-bible threw:", err);
+              console.error("[GameLoop/4d] apply-regional-bible threw:", err);
+              expansionFailed = true;
             }
+          }
+
+          if (expansionFailed) {
+            // FIX 2 — roll back. resolveMove pushed current_*_id to the
+            // placeholder; without this, the player is stranded there
+            // with no nav options. Restore previousNodeId, drop the
+            // ARRIVING flag, clear the generation lock, and skip the
+            // narrator entirely (nothing legitimate to narrate — the
+            // player turned back at the threshold).
+            const restored: MasterState = {
+              ...updatedState,
+              world_state: {
+                ...updatedState.world_state,
+                current_location_id: previousNodeId,
+                current_node_id:     previousNodeId,
+                location_status:     LocationStatus.PRESENT,
+              },
+              world_graph: updatedState.world_graph
+                ? { ...updatedState.world_graph, current_node_id: previousNodeId }
+                : updatedState.world_graph,
+            };
+            store.setMasterState(restored);
+            store.addMessage(
+              makeMessage(
+                "SYSTEM",
+                `The road to ${matchedOutline.name} is impassable. You turn back.`
+              )
+            );
+            useGameStore.getState().setGeneratingRegionId(null);
+            store.setProcessing(false);
+            return;
           }
           // Either way, the "Entering..." status is no longer accurate —
           // narration takes over from here.

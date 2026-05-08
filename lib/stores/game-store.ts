@@ -90,6 +90,15 @@ interface GameStore {
    *  session switch via clearSessionState. */
   examinedObjects:        string[];
 
+  // ── Adjacent region travel — generation lock ───────────────────────────────
+  /** Outline id of the region currently being expanded into a full
+   *  RegionBible, or null when no expansion is in flight. Set when the
+   *  player clicks a ◇ peer-unknown nav card; cleared when
+   *  apply-regional-bible resolves (success OR failure). NavigationBar
+   *  reads this to disable cards and swap the targeted ◇'s badge to
+   *  "GENERATING..." for the 5-15s the live AI call takes. */
+  generatingRegionId:     string | null;
+
   setMasterState:          (state: MasterState) => void;
   addMessage:              (message: StoryMessage) => void;
   setProcessing:           (isProcessing: boolean, step?: string) => void;
@@ -126,6 +135,9 @@ interface GameStore {
   markObjectExamined:      (objectKey: string) => void;
   /** FIX 7 — has the player already examined this object this session? */
   hasExaminedObject:       (objectKey: string) => boolean;
+  /** Adjacent region travel — set/clear the generation lock. Pass an
+   *  outline id to start, null to clear. */
+  setGeneratingRegionId:   (regionId: string | null) => void;
   /** Wipe all per-session state so a fresh session loads with a clean slate.
    *  Does NOT clear masterState — that is replaced by the caller right after.
    *  Use ONLY when switching to a different save slot. */
@@ -175,6 +187,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   mapPanelOpen:           false,
   tradeOpen:              false,
   examinedObjects:        [],
+  generatingRegionId:     null,
 
   setMasterState:       (state) => set({ masterState: state }),
   addMessage:           (message) => set((s) => ({ messages: [...s.messages, message] })),
@@ -290,6 +303,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const key = objectKey.trim().toLowerCase();
     return get().examinedObjects.includes(key);
   },
+  setGeneratingRegionId: (regionId) => set({ generatingRegionId: regionId }),
   clearSessionState: () => {
     // Day 19D — drop any cached regional bibles so a switch between save
     // slots never serves stale region data to a fresh campaign.
@@ -312,6 +326,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastNarrativeText:      null,
       mapPanelOpen:           false,
       examinedObjects:        [],
+      generatingRegionId:     null,
     });
   },
   clearTransientState: () =>

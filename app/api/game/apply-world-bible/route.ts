@@ -585,6 +585,16 @@ export async function POST(request: NextRequest) {
     for (const r of regionLocations) {
       if (!regionConnections.includes(r.id)) regionConnections.push(r.id);
     }
+    // Adjacent region travel: wire each adjacent_region placeholder into
+    // the geographic region zone's connections so NavigationBar's ◇
+    // (peer-unknown) D2 filter (which gates on
+    // current.connections.includes(r.id)) can surface them. classifyMove
+    // will then return GRAPH_NAVIGATE on a ◇ click; useGameLoop step 4d
+    // detects "navigating to an undiscovered adjacent placeholder" and
+    // fires RegionBible expansion.
+    for (const r of bibleNarrowed.adjacent_regions) {
+      if (!regionConnections.includes(r.id)) regionConnections.push(r.id);
+    }
     graphNodes[geographicRegionId] = {
       id:            geographicRegionId,
       name:          bibleNarrowed.starting_region.name,
@@ -647,6 +657,11 @@ export async function POST(request: NextRequest) {
 
   // 4d. Adjacent regions appear as undiscovered zone nodes so the world
   // map can render them as dim outlines.
+  // Each placeholder back-links to the geographic region zone (or the
+  // settlement if the AI reused a single id for both) so classifyMove's
+  // connection lookup from the region zone resolves the placeholder via
+  // its name/id rather than falling through to WORLD_EXPLORE.
+  const placeholderBackLink = isSameAsSettlement ? startingNodeId : geographicRegionId;
   for (const region of bibleNarrowed.adjacent_regions) {
     if (graphNodes[region.id]) continue; // shouldn't collide, but defensive
     graphNodes[region.id] = {
@@ -656,13 +671,31 @@ export async function POST(request: NextRequest) {
       category:      region.type,
       zone_id:       region.id,
       is_expandable: true,
-      connections:   [],
+      connections:   [placeholderBackLink],
       npc_ids:       [],
       item_ids:      [],
       asset_id:      `location_${region.id}`,
       discovered:    false,
       map_position:  region.grid_centre,
     };
+  }
+  // For the legacy single-tier shape (region.id === startingNodeId),
+  // also wire the settlement to each adjacent placeholder so the ◇ card
+  // can surface there. The non-legacy path already added them to the
+  // geographic region zone above.
+  if (isSameAsSettlement) {
+    const settlement = graphNodes[startingNodeId];
+    if (settlement) {
+      const extra = bibleNarrowed.adjacent_regions
+        .map((r) => r.id)
+        .filter((id) => !settlement.connections.includes(id));
+      if (extra.length > 0) {
+        graphNodes[startingNodeId] = {
+          ...settlement,
+          connections: [...settlement.connections, ...extra],
+        };
+      }
+    }
   }
 
   // Spread any colliding positions before persisting — the renderer's

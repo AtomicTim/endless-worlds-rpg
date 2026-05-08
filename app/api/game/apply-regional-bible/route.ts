@@ -34,6 +34,11 @@ interface RequestBody {
   bible?:                RegionBible;
   origin_node_id?:       string;
   existing_world_graph?: WorldGraph;
+  /** Bug 2 — the outline.id the client expects this bible to belong to.
+   *  Compared against bible.id; mismatch indicates cache poisoning or
+   *  the model echoing a different id back, and we 400 instead of
+   *  silently writing nodes with a corrupted zone_id. */
+  expected_region_id?:   string;
 }
 
 // ── Helpers: convert bible entries into WorldAsset rows ────────────────────────
@@ -163,7 +168,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { session_id, bible, origin_node_id, existing_world_graph } = body;
+  const { session_id, bible, origin_node_id, existing_world_graph, expected_region_id } = body;
   if (!session_id || !bible || !origin_node_id || !existing_world_graph) {
     return NextResponse.json(
       { error: "Missing required fields: session_id, bible, origin_node_id, existing_world_graph" },
@@ -178,6 +183,26 @@ export async function POST(request: NextRequest) {
   const bibleNarrowed:     RegionBible = bible;
   const originNodeId       = origin_node_id;
   const existingGraph:     WorldGraph  = existing_world_graph;
+
+  // Bug 2 guard — refuse to apply when the bible's id doesn't match the
+  // destination the client is expanding into. This would only trip on
+  // cache poisoning or the AI echoing a different id back; in either
+  // case writing nodes with a corrupted zone_id silently is worse than
+  // a 400 the player can retry.
+  if (expected_region_id && bibleNarrowed.id !== expected_region_id) {
+    console.error(
+      "[apply-regional-bible] ZONE_ID MISMATCH:",
+      { bibleId: bibleNarrowed.id, expectedRegionId: expected_region_id, sessionId }
+    );
+    return NextResponse.json(
+      {
+        error:               "Region bible id does not match the expected destination region id",
+        bible_id:            bibleNarrowed.id,
+        expected_region_id,
+      },
+      { status: 400 }
+    );
+  }
 
   // Audit Issue K fix: load the current master_state so we can patch
   // it with the merged graph and current_location_id, then write the

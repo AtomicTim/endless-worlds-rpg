@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
+import { useGameStore } from "@/lib/stores/game-store";
 import type {
   Genre,
   MasterState,
@@ -56,6 +57,14 @@ interface Card {
 // ────────────────────────────────────────────────────────────────────────────
 
 export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
+  // Adjacent region travel — outline id currently being expanded into
+  // a full RegionBible. Set when the player clicks a ◇ peer-unknown
+  // card; cleared when apply-regional-bible resolves. We disable every
+  // card while truthy so a stray double-click can't fire a second
+  // generate, and replace the targeted ◇'s "UNDISCOVERED" badge with
+  // "GENERATING..." so the 5-15s wait reads as intentional.
+  const generatingRegionId = useGameStore((s) => s.generatingRegionId);
+
   const cards = useMemo<Card[]>(
     () => buildCards(worldGraph, masterState),
     [worldGraph, masterState]
@@ -110,6 +119,7 @@ export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
             key={c.key}
             card={c}
             onClick={() => onNavigate(c.targetId)}
+            generatingRegionId={generatingRegionId}
           />
         ))}
       </div>
@@ -360,7 +370,17 @@ const ARROW: Record<CardKind, string> = {
   "peer-unknown": "◇",
 };
 
-function NavCard({ card, onClick }: { card: Card; onClick: () => void }) {
+function NavCard({
+  card,
+  onClick,
+  generatingRegionId,
+}: {
+  card: Card;
+  onClick: () => void;
+  /** When non-null, RegionBible expansion is in flight. Every card
+   *  disables; the targeted ◇ swaps its badge to "GENERATING...". */
+  generatingRegionId: string | null;
+}) {
   const isBack       = card.kind === "back";
   const isExit       = card.kind === "exit";
   const isDeeper     = card.kind === "deeper";
@@ -368,6 +388,9 @@ function NavCard({ card, onClick }: { card: Card; onClick: () => void }) {
   const isUnknown    = card.kind === "peer-unknown";
   const isNew        = !card.discovered && !isUnknown && !isBack;
   const arrow        = ARROW[card.kind];
+
+  const isGenerating       = generatingRegionId !== null;
+  const isGeneratingTarget = isUnknown && generatingRegionId === card.targetId;
 
   const arrowColor =
     isBack ? "var(--ink-3)"
@@ -404,13 +427,21 @@ function NavCard({ card, onClick }: { card: Card; onClick: () => void }) {
   // Category / undiscovered badge under the primary name — diamond cards
   // (◆ / ◇) carry an explicit badge so the player can tell a region
   // dungeon apart from a settlement → DEEPER card at a glance.
+  // While the player's clicked ◇ is being expanded, swap that card's
+  // badge to "GENERATING..." so the wait reads as in-progress work.
   const showBadge = isPeerKnown || isUnknown;
-  const badgeText = isUnknown ? "UNDISCOVERED" : card.sublabel;
+  const badgeText = isGeneratingTarget
+    ? "GENERATING..."
+    : isUnknown
+      ? "UNDISCOVERED"
+      : card.sublabel;
 
   return (
     <button
       onClick={onClick}
       title={card.name}
+      disabled={isGenerating}
+      aria-busy={isGeneratingTarget}
       style={{
         display:        "flex",
         alignItems:     "center",
@@ -424,11 +455,12 @@ function NavCard({ card, onClick }: { card: Card; onClick: () => void }) {
         borderRadius:   4,
         color:          "var(--ink-2)",
         fontFamily:     "var(--mono)",
-        cursor:         "pointer",
+        cursor:         isGenerating ? "wait" : "pointer",
         flexShrink:     0,
         textAlign:      "left",
         whiteSpace:     "nowrap",
         transition:     "all 120ms",
+        opacity:        isGenerating && !isGeneratingTarget ? 0.45 : 1,
       }}
     >
       <span

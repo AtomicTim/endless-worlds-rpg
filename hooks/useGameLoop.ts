@@ -908,16 +908,28 @@ export function useGameLoop() {
         }
       }
 
-      // ── 4d. Day 19D — WORLD_EXPLORE → Regional Bible expansion ─────────────
-      // Before the narrator runs, see if this WORLD_EXPLORE matches an
-      // outline from the WorldBible's adjacent_regions. If so, generate
-      // (or fetch from cache) a full RegionBible, apply it on the server
-      // side, and swap the player into the new region's settlement node.
-      // The narrator then runs with ARRIVING context describing the real
-      // settlement instead of a stub-named placeholder.
+      // ── 4d. Day 19D — Adjacent region → Regional Bible expansion ───────────
+      // Before the narrator runs, see if this move targets an undiscovered
+      // adjacent region. If so, generate (or fetch from cache) a full
+      // RegionBible, apply it on the server, and swap the player into the
+      // new region's settlement node. The narrator then runs with ARRIVING
+      // context describing the real settlement instead of a stub-named
+      // placeholder.
+      //
+      // Two trigger paths:
+      //   (a) classifyMove returned WORLD_EXPLORE — destination genuinely
+      //       new and not in the graph yet.
+      //   (b) classifyMove returned GRAPH_NAVIGATE to an UNDISCOVERED
+      //       adjacent-region placeholder — apply-world-bible seeds these
+      //       at world-gen with discovered=false so the world map shows
+      //       them dim, AND wires them into the geographic region zone's
+      //       connections so NavigationBar's ◇ peer-unknown card surfaces
+      //       them. classifyMove name-matches the placeholder via the
+      //       connection list, returns GRAPH_NAVIGATE, and we'd otherwise
+      //       leave the player stranded on an empty placeholder. This
+      //       branch catches that case.
       //
       // Falls through to the legacy stub-gen path (step 7-C) when:
-      //   - the move isn't WORLD_EXPLORE
       //   - the world_bible isn't in metadata (legacy save)
       //   - no outline matched (truly unknown destination)
       //   - the network fetch fails (graceful degrade)
@@ -925,18 +937,43 @@ export function useGameLoop() {
         typeof resolution.narrative_context.move_type === "string"
           ? resolution.narrative_context.move_type
           : null;
+
+      // (b) — detect navigation to an undiscovered adjacent placeholder.
+      // The destination node id lives in narrative_context.location_id
+      // for GRAPH_NAVIGATE, or in current_location_id after applyStateDelta.
+      const targetNodeId =
+        typeof resolution.narrative_context.location_id === "string"
+          ? resolution.narrative_context.location_id
+          : updatedState.world_state.current_location_id;
+      const targetGraphNode = updatedState.world_graph?.nodes[targetNodeId];
+      const targetIsAdjacentPlaceholder =
+        moveTypeForRegion === "GRAPH_NAVIGATE" &&
+        !!targetGraphNode &&
+        targetGraphNode.discovered === false &&
+        targetGraphNode.is_expandable === true &&
+        !!updatedState.metadata.world_bible?.adjacent_regions.find(
+          (r) => r.id === targetNodeId
+        );
+
+      const shouldExpandRegion =
+        moveTypeForRegion === "WORLD_EXPLORE" || targetIsAdjacentPlaceholder;
+
       if (
-        moveTypeForRegion === "WORLD_EXPLORE" &&
+        shouldExpandRegion &&
         updatedState.world_graph &&
         updatedState.metadata.world_bible
       ) {
         const wb        = updatedState.metadata.world_bible;
         const wcdRegion = updatedState.metadata.world_consistency;
-        const target    =
-          parsedAction.primary_target ??
-          (typeof resolution.narrative_context.destination_hint === "string"
-            ? resolution.narrative_context.destination_hint
-            : null);
+        // For GRAPH_NAVIGATE-to-placeholder we already have the exact
+        // outline id in hand (targetNodeId). For WORLD_EXPLORE we fall
+        // back to fuzzy matching against the player-typed destination.
+        const target = targetIsAdjacentPlaceholder
+          ? targetNodeId
+          : (parsedAction.primary_target ??
+            (typeof resolution.narrative_context.destination_hint === "string"
+              ? resolution.narrative_context.destination_hint
+              : null));
         const matchedOutline = matchRegionOutline(wb.adjacent_regions, target);
 
         // Bug 2 diagnostic — show what outline (and bible) the
@@ -947,6 +984,7 @@ export function useGameLoop() {
           targetId:           target,
           matchedOutlineId:   matchedOutline?.id,
           matchedOutlineName: matchedOutline?.name,
+          trigger:            targetIsAdjacentPlaceholder ? "GRAPH_NAVIGATE_PLACEHOLDER" : "WORLD_EXPLORE",
         });
 
         if (matchedOutline && wcdRegion) {
@@ -1026,6 +1064,11 @@ export function useGameLoop() {
                   bible:                regionBible,
                   origin_node_id:       fromId,
                   existing_world_graph: updatedState.world_graph,
+                  // Bug 2 — server compares this against bible.id and
+                  // 400s on mismatch (cache poisoning / AI echoing the
+                  // wrong id). Without this guard, a stale cache entry
+                  // would silently corrupt every new node's zone_id.
+                  expected_region_id:   matchedOutline.id,
                 }),
               });
               if (applyRes.ok) {
@@ -1105,9 +1148,16 @@ export function useGameLoop() {
       // the TIER 1 OBJECTS block render empty, so the narrator can't
       // reference the real cast / props. Synchronous pre-load fixes the
       // first beat; step 7c continues to keep subsequent beats fresh.
+      //
+      // Adjacent region travel — read the current location from
+      // updatedState, NOT resolution.state_delta. Step 4d's RegionBible
+      // expansion swaps current_location_id from the placeholder to the
+      // new settlement on updatedState; resolution.state_delta still
+      // points at the placeholder. Without this, the narrator's first
+      // beat in the new region pulls assets for the empty placeholder.
       const arrivingAt =
-        resolution.state_delta.world_state?.location_status === LocationStatus.ARRIVING
-          ? resolution.state_delta.world_state.current_location_id ?? null
+        updatedState.world_state.location_status === LocationStatus.ARRIVING
+          ? updatedState.world_state.current_location_id ?? null
           : null;
       if (arrivingAt) {
         const arrivedAssets = await getWorldAssetsForLocation(
@@ -2417,6 +2467,14 @@ export function useGameLoop() {
       );
     } finally {
       store.setProcessing(false);
+      // Adjacent region travel — always clear the generation lock at
+      // the end of submitAction so the nav bar re-enables whether the
+      // expansion succeeded, failed, or was a no-op for this turn.
+      // Lock is set in navigateTo on a ◇ click; a non-region nav is
+      // a no-op since generatingRegionId stays null.
+      if (useGameStore.getState().generatingRegionId !== null) {
+        useGameStore.getState().setGeneratingRegionId(null);
+      }
     }
   }, []);
 
@@ -2551,6 +2609,17 @@ export function useGameLoop() {
       console.log(
         "[navigateTo] adjacent region detected:", nodeId,
         "triggering RegionBible expansion"
+      );
+      // Adjacent region travel — UI feedback before the 5-15s
+      // generation begins.
+      //   1. Lock the nav bar so a stray double-click can't fire two
+      //      generates against the same outline.
+      //   2. Drop a visible system message in the story feed so the
+      //      wait feels intentional rather than the app freezing.
+      // Cleared in step 4d's finally branch (success OR failure).
+      gs.setGeneratingRegionId(nodeId);
+      gs.addMessage(
+        makeMessage("SYSTEM", "Venturing into unknown territory...")
       );
     }
 

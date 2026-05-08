@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.25
-**Status:** Active Development — Architecture Hardening Complete, Combat System Next
+**Version:** 8.26
+**Status:** Active Development — Architecture Hardening + Bug Fix Round Complete, Combat System Next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -10,7 +10,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Test architecture hardening → combat system (Day 20)
+**Current Phase:** Bug fix round complete → combat system (Day 20)
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -28,6 +28,7 @@
 | Session 84–89 Bug Fixes | Nav, map, RegionBible, zone_id, UX | ✅ Complete |
 | Adjacent Region Travel | End-to-end flow, Bug 2 fixed | ✅ Complete |
 | Architecture Hardening | Caching, codex dedup, code-built dialogue | ✅ Complete |
+| Bug Fix Round (57b0300) | Highlight nav, discovered, headers, map polish | ✅ Complete |
 | 20 | Combat System | ⏳ Next |
 | 21 | Container + Loot | ⏳ Pending |
 | 22 | Skills + Leveling | ⏳ Pending |
@@ -35,6 +36,26 @@
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir removed. Genre renderers restored (pickModule re-enabled).**
+
+### Bug Fix Round (commit 57b0300 — 43/43 tests, clean build)
+
+**Fix 1 — Highlight nav uses node id, not display name:**
+`useGameLoop.ts:2832-2871` — `navigateTo(rawId)` resolves a display-name input to its canonical node id (via `graph.nodes` name match, then `adjacent_regions` fallback) before validating. Bails with a warning if nothing resolves. Eliminates the WORLD_EXPLORE mis-fire that occurred when story-feed highlights passed display names like "Rust-Watch Highlands" instead of ids like `rust_watch_highlands`.
+
+**Fix 2 — Discovered flag safety net:**
+`useGameLoop.ts:2036-2065` — Generic safety-net flip of `discovered = true` at the end of step 7's move dispatch. Every successful arrival ends with the destination marked discovered regardless of which branch handled the move. Backstop, not root cause — if `discovered: false` shows up later in saved state for clearly-visited nodes, individual step 7 branches are the suspect.
+
+**Fix 3 — Section header on cross-node navigation:**
+`useGameLoop.ts:2880-2887` — `navigateTo` resets `lastArrivalNodeId = null` whenever the requested nodeId differs from the current one. Same-node re-triggers stay suppressed (no duplicate ◈ headers), legit cross-node moves always emit a fresh header. Fixes the missing header on dungeon → region zone return.
+
+**Fix 4 — Map text size pass:**
+All 5 genre renderers (FantasyMap, CyberMap, SpaceMap, ApocMap, HorrorMap) bumped: node labels → 11px, exit labels → 10px, subtitles → 10px, undiscovered shapes enlarged proportionally. DebugMap unchanged. No genre renderer was ever drawing coordinate text — that was a misread of older code.
+
+**Fix 5 — Map "?" glyph underline removed:**
+`FantasyMap.tsx:60-71` — Only renderer using the `?` character. Added `textDecoration="none"` + `style={{ textDecoration: "none" }}` to override any inherited link underline. Story-feed location highlight underlines were intentionally left as-is. If other genre renderers ever add an unknown-marker glyph, they need the same treatment.
+
+**Fix 6 — Cache hit skips arrival narrator:**
+`useGameLoop.ts:1465-1591` — Cache-hit on ARRIVING now runs an inline mini-pipeline (emit message with arrival header → mark discovered → refresh assets → first-visit codex → log entry → persist) and `return`s. No narrator pipeline at all. Eliminates the downstream AI call risk from step 7-C's `generateLocationStub` when a return move gets mis-classified as WORLD_EXPLORE. The cached `physical_description` IS the arrival narration.
 
 ### Architecture Hardening (commit 57d27f3 — 43/43 tests, clean build)
 
@@ -106,6 +127,8 @@ Legacy format: plain string → auto-converted to {topic: first-5-words, content
 - NPC highlight color (orange) too similar to item highlight (yellow) in Fantasy
 - React key-prop-spread warnings in LocationSpan/ItemSpan/NpcSpan
 - Hub node not added to codex on first arrival to new region (deferred)
+- Step 7 individual branches: confirm each branch sets `discovered: true` (currently relying on Fix 2 safety net)
+- Cyber/Space/Apoc/Horror renderers don't currently use `?` glyph; if added later, replicate Fix 5 textDecoration="none" override
 
 ---
 
@@ -126,6 +149,8 @@ Genre renderers active (pickModule enabled).
 PAD=76. Tier switcher. Current node highlighted.
 World tier: CURRENT LOCATION eyebrow hidden.
 New region nodes: collision-checked, nudged if overlap.
+Text sizes: node labels 11px, exit labels 10px, subtitles 10px (V8.26).
+Fantasy "?" glyph: textDecoration none (V8.26).
 ```
 
 ---
@@ -142,6 +167,9 @@ New region nodes: collision-checked, nudged if overlap.
 8. WCD Is Absolute Law.
 9. Failed Checks = Evasion Only.
 10. Highlights Are Exact Tier 1 Matches.
+11. Highlight clicks resolve display-name → node id before navigateTo. Never pass display names. (V8.26)
+12. Every successful arrival flips `discovered = true` at end of step 7. (V8.26)
+13. Cache hit on ARRIVING runs inline mini-pipeline and exits. Zero narrator calls on cached re-visits. (V8.26)
 
 ---
 
@@ -161,7 +189,7 @@ Narrator prose:      var(--ink-1)
 NPC quoted speech:   #e8d5b0 warm cream, italic
 Player actions:      #7ab8c8 teal-blue, 12px mono italic
 Item highlights:     #e8c547 yellow
-Location highlights: #7dd3fc sky blue
+Location highlights: #7dd3fc sky blue (underline intentional, retained V8.26)
 NPC highlights:      var(--accent) orange (too similar to item yellow — future fix)
 ```
 
@@ -221,9 +249,9 @@ NPC highlights:      var(--accent) orange (too similar to item yellow — future
 
 ## Workflow
 **Claude.ai owns all CLAUDE.md updates.**
-Claude Code pushes → git pull + restart → report → confirm → next prompt.
+Claude Code pushes → user reports commit + test results → Claude.ai updates CLAUDE.md + provides testing checklist → user verifies → next prompt.
 **All architecture decisions defer to /docs/architecture-spec.md.**
 
 ---
 
-*Last updated: Session 89 — V8.25: Architecture hardening complete. Arrival caching, codex dedup (Bug 9), code-built dialogue options, region zone landing, world map overlap fix, genre renderers restored. Combat system (Day 20) next.*
+*Last updated: V8.26 — Bug fix round (commit 57b0300): highlight nav resolves display-name → id, discovered safety net at end of step 7, lastArrivalNodeId resets on cross-node navigateTo, all 5 genre renderers bumped to 11/10/10px, Fantasy "?" glyph underline stripped, ARRIVING cache hit runs inline mini-pipeline with zero narrator calls. Combat system (Day 20) next.*

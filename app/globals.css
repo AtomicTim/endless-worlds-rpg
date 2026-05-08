@@ -213,10 +213,11 @@
 .ew-link-item     { color: var(--hl-item);     border-bottom: 1px dashed color-mix(in oklab, var(--hl-item) 60%, transparent);     cursor: pointer; }
 .ew-link-landmark { color: var(--hl-landmark); border-bottom: 1px dashed color-mix(in oklab, var(--hl-landmark) 60%, transparent); cursor: pointer; }
 
-/* Direct character speech inside narrative paragraphs */
+/* Direct character speech inside narrative paragraphs (Fix 4 — warm
+   cream + italic so quoted NPC dialogue reads distinct from narration). */
 .ew-said {
-  color: var(--hl-said, #e8d8b0);
-  font-style: normal;
+  color: var(--hl-said, #e8d5b0);
+  font-style: italic;
   font-weight: 500;
 }
 [data-genre="cyber"] .ew-said,

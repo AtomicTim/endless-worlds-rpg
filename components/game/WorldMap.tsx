@@ -253,18 +253,23 @@ export function WorldMap({
         </div>
       )}
 
-      {/* Location info panel */}
+      {/* Location info panel.
+           Fix 8 — at the World tier the "current location" reads as the
+           geographic region zone, which is misleading; the World map is
+           a pure overview, so we hide the panel entirely. The flex:1
+           slot stays so the map still snaps to the top of the column. */}
       <div
         className="ew-scroll"
         style={{
           flex:        1,
           minHeight:   0,
           overflowY:   "auto",
-          padding:     "14px 16px",
-          borderTop:   "1px solid var(--line)",
+          padding:     activeTier === 1 ? 0 : "14px 16px",
+          borderTop:   activeTier === 1 ? "none" : "1px solid var(--line)",
           background:  "var(--bg-0)",
         }}
       >
+        {activeTier !== 1 && <>
         <div
           className="ew-mono"
           style={{
@@ -328,7 +333,7 @@ export function WorldMap({
             >
               PRESENT
             </div>
-            <div style={{ display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {info.npcs.map((npc) => (
                 <button
                   key={npc.id}
@@ -340,15 +345,25 @@ export function WorldMap({
                     alignItems:    "center",
                     gap:           8,
                     width:         "100%",
-                    padding:       "6px 0",
-                    background:    "transparent",
-                    border:        "none",
-                    borderBottom:  "1px solid var(--line)",
+                    padding:       "8px 10px",
+                    background:    "var(--bg-2)",
+                    border:        "1px solid var(--line)",
+                    borderRadius:  3,
                     cursor:        onOpenDialogue ? "pointer" : "default",
                     color:         "var(--ink-1)",
                     fontFamily:    "var(--mono)",
                     fontSize:      10,
                     textAlign:     "left",
+                    transition:    "background 150ms, border-color 150ms",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!onOpenDialogue) return;
+                    e.currentTarget.style.background   = "var(--bg-3)";
+                    e.currentTarget.style.borderColor  = "var(--accent)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background   = "var(--bg-2)";
+                    e.currentTarget.style.borderColor  = "var(--line)";
                   }}
                 >
                   <span
@@ -360,18 +375,32 @@ export function WorldMap({
                       flexShrink:   0,
                     }}
                   />
-                  {npc.name}
-                  {npc.role && (
+                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {npc.name}
+                    {npc.role && (
+                      <span
+                        style={{
+                          marginLeft:    8,
+                          fontSize:      8,
+                          color:         "var(--ink-4)",
+                          letterSpacing: "0.15em",
+                          textTransform: "uppercase" as const,
+                        }}
+                      >
+                        {npc.role}
+                      </span>
+                    )}
+                  </span>
+                  {onOpenDialogue && (
                     <span
                       style={{
-                        marginLeft:    "auto",
                         fontSize:      8,
-                        color:         "var(--ink-4)",
-                        letterSpacing: "0.15em",
-                        textTransform: "uppercase" as const,
+                        color:         "var(--accent)",
+                        letterSpacing: "0.18em",
+                        flexShrink:    0,
                       }}
                     >
-                      {npc.role}
+                      TALK →
                     </span>
                   )}
                 </button>
@@ -458,6 +487,7 @@ export function WorldMap({
             </div>
           </div>
         )}
+        </>}
       </div>
     </div>
   );

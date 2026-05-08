@@ -290,11 +290,11 @@ function buildCards(
   // the hub to choose another building (Fix 3).
 
   // ── TYPE C — exit ────────────────────────────────────────────────────────
-  // Only for settlement hub and sub-locations (↑ exit to region zone).
-  // Dungeon/wilderness have no Type C card — the ← back card returns to
-  // the region zone and the player chooses from there (Fix 4).
+  // ONLY the settlement hub gets the ↑ exit card. From a sub-location the
+  // only nav is ← back to hub; from a dungeon the only nav is ← back to
+  // the region zone. (Fix 1)
   const exitCards: Card[] = [];
-  if ((isAtSettlementHub || isAtSubLocation) && regionZone) {
+  if (isAtSettlementHub && regionZone) {
     exitCards.push({
       key:        `exit-${regionZone.id}`,
       kind:       "exit",
@@ -363,25 +363,49 @@ const ARROW: Record<CardKind, string> = {
 function NavCard({ card, onClick }: { card: Card; onClick: () => void }) {
   const isBack       = card.kind === "back";
   const isExit       = card.kind === "exit";
+  const isDeeper     = card.kind === "deeper";
+  const isPeerKnown  = card.kind === "peer-known";
   const isUnknown    = card.kind === "peer-unknown";
   const isNew        = !card.discovered && !isUnknown && !isBack;
   const arrow        = ARROW[card.kind];
 
   const arrowColor =
-    isBack ? "var(--ink-3)" : isUnknown ? "var(--ink-4)" : "var(--accent)";
+    isBack ? "var(--ink-3)"
+    : isUnknown ? "var(--ink-4)"
+    : "var(--accent)";
   const nameColor =
     isBack    ? "var(--ink-3)"
-    : isUnknown ? "var(--ink-4)"
+    : isUnknown ? "var(--ink-3)"
     : isNew   ? "var(--ink-3)"
     : "var(--ink-1)";
-  const subColor   = "var(--ink-4)";
-  const background = isExit ? "var(--bg-3)" : "var(--bg-2)";
+  const subColor =
+    isPeerKnown ? "var(--accent)"
+    : isUnknown  ? "var(--accent)"
+    : "var(--ink-4)";
+
+  // Backgrounds — Fix 7: TYPE B (deeper) is transparent so settlement
+  // sub-loc cards read flatter; TYPE D1 keeps the elevated --bg-2 fill;
+  // TYPE D2 (undiscovered) is transparent.
+  const background =
+    isExit       ? "var(--bg-3)"
+    : isDeeper   ? "transparent"
+    : isUnknown  ? "transparent"
+    : "var(--bg-2)";
+
+  // Border — TYPE B uses 60% accent opacity, TYPE D2 dashed 35%.
   const borderColor =
-    isUnknown ? "var(--line-2)"
-    : isBack  ? "var(--line)"
-    : isNew   ? "color-mix(in srgb, var(--accent) 40%, transparent)"
+    isBack       ? "var(--line)"
+    : isUnknown  ? "color-mix(in srgb, var(--accent) 35%, transparent)"
+    : isDeeper   ? "color-mix(in srgb, var(--accent) 60%, transparent)"
+    : isNew      ? "color-mix(in srgb, var(--accent) 40%, transparent)"
     : "var(--accent)";
   const borderStyle = isUnknown || isNew ? "dashed" : "solid";
+
+  // Category / undiscovered badge under the primary name — diamond cards
+  // (◆ / ◇) carry an explicit badge so the player can tell a region
+  // dungeon apart from a settlement → DEEPER card at a glance.
+  const showBadge = isPeerKnown || isUnknown;
+  const badgeText = isUnknown ? "UNDISCOVERED" : card.sublabel;
 
   return (
     <button
@@ -467,15 +491,23 @@ function NavCard({ card, onClick }: { card: Card; onClick: () => void }) {
         <span
           style={{
             fontFamily:    "var(--mono)",
-            fontSize:      8,
+            fontSize:      showBadge ? 7 : 8,
             letterSpacing: "0.2em",
             color:         subColor,
             overflow:      "hidden",
             textOverflow:  "ellipsis",
             whiteSpace:    "nowrap",
+            ...(showBadge ? {
+              alignSelf:    "flex-start",
+              border:       `1px solid ${isUnknown
+                ? "color-mix(in srgb, var(--accent) 35%, transparent)"
+                : "color-mix(in srgb, var(--accent) 60%, transparent)"}`,
+              padding:      "1px 5px",
+              marginTop:    2,
+            } : {}),
           }}
         >
-          {card.sublabel}
+          {showBadge ? badgeText : card.sublabel}
         </span>
       </span>
     </button>

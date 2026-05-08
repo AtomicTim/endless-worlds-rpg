@@ -1010,6 +1010,27 @@ export function buildNarratorUserPrompt(
       // At a geographic region zone: name the settlement hub as a whole unit
       // and list standalone region_locations (dungeons/wilderness).
       // Do NOT list individual sub-locations inside the settlement.
+      //
+      // Fix 10 — for each region_location, derive a rough compass
+      // direction from its grid position relative to the settlement
+      // hub. The narrator can then say "to the east, the Hollowborn
+      // Breach waits..." rather than naming the place generically.
+      const settlementHubNode = Object.values(graph.nodes).find(
+        (n) => n.zone_id === currentNode.id && n.is_settlement_node === true
+      ) ?? null;
+      const hubX = settlementHubNode?.map_position?.x ?? 0;
+      const hubY = settlementHubNode?.map_position?.y ?? 0;
+
+      const compass = (n: { map_position?: { x: number; y: number } }): string => {
+        const dx = (n.map_position?.x ?? 0) - hubX;
+        const dy = (n.map_position?.y ?? 0) - hubY;
+        if (dx === 0 && dy === 0) return "nearby";
+        // y axis grows downward in our grid, so positive dy = south.
+        const ns = Math.abs(dy) > 0.5 ? (dy > 0 ? "south" : "north") : "";
+        const ew = Math.abs(dx) > 0.5 ? (dx > 0 ? "east"  : "west")  : "";
+        return (ns + ew) || "nearby";
+      };
+
       for (const node of Object.values(graph.nodes)) {
         if (node.id === currentNode.id) continue;
         if (node.zone_id !== currentNode.id) continue;
@@ -1019,7 +1040,10 @@ export function buildNarratorUserPrompt(
           node.type === "zone" &&
           node.is_expandable === false
         ) {
-          connectedLines.push(`- ${node.name}`);
+          const cat = (node.category ?? "location").toLowerCase();
+          connectedLines.push(
+            `- ${node.name} (${cat}, to the ${compass(node)})`
+          );
         }
       }
     } else {

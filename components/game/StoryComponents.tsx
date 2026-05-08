@@ -165,8 +165,21 @@ interface SceneDividerProps {
 }
 
 export function SceneDivider({ label }: SceneDividerProps) {
+  // Fix 6 — full-width flex container with the label centered between
+  // the two ::before / ::after rule lines that .ew-divider draws. The
+  // explicit width:100% + justifyContent:center overrides the prior
+  // maxWidth:640 that left the divider hugging the left edge.
   return (
-    <div className="ew-divider" style={{ maxWidth: 640, width: "100%", textAlign: "center" }}>
+    <div
+      className="ew-divider"
+      style={{
+        width:          "100%",
+        display:        "flex",
+        alignItems:     "center",
+        justifyContent: "center",
+        textAlign:      "center",
+      }}
+    >
       <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
           <path d="M 5 0 L 10 5 L 5 10 L 0 5 Z" fill="currentColor" />

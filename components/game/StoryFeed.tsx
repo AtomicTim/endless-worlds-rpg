@@ -189,17 +189,19 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
     switch (type) {
       case "NARRATIVE": {
         // Player echo (DialogueModal inline submit / option click).
+        // Fix 5 — muted teal so the player can scan their own actions
+        // distinct from narration / NPC dialogue.
         if (isPlayerDialogue) {
           return (
             <div
-              className="message-enter ew-mono"
+              className="message-enter"
               style={{
-                color:         "var(--ink-4)",
-                fontSize:      11,
+                color:         "#7ab8c8",
+                fontFamily:    "var(--mono)",
+                fontSize:      12,
                 letterSpacing: "0.05em",
                 margin:        "10px 0 4px",
                 fontStyle:     "italic",
-                opacity:       0.85,
               }}
             >
               ◈ {content.replace(/^"|"$/g, "")}
@@ -224,18 +226,19 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
       }
 
       case "SYSTEM": {
-        // Player action echo
+        // Player action echo — Fix 5: muted teal to mark the player's
+        // own input apart from system events / narration.
         if (content.startsWith("> ")) {
           return (
             <div
-              className="message-enter ew-mono"
+              className="message-enter"
               style={{
-                color:         "var(--ink-4)",
-                fontSize:      11,
+                color:         "#7ab8c8",
+                fontFamily:    "var(--mono)",
+                fontSize:      12,
                 letterSpacing: "0.05em",
                 margin:        "10px 0 4px",
                 fontStyle:     "italic",
-                opacity:       0.9,
               }}
             >
               ◈ {content.slice(2)}

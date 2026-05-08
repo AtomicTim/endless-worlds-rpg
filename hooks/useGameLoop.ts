@@ -650,40 +650,42 @@ export function useGameLoop() {
             }
             return /[A-Z]/.test(s);
           };
+          // Fix 2 — when the player names a specific NPC by proper name and
+          // that NPC is not present, short-circuit with a hardcoded system
+          // message. No AI call, no redirect to a different NPC at the
+          // current node — the parser is asked to address the named person,
+          // not whoever happens to be standing here.
           if (
             target.length > 0 &&
             !targetMatchesPresent &&
             looksLikeProperName(target)
           ) {
-            (parsedAction as ParsedAction & { _namedNpcNotPresent?: string })._namedNpcNotPresent = target;
             console.log(
-              `[GameLoop/2b-2] Player named '${target}' but they're not at this location — narrator will describe absence.`
+              `[GameLoop/2b-2] '${target}' isn't here — short-circuiting with hardcoded response.`
             );
+            store.addMessage(
+              makeMessage("SYSTEM", `${target} isn't here.`)
+            );
+            store.setProcessing(false);
+            return;
           }
 
+          // Generic descriptor / null-target resolution — the parser said
+          // "the boy" or "the merchant" without naming a specific NPC, or
+          // the player typed quoted speech with no target at all. We can
+          // safely resolve this to a present NPC because the player did
+          // not address anyone by name. (No proper-name redirect runs
+          // here — that case short-circuits above.)
           const shouldOverride = !target || !targetMatchesPresent;
 
           if (shouldOverride && presentNpcAssets.length === 1) {
             const real = presentNpcAssets[0].name;
-            if (target && !targetMatchesPresent) {
-              console.log(
-                `[GameLoop/2b-2] Redirected unmatched target '${target}' to node NPC: ${real}`
-              );
-            } else {
-              console.log(
-                "[GameLoop/2b-2] Pinned primary_target to sole NPC at node:",
-                real
-              );
-            }
+            console.log(
+              "[GameLoop/2b-2] Pinned primary_target to sole NPC at node:",
+              real
+            );
             parsedAction = { ...parsedAction, primary_target: real };
           } else if (shouldOverride && presentNpcAssets.length > 1) {
-            // FIX 5 — try descriptor → role matching BEFORE falling back
-            // to the active-conversation NPC. The intent parser sometimes
-            // emits "the boy" or "the merchant" when the player references
-            // an NPC by description rather than by name. We can resolve
-            // that descriptor against the role / archetype of every NPC
-            // present at the node — if exactly one matches, pin to that
-            // NPC instead of letting the narrator invent a new character.
             const descriptorMatch = matchDescriptorToNpc(target, presentNpcAssets);
             if (descriptorMatch) {
               console.log(
@@ -697,16 +699,10 @@ export function useGameLoop() {
                   (a) => a.name.toLowerCase() === activeNpcName.toLowerCase()
                 );
                 if (activeIsHere) {
-                  if (target && !targetMatchesPresent) {
-                    console.log(
-                      `[GameLoop/2b-2] Redirected unmatched target '${target}' to node NPC: ${activeNpcName}`
-                    );
-                  } else {
-                    console.log(
-                      "[GameLoop/2b-2] Pinned primary_target to active NPC at node:",
-                      activeNpcName
-                    );
-                  }
+                  console.log(
+                    "[GameLoop/2b-2] Pinned primary_target to active NPC at node:",
+                    activeNpcName
+                  );
                   parsedAction = { ...parsedAction, primary_target: activeNpcName };
                 }
               }
@@ -2528,6 +2524,13 @@ export function useGameLoop() {
       console.log("[navigateTo] no-op: already at", nodeId);
       return;
     }
+
+    // Fix 3 — close any open dialogue or trade modal before leaving the
+    // location. Modals belong to the location the player is leaving;
+    // carrying them across navigation produces stale partner refs and
+    // a merchant inventory that doesn't belong to the new place.
+    gs.clearDialogueOptions();
+    gs.setTradeItems([]);
 
     const graph = state.world_graph;
     const node  = graph?.nodes[nodeId];

@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.29
-**Status:** Active Development — Polish Round Complete, Combat System Next
+**Version:** 8.30
+**Status:** Active Development — Region Description / Region Travel / Resilience Round Complete, Combat System Next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -10,7 +10,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Polish round complete → combat system (Day 20). Map visual rework queued for dedicated session post-combat.
+**Current Phase:** Region/resilience round complete → combat system (Day 20). Map visual rework queued for dedicated session post-combat.
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -32,6 +32,7 @@
 | Regression Fix Round (75a7cd4) | Cache pipeline, map sizes, tier descriptions | ✅ Complete |
 | Targeted Fix Round (dc5bcd8) | Region travel 500, region zone description | ✅ Complete |
 | Polish Round (b7032f9) | Tier-aware highlight colors, NPC speech, region cards, key warnings | ✅ Complete |
+| Region/Resilience Round (87c89a3) | Region desc from any node, default tier, landmark color, origin region card, RegionBible stub fallback | ✅ Complete |
 | 20 | Combat System | ⏳ Next |
 | Map Visual Rework | Dedicated session | ⏳ Deferred (post-combat) |
 | 21 | Container + Loot | ⏳ Pending |
@@ -40,6 +41,31 @@
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir removed. Genre renderers restored (pickModule re-enabled).**
+
+### Region / Resilience Round (commit 87c89a3 — 43/43 tests, clean build)
+
+**Fix 1 — Region tier description resolves from parent region for any node:**
+- `lib/game/codex.ts` — `getWorldAssetsForLocation` now accepts an optional `parentRegionId`. The filter includes assets whose `first_seen_location === parentRegionId`, so the geographic region zone asset (e.g. `location_the_rustveil_commons`) is pulled into `locationAssets` even when the player is at a settlement hub or sub-location.
+- `app/game/page.tsx` + `hooks/useGameLoop.ts` — both call sites that load assets on arrival now compute the root zone id by walking the `zone_id` chain and pass it as `parentRegionId`.
+- `WorldMap.tsx::firstAtmosphere` already looked up by `a.id === "location_${regionId}"` — now the asset is actually present in `locationAssets` for it to find. Region tier description renders from any node in the region, not just from the region zone itself.
+
+**Fix 2 — Map defaults to Local tier on startup:**
+- `WorldMap.tsx::chooseInitialTier()` — final return value flipped from `2` (Region) → `3` (Local). Region zones keep the `2` default since LOCAL view doesn't apply there. Everything else (settlement hubs, dungeons, sub-locations) opens on Local tier.
+- User's manual tier choice is not overridden mid-session.
+
+**Fix 3 — Landmark highlight color distinct from region:**
+- `app/globals.css` — `--hl-landmark` flipped from `#c4b5fd` (lavender, same as regions) → `#94d8b8` (soft mint).
+- Region names = lavender, WCD landmarks = soft mint. Visually distinct at a glance.
+
+**Fix 4 — New region lists origin region as adjacent travelable:**
+- `apply-regional-bible/route.ts` — before creating the new region zone node, resolves `originRegionZoneId` by walking the zone chain of `originNodeId`. Adds it to `regionConnections` (new region → origin). Step 6 also adds the new region zone to the origin's connections (origin → new region, supports 3rd-region depth).
+- `NavigationBar.tsx` D2 branch — when at the starting region uses `wb.adjacent_regions` (unchanged from V8.29). When at an expanded region, reads `current.connections` and lists any `is_expandable=true, zone_id=self` nodes as peer cards — picks up the origin region zone wired in by the route fix above.
+- Symmetric region travel: forward AND back work from any region, including the third hop.
+
+**Fix 5 — RegionBible stub fallback on JSON parse failure:**
+- `generate-regional-bible/route.ts` — `max_tokens` 3500 → 6000 to reduce truncation rate. Prompt includes "Keep total response under 5000 tokens. Be concise." directive.
+- On double-parse-failure: returns `200 { bible: stubBible, stub: true }` with a minimal but valid RegionBible (hub + tavern + 1 NPC + back-exit) instead of 500. Console logs `[RegionBible] Returning stub fallback` warning for observability.
+- Player can always traverse into a region. Sparse content is better than a hard wall.
 
 ### Polish Round (commit b7032f9 — 43/43 tests, clean build)
 
@@ -171,16 +197,20 @@ Routing:
   Dungeon        → ← back to region zone ONLY
   New region     → lands at region zone (not settlement hub)
 
-Region zone D2 card builder iterates every world_bible.adjacent_regions
-entry. NEVER filters by current.connections (that gets stripped at
-expansion time). Discovered → ◆ peer-known REGION; absent/undiscovered
-→ ◇ peer-unknown UNDISCOVERED REGION. (V8.29)
+Region zone D2 card builder:
+- At starting region: iterates wb.adjacent_regions
+- At expanded region: reads current.connections, lists is_expandable
+  zone_id=self nodes as peer cards (V8.30)
+- Forward AND back direction symmetric across any region depth
 ```
 
-### Map Description Sourcing ✅ (V8.27, hardened V8.28)
+### Map Description Sourcing ✅ (V8.27, hardened V8.28, generalized V8.30)
 ```
 World tier  → wcd.world_description (2-3 sentence world summary, never changes)
 Region tier → currentRegion.atmosphere (region-specific prose)
+              Resolved from parent region zone asset for ANY node
+              within that region (not just from the region zone)
+              via parentRegionId chain walk (V8.30).
 Local tier  → currentLocation.atmosphere (location-specific prose)
 
 Region zone asset:
@@ -194,6 +224,10 @@ Region zone asset:
 
 Apply routes drop ignoreDuplicates on region-zone upserts so
 re-applied bibles refresh stale prose (V8.28).
+
+Map tier default on mount: Local for non-region-zone nodes, Region
+for region zone nodes (V8.30). User's manual tier choice not
+overridden mid-session.
 
 Legacy saves without world_description: fall back to wcd.atmosphere.
 World tagline under world name: REMOVED (replaced with known/rumored count).
@@ -217,18 +251,32 @@ NPC quoted speech: rendered via .ew-said class — #e8d5b0 warm cream,
 italic, weight 600 (V8.29).
 ```
 
+### RegionBible Resilience ✅ (V8.30)
+```
+Model: claude-haiku-4-5-20251001
+max_tokens: 6000 (bumped from 3500)
+Prompt: includes "Keep total response under 5000 tokens. Be concise."
+
+Failure modes:
+- First parse fail → retry once
+- Retry parse fail → return 200 with stub bible (hub + tavern + 1 NPC
+  + back-exit). Player can still traverse. Console warns
+  [RegionBible] Returning stub fallback for observability.
+
+Player is never blocked from traversal by an LLM JSON malformation.
+```
+
 ### Known issues (deferred to post-combat / map visual rework)
 
 **Map visual rework (dedicated session, post-combat):**
 - Per-node decorative shelf line under every node (visible under both discovered and undiscovered) — looks like an underline but is a separate SVG element. Cleanup needed across all renderers.
 - Connection lines pass through node icons instead of terminating at icon edges — endpoint geometry / z-order issue.
 - Overall sizing and visual hierarchy still feels cramped relative to panel size even after V8.27 bumps.
-- Map label collision: World/Region tier labels overlap visibly when nodes are close together (e.g. "The Drift Barrens" / "Carrion Anchorage", "Carrion Anchorage" / "The Calculus Spire"). Needs label placement / collision avoidance pass.
+- Map label collision: World/Region tier labels overlap visibly when nodes are close together. Needs label placement / collision avoidance pass.
 - Whole-renderer redesign needed: decoration cleanup, line-endpoint geometry, sizing pass, current-node emphasis, label collision.
 
 **Other deferred:**
 - NPC highlight color (orange) too similar to item highlight (yellow) in Fantasy
-- Region highlight color (lavender) and Landmark highlight color (also lavender) currently match. Consider differentiating if it causes player confusion in playtesting.
 - Hub node not added to codex on first arrival to new region
 - Step 7 individual branches: confirm each branch sets `discovered: true` (currently relying on Fix 2 safety net)
 
@@ -241,7 +289,7 @@ italic, weight 600 (V8.29).
 **Domain 2 (Content Library — frozen):** WCD, locations, NPCs, items, loot tables, main quest.
 
 ### Generation Model ✅
-RegionBible: claude-haiku-4-5-20251001, max_tokens: 3500.
+RegionBible: claude-haiku-4-5-20251001, max_tokens: 6000 (V8.30). Stub fallback on double-parse-failure.
 WorldBible: claude-sonnet-4-5, 8000 tokens.
 WCD now includes `world_description` (2-3 sentence world summary).
 Knowledge format: `{topic, content}` pairs. Legacy string → auto-converted.
@@ -252,6 +300,7 @@ Region zone assets: constitution.physical_description AND constitution.atmospher
 Genre renderers active (pickModule enabled).
 PAD=76. Tier switcher. Current node highlighted.
 World tier: tagline removed; subtitle = "<n> known · <n> rumored" (V8.27).
+Initial tier on mount: Local (V8.30).
 New region nodes: collision-checked, nudged if overlap.
 
 Text sizes (V8.27):
@@ -290,9 +339,13 @@ NPE from malformed grid_position entries (V8.28).
 14. Map description sourcing: World = `wcd.world_description`, Region = `currentRegion.atmosphere`, Local = `currentLocation.atmosphere`. No cross-tier bleed. (V8.27)
 15. Region zone assets always populate both `constitution.physical_description` AND `constitution.atmosphere` from the same source prose. WorldMap prefers whichever has trimmed content. (V8.28)
 16. Collision-check loops over expandable node positions must guard each entry with `isValidPos`. Malformed entries are skipped + warned, never dereferenced. (V8.28)
-17. Story feed location highlights are tier-aware: region-tier names use `--hl-region` (lavender), settlement/sub-location names use `--hl-loc` (sky-blue). HighlightCandidate carries `isRegion` flag set at match time from world_graph + WorldBible.adjacent_regions. (V8.29)
-18. Region zone D2 card builder iterates every `world_bible.adjacent_regions` entry, NEVER filters by `current.connections`. Already-expanded regions stay travelable. (V8.29)
+17. Story feed location highlights are tier-aware: region-tier names use `--hl-region` (lavender), settlement/sub-location names use `--hl-loc` (sky-blue), WCD landmarks use `--hl-landmark` (mint). HighlightCandidate carries `isRegion` flag. (V8.29, V8.30 mint landmarks)
+18. Region zone D2 card builder iterates every `world_bible.adjacent_regions` at the starting region; at expanded regions, reads `current.connections` for is_expandable peer-region nodes. Already-expanded regions stay travelable, including back to origin. (V8.29 + V8.30)
 19. Span dispatch in StoryFeed separates `key` from spread props before JSX. Never spread an object containing `key` into a component. (V8.29)
+20. Region tier description resolves from parent region zone asset for any node in that region. `getWorldAssetsForLocation` accepts `parentRegionId` so the asset is in scope regardless of player position within the region. (V8.30)
+21. Map tier defaults to Local on initial mount for any non-region-zone node. Region zone nodes default to Region tier. User's manual tier choice never overridden mid-session. (V8.30)
+22. New region creation always wires the origin region into the new region's connections AND vice versa, so adjacent-region travel is symmetric across any region depth. (V8.30)
+23. RegionBible parse failure must never block the player. Double-parse-failure returns 200 with a stub bible (hub + tavern + 1 NPC + back-exit) and a console warning. (V8.30)
 
 ---
 
@@ -314,7 +367,7 @@ Player actions:        #7ab8c8 teal-blue, 12px mono italic
 Item highlights:       #e8c547 yellow (--hl-item)
 Region highlights:     #c4b5fd lavender (--hl-region)  — Tier 2 / region zones
 Location highlights:   #7dd3fc sky blue (--hl-loc)     — Tier 3 settlements/sub-locations
-Landmark highlights:   #c4b5fd lavender (--hl-landmark) — WCD-known landmarks
+Landmark highlights:   #94d8b8 soft mint (--hl-landmark) — WCD-known landmarks (V8.30)
 NPC highlights:        var(--accent) orange (too similar to item yellow — future fix)
 ```
 
@@ -330,7 +383,7 @@ NPC highlights:        var(--accent) orange (too similar to item yellow — futu
 | Skills + Leveling | Day 22 | XP, stat points, level gates |
 | Main Quest Thread | Day 23 | Breadcrumb injection, quest tracking |
 | Random Events | After combat | Region zone + travel encounters |
-| Genre UI polish | Post-systems | NPC color, region/landmark color overlap if confusing |
+| Genre UI polish | Post-systems | NPC color overlap with item yellow |
 
 ---
 
@@ -380,4 +433,4 @@ Claude Code pushes → user reports commit + test results → Claude.ai updates 
 
 ---
 
-*Last updated: V8.29 — Polish round (commit b7032f9): tier-aware highlight colors (region lavender vs location sky-blue) via new RegionSpan + isRegion flag in HighlightCandidate, NPC quoted speech now warm cream italic weight 600, region zone retains adjacent-region cards on return (D2 builder iterates adjacent_regions directly, never filters by stripped connections), key-prop-spread warnings silenced. Map label collision logged for dedicated map session. Combat system (Day 20) up next.*
+*Last updated: V8.30 — Region/resilience round (commit 87c89a3): region tier description resolves from parent region zone for any node via parentRegionId chain walk, map defaults to Local on startup, landmark color flipped to mint for distinction from region lavender, new region creation wires origin region symmetrically into adjacent-region connections, RegionBible bumped to 6000 tokens with stub-fallback on double-parse-failure (player never blocked). Combat system (Day 20) up next.*

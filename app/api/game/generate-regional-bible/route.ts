@@ -179,7 +179,7 @@ consistent with the WCD):
       "appearance": "[1 sentence]",
       "personality": "[1 sentence]",
       "speech_style": "[3 words]",
-      "knowledge": ["[WCD-consistent fact]"],
+      "knowledge": [{"topic": "[3-5 word label]", "content": "[Full WCD-consistent sentence]"}],
       "default_trust": 50
     },
     {
@@ -190,7 +190,7 @@ consistent with the WCD):
       "appearance": "[1 sentence]",
       "personality": "[1 sentence]",
       "speech_style": "[3 words]",
-      "knowledge": ["[WCD-consistent fact]"],
+      "knowledge": [{"topic": "[3-5 word label]", "content": "[Full WCD-consistent sentence]"}],
       "default_trust": 50
     },
     {
@@ -249,7 +249,14 @@ The region_locations entry is a STANDALONE point in the geographic
 area (dungeon / wilderness / shrine) — NOT inside the settlement.
 It connects directly to the settlement hub. It MUST have an NPC
 with a believable reason to be there, plus 2 evocative Tier 1
-objects.`;
+objects.
+
+NPC KNOWLEDGE FORMAT (Architecture C): every NPC's "knowledge"
+array must be objects of shape {topic, content}. The topic is a
+3-5 word button label the player sees ("The cult below",
+"Roads east"); content is the full WCD-consistent sentence the
+NPC reveals on a passed stat check. Generate 1-2 entries per NPC.
+Do NOT emit plain strings — always {topic, content}.`;
 }
 
 function stripJsonFences(raw: string): string {

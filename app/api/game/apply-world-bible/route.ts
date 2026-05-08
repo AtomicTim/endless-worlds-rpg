@@ -60,7 +60,43 @@ function locationToAsset(loc: LocationDefinition, sessionId: string): WorldAsset
   };
 }
 
+/**
+ * Architecture C — coerce an arbitrary NPC knowledge entry to the
+ * canonical `{topic, content}` shape so apply-time can write a single
+ * format into world_assets.constitution.knowledge. The dialogue option
+ * builder reads this back without a second normalization pass.
+ */
+function normalizeKnowledgeEntry(
+  raw: unknown
+): { topic: string; content: string } | null {
+  if (typeof raw === "string") {
+    const content = raw.trim();
+    if (!content) return null;
+    const topic = content.split(/\s+/).slice(0, 5).join(" ").replace(/[.!?,;:]+$/, "").trim();
+    return { topic: topic || content.slice(0, 40), content };
+  }
+  if (raw && typeof raw === "object") {
+    const o = raw as Record<string, unknown>;
+    const topic   = typeof o.topic   === "string" ? o.topic.trim()   : "";
+    const content = typeof o.content === "string" ? o.content.trim() : "";
+    if (!content) return null;
+    return {
+      topic:   topic || content.split(/\s+/).slice(0, 5).join(" "),
+      content,
+    };
+  }
+  return null;
+}
+
 function npcToAsset(npc: NPCDefinition, sessionId: string): WorldAsset {
+  const knowledgeItems = (npc.knowledge ?? [])
+    .map((k) => normalizeKnowledgeEntry(k))
+    .filter((k): k is { topic: string; content: string } => k !== null);
+  // Keep `notes` populated for the legacy ACTIVE NPC CONTEXT block in
+  // prompt-builder ("Motivations: ${c.notes}"); writing the structured
+  // `knowledge` array alongside it powers the code-built dialogue
+  // option list (Architecture C) without removing prompt context.
+  const notes = knowledgeItems.map((k) => k.content).join(". ");
   return {
     id:                  npc.id,
     category:            AssetCategory.CHARACTER,
@@ -71,7 +107,8 @@ function npcToAsset(npc: NPCDefinition, sessionId: string): WorldAsset {
       role:            npc.role,
       speech_patterns: npc.speech_style,
       ...(npc.faction_id ? { faction: npc.faction_id } : {}),
-      notes:           npc.knowledge.join(". "),
+      knowledge:       knowledgeItems,
+      notes,
     },
     significance:        npc.quest_relevance === "key" ? "MAJOR" : "NOTABLE",
     first_seen_location: npc.home_location_id,

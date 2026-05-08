@@ -62,7 +62,39 @@ function locationToAsset(loc: LocationDefinition, sessionId: string): WorldAsset
   };
 }
 
+/**
+ * Architecture C — coerce an arbitrary NPC knowledge entry to the
+ * canonical `{topic, content}` shape. Mirrors apply-world-bible so
+ * region-expanded NPCs land in world_assets with the same structured
+ * knowledge format.
+ */
+function normalizeKnowledgeEntry(
+  raw: unknown
+): { topic: string; content: string } | null {
+  if (typeof raw === "string") {
+    const content = raw.trim();
+    if (!content) return null;
+    const topic = content.split(/\s+/).slice(0, 5).join(" ").replace(/[.!?,;:]+$/, "").trim();
+    return { topic: topic || content.slice(0, 40), content };
+  }
+  if (raw && typeof raw === "object") {
+    const o = raw as Record<string, unknown>;
+    const topic   = typeof o.topic   === "string" ? o.topic.trim()   : "";
+    const content = typeof o.content === "string" ? o.content.trim() : "";
+    if (!content) return null;
+    return {
+      topic:   topic || content.split(/\s+/).slice(0, 5).join(" "),
+      content,
+    };
+  }
+  return null;
+}
+
 function npcToAsset(npc: NPCDefinition, sessionId: string): WorldAsset {
+  const knowledgeItems = (npc.knowledge ?? [])
+    .map((k) => normalizeKnowledgeEntry(k))
+    .filter((k): k is { topic: string; content: string } => k !== null);
+  const notes = knowledgeItems.map((k) => k.content).join(". ");
   return {
     id:                  npc.id,
     category:            AssetCategory.CHARACTER,
@@ -73,7 +105,8 @@ function npcToAsset(npc: NPCDefinition, sessionId: string): WorldAsset {
       role:            npc.role,
       speech_patterns: npc.speech_style,
       ...(npc.faction_id ? { faction: npc.faction_id } : {}),
-      notes:           npc.knowledge.join(". "),
+      knowledge:       knowledgeItems,
+      notes,
     },
     significance:        npc.quest_relevance === "key" ? "MAJOR" : "NOTABLE",
     first_seen_location: npc.home_location_id,
@@ -470,6 +503,46 @@ export async function POST(request: NextRequest) {
     for (const r of regionLocations) {
       if (!regionConnections.includes(r.id)) regionConnections.push(r.id);
     }
+
+    // Architecture CHANGE 2 — world map coordinate overlap fix.
+    // The bible's grid_centre comes from the WorldBible outline that
+    // sketched this region. Outlines from different sessions (or the
+    // model itself drifting) sometimes land within visual range of
+    // an existing region zone, which projects to overlapping markers
+    // on the world-tier map. Detect collisions against every other
+    // is_expandable node and nudge the new region until it has at
+    // least 20 grid units of separation. Cap iterations so a fully
+    // crowded map still terminates.
+    const existingPositions = Object.values(existingGraph.nodes)
+      .filter((n) => n.is_expandable === true && n.id !== bibleNarrowed.id)
+      .map((n) => n.map_position);
+    const hasConflict = (
+      pos:      { x: number; y: number },
+      existing: Array<{ x: number; y: number }>,
+      minDist = 20
+    ): boolean =>
+      existing.some(
+        (p) =>
+          Math.abs(p.x - pos.x) < minDist &&
+          Math.abs(p.y - pos.y) < minDist
+      );
+    const adjustedPos = { ...bibleNarrowed.grid_centre };
+    let nudges = 0;
+    while (hasConflict(adjustedPos, existingPositions) && nudges < 50) {
+      adjustedPos.x += 12;
+      if (adjustedPos.x > 80) {
+        adjustedPos.x = -40;
+        adjustedPos.y += 12;
+      }
+      nudges++;
+    }
+    if (nudges > 0) {
+      console.log(
+        "[apply-regional-bible] map_position nudged to avoid overlap:",
+        { original: bibleNarrowed.grid_centre, adjusted: adjustedPos, nudges }
+      );
+    }
+
     mergedNodes[bibleNarrowed.id] = {
       id:            bibleNarrowed.id,
       name:          bibleNarrowed.name,
@@ -482,7 +555,7 @@ export async function POST(request: NextRequest) {
       item_ids:      [],
       asset_id:      `location_${bibleNarrowed.id}`,
       discovered:    true,
-      map_position:  bibleNarrowed.grid_centre,
+      map_position:  adjustedPos,
     };
     // Wire the settlement back to the region zone so the player can
     // step onto the open-world layer from town.
@@ -549,29 +622,36 @@ export async function POST(request: NextRequest) {
     };
   }
 
+  // Architecture CHANGE 1 — the player lands at the geographic region
+  // zone (is_expandable=true), NOT the settlement hub. The settlement
+  // is reachable via ← BACK from the region zone. When the bible
+  // collapsed both ids into one (legacy single-tier shape), the region
+  // zone IS the settlement node so this falls back gracefully.
+  const regionZoneId = isSameAsSettlement ? startingNodeId : bibleNarrowed.id;
+
   const updatedWorldGraph: WorldGraph = {
     ...existingGraph,
     nodes:           mergedNodes,
-    current_node_id: startingNodeId,
+    current_node_id: regionZoneId,
   };
 
   // ── 7. Audit Issue K fix — persist patched master_state + world_graph ──────
   // Mirror apply-world-bible's persistence pattern so a reload mid-region
   // expansion never loses the new region. The master_state copy includes:
   //   - the merged world_graph with the new region's nodes
-  //   - current_location_id / current_node_id pointing at the settlement
-  //   - visited_locations including the settlement
+  //   - current_location_id / current_node_id pointing at the region zone
+  //   - visited_locations including the region zone
   //   - location_status: ARRIVING (the player just crossed the border)
   const patchedMasterState: MasterState = {
     ...currentMasterState,
     world_state: {
       ...currentMasterState.world_state,
-      current_location_id: startingNodeId,
-      current_node_id:     startingNodeId,
+      current_location_id: regionZoneId,
+      current_node_id:     regionZoneId,
       visited_locations: Array.from(
         new Set([
           ...(currentMasterState.world_state.visited_locations ?? []),
-          startingNodeId,
+          regionZoneId,
         ])
       ),
       location_status: LocationStatus.ARRIVING,
@@ -602,7 +682,11 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     success:             true,
+    /** Settlement hub node id (intra-region down-card target). */
     starting_node_id:    startingNodeId,
+    /** Geographic region zone node id — the player lands here. Equals
+     *  starting_node_id only in the legacy single-tier shape. */
+    region_zone_id:      regionZoneId,
     updated_world_graph: updatedWorldGraph,
     location_count:      bibleNarrowed.locations.length,
     npc_count:           bibleNarrowed.npcs.length,

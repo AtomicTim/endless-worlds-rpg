@@ -447,17 +447,11 @@ BAD: "You can interact with: merchant, fire, door."
 
 The player should always know what they can engage with next without you telling them directly.
 
-DIALOGUE OPTIONS — populate when action involves an NPC:
-When the current action is a DIALOGUE action type, OR an INTERACT with an NPC target, populate dialogue_options with 3-4 things the player could say next. Requirements:
-- Each option must be meaningfully different in tone and approach
-- Tones: "friendly" (cooperative/helpful), "aggressive" (threatening/hostile), "curious" (investigative/questioning), "deceptive" (misleading/manipulative)
-- One option should always be a natural exit like "Leave them be" or "Walk away" (tone: "friendly")
-- Each option is { id, text, tone } — NOTHING ELSE. No stat_check field.
-  The game engine determines the stat check automatically from tone:
-  aggressive → STR, curious → PER, deceptive → CHA (+2 difficulty), friendly → no check.
-  ALL options are always clickable.
-- Keep each option.text under 60 characters — these are button labels
-- For non-NPC actions, leave dialogue_options as an empty array
+DIALOGUE OPTIONS — leave the array empty:
+The game engine builds the dialogue option list from each NPC's
+constitution.knowledge[] (Architecture C). You no longer emit
+options. Always set "dialogue_options": []. Anything you write
+in this field is dropped before reaching the player.
 
 TRUST CHANGES — populate when dialogue meaningfully shifts a relationship:
 Populate trust_changes when this interaction notably affects how an NPC feels about the player. delta: +10 to +20 for very positive, -10 to -20 for hostile/deceptive, +5/-5 for mild shifts. Only include if something notable happened — not for every action. Use the NPC's npc_key (snake_case from the NPC registry or ESTABLISHED WORLD ASSETS).
@@ -943,6 +937,35 @@ export function buildNarratorUserPrompt(
       `\nWrite the NPC's response reflecting this outcome.` +
       `\nOn PASSED: NPC is more forthcoming, helpful, swayed, or backed down by the attempt.` +
       `\nOn FAILED: NPC is suspicious, dismissive, evasive, hostile, or unmoved.`;
+  }
+
+  // SELECTED_KNOWLEDGE — Architecture C, code-built dialogue options.
+  // When the player clicks a knowledge button, useGameLoop grafts
+  // {topic, content} onto narrative_context.selected_knowledge so we
+  // can hand the narrator a closed context: this is the ONE fact in
+  // play, decide whether to reveal or deflect based on the stat check.
+  // Without this gate the AI sees the full NPC knowledge bank and can
+  // free-associate; with it, the conversation stays scoped.
+  const selectedKnow = result.narrative_context.selected_knowledge as
+    | { topic?: string; content?: string }
+    | undefined;
+  if (
+    selectedKnow &&
+    typeof selectedKnow === "object" &&
+    typeof selectedKnow.content === "string" &&
+    selectedKnow.content.trim().length > 0
+  ) {
+    const topic   = String(selectedKnow.topic ?? "").trim() || "the matter at hand";
+    const content = selectedKnow.content.trim();
+    prompt +=
+      `\n\nCLOSED CONTEXT — SELECTED KNOWLEDGE:\n` +
+      `The player is asking about: ${topic}\n` +
+      `What the NPC knows: ${content}\n` +
+      `\nRespond in character. On a passed stat check, REVEAL the ` +
+      `content (paraphrase naturally — do not copy the sentence verbatim). ` +
+      `On a failed check, deflect, evade, or give a half-truth that ` +
+      `doesn't disclose the content. Do NOT reference any other facts ` +
+      `from this NPC's knowledge — only the one above is in play.`;
   }
 
   // ACTIVE NPC CONTEXT — inject the NPC's full constitution + authoritative

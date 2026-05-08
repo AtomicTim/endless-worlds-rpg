@@ -19,7 +19,17 @@ import type { Attributes, DialogueOption } from "@/types/game";
  */
 
 interface DialogueModalProps {
-  onSubmit:     (input: string, options?: { npcName?: string; tone?: DialogueOption["tone"] }) => void;
+  onSubmit:     (
+    input: string,
+    options?: {
+      npcName?:           string;
+      tone?:              DialogueOption["tone"];
+      /** Architecture C — closed-context fact piped to the narrator
+       *  when the player clicks a code-built knowledge option. The AI
+       *  sees only this one {topic, content}, not the full NPC bank. */
+      selectedKnowledge?: { topic: string; content: string };
+    }
+  ) => void;
   onFocusInput: () => void;
   onOpenTrade:  (npcName: string) => void;
 }
@@ -102,11 +112,54 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade }: DialogueM
   if (options.length === 0) return null;
 
   const handleOption = (option: DialogueOption) => {
-    clear();
-    onSubmit(`"${option.text}"`, {
-      ...(npcName ? { npcName } : {}),
-      tone: option.tone,
-    });
+    // Architecture C — dispatch by option.type when present. Legacy
+    // narrator-emitted options (no type) fall through to the original
+    // "submit option.text as quoted speech" path.
+    switch (option.type) {
+      case "trade": {
+        if (!npcName) return;
+        clear();
+        setInlineInputOpen(false);
+        onOpenTrade(npcName);
+        return;
+      }
+      case "free": {
+        // Don't clear() — the dialogue panel must stay open while the
+        // player types their own line into the inline input row.
+        setInlineInputOpen(true);
+        return;
+      }
+      case "farewell": {
+        clear();
+        return;
+      }
+      case "knowledge": {
+        clear();
+        onSubmit(`"${option.text}"`, {
+          ...(npcName ? { npcName } : {}),
+          tone: option.tone,
+          ...(option.content
+            ? {
+                selectedKnowledge: {
+                  topic:   option.text,
+                  content: option.content,
+                },
+              }
+            : {}),
+        });
+        return;
+      }
+      default: {
+        // Legacy AI-generated option — submit the text as quoted speech
+        // and let resolveDialogue route the tone-derived stat check.
+        clear();
+        onSubmit(`"${option.text}"`, {
+          ...(npcName ? { npcName } : {}),
+          tone: option.tone,
+        });
+        return;
+      }
+    }
   };
 
   void onFocusInput;

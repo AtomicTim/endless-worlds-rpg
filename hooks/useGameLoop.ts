@@ -18,7 +18,7 @@ import {
   invalidateRegionalBibleCache,
 } from "@/lib/game/regional-bible-cache";
 import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
-import type { Item, MasterState, ParsedAction, RegionBible, RegionOutline, ResolutionResult, StoredMessage, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
+import type { DialogueOption, Item, MasterState, ParsedAction, RegionBible, RegionOutline, ResolutionResult, StoredMessage, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
 
 const MAX_INPUT_LENGTH  = 500;
 const AUTO_SAVE_INTERVAL = 10;
@@ -150,6 +150,83 @@ function matchDescriptorToNpc(
     if (roleHits.length === 1) return roleHits[0];
   }
   return null;
+}
+
+// ── Architecture C — code-built dialogue options ────────────────────────────
+
+const MERCHANT_ROLE_KEYWORDS = ["merchant", "trader", "vendor", "shopkeeper"];
+
+/**
+ * Build the dialogue option list for an NPC from their world_asset
+ * constitution. Replaces narrator-emitted dialogue_options so the AI
+ * can no longer hallucinate options or reference content it shouldn't
+ * know. Returns at minimum: free-type + farewell (always available).
+ *
+ * Knowledge options carry both the topic (button label) and content
+ * (closed context piped to the narrator on click). Tone defaults to
+ * "curious" so the existing PER stat-check flow drives a reveal vs
+ * deflect outcome without the player having to pick a tone manually.
+ */
+function buildDialogueOptions(npcAsset: WorldAsset | null): DialogueOption[] {
+  const options: DialogueOption[] = [];
+
+  const c        = npcAsset?.constitution as Record<string, unknown> | undefined;
+  const rawKnow  = c?.knowledge;
+  const knowItems = Array.isArray(rawKnow) ? rawKnow : [];
+
+  for (const k of knowItems.slice(0, 4)) {
+    let topic: string;
+    let content: string;
+    if (typeof k === "string") {
+      const trimmed = k.trim();
+      if (!trimmed) continue;
+      topic   = trimmed.split(/\s+/).slice(0, 5).join(" ").replace(/[.!?,;:]+$/, "");
+      content = trimmed;
+    } else if (k && typeof k === "object") {
+      const obj = k as Record<string, unknown>;
+      const t   = typeof obj.topic   === "string" ? obj.topic.trim()   : "";
+      const ct  = typeof obj.content === "string" ? obj.content.trim() : "";
+      if (!ct) continue;
+      topic   = t || ct.split(/\s+/).slice(0, 5).join(" ");
+      content = ct;
+    } else continue;
+    if (!topic) continue;
+    const slug = topic.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    options.push({
+      id:      `topic_${slug || options.length}`,
+      text:    topic,
+      type:    "knowledge",
+      content,
+      // Knowledge probing is investigative — PER check via "curious" tone.
+      tone:    "curious",
+    });
+  }
+
+  const role = String(c?.role ?? "").toLowerCase();
+  const isMerchant = MERCHANT_ROLE_KEYWORDS.some((r) => role.includes(r));
+  if (isMerchant) {
+    options.push({
+      id:   "browse_wares",
+      text: "Browse your wares",
+      type: "trade",
+      tone: "friendly",
+    });
+  }
+
+  options.push({
+    id:   "free_type",
+    text: "Say something...",
+    type: "free",
+    tone: "friendly",
+  });
+  options.push({
+    id:   "farewell",
+    text: "Farewell",
+    type: "farewell",
+    tone: "friendly",
+  });
+
+  return options;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -429,10 +506,18 @@ export function useGameLoop() {
        *  for this node id. Used by navigateTo() and direct UI navigation
        *  (NavigationBar, map clicks, LOCATION highlight links). */
       forceMoveToNode?: string;
+      /** Architecture C — when the player clicks a code-built knowledge
+       *  option in DialogueModal, the option's full content is piped
+       *  through here. Stuffed onto resolution.narrative_context.
+       *  selected_knowledge so prompt-builder can hand the narrator a
+       *  closed-context probe (reveal on success, deflect on failure)
+       *  without the AI ever seeing the full knowledge bank. */
+      selectedKnowledge?: { topic: string; content: string };
     }
   ) => {
     const store = useGameStore.getState();
     const forceMoveToNode = options?.forceMoveToNode ?? null;
+    const selectedKnowledge = options?.selectedKnowledge ?? null;
 
     // ── 1. Validate input ────────────────────────────────────────────────────
     // Direct-navigation invocations carry no player text; skip the
@@ -1090,26 +1175,34 @@ export function useGameLoop() {
               if (applyRes.ok) {
                 const applied = await applyRes.json() as {
                   starting_node_id?:    string;
+                  region_zone_id?:      string;
                   updated_world_graph?: WorldGraph;
                 };
                 if (applied.starting_node_id && applied.updated_world_graph) {
-                  // Swap the player into the new settlement node and replace
-                  // the graph in one step so the narrator's ARRIVING context
-                  // reflects the real region from the very first beat.
+                  // Architecture CHANGE 1 — land at the geographic region
+                  // zone (is_expandable=true), NOT the settlement hub. The
+                  // settlement reachable via ← BACK from the region zone.
+                  // Falls back to starting_node_id (settlement) when the
+                  // bible used a single id for both (legacy single-tier
+                  // shape) — the response carries them separately so the
+                  // server's collision detection runs even when matchedOutline
+                  // doesn't agree with the canonical bible id.
+                  const landingNodeId =
+                    applied.region_zone_id ?? matchedOutline.id;
                   const newGraph = {
                     ...applied.updated_world_graph,
-                    current_node_id: applied.starting_node_id,
+                    current_node_id: landingNodeId,
                   };
                   updatedState = {
                     ...updatedState,
                     world_state: {
                       ...updatedState.world_state,
-                      current_location_id: applied.starting_node_id,
-                      current_node_id:     applied.starting_node_id,
+                      current_location_id: landingNodeId,
+                      current_node_id:     landingNodeId,
                       visited_locations: Array.from(
                         new Set([
                           ...(updatedState.world_state.visited_locations ?? []),
-                          applied.starting_node_id,
+                          landingNodeId,
                         ])
                       ),
                       // FIX 4 — explicitly stamp ARRIVING after RegionBible
@@ -1117,14 +1210,14 @@ export function useGameLoop() {
                       // ARRIVING already, but we re-apply it here so the
                       // narrator's state sees ARRIVING regardless of any
                       // intermediate mutations, and so the ◈ arrival header
-                      // fires for the new settlement on the first beat.
+                      // fires for the new region on the first beat.
                       location_status: LocationStatus.ARRIVING,
                     },
                     world_graph: newGraph,
                   };
-                  // Refresh locationAssets for the new settlement node so
+                  // Refresh locationAssets for the new region zone so
                   // later steps (narrator, highlight) see real Tier 1 data.
-                  void getWorldAssetsForLocation(sessionId, applied.starting_node_id).then(
+                  void getWorldAssetsForLocation(sessionId, landingNodeId).then(
                     (assets) => useGameStore.getState().setLocationAssets(assets)
                   );
                   // Audit Issue M fix: also fire a world_graph persist so a
@@ -1133,7 +1226,7 @@ export function useGameLoop() {
                   // belt-and-braces patch for the dedicated jsonb column).
                   saveWorldGraphAsync(sessionId, newGraph);
                   console.log(
-                    `[GameLoop/4d] RegionBible applied: ${regionBible.name} → ${applied.starting_node_id}`
+                    `[GameLoop/4d] RegionBible applied: ${regionBible.name} → region zone ${landingNodeId} (settlement: ${applied.starting_node_id})`
                   );
                 } else {
                   console.error(
@@ -1305,19 +1398,96 @@ export function useGameLoop() {
       // named character as not present rather than inventing them.
       const namedNpcNotPresent =
         (parsedAction as ParsedAction & { _namedNpcNotPresent?: string })._namedNpcNotPresent;
-      const resolutionForNarrator: ResolutionResult =
-        namedNpcNotPresent
-          ? {
-              ...resolution,
-              narrative_context: {
-                ...resolution.narrative_context,
-                named_npc_not_present: namedNpcNotPresent,
-              },
-            }
-          : resolution;
+      const resolutionForNarrator: ResolutionResult = (() => {
+        let r: ResolutionResult = resolution;
+        if (namedNpcNotPresent) {
+          r = {
+            ...r,
+            narrative_context: {
+              ...r.narrative_context,
+              named_npc_not_present: namedNpcNotPresent,
+            },
+          };
+        }
+        // Architecture C — graft the clicked knowledge option onto the
+        // narrative_context so prompt-builder's SELECTED_KNOWLEDGE
+        // block injects the closed context. The AI sees only this one
+        // {topic, content}, never the full knowledge bank.
+        if (selectedKnowledge) {
+          r = {
+            ...r,
+            narrative_context: {
+              ...r.narrative_context,
+              selected_knowledge: selectedKnowledge,
+            },
+          };
+        }
+        return r;
+      })();
+
+      // Architecture CHANGE 3 — write-once arrival cache.
+      // On ARRIVING actions (MOVE, region expansion landing, ZONE_EXPAND
+      // re-arrival) the destination's world_asset already carries a
+      // physical_description written at apply-world-bible /
+      // apply-regional-bible / stub-gen / first-visit time. If we have
+      // it, render that as the arrival narrative directly and skip the
+      // AI narrator call entirely — there's nothing for the AI to add
+      // and on session reload at a known location we'd otherwise pay
+      // for the same description every turn.
+      //
+      // Cache miss (no physical_description) falls through to the
+      // normal narrator call so first-visit dynamic locations
+      // (truly novel, not from a bible) still get described once.
+      const isArrivingAction =
+        updatedState.world_state.location_status === LocationStatus.ARRIVING ||
+        resolutionForNarrator.narrative_context.movement_mandatory === true;
+      const arriveLocId = updatedState.world_state.current_location_id;
+      let cachedArrivalText: string | null = null;
+      if (
+        isArrivingAction &&
+        arriveLocId &&
+        parsedAction.action_type === ActionType.MOVE
+      ) {
+        const liveForCache = useGameStore.getState().locationAssets;
+        const locAsset = liveForCache.find(
+          (a) =>
+            a.category === AssetCategory.LOCATION &&
+            (a.id === arriveLocId ||
+             a.id === `location_${arriveLocId}` ||
+             normalizeLocationId(a.first_seen_location ?? "") === arriveLocId)
+        );
+        const desc = locAsset?.constitution.physical_description;
+        if (typeof desc === "string" && desc.trim().length > 0) {
+          cachedArrivalText = desc.trim();
+        }
+      }
 
       let narratorResponse;
-      try {
+      if (cachedArrivalText) {
+        // Synthesize a minimal narrator response so the rest of the
+        // pipeline (step 6 add-message, step 7 graph maintenance, step
+        // 9 log entry) keeps its existing shape without branching.
+        // codex_entries / new_npcs / dialogue_options stay empty —
+        // first-visit codex fires from step 7c-1 and dialogue options
+        // are now built by code (CHANGE 4).
+        narratorResponse = {
+          response_tier:      2 as const,
+          narrative_text:     cachedArrivalText,
+          ascii_art:          null,
+          sound_id:           null,
+          new_npcs:           [],
+          items_acquired:     [],
+          points_of_interest: [],
+          codex_entries:      [],
+          log_summary:        undefined,
+          dialogue_options:   [],
+          trust_changes:      [],
+          items_for_sale:     [],
+        };
+        console.log(
+          "[GameLoop/5] Arrival cache hit — using cached physical_description for", arriveLocId
+        );
+      } else try {
         narratorResponse = await narrateAction(
           resolutionForNarrator,
           narratorState,
@@ -1761,8 +1931,14 @@ export function useGameLoop() {
       // Both saveCodexEntry and saveWorldAsset are fire-and-forget: they
       // upsert with ignoreDuplicates so first-introduction is law, and any
       // failures are logged inside the helpers without crashing the loop.
+      //
+      // Architecture CHANGE 3 — track whether 7b wrote a LOCATION codex
+      // entry for the current location. 7c-1's first-visit fallback
+      // skips when this is true so we don't double-write the location's
+      // codex row on the same turn.
       const sessionId = updatedState.metadata.session_id;
       const currentLocationId = updatedState.world_state.current_location_id;
+      let codexWrittenBy7b = false;
       for (const entry of narratorResponse.codex_entries) {
         if (entry.significance !== "NOTABLE" && entry.significance !== "MAJOR") continue;
 
@@ -1822,6 +1998,13 @@ export function useGameLoop() {
         // depend on this list staying authoritative.
         if (assetCategory === AssetCategory.CHARACTER) {
           updatedState = addNpcToCurrentNode(updatedState, asset.id);
+        }
+
+        // Architecture CHANGE 3 — flag location-codex coverage so the
+        // 7c-1 fallback doesn't run a second saveCodexEntry on the same
+        // turn for this location.
+        if (assetCategory === AssetCategory.LOCATION) {
+          codexWrittenBy7b = true;
         }
 
         if (entry.significance === "MAJOR") {
@@ -1937,7 +2120,7 @@ export function useGameLoop() {
           [visitsKey]: next,
         };
 
-        if (next >= 1 && !alreadyWritten) {
+        if (next >= 1 && !alreadyWritten && !codexWrittenBy7b) {
           const liveAssets = useGameStore.getState().locationAssets;
           const locationAsset = liveAssets.find(
             (a) =>
@@ -2035,8 +2218,31 @@ export function useGameLoop() {
       // Show after every DIALOGUE action; clear after any non-DIALOGUE action.
       // Preserve the existing NPC name + portrait across consecutive turns with
       // the same NPC so the modal doesn't flash blank between turns.
+      //
+      // Architecture C — options are built by code from the resolved
+      // NPC's constitution.knowledge, NOT by the AI. We resolve the
+      // active NPC asset first, then call buildDialogueOptions(); the
+      // narrator's dialogue_options field is now ignored. This stops
+      // the AI from hallucinating options or referencing facts it
+      // shouldn't know about, and guarantees the option list matches
+      // what the WorldBible / RegionBible declared the NPC knows.
       {
-        const dialogueOpts = narratorResponse.dialogue_options ?? [];
+        const optionNpcName = parsedAction.primary_target ?? null;
+        const liveAssetsForOpts = useGameStore.getState().locationAssets;
+        const codeBuildNpcAsset = optionNpcName
+          ? liveAssetsForOpts.find(
+              (a) =>
+                a.category === AssetCategory.CHARACTER &&
+                a.name.toLowerCase() === optionNpcName.toLowerCase()
+            ) ?? null
+          : null;
+        const codeBuiltOpts = isDialogueAction
+          ? buildDialogueOptions(codeBuildNpcAsset)
+          : [];
+        const dialogueOpts: DialogueOption[] =
+          codeBuiltOpts.length > 0
+            ? codeBuiltOpts
+            : (narratorResponse.dialogue_options ?? []);
         if (isDialogueAction && dialogueOpts.length > 0) {
           const newNpcName       = parsedAction.primary_target ?? null;
           const gsBefore         = useGameStore.getState();

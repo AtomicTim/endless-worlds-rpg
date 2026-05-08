@@ -367,8 +367,11 @@ export interface NPCDefinition {
   speech_style:      string;
   /** WCD faction id, when affiliated. */
   faction_id?:       string;
-  /** WCD-consistent facts the NPC plausibly knows. */
-  knowledge:         string[];
+  /** WCD-consistent facts the NPC plausibly knows. Generated as
+   *  `{topic, content}` pairs (Architecture C). Plain-string entries
+   *  from legacy saves are normalized to objects at apply time so
+   *  consumers can rely on a single shape. */
+  knowledge:         Array<string | NPCKnowledgeItem>;
   /** "key" / "supporting" / "none". Optional. */
   quest_relevance?:  string;
   /** Index 0-4 of the breadcrumb this NPC can hint at. */
@@ -663,6 +666,33 @@ export interface DialogueOption {
   // is derived purely from `tone` by the game engine. The DialogueModal
   // renders a tone-derived badge for the player; the resolver routes the
   // tone classification through resolveDialogue's switch.
+
+  // ── Architecture C — code-built dialogue options ──────────────────────────
+  /** Dispatch class. When set, click handling diverges from the legacy
+   *  "submit option.text as quoted speech" flow:
+   *    knowledge → submits speech AND pipes content to the narrator as
+   *                closed-context (revealed on success, deflected on fail).
+   *    trade     → opens the trade panel directly (no speech submitted).
+   *    free      → opens the inline free-type input row (no speech yet).
+   *    farewell  → closes the dialogue (no speech submitted).
+   *  Legacy AI-generated options omit this and rely on `tone` alone. */
+  type?:    "knowledge" | "trade" | "free" | "farewell";
+  /** For type==="knowledge": the full closed-context fact the NPC knows.
+   *  Routed through resolution.narrative_context.selected_knowledge so
+   *  the narrator prompt can reveal it on a passed stat check or
+   *  deflect on a failed one. The player's UI shows only the topic
+   *  (option.text); the AI receives both. */
+  content?: string;
+}
+
+/** WorldBible / RegionBible NPC knowledge item — code-built dialogue
+ *  options surface `topic` as the button label and pipe `content` to
+ *  the narrator as closed-context on click. Legacy plain-string
+ *  knowledge entries are normalized to `{topic, content}` at apply
+ *  time so the dialogue option builder can read a single shape. */
+export interface NPCKnowledgeItem {
+  topic:   string;
+  content: string;
 }
 
 export interface CodexEntry {
@@ -728,6 +758,12 @@ export interface WorldAssetConstitution {
   faction?:              string;
   speech_patterns?:      string;
   initial_relationship?: string;
+  /** Architecture C — structured `{topic, content}` knowledge entries
+   *  written by apply-world-bible / apply-regional-bible from
+   *  NPCDefinition.knowledge. Read by buildDialogueOptions to produce
+   *  the code-built dialogue option list (knowledge probes the player
+   *  may ask the NPC about). */
+  knowledge?:            NPCKnowledgeItem[];
 
   // FACTION fields
   ideology?:               string;

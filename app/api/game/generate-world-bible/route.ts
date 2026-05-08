@@ -185,7 +185,9 @@ Return EXACTLY this JSON structure (fill in the values):
         "appearance": "1 sentence",
         "personality": "1 sentence",
         "speech_style": "brief",
-        "knowledge": ["fact 1"],
+        "knowledge": [
+          {"topic": "Local rumours (3-5 words)", "content": "Full WCD-consistent sentence the NPC knows."}
+        ],
         "default_trust": 50
       },
       {
@@ -196,7 +198,9 @@ Return EXACTLY this JSON structure (fill in the values):
         "appearance": "1 sentence",
         "personality": "1 sentence",
         "speech_style": "brief",
-        "knowledge": ["fact 1"],
+        "knowledge": [
+          {"topic": "Trade goods (3-5 words)", "content": "Full WCD-consistent sentence the NPC knows."}
+        ],
         "default_trust": 50
       }
     ],
@@ -244,7 +248,15 @@ parent_location_id — it sits in the geographic area, NOT inside the
 town. Connect it to the settlement node via connections.
 'name' is the geographic region. 'settlement_name' is the town.
 Make content original, specific to the WCD and genre.
-REAL NAMES for all NPCs. No placeholders.`;
+REAL NAMES for all NPCs. No placeholders.
+
+NPC KNOWLEDGE FORMAT (Architecture C): each NPC's "knowledge" array
+must be objects of shape {topic, content}. The topic is a 3-5 word
+button label the player sees ("Bandits in the foothills",
+"The old crypt"); content is the full WCD-consistent sentence the
+NPC will reveal on a passed stat check. Generate 2-4 knowledge items
+per NPC, each centered on something the player would plausibly want
+to ask about. Do NOT emit plain strings — always {topic, content}.`;
 }
 
 function stripJsonFences(raw: string): string {
@@ -259,6 +271,35 @@ function stripJsonFences(raw: string): string {
 
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+}
+
+/**
+ * Architecture C — coerce a single NPC knowledge entry into the
+ * canonical `{topic, content}` shape. Plain strings (legacy format)
+ * derive a topic from the first ~5 words. Returns null when the
+ * entry is unusable (empty, malformed) so callers can drop it.
+ */
+function normalizeKnowledgeItem(
+  raw: unknown
+): { topic: string; content: string } | null {
+  if (typeof raw === "string") {
+    const content = raw.trim();
+    if (!content) return null;
+    const words = content.split(/\s+/).slice(0, 5).join(" ");
+    const topic = words.replace(/[.!?,;:]+$/, "").trim();
+    return { topic: topic || content.slice(0, 40), content };
+  }
+  if (raw && typeof raw === "object") {
+    const obj     = raw as Record<string, unknown>;
+    const topic   = typeof obj.topic   === "string" ? obj.topic.trim()   : "";
+    const content = typeof obj.content === "string" ? obj.content.trim() : "";
+    if (!content) return null;
+    return {
+      topic:   topic || content.split(/\s+/).slice(0, 5).join(" "),
+      content,
+    };
+  }
+  return null;
 }
 
 /**
@@ -503,6 +544,14 @@ function normalizeWorldBible(parsed: unknown): unknown {
           n.id = `character_${slugify(n.name as string)}`;
         }
         if (!Array.isArray(n.knowledge)) n.knowledge = [];
+        // Architecture C — normalize knowledge entries to {topic,
+        // content}. Plain strings (legacy AI output) become objects
+        // with the first 5 words as the topic label so the dialogue
+        // option builder can show a button without a separate parsing
+        // step. Already-shaped objects pass through unchanged.
+        n.knowledge = (n.knowledge as unknown[])
+          .map((k) => normalizeKnowledgeItem(k))
+          .filter((k): k is { topic: string; content: string } => k !== null);
         if (typeof n.default_trust !== "number") n.default_trust = 50;
         if (!n.home_location_id || typeof n.home_location_id !== "string") {
           n.home_location_id = firstLocId;

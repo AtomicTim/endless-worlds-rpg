@@ -1198,15 +1198,20 @@ function firstAtmosphere(region: WorldNode, assets: WorldAsset[]): string | null
       a.category === AssetCategory.LOCATION &&
       (a.id === region.id || a.id === `location_${region.id}`)
   );
-  // FIX B3 — apply-world-bible / apply-regional-bible's regionZoneToAsset
-  // writes the region atmosphere into `physical_description`, not
-  // `atmosphere`. Read both so the region panel finds the prose
-  // regardless of which write path produced the asset.
-  return (
-    asset?.constitution.physical_description ??
-    asset?.constitution.atmosphere ??
-    null
-  );
+  // FIX B3 — apply-world-bible / apply-regional-bible's
+  // regionZoneToAsset writes the region atmosphere into BOTH
+  // `physical_description` AND `atmosphere`. Read both. Prefer
+  // whichever has actual content so a row written before the FIX 2
+  // dual-write (only physical_description populated) still
+  // resolves, and so does a future variant that only sets
+  // atmosphere. Empty strings count as "no content" so the panel
+  // doesn't render an empty paragraph.
+  const c    = asset?.constitution;
+  const phys = (typeof c?.physical_description === "string" ? c.physical_description : "").trim();
+  const atm  = (typeof c?.atmosphere === "string" ? c.atmosphere : "").trim();
+  if (phys.length > 0) return phys;
+  if (atm.length > 0)  return atm;
+  return null;
 }
 
 // resolveLandmarks() helper removed — buildLocationInfo now reads

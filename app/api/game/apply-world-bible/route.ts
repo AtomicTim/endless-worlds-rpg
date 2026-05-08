@@ -148,12 +148,20 @@ function regionZoneToAsset(
   atmosphere: string,
   sessionId: string
 ): WorldAsset {
+  // FIX 2 — populate BOTH constitution.physical_description AND
+  // constitution.atmosphere from the same atmosphere prose. The
+  // narrator pipeline (and the codex first-visit fallback) reads
+  // physical_description; WorldMap.tsx::firstAtmosphere falls back
+  // through both fields. Writing both means every consumer finds
+  // the prose regardless of which field they happen to query.
+  const trimmedAtm = (atmosphere ?? "").trim();
   return {
     id:                  `location_${regionId}`,
     category:            AssetCategory.LOCATION,
     name:                regionName,
     constitution: {
-      physical_description: atmosphere,
+      physical_description: trimmedAtm,
+      atmosphere:           trimmedAtm,
       key_landmarks:        [],
       ambient_type:         regionAmbientType(regionType),
       available_services:   [],
@@ -660,15 +668,38 @@ export async function POST(request: NextRequest) {
 
     // CHANGE 4 — write a world_asset for the region zone so the
     // narrator has location data to work with when the player steps
-    // out into the open-world layer. Same upsert pattern as every
-    // other asset (write-once via ignoreDuplicates).
+    // out into the open-world layer.
+    //
+    // FIX 2 — upsert WITHOUT ignoreDuplicates here. The settlement /
+    // region_locations rows in step 3 already covered every other id;
+    // this id (`location_<region>`) is unique to the geographic region
+    // zone. Letting the upsert override an existing row guarantees a
+    // re-applied bible refreshes stale region prose instead of
+    // silently skipping. Diagnostic logs surface both the prose
+    // length we are writing and any upsert error.
+    const startingAtmosphere = bibleNarrowed.starting_region.atmosphere ?? "";
     const regionZoneAsset = regionZoneToAsset(
       geographicRegionId,
       bibleNarrowed.starting_region.name,
       bibleNarrowed.starting_region.type,
-      bibleNarrowed.starting_region.atmosphere,
+      startingAtmosphere,
       sessionId
     );
+    console.log(
+      "[apply-world-bible] region-zone asset write:",
+      {
+        id:                  regionZoneAsset.id,
+        name:                regionZoneAsset.name,
+        atmosphereLen:       startingAtmosphere.trim().length,
+        atmospherePreview:   startingAtmosphere.trim().slice(0, 80),
+      }
+    );
+    if (startingAtmosphere.trim().length === 0) {
+      console.warn(
+        "[apply-world-bible] starting_region.atmosphere is empty — region panel will show blank description for",
+        regionZoneAsset.id
+      );
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: regionAssetErr } = await (supabase.from("world_assets") as any).upsert(
       {
@@ -681,7 +712,7 @@ export async function POST(request: NextRequest) {
         first_seen_location: regionZoneAsset.first_seen_location,
         name_known:          regionZoneAsset.name_known,
       },
-      { onConflict: "session_id,asset_id", ignoreDuplicates: true }
+      { onConflict: "session_id,asset_id" }
     );
     if (regionAssetErr) {
       console.error(
@@ -689,6 +720,52 @@ export async function POST(request: NextRequest) {
         regionZoneAsset.id,
         regionAssetErr
       );
+    }
+  } else if (isSameAsSettlement) {
+    // FIX 2 — single-tier shape (region.id === settlement.id). The
+    // settlement asset was written in step 3 with the SUB-LOCATION
+    // atmosphere ("outdoor hub description"), not the broader
+    // regional landscape prose. Overwrite the asset's constitution
+    // with the region atmosphere so the Region map description panel
+    // shows landscape prose instead of an interior hub blurb.
+    const startingAtmosphere = bibleNarrowed.starting_region.atmosphere ?? "";
+    if (startingAtmosphere.trim().length > 0) {
+      const regionZoneAsset = regionZoneToAsset(
+        geographicRegionId,
+        bibleNarrowed.starting_region.name,
+        bibleNarrowed.starting_region.type,
+        startingAtmosphere,
+        sessionId
+      );
+      console.log(
+        "[apply-world-bible] single-tier region-zone asset overwrite:",
+        {
+          id:                regionZoneAsset.id,
+          atmosphereLen:     startingAtmosphere.trim().length,
+          atmospherePreview: startingAtmosphere.trim().slice(0, 80),
+        }
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: regionAssetErr } = await (supabase.from("world_assets") as any).upsert(
+        {
+          session_id:          sessionId,
+          asset_id:            regionZoneAsset.id,
+          category:            regionZoneAsset.category,
+          name:                regionZoneAsset.name,
+          constitution:        regionZoneAsset.constitution,
+          significance:        regionZoneAsset.significance,
+          first_seen_location: regionZoneAsset.first_seen_location,
+          name_known:          regionZoneAsset.name_known,
+        },
+        { onConflict: "session_id,asset_id" }
+      );
+      if (regionAssetErr) {
+        console.error(
+          "[apply-world-bible] single-tier region-zone overwrite failed for",
+          regionZoneAsset.id,
+          regionAssetErr
+        );
+      }
     }
   }
 

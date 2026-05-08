@@ -146,12 +146,21 @@ function regionZoneToAsset(
   atmosphere: string,
   sessionId: string
 ): WorldAsset {
+  // FIX 2 — write BOTH constitution.physical_description AND
+  // constitution.atmosphere. Mirrors apply-world-bible's
+  // regionZoneToAsset so every region-zone asset (starting region
+  // OR a freshly-expanded RegionBible) carries the same shape.
+  // WorldMap's firstAtmosphere helper falls back through both
+  // fields; populating both makes the description panel
+  // resilient to either consumer style.
+  const trimmedAtm = (atmosphere ?? "").trim();
   return {
     id:                  `location_${regionId}`,
     category:            AssetCategory.LOCATION,
     name:                regionName,
     constitution: {
-      physical_description: atmosphere,
+      physical_description: trimmedAtm,
+      atmosphere:           trimmedAtm,
       key_landmarks:        [],
       ambient_type:         regionAmbientType(regionType),
       available_services:   [],
@@ -513,20 +522,71 @@ export async function POST(request: NextRequest) {
     // is_expandable node and nudge the new region until it has at
     // least 20 grid units of separation. Cap iterations so a fully
     // crowded map still terminates.
-    const existingPositions = Object.values(existingGraph.nodes)
-      .filter((n) => n.is_expandable === true && n.id !== bibleNarrowed.id)
-      .map((n) => n.map_position);
+    //
+    // FIX 1 — defend against malformed or missing grid_position on
+    // any expandable node. The previous version assumed every entry
+    // had numeric .x/.y and hit a TypeError when an existing node
+    // (or the incoming bible.grid_centre) was missing one. Filter at
+    // gather time, log the offender so we can spot upstream data
+    // problems, and double-check inside hasConflict in case anything
+    // slipped through (defense in depth).
+    type Pos = { x: number; y: number };
+    const isValidPos = (p: unknown): p is Pos =>
+      !!p &&
+      typeof (p as Pos).x === "number" && Number.isFinite((p as Pos).x) &&
+      typeof (p as Pos).y === "number" && Number.isFinite((p as Pos).y);
+    const existingPositions: Pos[] = [];
+    for (const n of Object.values(existingGraph.nodes)) {
+      if (n.is_expandable !== true) continue;
+      if (n.id === bibleNarrowed.id) continue;
+      if (!isValidPos(n.map_position)) {
+        console.warn(
+          "[apply-regional-bible] expandable node missing grid_position — skipping in collision check:",
+          { id: n.id, name: n.name, map_position: n.map_position }
+        );
+        continue;
+      }
+      existingPositions.push(n.map_position);
+    }
     const hasConflict = (
-      pos:      { x: number; y: number },
-      existing: Array<{ x: number; y: number }>,
+      pos:      Pos,
+      existing: Pos[],
       minDist = 20
-    ): boolean =>
-      existing.some(
-        (p) =>
+    ): boolean => {
+      if (!isValidPos(pos)) {
+        console.warn(
+          "[apply-regional-bible] hasConflict: pos missing/invalid, treating as no-conflict:",
+          pos
+        );
+        return false;
+      }
+      return existing.some((p) => {
+        if (!isValidPos(p)) {
+          console.warn(
+            "[apply-regional-bible] hasConflict: existing entry invalid, skipping:", p
+          );
+          return false;
+        }
+        return (
           Math.abs(p.x - pos.x) < minDist &&
           Math.abs(p.y - pos.y) < minDist
+        );
+      });
+    };
+    // Default grid_centre when the bible's value is missing or
+    // malformed. Picking origin keeps the new region inside the
+    // typical map range; the nudge loop below will spread it if
+    // anything else already sits there.
+    const seedPos: Pos = isValidPos(bibleNarrowed.grid_centre)
+      ? { x: bibleNarrowed.grid_centre.x, y: bibleNarrowed.grid_centre.y }
+      : { x: 0, y: 0 };
+    if (!isValidPos(bibleNarrowed.grid_centre)) {
+      console.warn(
+        "[apply-regional-bible] bible.grid_centre missing/invalid — defaulting to {0,0}:",
+        bibleNarrowed.grid_centre
       );
-    const adjustedPos = { ...bibleNarrowed.grid_centre };
+    }
+    const adjustedPos: Pos = { ...seedPos };
     let nudges = 0;
     while (hasConflict(adjustedPos, existingPositions) && nudges < 50) {
       adjustedPos.x += 12;
@@ -570,13 +630,38 @@ export async function POST(request: NextRequest) {
     // World_asset for the region zone — the narrator needs a Tier 1
     // location asset to read when the player arrives in the
     // open-world layer.
+    //
+    // FIX 2 — drop ignoreDuplicates so a re-applied bible (or a
+    // placeholder row from apply-world-bible's regionOutlineToAsset)
+    // gets refreshed instead of silently skipped. The Region map
+    // description panel reads constitution.physical_description /
+    // constitution.atmosphere from this row; both are now written by
+    // regionZoneToAsset. Diagnostic logs surface what we wrote so a
+    // blank panel is traceable to either the bible's atmosphere
+    // being empty or the upsert failing.
+    const regionAtmosphere = bibleNarrowed.atmosphere ?? "";
     const regionZoneAsset = regionZoneToAsset(
       bibleNarrowed.id,
       bibleNarrowed.name,
       bibleNarrowed.type,
-      bibleNarrowed.atmosphere,
+      regionAtmosphere,
       sessionId
     );
+    console.log(
+      "[apply-regional-bible] region-zone asset write:",
+      {
+        id:                regionZoneAsset.id,
+        name:              regionZoneAsset.name,
+        atmosphereLen:     regionAtmosphere.trim().length,
+        atmospherePreview: regionAtmosphere.trim().slice(0, 80),
+      }
+    );
+    if (regionAtmosphere.trim().length === 0) {
+      console.warn(
+        "[apply-regional-bible] bible.atmosphere is empty — region panel will show blank description for",
+        regionZoneAsset.id
+      );
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: regionAssetErr } = await (supabase.from("world_assets") as any).upsert(
       {
@@ -589,7 +674,7 @@ export async function POST(request: NextRequest) {
         first_seen_location: regionZoneAsset.first_seen_location,
         name_known:          regionZoneAsset.name_known,
       },
-      { onConflict: "session_id,asset_id", ignoreDuplicates: true }
+      { onConflict: "session_id,asset_id" }
     );
     if (regionAssetErr) {
       console.error(

@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.19
-**Status:** Active Development — Nav Bar Refactor Complete, Bug 2 Investigation Active
+**Version:** 8.20
+**Status:** Active Development — Nav UX Polish Complete, Bug 2 Investigation Active
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -10,7 +10,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Test nav bar refactor → Bug 2 investigation → architecture hardening
+**Current Phase:** Test nav UX polish → Bug 2 investigation → architecture hardening
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -28,6 +28,7 @@
 | Session 84 Bug Fixes | 7 map/nav fixes + Bug 2 diagnostics | ✅ Complete |
 | RegionBible 500 + Header Fixes | max_tokens, page header, node type | ✅ Complete |
 | Nav Bar Refactor + Map Visual-Only | Typed cards, map stripped of navigation | ✅ Complete |
+| Nav UX Polish | Panel labels, visited badges, routing, breadcrumb | ✅ Complete |
 | Bug 2 Investigation | zone_id corruption — logs needed | ⏳ Active |
 | Architecture Hardening | Domain 1/2 separation, caching, gate | ⏳ Pending |
 | Genre renderers restored | After architecture confirmed | ⏳ Pending |
@@ -36,39 +37,36 @@
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir has been removed.**
 
-### Nav Bar Refactor (commit d616be2 — 43/43 tests, clean build)
+### Nav UX Polish (commit c8fdb24 — 43/43 tests, clean build)
 
-**Map is now purely visual.** onNavigate removed from WorldMap entirely. handleSelectNode, handleSelectExit, localExit useMemo, and the "↑ EXIT TO REGION" JSX button all deleted. All renderers (DebugMap + genre renderers) had click props removed; node tooltips added via `<title>`. RendererProps no longer carries click props.
+**Fix 1 — Location panel:** "◆ CURRENT LOCATION" eyebrow label, 18px serif name, 13px atmosphere text, NPC rows clickable to open dialogue.
 
-**NavigationBar rebuilt with four typed card categories** in fixed left-to-right order:
+**Fix 2 — Visited indicators:** Unvisited nav cards get dimmed name (--ink-3), dashed accent border at 40% opacity, and a NEW badge.
 
-| Type | Icon | When shown | Target |
-|------|------|-----------|--------|
-| Back | ← | At sub_location or standalone dungeon | Parent hub |
-| Deeper | → | Sub-locations of current hub | Sibling sub-locations |
-| Exit | ↑ | At settlement hub, sub_location, or dungeon | Region zone or settlement |
-| Peer-known | ◆ | At region zone | region_locations in this region |
-| Peer-unknown | ◇ | At region zone | Adjacent undiscovered regions |
+**Fix 3 — Sub-location routing:** At a sub_location, only ← back card shown. No sibling shortcuts. Player must return to hub to choose another building — consistent with region zone transit model.
 
-Card sizing: 140–200px × 64px, mono labels, accent borders for active types, dashed border for unknown, var(--bg-3) for exit card. Nav bar now visible on desktop (removed md:hidden).
+**Fix 4 — Dungeon exit to region only:** Standalone region_locations (dungeons/wilderness) show only ← back to region zone. No ↑ exit card directly to settlement. Region zone is always the transit point.
 
-### Navigation Model ✅ (Updated)
+**Fix 5 — Section headers centered:** SceneDivider gets textAlign: "center" + width: "100%".
+
+**Fix 6 — Region zone narration context:** prompt-builder.ts injects settlement hub (labeled "settlement") + standalone region_locations when at region zone — not individual sub-location names. Narrator no longer references interior buildings when player is in the open region.
+
+**Fix 7 — Breadcrumb above nav:** Small monospace "REGION › SETTLEMENT › CURRENT LOCATION" line above card scroll row.
+
+### Navigation Rules ✅ (Hardened)
 ```
-Map = PURELY VISUAL. No click handlers navigate. View-only.
-All navigation via NavigationBar typed cards only.
+Map = PURELY VISUAL. All navigation via nav bar cards only.
 
-Card grammar (always left to right):
+Card grammar (left to right):
   [← BACK]  [→ DEEPER...]  [↑ EXIT]  [◆ PEER...]  [◇ UNDISCOVERED...]
 
-Travel flow:
-  Sub-location  →  ← back  →  Settlement hub
-  Settlement hub  →  → deeper cards  →  sub-locations
-  Settlement hub  →  ↑ exit  →  Region zone
-  Region zone  →  ← back  →  Settlement hub
-  Region zone  →  ◆ cards  →  region_locations (dungeons/wilderness)
-  Region zone  →  ◇ cards  →  adjacent undiscovered regions
-  Dungeon  →  ← back  →  Region zone
-  Dungeon  →  ↑ exit  →  Settlement hub
+Routing rules:
+  Sub-location   → ← back only (no sibling shortcuts)
+  Settlement hub → → deeper to sub-locations + ↑ exit to region zone
+  Region zone    → ← back to settlement + ◆ dungeons + ◇ undiscovered
+  Dungeon        → ← back to region zone ONLY (no direct exit to settlement)
+
+Region zone is ALWAYS the transit point for region-level travel.
 ```
 
 ### Bug 2 — zone_id corruption (UNDER INVESTIGATION)
@@ -122,11 +120,6 @@ DEBUG MODE ACTIVE in index.tsx. TO RESTORE: uncomment pickModule.
 
 PAD=76. COORDINATE SYSTEM: Hub {0,0}, sub-locations ±5,
 region_locations 8-15, adjacent 18-35.
-
-TIER DEFINITIONS (view only):
-  Local  = hub + sub_locations. Disabled at region zones + non-settlement zones.
-  Region = settlement + region_locations.
-  World  = is_expandable nodes only.
 ```
 
 ### Geographic Hierarchy ✅
@@ -165,6 +158,9 @@ WorldBible: claude-sonnet-4-5, 8000 tokens.
 DIALOGUE: WCD → HARD RULES → RESPONDING CHARACTER → TIER 1 OBJECTS → WORLD ASSETS → SCENE → VERBOSITY
 non-DIALOGUE: WCD → HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → CONNECTED LOCATIONS → WORLD ASSETS → SCENE → VERBOSITY
 
+CONNECTED LOCATIONS special case: at region zone, inject settlement hub
+(labeled "settlement") + region_locations only — NOT sub-location names.
+
 Verbosity: terse (2/3/4 sentences ≤12 words) | standard (3-4/4-5/5-7) | rich (5-7/6-8/8-12)
 
 ---
@@ -173,8 +169,7 @@ Verbosity: terse (2/3/4 sentences ≤12 words) | standard (3-4/4-5/5-7) | rich (
 
 | System | When | Description |
 | --- | --- | --- |
-| Nav bar refinement | NOW | Test + polish after refactor |
-| Bug 2 Fix | After nav test | zone_id corruption — after log analysis |
+| Bug 2 Fix | NOW | zone_id corruption — after log analysis |
 | Architecture Hardening | After Bug 2 | Arrival caching, NPC gate, code-gen dialogue options |
 | Genre renderers restored | After arch | Uncomment pickModule in index.tsx |
 | Codex dedup fix | After arch | Two-path duplicate write cleanup |
@@ -232,4 +227,4 @@ Claude Code pushes → git pull + restart → report → confirm → next prompt
 
 ---
 
-*Last updated: Session 86 — V8.19: Map navigation fully removed. NavigationBar rebuilt with typed cards (back/deeper/exit/peer-known/peer-unknown) in fixed left-to-right order. Nav bar now desktop-visible. Bug 2 diagnostic logging still active.*
+*Last updated: Session 86 — V8.20: Nav UX polish complete. Location panel labels+NPCs, visited NEW badges, sub-loc routing through hub, dungeon exit to region only, centered section headers, region zone narration context fix, breadcrumb above nav bar.*

@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.28
-**Status:** Active Development — Regional Travel + Region Description Fixes Complete, Map Visual Rework Deferred, Combat System Next
+**Version:** 8.29
+**Status:** Active Development — Polish Round Complete, Combat System Next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
@@ -10,7 +10,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Targeted bug fixes complete → combat system (Day 20). Map visual rework queued for dedicated session post-combat.
+**Current Phase:** Polish round complete → combat system (Day 20). Map visual rework queued for dedicated session post-combat.
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -31,6 +31,7 @@
 | Bug Fix Round (57b0300) | Highlight nav, discovered, headers, map polish | ✅ Complete |
 | Regression Fix Round (75a7cd4) | Cache pipeline, map sizes, tier descriptions | ✅ Complete |
 | Targeted Fix Round (dc5bcd8) | Region travel 500, region zone description | ✅ Complete |
+| Polish Round (b7032f9) | Tier-aware highlight colors, NPC speech, region cards, key warnings | ✅ Complete |
 | 20 | Combat System | ⏳ Next |
 | Map Visual Rework | Dedicated session | ⏳ Deferred (post-combat) |
 | 21 | Container + Loot | ⏳ Pending |
@@ -39,6 +40,29 @@
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir removed. Genre renderers restored (pickModule re-enabled).**
+
+### Polish Round (commit b7032f9 — 43/43 tests, clean build)
+
+**Fix 1 — Tier-aware highlight colors (region vs location):**
+- New `--hl-region: #c4b5fd` token + `.ew-link-region` CSS rule.
+- New `RegionSpan` component in `components/game/StoryComponents.tsx:135-141` (mirror of LocationSpan with the lavender token).
+- `HighlightCandidate` / `HighlightMatch` types carry `isRegion` flag. `lib/game/highlights.ts:90-159` flags every region-tier graph node + every WorldBible adjacent region, so region names highlight even when the player is far from them.
+- `components/game/StoryFeed.tsx:422-451` branches LOCATION → RegionSpan when `isRegion === true`.
+- Region names like "The Drift Barrens" now render lavender; sub-locations like "Carrion Anchorage" stay sky-blue. Both navigate via existing display-name → id resolver.
+
+**Fix 2 — NPC quoted speech in warm cream italic, weight 600:**
+- `--hl-said: #e8d5b0` defined explicitly at `:root` (was an inline fallback before).
+- `.ew-said` weight bumped 500 → 600 so quoted speech reads clearly distinct from surrounding ink-2 narrator prose in `NPCSpeech` bodies.
+- Resolves the regression where Morrow Kellsix-style dialogue read identically to narrator prose.
+
+**Fix 3 — Region zone retains adjacent-region cards on return:**
+- NavigationBar D2 branch dropped the `current.connections.includes(r.id)` filter — apply-regional-bible's step 6 strips that link after expansion, which was causing already-expanded regions to disappear from the card list.
+- Now iterates every `world_bible.adjacent_regions` entry, skips self, classifies by graph state: discovered → `◆ peer-known REGION`; absent or undiscovered → `◇ peer-unknown UNDISCOVERED REGION`.
+- `navigateTo`'s `isUndiscoveredRegion` tightened to require either no graph node or an expandable-but-undiscovered placeholder. The "Venturing into unknown territory..." message no longer fires on every return visit to an already-expanded region.
+
+**Fix 4 — React key-prop-spread warning silenced:**
+- `components/game/StoryFeed.tsx:422-451` separates `key` from the rest of props before the JSX spread, killing the React `"key prop being spread into JSX"` console warning on every story feed render.
+- Cosmetic only — no behavior change. Console is now clean of span-render warnings.
 
 ### Targeted Fix Round (commit dc5bcd8 — 43/43 tests, clean build)
 
@@ -143,9 +167,14 @@ Card grammar: [← BACK] [→ DEEPER...] [↑ EXIT] [◆ PEER...] [◇ UNDISCOVE
 Routing:
   Sub-location   → ← back to hub ONLY
   Settlement hub → → deeper + ↑ exit to region zone
-  Region zone    → ← back + ◆ known + ◇ undiscovered
+  Region zone    → ← back + ◆ known + ◇ undiscovered + adjacent regions (V8.29)
   Dungeon        → ← back to region zone ONLY
   New region     → lands at region zone (not settlement hub)
+
+Region zone D2 card builder iterates every world_bible.adjacent_regions
+entry. NEVER filters by current.connections (that gets stripped at
+expansion time). Discovered → ◆ peer-known REGION; absent/undiscovered
+→ ◇ peer-unknown UNDISCOVERED REGION. (V8.29)
 ```
 
 ### Map Description Sourcing ✅ (V8.27, hardened V8.28)
@@ -183,6 +212,9 @@ AI writes: response text only (not option list)
 
 Knowledge format: {topic: "Short label", content: "Full sentence"}
 Legacy format: plain string → auto-converted to {topic: first-5-words, content: string}
+
+NPC quoted speech: rendered via .ew-said class — #e8d5b0 warm cream,
+italic, weight 600 (V8.29).
 ```
 
 ### Known issues (deferred to post-combat / map visual rework)
@@ -191,11 +223,12 @@ Legacy format: plain string → auto-converted to {topic: first-5-words, content
 - Per-node decorative shelf line under every node (visible under both discovered and undiscovered) — looks like an underline but is a separate SVG element. Cleanup needed across all renderers.
 - Connection lines pass through node icons instead of terminating at icon edges — endpoint geometry / z-order issue.
 - Overall sizing and visual hierarchy still feels cramped relative to panel size even after V8.27 bumps.
-- Whole-renderer redesign needed: decoration cleanup, line-endpoint geometry, sizing pass, current-node emphasis.
+- Map label collision: World/Region tier labels overlap visibly when nodes are close together (e.g. "The Drift Barrens" / "Carrion Anchorage", "Carrion Anchorage" / "The Calculus Spire"). Needs label placement / collision avoidance pass.
+- Whole-renderer redesign needed: decoration cleanup, line-endpoint geometry, sizing pass, current-node emphasis, label collision.
 
 **Other deferred:**
 - NPC highlight color (orange) too similar to item highlight (yellow) in Fantasy
-- React key-prop-spread warnings in LocationSpan/ItemSpan/NpcSpan/LandmarkSpan
+- Region highlight color (lavender) and Landmark highlight color (also lavender) currently match. Consider differentiating if it causes player confusion in playtesting.
 - Hub node not added to codex on first arrival to new region
 - Step 7 individual branches: confirm each branch sets `discovered: true` (currently relying on Fix 2 safety net)
 
@@ -257,6 +290,9 @@ NPE from malformed grid_position entries (V8.28).
 14. Map description sourcing: World = `wcd.world_description`, Region = `currentRegion.atmosphere`, Local = `currentLocation.atmosphere`. No cross-tier bleed. (V8.27)
 15. Region zone assets always populate both `constitution.physical_description` AND `constitution.atmosphere` from the same source prose. WorldMap prefers whichever has trimmed content. (V8.28)
 16. Collision-check loops over expandable node positions must guard each entry with `isValidPos`. Malformed entries are skipped + warned, never dereferenced. (V8.28)
+17. Story feed location highlights are tier-aware: region-tier names use `--hl-region` (lavender), settlement/sub-location names use `--hl-loc` (sky-blue). HighlightCandidate carries `isRegion` flag set at match time from world_graph + WorldBible.adjacent_regions. (V8.29)
+18. Region zone D2 card builder iterates every `world_bible.adjacent_regions` entry, NEVER filters by `current.connections`. Already-expanded regions stay travelable. (V8.29)
+19. Span dispatch in StoryFeed separates `key` from spread props before JSX. Never spread an object containing `key` into a component. (V8.29)
 
 ---
 
@@ -289,12 +325,12 @@ NPC highlights:        var(--accent) orange (too similar to item yellow — futu
 | System | When | Description |
 | --- | --- | --- |
 | Combat System | NOW (Day 20) | Turn-based, code resolves, AI narrates |
-| Map Visual Rework | After combat | Dedicated session: decoration cleanup, line geometry, sizing, hierarchy |
+| Map Visual Rework | After combat | Dedicated session: decoration, geometry, sizing, hierarchy, label collision |
 | Container + Loot | Day 21 | Registry, loot tables, dungeon sub-levels |
 | Skills + Leveling | Day 22 | XP, stat points, level gates |
 | Main Quest Thread | Day 23 | Breadcrumb injection, quest tracking |
 | Random Events | After combat | Region zone + travel encounters |
-| Genre UI polish | Post-systems | NPC color, key-prop warnings |
+| Genre UI polish | Post-systems | NPC color, region/landmark color overlap if confusing |
 
 ---
 
@@ -344,4 +380,4 @@ Claude Code pushes → user reports commit + test results → Claude.ai updates 
 
 ---
 
-*Last updated: V8.28 — Targeted fix round (commit dc5bcd8): apply-regional-bible 500 fixed via isValidPos guards on collision check, region zone description populates correctly across world bible + region bible apply paths (both physical_description and atmosphere fields written, single-tier overwrite, ignoreDuplicates dropped, WorldMap firstAtmosphere prefers populated field). Map visual rework queued for dedicated session post-combat. Combat system (Day 20) up next.*
+*Last updated: V8.29 — Polish round (commit b7032f9): tier-aware highlight colors (region lavender vs location sky-blue) via new RegionSpan + isRegion flag in HighlightCandidate, NPC quoted speech now warm cream italic weight 600, region zone retains adjacent-region cards on return (D2 builder iterates adjacent_regions directly, never filters by stripped connections), key-prop-spread warnings silenced. Map label collision logged for dedicated map session. Combat system (Day 20) up next.*

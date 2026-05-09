@@ -706,6 +706,111 @@ export interface MasterState {
    *  fresh sessions before world-seed application have no graph yet, in
    *  which case the resolver and game loop fall back to legacy behaviour. */
   world_graph?: WorldGraph;
+  // ── Day 20 Combat ────────────────────────────────────────────────────────
+  /** Active combat encounter slice. `undefined` when not in combat;
+   *  fully populated when combat is in progress. Combat is a self-
+   *  contained slice of game state: dismissed entirely on victory /
+   *  defeat / flee, no leftovers. UI subscribes to this and renders
+   *  combat mode reactively. */
+  combat?: CombatState;
+  /** Tracked for the defeat teleport. Updated whenever the player
+   *  arrives at a settlement hub (is_settlement_node=true). Defaults
+   *  to the starting settlement. */
+  last_settlement_hub_id?: string;
+  /** Last 5 visited node ids, most recent at end. Flee uses the
+   *  second-to-last as the rollback target. */
+  navigation_trail?:       string[];
+}
+
+// ---------------------------------------------------------------------------
+// Day 20 Combat — runtime state slice
+// ---------------------------------------------------------------------------
+
+/**
+ * One instance of an enemy spawned in an encounter. HP rolled per
+ * spawn from the bestiary `hp_range`. instance_id is unique within
+ * the encounter so multiple of the same enemy id can coexist
+ * (e.g. two goblins, fantasy_goblin_1 and fantasy_goblin_2).
+ */
+export interface CombatEnemyInstance {
+  /** Unique within this encounter — typically `${enemy_id}_${index}`. */
+  instance_id:     string;
+  /** Resolves against the bestiary or RegionBible.enemies. */
+  enemy_id:        string;
+  name:            string;
+  description:     string;
+  current_hp:      number;
+  max_hp:          number;
+  agi_mod:         number;
+  str_mod:         number;
+  damage_die:      string;
+  armor_bonus:     number;
+  xp_value:        number;
+  loot_table_id:   string;
+  is_boss:         boolean;
+  behavior_flavor: string;
+  /** False once current_hp <= 0. Dead enemies stay in the array so
+   *  the combat log keeps a stable reference to them. */
+  alive:           boolean;
+}
+
+/**
+ * One atomic event in a combat encounter. The combat_log is the
+ * narration source: Prompt 3 will render these into the story feed.
+ * For Prompt 2, a console logger prints these for visibility.
+ */
+export interface CombatEvent {
+  type:                  | "combat_start" | "round_start"
+                         | "player_attack" | "enemy_attack"
+                         | "defend"       | "use_item"
+                         | "flee_attempt"
+                         | "kill"         | "victory"
+                         | "defeat"       | "flee_success";
+  /** Date.now() at event emission. */
+  timestamp:             number;
+  /** "PLAYER" or an enemy `instance_id`. */
+  actor:                 "PLAYER" | string;
+  /** "PLAYER", an enemy `instance_id`, or null for non-targeted events. */
+  target:                "PLAYER" | string | null;
+  outcome:               | "hit" | "miss" | "crit" | "fumble"
+                         | "kill"
+                         | "defended" | "fled" | "fled_failed"
+                         | "item_used"
+                         | null;
+  damage_dealt:          number | null;
+  remaining_target_hp:   number | null;
+  /** Weapon or item name — used by the narrator (Prompt 3). */
+  weapon_or_item:        string | null;
+  /** Free-form flavor note. Lets the encounter trigger pass enemy
+   *  behavior_flavor / region atmosphere without the resolver having
+   *  to infer it. */
+  context_note:          string | null;
+}
+
+export interface CombatState {
+  /** False = no combat. When combat dismisses cleanly the slice
+   *  should be unset on MasterState rather than left at active=false. */
+  active:             boolean;
+  /** Unique per encounter — used for log correlation. */
+  encounter_id:       string;
+  enemies:            CombatEnemyInstance[];
+  /** Initiative order: enemy `instance_id`s + the literal "PLAYER". */
+  turn_order:         string[];
+  /** Index into `turn_order` — advances after each turn resolves. */
+  current_turn_index: number;
+  /** Increments after a full pass through `turn_order`. */
+  round_number:       number;
+  /** True from the moment the player chooses Defend until the start of
+   *  their next turn. Damage halved (min 1) and +2 AGI for defense
+   *  calcs while true. */
+  player_defending:   boolean;
+  /** Every event since combat started — survives until combat dismisses. */
+  combat_log:         CombatEvent[];
+  /** Node id where combat began. Used for victory return + the
+   *  fallback flee target when navigation_trail is too short. */
+  origin_node_id:     string;
+  /** Player.xp at combat start. Restored verbatim on defeat (§9). */
+  pre_combat_xp:      number;
 }
 
 // ---------------------------------------------------------------------------

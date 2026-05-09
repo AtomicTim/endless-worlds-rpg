@@ -17,6 +17,8 @@ import {
   pregenerateRegionalBible,
   invalidateRegionalBibleCache,
 } from "@/lib/game/regional-bible-cache";
+import { rollEncounterWithPlayer, shouldRollEncounter } from "@/lib/game/combat-engine";
+import { consumeForcedEncounter } from "@/hooks/useCombat";
 import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { DialogueOption, Item, MasterState, ParsedAction, RegionBible, RegionOutline, ResolutionResult, StoredMessage, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
 
@@ -2239,6 +2241,57 @@ export function useGameLoop() {
           ...updatedState,
           world_state: { ...updatedState.world_state, flags: flagsAfter },
         };
+
+        // ── 7c-2. Day 20 Combat — settlement + navigation tracking ──────────
+        // Track last_settlement_hub_id (defeat teleport target) and the
+        // last 5 visited nodes (flee rollback). Both ride alongside the
+        // existing master_state and don't impact narrator behavior.
+        const arrivedNode = updatedState.world_graph?.nodes[arrivedAt];
+        const isSettlementHub =
+          arrivedNode?.is_settlement_node === true ||
+          arrivedNode?.category === "settlement_hub";
+        const trail = (updatedState.navigation_trail ?? []).filter((id) => id !== undefined);
+        const updatedTrail = [...trail, arrivedAt].slice(-5);
+        updatedState = {
+          ...updatedState,
+          last_settlement_hub_id: isSettlementHub
+            ? arrivedAt
+            : updatedState.last_settlement_hub_id,
+          navigation_trail:       updatedTrail,
+        };
+
+        // ── 7c-3. Day 20 Combat — encounter trigger ─────────────────────────
+        // Reads the arrived node's encounter_chance + roster (mirrored
+        // from the bible at apply time). Honors a dev-mode override
+        // queued via window.__forceEncounter so QA can spawn specific
+        // enemies without rolling. Splices a CombatState into
+        // master_state on success — the UI in Prompt 3 reacts to
+        // combat?.active === true and takes over the action bar.
+        if (arrivedNode) {
+          const forced = consumeForcedEncounter();
+          const willTry = forced !== null || shouldRollEncounter(arrivedNode, updatedState.combat);
+          if (willTry) {
+            const playerAgi = Math.floor(
+              (updatedState.player_state.attributes.agility - 10) / 2
+            );
+            const result = rollEncounterWithPlayer({
+              node:           arrivedNode,
+              world_bible:    updatedState.metadata.world_bible,
+              region_bibles:  updatedState.metadata.region_bibles,
+              genre:          updatedState.metadata.genre,
+              current_xp:     updatedState.player_state.xp,
+              player_agi_mod: playerAgi,
+              forceEnemyIds:  forced ?? undefined,
+            });
+            if (result.combatStarted && result.combat) {
+              console.log(
+                `[Combat] Encounter triggered at ${arrivedNode.id}:`,
+                result.enemyNames ?? []
+              );
+              updatedState = { ...updatedState, combat: result.combat };
+            }
+          }
+        }
       } else {
         // Late-load fallback: if locationAssets is still empty at this point,
         // page.tsx's seed must have failed (network error, race, hard reload

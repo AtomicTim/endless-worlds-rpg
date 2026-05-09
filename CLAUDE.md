@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
 **Version:** 8.33
-**Status:** Active Development — Prompt 2.5 Navigation Fix Complete, Combat Prompt 3/3 (UI) Next
+**Status:** Active Development — Combat Prompt 3/3 Up Next, Polish Round (Prompt 4) Queued
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions. /docs/combat-spec.md — The authoritative source for combat system design.
@@ -10,7 +10,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Prompt 2.5 navigation fix complete. Returning to known regions no longer re-applies the bible. Foundation is clean for Combat Mode UI (Prompt 3/3).
+**Current Phase:** Prompt 2.5 navigation fix complete. Combat foundation solid — encounters trigger, resolver works, navigation is clean. Combat Mode UI (Prompt 3/3) up next, with bestiary codex + new-game string fix bundled. Polish Round (Prompt 4) queued for after combat works visually.
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -37,9 +37,10 @@
 | Combat Spec | /docs/combat-spec.md design doc | ✅ Frozen |
 | 20 — Combat Prompt 1/3 (1024287) | Data foundation: enemy types, bestiary, generation, encounter tagging | ✅ Complete |
 | 20 — Combat Prompt 2/3 (a4e5975) | Resolver + encounter triggers + turn loop | ✅ Complete |
-| **20 — Prompt 2.5 Nav Fix (25ff111)** | **Region trigger reclassification, idempotent apply, discovered preservation** | ✅ **Complete** |
-| 20 — Combat Prompt 3/3 | Combat mode UI + narration integration | ⏳ Next |
-| Map Visual Rework | Dedicated session | ⏳ Deferred (post-combat) |
+| 20 — Prompt 2.5 Nav Fix (25ff111) | Region trigger reclassification, idempotent apply, discovered preservation | ✅ Complete |
+| **20 — Combat Prompt 3/3** | **Combat mode UI + narration + bestiary codex + new-game string fix** | ⏳ **Next** |
+| Polish Round (Prompt 4) | Settlement card label, tier auto-switch, NPC dialogue contrast, tier-aware nav button colors | ⏳ Queued post-combat |
+| Map Visual Rework | Dedicated session | ⏳ Deferred (post-Prompt-4) |
 | 21 | Container + Loot | ⏳ Pending |
 | 22 | Skills + Leveling | ⏳ Pending |
 | 23 | Main Quest Thread | ⏳ Pending |
@@ -64,27 +65,15 @@ After matching the outline, if the matched id is already in `metadata.region_bib
 Also patched the downstream `arrivedAt` computation at step 7c — it now reads `updatedState.world_state.current_location_id` instead of `resolution.state_delta.world_state.current_location_id`, so the FIX 1 reclassification flows into asset reload, navigation_trail tracking, and the encounter trigger.
 
 **Fix 2 — apply-regional-bible idempotence guard:**
-At the top of the POST handler, before any work: if the bible is already in `metadata.region_bibles` AND every location (settlement-side + region_locations) is already in `world_graph.nodes`, log `Skipping redundant re-apply of <name> — already in master_state.` and return 200 with the existing graph + bible-derived response shape (`starting_node_id`, `region_zone_id`, `updated_world_graph`, `location_count`, `npc_count`, plus `skipped: true`).
-
-The route is now safe to call multiple times — even a future caller bug or cache stutter cannot corrupt state.
+At the top of the POST handler, before any work: if the bible is already in `metadata.region_bibles` AND every location is already in `world_graph.nodes`, log `Skipping redundant re-apply of <name> — already in master_state.` and return 200 with `skipped: true`.
 
 **Fix 3 — preserve `discovered` on re-apply:**
-At the merge step in apply-regional-bible (step 5), every newly-built node is run through `mergeNodePreservingDiscovered(existing, fresh)`. If the existing graph node had `discovered: true` and the fresh bible-built node has `discovered: false`, the merged node keeps `discovered: true`. All other fields ride from fresh — atmosphere, connections, encounter_chance are content (overwriteable); discovered is player state.
-
-**Fix 4 — verified Prompt 2 tracking:**
-Read step 7c-2: `last_settlement_hub_id` updates only on `is_settlement_node === true || category === "settlement_hub"`; `navigation_trail` appends `arrivedAt` and slices the last 5. Both behaviors are correct under the FIX 1 flow now that `arrivedAt` reads from `updatedState` (post-reclassification) instead of `resolution.state_delta` (pre-reclassification). No code change needed here — just the `arrivedAt` source patch above.
+At the merge step in apply-regional-bible (step 5), every newly-built node is run through `mergeNodePreservingDiscovered(existing, fresh)`.
 
 **Architecture extraction — `lib/game/region-expansion-guard.ts`:**
-Three pure helpers, exported and consumed by both call sites:
-- `isRegionAlreadyExpanded(state, regionId)` — bible registered AND graph node discovered. Used by useGameLoop FIX 1.
-- `isApplyRegionalBibleRedundant(state, bible)` — bible registered AND every location structurally present. Used by apply-regional-bible FIX 2. Discovered flag is intentionally NOT part of this predicate (a partial-apply recovery should re-run regardless of discovery state).
-- `mergeNodePreservingDiscovered(existing, fresh)` — used by apply-regional-bible FIX 3.
+Three pure helpers (`isRegionAlreadyExpanded`, `isApplyRegionalBibleRedundant`, `mergeNodePreservingDiscovered`), exported and consumed by both call sites.
 
-Keeping these in one file ensures the two call sites stay semantically aligned; if the predicate evolves (e.g. checking `world_assets` too), both paths update together.
-
-**Tests:** 16 new in `region-expansion-guard.test.ts`. 149 total passing (133 prior + 16 new).
-
-**Build impact:** /game route 96.1 → 96.3 kB. Build, tsc, and 149 jest tests all green.
+**Tests:** 16 new in `region-expansion-guard.test.ts`. 149 total passing.
 
 ### Combat Day 20 — Prompt 2/3: Resolver + Triggers + Turn Loop (commit a4e5975 — 133/133 tests, clean build)
 
@@ -92,11 +81,11 @@ Keeping these in one file ensures the two call sites stay semantically aligned; 
 
 **Task 1 — Combat state in types/game.ts:**
 - New `CombatEnemyInstance`, `CombatEvent`, `CombatState` interfaces.
-- `MasterState` extended with optional `combat`, `last_settlement_hub_id`, `navigation_trail`. Combat slice is dismissed entirely on victory/defeat/flee — no leftovers.
+- `MasterState` extended with optional `combat`, `last_settlement_hub_id`, `navigation_trail`. Combat slice is dismissed entirely on victory/defeat/flee.
 
 **Task 2 — `/lib/game/combat-resolver.ts` (pure math, RNG injected):**
 - `rollD20`, `rollDamageDie`, `maxDamageDie`, `rollEnemyHP`, `rollInitiative`.
-- `resolveAttack` — full §5.2 logic: nat-1 fumble, nat-20 crit (max die + 1d(die) + str_mod), `hit_total >= target_dc`, min-1 damage clamp on hits, `killed_target` flag.
+- `resolveAttack` — full §5.2 logic: nat-1 fumble, nat-20 crit (max die + 1d(die) + str_mod), `hit_total >= target_dc`, min-1 damage clamp, `killed_target` flag.
 - `resolveDefend` + `applyDefendDamageReduction` — half damage rounded down, min 1.
 - `resolveFlee` — average AGI of LIVING enemies; ignores dead.
 - `resolveUseItem` — heals 1d8+4 capped at max; unknown items no-op.
@@ -105,19 +94,14 @@ Keeping these in one file ensures the two call sites stay semantically aligned; 
 - `shouldRollEncounter`, `resolveEnemyLookup` (4-layer fall-through), `rollEncounter`, `rollEncounterWithPlayer` wrapper.
 
 **Task 4 — Turn loop in `/lib/game/combat-engine.ts`:**
-- `executePlayerAction` — resolves attack/defend/use_item/flee, auto-advances enemy turns until next player turn or combat ends.
-- `advanceEnemyTurn` — every enemy attacks the player (§6.3 simplification); honors defend buff.
-- `checkVictory` / `checkDefeat` predicates.
-- `handleVictory` / `handleDefeat` / `handleFleeSuccess` — full payouts, teleports, rollbacks per spec §9.
+- `executePlayerAction`, `advanceEnemyTurn`, `checkVictory`, `checkDefeat`, `handleVictory`, `handleDefeat`, `handleFleeSuccess`.
 
 **Task 5 — Tracking in useGameLoop step 7c-2:**
 - `navigation_trail` keeps last 5 node ids; `last_settlement_hub_id` updates on settlement hub arrivals.
 
-**Task 6 — Console combat logger:**
-- TEMPORARY — Prompt 3 will replace with story-feed rendering.
+**Task 6 — Console combat logger:** TEMPORARY — Prompt 3 will replace with story-feed rendering.
 
-**Task 7 — Dev-only test override:**
-- `window.__forceEncounter("fantasy_goblin", "fantasy_skeleton")` registers at module load, bypasses chance + weight rolls.
+**Task 7 — Dev-only test override:** `window.__forceEncounter("fantasy_goblin", "fantasy_skeleton")` registers at module load.
 
 **Task 8 — 61 new tests, 133 total passing.**
 
@@ -146,13 +130,13 @@ Keeping these in one file ensures the two call sites stay semantically aligned; 
 **Fix 2 — Map defaults to Local tier on startup.**
 **Fix 3 — Landmark highlight color flipped to mint** to distinguish from region lavender.
 **Fix 4 — New region wires origin region symmetrically into adjacent-region connections.**
-**Fix 5 — RegionBible stub fallback** on JSON parse failure (max_tokens 3500 → 6000).
+**Fix 5 — RegionBible stub fallback** on JSON parse failure.
 
 ### Polish Round (commit b7032f9 — 43/43 tests, clean build)
 
 **Fix 1 — Tier-aware highlight colors** (region lavender vs location sky-blue).
 **Fix 2 — NPC quoted speech in warm cream italic, weight 600.**
-**Fix 3 — Region zone retains adjacent-region cards on return** (D2 builder no longer filters by stripped connections).
+**Fix 3 — Region zone retains adjacent-region cards on return.**
 **Fix 4 — React key-prop-spread warning silenced** in StoryFeed.
 
 ### Targeted Fix Round (commit dc5bcd8 — 43/43 tests, clean build)
@@ -164,7 +148,7 @@ Keeping these in one file ensures the two call sites stay semantically aligned; 
 
 **Fix A1 — Cache hit preserves post-arrival pipeline.**
 **Fix A2 — Sub-location nav cards back-to-hub only.**
-**Fix B1 — Map text and icons visually larger** (titles 16-22, subtitles 13, node labels 14-18).
+**Fix B1 — Map text and icons visually larger.**
 **Fix B2 — `?` underline removed across all renderers and tiers.**
 **Fix B3 — Description sourcing per map tier** (no cross-tier bleed).
 
@@ -173,14 +157,12 @@ Keeping these in one file ensures the two call sites stay semantically aligned; 
 **Fix 1 — Highlight nav uses node id, not display name.**
 **Fix 2 — Discovered flag safety net at end of step 7.**
 **Fix 3 — Section header on cross-node navigation.**
-**Fix 4 — Map text size pass (superseded by V8.27 Fix B1).**
-**Fix 5 — Map "?" glyph underline removed (Fantasy only — superseded by V8.27 Fix B2).**
-**Fix 6 — Cache hit skips arrival narrator (refined by V8.27 Fix A1).**
+**Fix 4-6 — Various map polish fixes (some superseded by V8.27).**
 
 ### Architecture Hardening (commit 57d27f3 — 43/43 tests, clean build)
 
 **Change 1 — Land at region zone after generation.**
-**Change 2 — World map overlap fix (hardened in V8.28 Fix 1).**
+**Change 2 — World map overlap fix.**
 **Change 3 — Write-once arrival cache + codex dedup.**
 **Change 4 — Code-built dialogue options.**
 **Change 5 — Genre renderers restored.**
@@ -206,71 +188,38 @@ AI during gameplay:
 ### Combat System ✅ (V8.31 + V8.32)
 ```
 DATA LAYER (V8.31):
-  Enemy interface (combat-spec §6.2)
-  Two-tier bestiary: hand-authored genre + LLM region-specific
-  Fantasy bestiary: 14 entries; other 4 genres: 3 placeholder each
-  Encounter tagging on combat-eligible nodes
-  Stub loot drops: 25-50% gold, 5% basic health potion
+  Enemy interface, two-tier bestiary, encounter tagging, stub loot drops.
 
 RESOLVER LAYER (V8.32):
-  /lib/game/combat-resolver.ts — pure math, RNG injected
-  rollD20 / rollDamageDie / maxDamageDie / rollEnemyHP / rollInitiative
-  resolveAttack / resolveDefend / resolveFlee / resolveUseItem
+  /lib/game/combat-resolver.ts — pure math, RNG injected.
+  d20 hit/dmg/init/flee/use_item.
 
 TRIGGER LAYER (V8.32):
-  shouldRollEncounter / resolveEnemyLookup (4-layer fall-through) /
-  rollEncounter / rollEncounterWithPlayer
+  shouldRollEncounter / resolveEnemyLookup / rollEncounter.
 
 TURN LOOP (V8.32):
-  /lib/game/combat-engine.ts
-  executePlayerAction / advanceEnemyTurn / checkVictory / checkDefeat
-  handleVictory / handleDefeat / handleFleeSuccess
+  /lib/game/combat-engine.ts — full action resolution + auto-advance.
 
 STATE TRACKING (V8.32):
-  master_state.combat (CombatState, dismissed on resolve)
-  master_state.last_settlement_hub_id
-  master_state.navigation_trail (last 5 ids)
-  pre_combat_xp captured at encounter start
+  master_state.combat / last_settlement_hub_id / navigation_trail.
 
 DEV TOOLS (V8.32):
-  window.__forceEncounter("enemy_id", ...) — dev-only override
-  Console logger — TEMPORARY, Prompt 3 replaces with story-feed
+  window.__forceEncounter("enemy_id", ...) — dev-only override.
+  Console logger — TEMPORARY, Prompt 3 replaces with story-feed.
 ```
 
 ### Region Expansion Guard ✅ (V8.33)
 ```
 /lib/game/region-expansion-guard.ts — pure helpers, two callers:
 
-isRegionAlreadyExpanded(state, regionId):
-  - bible registered in metadata.region_bibles AND
-  - graph node has discovered: true
-  Used in useGameLoop step 4d to reclassify
-  WORLD_EXPLORE → GRAPH_NAVIGATE for known regions.
-
-isApplyRegionalBibleRedundant(state, bible):
-  - bible registered AND
-  - every location (settlement-side + region_locations) present
-    in world_graph.nodes
-  Discovered flag intentionally NOT part of this predicate —
-  partial-apply recovery should re-run regardless of player state.
-  Used in apply-regional-bible to short-circuit redundant calls.
-
-mergeNodePreservingDiscovered(existing, fresh):
-  Used in apply-regional-bible step 5 merge.
-  If existing had discovered: true and fresh has discovered: false,
-  result keeps discovered: true. All other fields ride from fresh.
+isRegionAlreadyExpanded / isApplyRegionalBibleRedundant /
+mergeNodePreservingDiscovered.
 
 ROOT CAUSE FIXED IN V8.33:
 toSlug() strips hyphens from "The Chain-Keeps Borderland" →
 "the_chainkeeps_borderland", but canonical id is
-"the_chain_keeps_borderland". directHit fallback misses,
-classifyMove returns WORLD_EXPLORE, and apply-regional-bible
-re-fires on already-known regions.
-
-The Region Expansion Guard works AROUND this slug bug. The
-slug normalizer itself is untouched (high blast radius).
-If toSlug is ever fixed, the guard remains valid as defense-
-in-depth.
+"the_chain_keeps_borderland". The Region Expansion Guard works
+AROUND this slug bug. Fixing toSlug itself is high-blast-radius.
 ```
 
 ### Navigation Rules ✅ (Complete)
@@ -290,12 +239,10 @@ Region zone D2 card builder:
 - At starting region: iterates wb.adjacent_regions
 - At expanded region: reads current.connections, lists is_expandable
   zone_id=self nodes as peer cards
-- Forward AND back direction symmetric across any region depth
 
 Region trigger reclassification (V8.33):
 - Step 4d checks isRegionAlreadyExpanded BEFORE expanding
 - Known region → GRAPH_NAVIGATE, no apply-regional-bible call
-- Unknown region → normal expansion flow
 
 Combat trigger:
 - Step 7c-3: shouldRollEncounter on every arrival
@@ -309,57 +256,39 @@ World tier  → wcd.world_description (2-3 sentence world summary)
 Region tier → currentRegion.atmosphere (resolved from parent region zone
               asset for ANY node within the region)
 Local tier  → currentLocation.atmosphere
-
-Region zone asset:
-  - constitution.physical_description AND constitution.atmosphere both written
-  - WorldMap firstAtmosphere prefers whichever has trimmed content
-
-Map tier default on mount: Local for non-region-zone nodes, Region for region
-zone nodes. User's manual tier choice not overridden mid-session.
 ```
 
 ### NPC Dialogue System ✅
 ```
 Option list: built by code from NPC.knowledge[] asset
-AI writes: response text only (not option list)
-Knowledge format: {topic: "Short label", content: "Full sentence"}
+AI writes: response text only
 
 NPC quoted speech: rendered via .ew-said class — #e8d5b0 warm cream,
-italic, weight 600. Pending higher-contrast pass — see Wrap-up Polish.
+italic, weight 600. Higher-contrast pass scheduled for Prompt 4 polish.
 ```
 
 ### RegionBible Resilience ✅ (V8.30, extended V8.31, idempotent V8.33)
 ```
-Model: claude-haiku-4-5-20251001
-max_tokens: 7000
-
-Failure modes:
-- First parse fail → retry once
-- Retry parse fail → return 200 with stub bible
-- Already-applied bible → 200 with skipped: true (V8.33)
-
-Player is never blocked from traversal by an LLM JSON malformation
-or by a redundant apply.
+Model: claude-haiku-4-5-20251001, max_tokens: 7000.
+Stub fallback on double-parse-failure. Idempotent on re-apply.
 ```
 
 ### WorldBible Resilience ✅ (V8.31)
 ```
-Model: claude-sonnet-4-5
-max_tokens: 10000
-
-apply-world-bible validates:
-  - validateEnemy / validateEnemies — warn-don't-500 on malformed entries
-  - scrubEncounterRoster — strips unresolvable enemy ids from rosters
+Model: claude-sonnet-4-5, max_tokens: 10000.
+validateEnemy / validateEnemies / scrubEncounterRoster — warn-don't-500.
 ```
 
 ### Known issues
 
-**Wrap-up Polish (bundle into Combat Prompt 3 or post-combat polish round):**
-- **Settlement hub card on new region arrival reads as back-from-settlement.** Functional but visually misleading. Card-typing issue in NavigationBar's region-zone D2 branch.
+**Prompt 4 — Polish Round (queued for after Combat Prompt 3 lands):**
+This is a dedicated visual polish round bundling all the small UX issues that don't belong in any of the major systems. Each item below is independent — no architecture dependencies — so they're best done together when the systems on either side (Combat) are stable.
+- **Settlement hub card on new region arrival reads as back-from-settlement.** Functional but visually misleading. Card-typing issue in NavigationBar's region-zone D2 branch — needs to distinguish "settlement hub of CURRENT region" (deeper-into card) from "place player just left" (back card). Confirmed still present in V8.33.
 - **Map does not auto-switch tiers on cross-region arrival.** Initial-mount default works (V8.30) but doesn't re-fire on cross-zone arrival.
-- **NPC dialogue text needs higher contrast.** `.ew-said` doesn't read distinctly enough from surrounding ink-2 prose.
+- **NPC dialogue text needs higher contrast.** `.ew-said` doesn't read distinctly enough from surrounding ink-2 prose. Pick a more contrasting color or add a subtle background tint / left-border accent.
+- **Tier-aware nav button colors (NEW request V8.33).** Each card type currently looks identical regardless of destination tier. Region cards, dungeon cards, settlement cards, and sub-location cards should each have a distinct visual treatment. For Prompt 4: distinct color per tier matching the existing highlight color tokens (region lavender, settlement sky-blue, dungeon a new color, etc). Style differentiation (icons, borders) deferred to a later visual pass.
 
-**Map visual rework (dedicated session, post-combat):**
+**Map visual rework (dedicated session, post-Prompt-4):**
 - Per-node decorative shelf line under every node — separate SVG element. Cleanup needed.
 - Connection lines pass through node icons instead of terminating at icon edges.
 - Overall sizing and visual hierarchy still cramped.
@@ -373,7 +302,7 @@ apply-world-bible validates:
 - Starting region nodes lack `grid_position` — masked by V8.28 isValidPos guard.
 - Behavior dispatch beyond flavor text deferred (combat-spec §6.3) — every enemy just attacks the player every turn.
 - Combat console logger is TEMPORARY (V8.32) — Prompt 3 replaces with story-feed combat-event rendering.
-- `toSlug` strips hyphens without converting to underscore — masked by V8.33 region-expansion-guard. Eventually worth fixing the normalizer itself, but the guard is the safer surface area.
+- `toSlug` strips hyphens without converting to underscore — masked by V8.33 region-expansion-guard. Eventually worth fixing the normalizer itself.
 
 ---
 
@@ -384,27 +313,20 @@ apply-world-bible validates:
 **Domain 2 (Content Library — frozen):** WCD, locations, NPCs, items, loot tables, main quest, bestiary, region enemies.
 
 ### Generation Model ✅
-RegionBible: claude-haiku-4-5-20251001, max_tokens: 7000. Stub fallback on double-parse-failure. Idempotent on re-apply (V8.33).
-WorldBible: claude-sonnet-4-5, max_tokens: 10000. Includes 3-5 starting-region enemies, 1-2 per adjacent-region outline, encounter tagging.
-WCD includes `world_description` (2-3 sentence world summary).
+RegionBible: claude-haiku-4-5-20251001, max_tokens: 7000. Stub fallback. Idempotent on re-apply.
+WorldBible: claude-sonnet-4-5, max_tokens: 10000. Includes enemies + encounter tagging.
+WCD includes `world_description`.
 
 ### Map System ✅
 ```
 Genre renderers active (pickModule enabled).
 PAD=76. Tier switcher. Current node highlighted.
-World tier: tagline removed; subtitle = "<n> known · <n> rumored" (V8.27).
+
 Initial tier on mount: Local (V8.30).
 New region nodes: collision-checked, nudged if overlap.
 
-Text sizes (V8.27):
-  Titles    16-22 SVG units
-  Subtitles 13
-  Node labels 14-18
-  Exit labels 14
-  Undiscovered glyph radii enlarged proportionally
-
-⚠️ Map visual rework deferred to dedicated post-combat session.
-⚠️ Tier auto-switch on cross-zone arrival pending — see Known Issues.
+⚠️ Map visual rework deferred to dedicated post-Prompt-4 session.
+⚠️ Tier auto-switch on cross-zone arrival pending — Prompt 4.
 ```
 
 ---
@@ -446,7 +368,7 @@ Text sizes (V8.27):
 33. Enemy behavior on Day 20 is hardcoded "attack the player" regardless of behavior_flavor field. (V8.32)
 34. Returning to a region whose bible is in metadata.region_bibles AND whose graph node is discovered is GRAPH_NAVIGATE, not WORLD_EXPLORE. Step 4d reclassifies via isRegionAlreadyExpanded. (V8.33)
 35. apply-regional-bible is idempotent: if the bible is registered AND every location is present in world_graph.nodes, the route returns 200 with skipped: true and does NOT re-write nodes. (V8.33)
-36. Re-applying a bible never overwrites discovered: true with discovered: false. mergeNodePreservingDiscovered enforces this on every node merge. Other fields are content (overwriteable); discovered is player state. (V8.33)
+36. Re-applying a bible never overwrites discovered: true with discovered: false. mergeNodePreservingDiscovered enforces this on every node merge. (V8.33)
 37. arrivedAt in step 7c reads from updatedState.world_state.current_location_id (post-reclassification), not from resolution.state_delta. (V8.33)
 
 ---
@@ -481,8 +403,9 @@ NPC highlights:        var(--accent) orange
 
 | System | When | Description |
 | --- | --- | --- |
-| Combat Prompt 3/3 | NEXT | Combat mode UI + narration integration + bundle Wrap-up Polish |
-| Map Visual Rework | After combat | Dedicated session: decoration, geometry, sizing, hierarchy, label collision |
+| Combat Prompt 3/3 | NEXT | Combat mode UI + AI narration + bestiary codex entries on encounter + new-game string fix |
+| Polish Round (Prompt 4) | After Combat 3 | Settlement card label, tier auto-switch, NPC dialogue contrast, tier-aware nav button colors |
+| Map Visual Rework | After Prompt 4 | Dedicated session: decoration, geometry, sizing, hierarchy, label collision |
 | Container + Loot | Day 21 | Registry, loot tables, dungeon sub-levels |
 | Skills + Leveling | Day 22 | XP, stat points, level gates |
 | Main Quest Thread | Day 23 | Breadcrumb injection, quest tracking |
@@ -538,4 +461,4 @@ Claude Code pushes → user reports commit + test results → Claude.ai updates 
 
 ---
 
-*Last updated: V8.33 — Prompt 2.5 navigation fix (commit 25ff111): root cause was toSlug stripping hyphens from "The Chain-Keeps Borderland" → "the_chainkeeps_borderland" while canonical id is "the_chain_keeps_borderland". Three-layer fix in lib/game/region-expansion-guard.ts: isRegionAlreadyExpanded for trigger reclassification in step 4d, isApplyRegionalBibleRedundant for idempotent apply route, mergeNodePreservingDiscovered for player-state preservation. arrivedAt sourcing patched at step 7c. 149/149 tests passing. Foundational rules 34-37 added. Combat Mode UI (Prompt 3) up next — combat becomes visually playable.*
+*Last updated: V8.33 — Planning update (no code change). Prompt 3 scope expanded to include bestiary codex entries on encounter and the "Resuming your adventure" → new-game string fix. Three V8.30 wrap-up polish items moved into a dedicated Polish Round (Prompt 4) queued for after Combat Prompt 3 lands; bundled with new tier-aware nav button color request from V8.33 playtest. Combat Prompt 3/3 up next: combat mode UI + narration + bestiary codex + new-game string fix.*

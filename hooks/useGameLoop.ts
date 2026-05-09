@@ -19,6 +19,7 @@ import {
 } from "@/lib/game/regional-bible-cache";
 import { rollEncounterWithPlayer, shouldRollEncounter } from "@/lib/game/combat-engine";
 import { consumeForcedEncounter } from "@/hooks/useCombat";
+import { isRegionAlreadyExpanded } from "@/lib/game/region-expansion-guard";
 import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { DialogueOption, Item, MasterState, ParsedAction, RegionBible, RegionOutline, ResolutionResult, StoredMessage, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
 
@@ -1063,6 +1064,74 @@ export function useGameLoop() {
               : null));
         const matchedOutline = matchRegionOutline(wb.adjacent_regions, target);
 
+        // V8.33 FIX 1 — Reclassify "WORLD_EXPLORE to a known region" as
+        // GRAPH_NAVIGATE. Symptom: hyphenated region names ("The
+        // Chain-Keeps Borderland") slugify to a phantom id in
+        // resolveMove (`the_chainkeeps_borderland`) that doesn't match
+        // the canonical graph node id (`the_chain_keeps_borderland`),
+        // so the directHit fallback misses and classifyMove falls
+        // through to WORLD_EXPLORE. Without this guard, returning to
+        // an already-expanded region from a sub-location fires
+        // apply-regional-bible AGAIN, churning the graph and
+        // (pre-FIX-3) wiping the discovered flag.
+        //
+        // Detect via isRegionAlreadyExpanded: outline id is in
+        // metadata.region_bibles AND its graph node is discovered.
+        // Same predicate the apply-regional-bible idempotence guard
+        // uses, kept in lib/game/region-expansion-guard.ts so both
+        // call sites stay in sync.
+        const isAlreadyExpandedRegion =
+          !!matchedOutline &&
+          isRegionAlreadyExpanded(updatedState, matchedOutline.id);
+
+        if (isAlreadyExpandedRegion && matchedOutline) {
+          const canonicalId = matchedOutline.id;
+          console.log(
+            "[navigateTo] known region — reclassified as GRAPH_NAVIGATE:",
+            { targetId: canonicalId, name: matchedOutline.name }
+          );
+          updatedState = {
+            ...updatedState,
+            world_state: {
+              ...updatedState.world_state,
+              current_location_id: canonicalId,
+              current_node_id:     canonicalId,
+              visited_locations: Array.from(new Set([
+                ...(updatedState.world_state.visited_locations ?? []),
+                canonicalId,
+              ])),
+              location_status: LocationStatus.ARRIVING,
+            },
+            world_graph: {
+              ...updatedState.world_graph,
+              current_node_id: canonicalId,
+            },
+          };
+          // Refresh location assets for the canonical region zone so
+          // the panel + narrator see the right Tier 1 data on this beat.
+          const _knownGraph = updatedState.world_graph;
+          const _knownParentReg = (() => {
+            if (!_knownGraph) return undefined;
+            let cur = _knownGraph.nodes[canonicalId];
+            const vis = new Set<string>();
+            while (cur && !vis.has(cur.id)) {
+              vis.add(cur.id);
+              if (!cur.zone_id || cur.zone_id === cur.id) {
+                return cur.id !== canonicalId ? cur.id : undefined;
+              }
+              cur = _knownGraph.nodes[cur.zone_id];
+            }
+            return undefined;
+          })();
+          void getWorldAssetsForLocation(
+            updatedState.metadata.session_id,
+            canonicalId,
+            _knownParentReg
+          ).then((assets) => useGameStore.getState().setLocationAssets(assets));
+          // Fall through to step 5+ — narrator runs with ARRIVING context
+          // for the canonical region zone, no apply-regional-bible call.
+        } else {
+
         // Bug 2 diagnostic — show what outline (and bible) the
         // RegionBible expansion path picked for this navigation. If
         // we ever cache-poison or mis-match, the mismatch shows up
@@ -1284,6 +1353,7 @@ export function useGameLoop() {
           // narration takes over from here.
           store.setProcessing(true, getLoadingText(parsedAction));
         }
+        } // closes V8.33 FIX 1 else (was-already-expanded vs needs-expansion)
       }
 
       // ── 5. Narrate ─────────────────────────────────────────────────────────
@@ -2150,9 +2220,14 @@ export function useGameLoop() {
       // ── 7c. After ARRIVING — refresh location assets for the next call ────
       // Fire-and-forget: when it lands, it populates the Zustand store so the
       // next narrator call sees ESTABLISHED WORLD ASSETS injected as fact.
+      // V8.33 FIX 1 follow-through — pull the destination id from
+      // updatedState (post-step-4d reclassification), not state_delta.
+      // The "known region" reroute updates updatedState only, so reading
+      // from state_delta would feed asset reload + nav tracking +
+      // encounter trigger the pre-reroute phantom slug.
       const arrivedAt =
         resolution.state_delta.world_state?.location_status === LocationStatus.ARRIVING
-          ? resolution.state_delta.world_state.current_location_id ?? null
+          ? updatedState.world_state.current_location_id ?? null
           : null;
       if (arrivedAt) {
         // Refresh the live cache so subsequent narrator beats see the

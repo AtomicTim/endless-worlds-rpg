@@ -13,6 +13,10 @@ import type {
   WorldNode,
 } from "@/types/game";
 import { getGenreBestiary } from "@/lib/game/bestiary";
+import {
+  isApplyRegionalBibleRedundant,
+  mergeNodePreservingDiscovered,
+} from "@/lib/game/region-expansion-guard";
 
 /**
  * Day 19D — Apply a freshly-generated RegionBible to a session.
@@ -351,6 +355,35 @@ export async function POST(request: NextRequest) {
   }
   const currentMasterState = row.master_state as unknown as MasterState;
 
+  // ── 0b. V8.33 FIX 2 — Idempotence guard ────────────────────────────────────
+  // If this bible is already in master_state.metadata.region_bibles AND
+  // every location is already in world_graph.nodes, this is a redundant
+  // re-apply. Short-circuit cleanly with a 200 carrying the existing
+  // bible so callers behave the same as a fresh apply.
+  //
+  // Defense-in-depth against a mis-fired trigger (V8.33 FIX 1 catches
+  // the known caller; this guard ensures the route is safe regardless).
+  if (isApplyRegionalBibleRedundant(currentMasterState, bibleNarrowed)) {
+    console.log(
+      `[apply-regional-bible] Skipping redundant re-apply of ${bibleNarrowed.name} — already in master_state.`
+    );
+    const settlementForResp = bibleNarrowed.locations.find((l) => l.is_settlement_node);
+    const startingNodeIdForResp = settlementForResp?.id ?? bibleNarrowed.id;
+    const isSameAsSettlementForResp = bibleNarrowed.id === startingNodeIdForResp;
+    const regionZoneIdForResp = isSameAsSettlementForResp
+      ? startingNodeIdForResp
+      : bibleNarrowed.id;
+    return NextResponse.json({
+      success:             true,
+      skipped:             true,
+      starting_node_id:    startingNodeIdForResp,
+      region_zone_id:      regionZoneIdForResp,
+      updated_world_graph: currentMasterState.world_graph,
+      location_count:      bibleNarrowed.locations.length,
+      npc_count:           bibleNarrowed.npcs.length,
+    });
+  }
+
   // ── 0c. Day 20 Combat — validate enemies + scrub encounter rosters ─────────
   // Same warn-don't-500 pattern as apply-world-bible. The bible is mutated
   // in place; the validated shape rides into master_state.metadata.region_bibles
@@ -634,8 +667,16 @@ export async function POST(request: NextRequest) {
   if (mergedNodes[bibleNarrowed.id] && !newNodes[bibleNarrowed.id]) {
     delete mergedNodes[bibleNarrowed.id];
   }
+  // V8.33 FIX 3 — preserve discovered=true on re-apply. The bible
+  // authoritatively overwrites content fields (atmosphere, connections,
+  // encounter_chance, etc.) but `discovered` is player state — once a
+  // node is visited it stays discovered. Without this, a redundant
+  // re-apply would silently flip nav cards from ◆ peer-known back to
+  // ◇ undiscovered. mergeNodePreservingDiscovered keeps both call
+  // sites (here + apply-world-bible if it grows the same need) using
+  // one canonical merge rule.
   for (const [id, node] of Object.entries(newNodes)) {
-    mergedNodes[id] = node;
+    mergedNodes[id] = mergeNodePreservingDiscovered(mergedNodes[id], node);
   }
 
   // CHANGE 4 — geographic region zone node + world_asset.

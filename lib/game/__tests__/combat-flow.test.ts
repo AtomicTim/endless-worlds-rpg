@@ -8,6 +8,8 @@ import type {
 import {
   PLAYER_ID,
   executePlayerAction,
+  kickoffCombatIfEnemyFirst,
+  advanceUntilPlayerTurnOrEnd,
   rollEncounter,
   type PlayerActionResult,
 } from "../combat-engine";
@@ -413,6 +415,178 @@ describe("phase events: enemy_phase_start + player_turn_start (Day 20.1)", () =>
     const types = result.events.map((e) => e.type);
     expect(types).not.toContain("enemy_phase_start");
     expect(types).not.toContain("player_turn_start");
+  });
+});
+
+// ===========================================================================
+// Day 20.2 TASK 1 — kickoffCombatIfEnemyFirst (enemy-wins-initiative fix)
+// ===========================================================================
+
+describe("kickoffCombatIfEnemyFirst (Day 20.2 TASK 1)", () => {
+  it("no-op when player has initiative — empty events, state unchanged", () => {
+    const combat = makeCombatState([makeEnemy("g1")]);
+    // Default makeCombatState seeds turn_order = [PLAYER, g1].
+    expect(combat.turn_order[0]).toBe(PLAYER_ID);
+    const player = makePlayer();
+
+    const result = kickoffCombatIfEnemyFirst({
+      state:       combat,
+      player,
+      world_genre: Genre.FANTASY,
+    });
+
+    expect(result.events).toEqual([]);
+    expect(result.newState).toBe(combat); // referential — no clone on no-op
+    expect(result.newPlayer).toBe(player);
+    expect(result.resolution).toBeUndefined();
+  });
+
+  it("runs the enemy phase and returns control to the player", () => {
+    // Enemy at index 0 — kickoff should drive it through and leave
+    // current_turn_index pointing at PLAYER.
+    const combat = makeCombatState(
+      [makeEnemy("g1")],
+      { turn_order: ["g1", PLAYER_ID], current_turn_index: 0 }
+    );
+    const player = makePlayer();
+    // Enemy attack: d20 = 14 (0.65, hits) + d6 = 4 (0.55) + str_mod 0 = 4 dmg.
+    const rng = seqRng([0.65, 0.55]);
+
+    const result = kickoffCombatIfEnemyFirst({
+      state:       combat,
+      player,
+      world_genre: Genre.FANTASY,
+      rng,
+    });
+
+    expect(result.resolution).toBeUndefined();
+    expect(result.newState).toBeDefined();
+    // Control should be back at the player's slot.
+    expect(
+      result.newState!.turn_order[result.newState!.current_turn_index]
+    ).toBe(PLAYER_ID);
+    // Player took a hit.
+    expect(result.newPlayer.health).toBeLessThan(player.health);
+  });
+
+  it("emits enemy_phase_start, at least one enemy_attack, and player_turn_start", () => {
+    const combat = makeCombatState(
+      [makeEnemy("g1")],
+      { turn_order: ["g1", PLAYER_ID], current_turn_index: 0 }
+    );
+    const player = makePlayer();
+    const rng = seqRng([0.65, 0.55]);
+
+    const result = kickoffCombatIfEnemyFirst({
+      state:       combat,
+      player,
+      world_genre: Genre.FANTASY,
+      rng,
+    });
+
+    const types = result.events.map((e) => e.type);
+    expect(types[0]).toBe("enemy_phase_start");
+    expect(types).toContain("enemy_attack");
+    expect(types[types.length - 1]).toBe("player_turn_start");
+  });
+
+  it("propagates defeat resolution when the enemy KOs the player on kickoff", () => {
+    const combat = makeCombatState(
+      [makeEnemy("g1")],
+      { turn_order: ["g1", PLAYER_ID], current_turn_index: 0 }
+    );
+    const player = makePlayer({ health: 1 });
+    // Enemy crit on nat 20 → 6 + d6(forced 6) + 0 = 12 dmg, lethal.
+    const rng = seqRng([0.95, 0.95]);
+
+    const result = kickoffCombatIfEnemyFirst({
+      state:                  combat,
+      player,
+      world_genre:            Genre.FANTASY,
+      last_settlement_hub_id: "settlement",
+      rng,
+    });
+
+    expect(result.resolution?.kind).toBe("defeat");
+    expect(result.newState).toBeUndefined();
+    // Defeat from kickoff path still emits enemy_phase_start as the
+    // first event — the phase did start, even if it ended in defeat.
+    const types = result.events.map((e) => e.type);
+    expect(types[0]).toBe("enemy_phase_start");
+    // No player_turn_start — combat won't return to the player.
+    expect(types).not.toContain("player_turn_start");
+  });
+
+  it("multi-enemy turn order resolves in order on kickoff", () => {
+    const combat = makeCombatState(
+      [makeEnemy("g1"), makeEnemy("g2", { instance_id: "g2" })],
+      { turn_order: ["g1", "g2", PLAYER_ID], current_turn_index: 0 }
+    );
+    const player = makePlayer();
+    // Two enemy attacks, both miss for clean test.
+    // d20 = 5 (0.20, miss). Each enemy emits one enemy_attack event.
+    const rng = seqRng([0.20, 0.20]);
+
+    const result = kickoffCombatIfEnemyFirst({
+      state:       combat,
+      player,
+      world_genre: Genre.FANTASY,
+      rng,
+    });
+
+    const enemyAttacks = result.events.filter((e) => e.type === "enemy_attack");
+    expect(enemyAttacks.length).toBe(2);
+    expect(enemyAttacks[0].actor).toBe("g1");
+    expect(enemyAttacks[1].actor).toBe("g2");
+    // Control returned to player.
+    expect(
+      result.newState!.turn_order[result.newState!.current_turn_index]
+    ).toBe(PLAYER_ID);
+  });
+});
+
+// ===========================================================================
+// Day 20.2 TASK 1 — advanceUntilPlayerTurnOrEnd (extracted helper)
+// ===========================================================================
+
+describe("advanceUntilPlayerTurnOrEnd (Day 20.2 TASK 1 refactor)", () => {
+  it("returns immediately when already at player's turn", () => {
+    const combat = makeCombatState([makeEnemy("g1")]);
+    expect(combat.turn_order[combat.current_turn_index]).toBe(PLAYER_ID);
+    const player = makePlayer();
+
+    const result = advanceUntilPlayerTurnOrEnd({
+      state:       combat,
+      player,
+      world_genre: Genre.FANTASY,
+    });
+
+    expect(result.events).toEqual([]);
+    expect(result.newPlayer).toBe(player);
+    expect(result.resolution).toBeUndefined();
+  });
+
+  it("clears player_defending when control returns to the player", () => {
+    const combat = makeCombatState(
+      [makeEnemy("g1")],
+      {
+        turn_order:         ["g1", PLAYER_ID],
+        current_turn_index: 0,
+        player_defending:   true,
+      }
+    );
+    const player = makePlayer();
+    // Enemy hits (halved by defend buff).
+    const rng = seqRng([0.65, 0.55]);
+
+    const result = advanceUntilPlayerTurnOrEnd({
+      state:       combat,
+      player,
+      world_genre: Genre.FANTASY,
+      rng,
+    });
+
+    expect(result.newState!.player_defending).toBe(false);
   });
 });
 

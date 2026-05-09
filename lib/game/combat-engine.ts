@@ -640,32 +640,28 @@ export function executePlayerAction({
     events.push(phaseEvent);
   }
 
-  while (s.turn_order[s.current_turn_index] !== PLAYER_ID && !checkVictory(s) && !checkDefeat(p)) {
-    const enemyTurn = advanceEnemyTurn({
-      state:                  s,
-      player:                 p,
-      last_settlement_hub_id,
-      world_genre,
-      rng,
-    });
-    s = enemyTurn.newState!;
-    p = enemyTurn.newPlayer;
-    events.push(...enemyTurn.events);
-    if (enemyTurn.resolution) {
-      return {
-        newState:   undefined,
-        newPlayer:  p,
-        events,
-        resolution: enemyTurn.resolution,
-      };
-    }
+  // Day 20.2 TASK 1 — enemy-turn loop extracted to
+  // advanceUntilPlayerTurnOrEnd so kickoffCombatIfEnemyFirst can
+  // reuse the same loop semantics. The defend-buff clear that used
+  // to live below moved into the helper.
+  const advanceResult = advanceUntilPlayerTurnOrEnd({
+    state:                  s,
+    player:                 p,
+    last_settlement_hub_id,
+    world_genre,
+    rng,
+  });
+  events.push(...advanceResult.events);
+  if (advanceResult.resolution) {
+    return {
+      newState:   undefined,
+      newPlayer:  advanceResult.newPlayer,
+      events,
+      resolution: advanceResult.resolution,
+    };
   }
-
-  // Reaching the player's turn with player_defending=true means we just
-  // ran a full round of enemy turns under the defend buff — clear it.
-  if (s.turn_order[s.current_turn_index] === PLAYER_ID && s.player_defending) {
-    s = { ...s, player_defending: false };
-  }
+  s = advanceResult.newState!;
+  p = advanceResult.newPlayer;
 
   // Day 20.1 TASK 3 — emit player_turn_start when control returns to
   // the player AFTER an enemy phase actually fired. If isEnemyNext was
@@ -777,6 +773,152 @@ export function advanceEnemyTurn({
   s = appendEvents(advanced.state, advanced.events);
 
   return { newState: s, newPlayer, events: [...events, ...advanced.events] };
+}
+
+/**
+ * Day 20.2 TASK 1 — loop enemy turns until control returns to the
+ * player or combat ends. Extracted from executePlayerAction so
+ * kickoffCombatIfEnemyFirst can reuse the same loop semantics
+ * without duplicating the resolution / defend-buff plumbing.
+ *
+ * Caller is responsible for emitting `enemy_phase_start` /
+ * `player_turn_start` separator events around the call when desired
+ * — this helper just runs the mechanical loop.
+ */
+export function advanceUntilPlayerTurnOrEnd({
+  state, player, world_genre, last_settlement_hub_id, rng = DEFAULT_RNG,
+}: {
+  state:                   CombatState;
+  player:                  PlayerState;
+  world_genre:             Genre | string | undefined;
+  last_settlement_hub_id?: string;
+  rng?:                    Rng;
+}): PlayerActionResult {
+  let s: CombatState = state;
+  let p = player;
+  const events: CombatEvent[] = [];
+
+  while (
+    s.turn_order[s.current_turn_index] !== PLAYER_ID &&
+    !checkVictory(s) &&
+    !checkDefeat(p)
+  ) {
+    const enemyTurn = advanceEnemyTurn({
+      state:                  s,
+      player:                 p,
+      last_settlement_hub_id,
+      world_genre,
+      rng,
+    });
+    if (enemyTurn.resolution) {
+      return {
+        newState:   undefined,
+        newPlayer:  enemyTurn.newPlayer,
+        events:     [...events, ...enemyTurn.events],
+        resolution: enemyTurn.resolution,
+      };
+    }
+    s = enemyTurn.newState!;
+    p = enemyTurn.newPlayer;
+    events.push(...enemyTurn.events);
+  }
+
+  // Reaching the player's turn with player_defending=true means we just
+  // ran a full round of enemy turns under the defend buff — clear it.
+  if (s.turn_order[s.current_turn_index] === PLAYER_ID && s.player_defending) {
+    s = { ...s, player_defending: false };
+  }
+
+  return { newState: s, newPlayer: p, events };
+}
+
+/**
+ * Day 20.2 TASK 1 — fix enemy-wins-initiative deadlock.
+ *
+ * On combat start, if rollInitiative seats an enemy at turn_order[0],
+ * the player can't act (ActionBar gates on isPlayerTurn) and the
+ * normal post-action enemy loop never runs (executePlayerAction
+ * requires a player turn to fire). Permanent deadlock.
+ *
+ * The fix: after rollEncounter commits combat state, useCombat
+ * detects "enemy has initiative" and calls this helper to drive the
+ * initial enemy phase. Behaves like a no-op when the player has
+ * initiative (most encounters), so it's safe to call unconditionally
+ * after every fresh combat.
+ *
+ * Emits `enemy_phase_start` BEFORE the loop and `player_turn_start`
+ * AFTER (when combat continues to the player's turn) so the story
+ * feed gets the same separator framing as a regular post-action
+ * enemy phase. On resolution (defeat in the kickoff phase, edge case
+ * but defensive), returns the resolution payload exactly like
+ * executePlayerAction does.
+ */
+export function kickoffCombatIfEnemyFirst({
+  state, player, world_genre, last_settlement_hub_id, rng = DEFAULT_RNG,
+}: {
+  state:                   CombatState;
+  player:                  PlayerState;
+  world_genre:             Genre | string | undefined;
+  last_settlement_hub_id?: string;
+  rng?:                    Rng;
+}): PlayerActionResult {
+  // Player has initiative — no-op. Combat proceeds with the player's
+  // first action as normal.
+  if (state.turn_order[state.current_turn_index] === PLAYER_ID) {
+    return { newState: state, newPlayer: player, events: [] };
+  }
+
+  // Defensive: combat already ended somehow before kickoff fired.
+  if (checkVictory(state) || checkDefeat(player)) {
+    return { newState: state, newPlayer: player, events: [] };
+  }
+
+  let s = state;
+  const events: CombatEvent[] = [];
+
+  // Emit enemy_phase_start for feed framing.
+  const enterPhase = makeEvent({
+    type:   "enemy_phase_start",
+    actor:  PLAYER_ID,
+    target: null,
+  });
+  s = appendEvents(s, [enterPhase]);
+  events.push(enterPhase);
+
+  // Run the enemy turns.
+  const result = advanceUntilPlayerTurnOrEnd({
+    state:                  s,
+    player,
+    world_genre,
+    last_settlement_hub_id,
+    rng,
+  });
+  events.push(...result.events);
+  if (result.resolution) {
+    return {
+      newState:   undefined,
+      newPlayer:  result.newPlayer,
+      events,
+      resolution: result.resolution,
+    };
+  }
+
+  s = result.newState!;
+  const p = result.newPlayer;
+
+  // Combat continues — control is back at the player. Emit
+  // player_turn_start so the feed pacing mirrors the regular flow.
+  if (s.turn_order[s.current_turn_index] === PLAYER_ID) {
+    const exitPhase = makeEvent({
+      type:   "player_turn_start",
+      actor:  PLAYER_ID,
+      target: null,
+    });
+    s = appendEvents(s, [exitPhase]);
+    events.push(exitPhase);
+  }
+
+  return { newState: s, newPlayer: p, events };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useGameStore, makeMessage } from "@/lib/stores/game-store";
 import { LocationStatus } from "@/types/game";
 import type { CombatEvent, CombatState, MasterState, PlayerState } from "@/types/game";
 import {
   executePlayerAction as engineExecute,
+  kickoffCombatIfEnemyFirst,
   PLAYER_ID,
   type CombatResolutionPayload,
   type PlayerActionInput,
@@ -169,6 +170,88 @@ export function useCombat() {
     [setMasterState, addMessage]
   );
 
+  /**
+   * Day 20.2 TASK 1 — drive the initial enemy phase when the enemy
+   * wins initiative. submitCombatAction can't fire because ActionBar
+   * is disabled (isPlayerTurn=false), and executePlayerAction won't
+   * loop without a player action — so without this kickoff the UI
+   * deadlocks. Pulls the same projection pipeline as a regular
+   * action so pacing/banner/displayPhase all line up.
+   *
+   * Safe to call even when player has initiative (engine returns a
+   * no-op result). Caller is responsible for not calling twice for
+   * the same encounter — the auto-fire useEffect below handles that
+   * via a ref-tracked encounter_id set.
+   */
+  const kickoffCombat = useCallback(
+    async () => {
+      const state = useGameStore.getState().masterState;
+      if (!state || !state.combat?.active) return;
+      if (state.combat.turn_order[state.combat.current_turn_index] === PLAYER_ID) return;
+
+      setIsResolving(true);
+      try {
+        const result = kickoffCombatIfEnemyFirst({
+          state:                  state.combat,
+          player:                 state.player_state,
+          world_genre:            state.metadata.genre,
+          last_settlement_hub_id: state.last_settlement_hub_id,
+        });
+
+        const next = applyCombatResult(
+          state, result.newState, result.newPlayer, result.resolution
+        );
+        setMasterState(next);
+
+        await projectCombatEventsToFeed({
+          events:           result.events,
+          combat:           result.newState ?? state.combat,
+          player:           result.newPlayer,
+          world_genre:      String(state.metadata.genre),
+          regionAtmosphere: regionAtmosphereFor(state),
+          locationName:     resolveLocationName(state, state.combat.origin_node_id),
+          addMessage,
+          setDisplayPhase,
+        });
+
+        // After drain — sync display pill to authoritative state.
+        if (result.newState?.active) {
+          const isPlayer = result.newState.turn_order[result.newState.current_turn_index] === PLAYER_ID;
+          setDisplayPhase(isPlayer ? "player" : "enemy");
+        }
+      } finally {
+        setIsResolving(false);
+      }
+    },
+    [setMasterState, addMessage]
+  );
+
+  // Day 20.2 TASK 1 — auto-fire the kickoff when a fresh combat
+  // commits with enemy initiative. Tracks encounter_id in a ref so
+  // each combat fires exactly once even if the effect re-runs from
+  // store updates during the drain.
+  const kickedOffEncounters = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const combat = masterState?.combat;
+    if (!combat?.active) return;
+    if (kickedOffEncounters.current.has(combat.encounter_id)) return;
+
+    if (combat.turn_order[combat.current_turn_index] === PLAYER_ID) {
+      // Player has initiative — record so we don't re-evaluate when
+      // the index advances later in this encounter.
+      kickedOffEncounters.current.add(combat.encounter_id);
+      return;
+    }
+
+    // Enemy has initiative. Kick off exactly once.
+    // Sync the pill to "enemy" SYNCHRONOUSLY here (before the async
+    // kickoff fires) so the header doesn't flash "Your turn" while
+    // we wait for the drain to start.
+    setDisplayPhase("enemy");
+    kickedOffEncounters.current.add(combat.encounter_id);
+    void kickoffCombat();
+  }, [masterState?.combat?.encounter_id, masterState?.combat?.active, kickoffCombat]);
+
   return {
     /** Active combat snapshot (undefined when not in combat). */
     combat: masterState?.combat,
@@ -183,6 +266,11 @@ export function useCombat() {
      *  feed's pacing instead of jumping ahead. */
     displayPhase,
     submitCombatAction,
+    /** Day 20.2 TASK 1 — exposed for the auto-fire useEffect.
+     *  External callers shouldn't need to invoke directly; the
+     *  hook fires it automatically when an encounter starts with
+     *  enemy initiative. */
+    kickoffCombat,
   };
 }
 

@@ -124,6 +124,37 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
       .join(", ");
   }
 
+  // ── Day 20.2 TASK 2 — combat stats line ─────────────────────────────────────
+  // WEAPONs show their damage_die, ARMOR shows the armor_bonus,
+  // CONSUMABLEs with a heal effect show "Heal: N" (or "Heal: 1d8+4"
+  // for the canonical basic health potion — that's the dice shape
+  // resolveUseItem actually rolls; the flat `effect.heal: 8` value
+  // is just an inventory hint). KEY / LORE / CONTAINER return null.
+  const BASIC_HEALTH_POTION_ID = "consumable_basic_health_potion";
+  function combatStatsLine(item: Item): string | null {
+    if (item.type === ItemType.WEAPON) {
+      const die = item.effect?.damage_die;
+      return typeof die === "string" && die.length > 0
+        ? `Damage: ${die}`
+        : null;
+    }
+    if (item.type === ItemType.ARMOR) {
+      const bonus = item.effect?.armor_bonus;
+      if (typeof bonus !== "number") return null;
+      // Render +0 explicitly so the player sees this is armor with
+      // no damage reduction (e.g. mage robes), not "missing data".
+      return `Armor: ${bonus >= 0 ? "+" : ""}${bonus}`;
+    }
+    if (item.type === ItemType.CONSUMABLE) {
+      // Basic health potion is the canonical 1d8+4 roll.
+      if (item.id === BASIC_HEALTH_POTION_ID) return "Heal: 1d8+4";
+      const heal = item.effect?.heal;
+      if (typeof heal === "number") return `Heal: ${heal}`;
+      return null;
+    }
+    return null;
+  }
+
   // SMALL FIX 2: include "Worth: N CCY" in the compact slot tooltip so the
   // player sees value on hover without expanding the detail card. For
   // currency-less genres (Horror) the worth line is suppressed.
@@ -286,7 +317,7 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
           className="mt-2 space-y-1 rounded-sm p-2"
           style={{ border: `1px solid ${RARITY_COLORS[selectedItem.rarity]}` }}
         >
-          {/* Name + rarity */}
+          {/* Name + rarity (+ Day 20.2 equipped pill) */}
           <div className="flex items-center justify-between gap-1">
             <span
               className="text-[11px] font-bold"
@@ -298,18 +329,51 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
                 <span style={{ color: "var(--color-muted)" }}> ×{selectedItem.quantity}</span>
               )}
             </span>
-            <span
-              className="shrink-0 text-[9px] uppercase tracking-wide"
-              style={{ color: "var(--color-muted)" }}
-            >
-              {selectedItem.rarity}
-            </span>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {/* Day 20.2 TASK 2 — equipped pill. Visible whenever the
+                  item is equipped, regardless of whether it's in the
+                  Equipped grid or (defensively) the Pack list. */}
+              {selectedItem.equipped && (
+                <span
+                  className="rounded-sm px-1 text-[8px] font-bold uppercase tracking-wider"
+                  style={{
+                    backgroundColor: "color-mix(in srgb, var(--hl-pass) 18%, transparent)",
+                    color:           "var(--hl-pass)",
+                    border:          "1px solid color-mix(in srgb, var(--hl-pass) 50%, transparent)",
+                  }}
+                >
+                  Equipped
+                </span>
+              )}
+              <span
+                className="text-[9px] uppercase tracking-wide"
+                style={{ color: "var(--color-muted)" }}
+              >
+                {selectedItem.rarity}
+              </span>
+            </div>
           </div>
 
           {/* Description */}
           <p className="text-[10px]" style={{ color: "var(--color-muted)" }}>
             {selectedItem.description}
           </p>
+
+          {/* Day 20.2 TASK 2 — combat stats line.
+              Damage / Armor / Heal — small mono, item-yellow tint
+              so it's visible without dominating the description. */}
+          {(() => {
+            const line = combatStatsLine(selectedItem);
+            if (!line) return null;
+            return (
+              <p
+                className="font-mono text-[10px]"
+                style={{ color: "var(--hl-item)" }}
+              >
+                {line}
+              </p>
+            );
+          })()}
 
           {/* Stat bonuses */}
           {selectedItem.stat_bonus && Object.keys(selectedItem.stat_bonus).length > 0 && (

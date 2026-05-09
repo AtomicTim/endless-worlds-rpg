@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.35
-**Status:** Day 20 Combat COMPLETE + Combat Polish landed — Polish Round (Prompt 4) Next
+**Version:** 8.36
+**Status:** Day 20 Combat COMPLETE + 20.1 Polish + 20.2 Hotfix landed — Polish Round (Prompt 4) Next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions. /docs/combat-spec.md — The authoritative source for combat system design.
@@ -10,7 +10,7 @@
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Day 20 Combat fully playable end-to-end with proper pacing and equipment. Knight feels like a knight from turn one. Polish Round (Prompt 4) is next, bundling four visual UX issues unrelated to combat.
+**Current Phase:** Day 20 Combat fully playable end-to-end with proper pacing, equipment, AND initiative kickoff. Inventory cards now surface combat stats. Polish Round (Prompt 4) is next, bundling four visual UX issues unrelated to combat (with new card-grouping design from V8.36 input).
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -39,8 +39,9 @@
 | 20 — Combat Prompt 2/3 (a4e5975) | Resolver + encounter triggers + turn loop | ✅ Complete |
 | 20 — Prompt 2.5 Nav Fix (25ff111) | Region trigger reclassification, idempotent apply, discovered preservation | ✅ Complete |
 | 20 — Combat Prompt 3/3 (abf73e6) | Combat mode UI + narration + bestiary codex + new-game string fix | ✅ Complete |
-| **20.1 — Combat Polish (1215bb6)** | **Starting equipment, encounter banner, turn separators, pacing delays, header pill** | ✅ **Complete** |
-| Polish Round (Prompt 4) | Settlement card label, tier auto-switch, NPC dialogue contrast, tier-aware nav button colors | ⏳ Next |
+| 20.1 — Combat Polish (1215bb6) | Starting equipment, encounter banner, turn separators, pacing delays, header pill | ✅ Complete |
+| **20.2 — Combat Hotfix (bf3871e)** | **Initiative kickoff fix + inventory stats display** | ✅ **Complete** |
+| Polish Round (Prompt 4) | Movement-direction grouped nav cards, tier color-coding, settlement card label, tier auto-switch, NPC dialogue contrast | ⏳ Next |
 | Map Visual Rework | Dedicated session | ⏳ Deferred (post-Prompt-4) |
 | 21 | Container + Loot | ⏳ Pending |
 | 22 | Skills + Leveling | ⏳ Pending |
@@ -48,6 +49,45 @@
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir removed. Genre renderers restored (pickModule re-enabled).**
+
+### Day 20.2 — Combat Hotfix + Inventory Stats (commit bf3871e — 216/216 tests, clean build)
+
+Two-issue hotfix round closing the V8.35 gap where combat could deadlock on enemy initiative AND equipped gear was invisible from the inventory view.
+
+**Task 1 — Enemy-wins-initiative deadlock fix:**
+
+ROOT CAUSE: `executePlayerAction`'s while-loop is the only place enemy turns auto-advance. ActionBar gates on `isPlayerTurn`. If `rollInitiative` seats an enemy at `turn_order[0]`, the player can't act → no enemy loop fires → permanent deadlock. Reproducible on a forced single high-AGI enemy (e.g. `__forceEncounter("apoc_feral_scavenger")`).
+
+ENGINE FIX (`lib/game/combat-engine.ts`):
+- Extracted the enemy-turn loop + defend-buff clear into a new exported pure function `advanceUntilPlayerTurnOrEnd`. Same loop semantics; returns `PlayerActionResult`. `executePlayerAction` now calls it instead of inlining the loop.
+- New exported `kickoffCombatIfEnemyFirst({ state, player, world_genre, last_settlement_hub_id, rng })`:
+  - No-op when player has initiative (referentially identical state, empty events)
+  - Otherwise emits `enemy_phase_start` (so feed gets the same separator framing as a regular post-action enemy phase), runs `advanceUntilPlayerTurnOrEnd`, then emits `player_turn_start` when control returns
+  - Propagates resolution payload (defeat in kickoff phase) exactly like `executePlayerAction`
+
+HOOK FIX (`hooks/useCombat.ts`):
+- New `kickoffCombat()` async function — mirrors `submitCombatAction`'s flow: `setIsResolving(true)` → engine call → `applyCombatResult` → `projectCombatEventsToFeed` (so all V8.35 pacing delays / banner / displayPhase logic applies) → resync displayPhase → `setIsResolving(false)`. Read-and-bail when player has initiative.
+- New `useEffect` watches `masterState.combat.encounter_id` + `active`. When fresh combat lands with enemy initiative AND not already kicked off (tracked via `useRef<Set<string>>`), calls `setDisplayPhase("enemy")` synchronously (no "Your turn" flash) and fires `kickoffCombat`.
+- Race the prompt flagged is benign: `useGameLoop` step 7c-3 splices combat into `updatedState`, step 10's `setMasterState` commits, the `useEffect` re-renders and only THEN reads from the store. No microtask plumbing needed; React event loop already orders things correctly. (Doc'd in code comment.)
+
+**Task 2 — Inventory cards now show combat stats:**
+
+`components/game/sidebar/InventoryPanel.tsx` (the actual component rendering inventory rows + detail panel — there's no separate `CharacterSheet/InventoryTab.tsx`):
+- New `combatStatsLine(item)` helper. Returns:
+  - `"Damage: 1d6"` for WEAPON with `effect.damage_die`
+  - `"Armor: +2"` for ARMOR with `effect.armor_bonus` (renders `+0` explicitly so mage robes show as armor with no bonus rather than "missing data")
+  - `"Heal: 1d8+4"` for canonical `consumable_basic_health_potion` id (the dice shape `resolveUseItem` actually rolls)
+  - `"Heal: N"` for other consumables with a flat `effect.heal` number
+  - `null` for KEY / LORE / CONTAINER (no stat line)
+- Stats line lives between Description and Stat Bonuses in the detail panel — font-mono, `--hl-item` (yellow), text-[10px]. Visible without dominating.
+- New "Equipped" pill rendered next to rarity label when `selectedItem.equipped === true`. Small uppercase tracker, `--hl-pass` green tint with matching border at 18%/50% opacity. Equip/unequip button below already exists; the pill is the at-a-glance indicator.
+- Did NOT add row-level Equip buttons — V8.35 already has them in the detail panel; pack-row buttons would clutter the small icon grid.
+
+**Tests (7 new, 216 total passing):**
+- `combat-flow.test.ts` (+7): kickoffCombatIfEnemyFirst no-op when player has initiative; runs enemy phase and returns control; emits enemy_phase_start → enemy_attack → player_turn_start ordering; propagates defeat resolution on KO during kickoff (no spurious player_turn_start); multi-enemy turn order resolves in initiative order; advanceUntilPlayerTurnOrEnd returns immediately when already at player's turn; clears `player_defending` when control returns.
+- All 5 prior combat-flow tests + 19 prior combat-resolver/trigger tests still pass — the refactor preserves external behavior.
+
+**Build impact:** `/game` route 105 → 106 kB. Build, tsc, and 216 jest tests all green.
 
 ### Day 20.1 — Combat Polish (commit 1215bb6 — 209/209 tests, clean build)
 
@@ -58,117 +98,63 @@ Five-task polish round that closes the gap between V8.34's "combat works mechani
 - Each background ships a `StartingItem[]` array. Every loadout includes:
   - Equipped weapon with `effect.damage_die` (1d4–1d8 by class)
   - Equipped armor with `effect.armor_bonus` (0–2 by class)
-  - 2× health potion stacked under canonical `consumable_basic_health_potion` id (so `resolveUseItem` returns the 1d8+4 heal)
-  - Class-flavor lore/key item where appropriate (lockpicks, spell tome, command badge, etc.)
+  - 2× health potion stacked under canonical `consumable_basic_health_potion` id
+  - Class-flavor lore/key item where appropriate
 - 15 backgrounds covered (3 per genre × 5 genres). Examples: Knight = Iron Sword 1d6 + Chainmail +2 + 2× potion; Rogue = Dagger 1d4 + Leather +1 + Lockpicks + 2× potion; Street Samurai = Katana 1d8 + Reinforced Jacket +1 + 2× stim.
-- Closes the V8.34 gap where every character fought bare-fisted at 1d4 with 0 armor regardless of class because starting items lacked `equipped: true` and `effect.damage_die`.
+- Closes the V8.34 gap where every character fought bare-fisted at 1d4 with 0 armor regardless of class.
 
 **Task 2 — Encounter start banner (templated, not LLM):**
 - Added `--combat-encounter-banner: #f4a07a;` (light coral) to globals.css.
-- `templates.ts::renderRoutineCombatEvent` now handles `combat_start` with `enemyNames` + optional `locationName` context. Format:
-  - 1 enemy: `"You encounter X at <loc>."`
-  - 2 enemies: `"You encounter X and Y at <loc>."`
-  - 3+ enemies: Oxford-comma chain `"You encounter X, Y, and Z at <loc>."`
-  - No location: drops `at <loc>` suffix
-- Removed `combat_start` from useCombat's `isDramaticEvent` set (no more LLM call for it).
-- useGameLoop step 7c-3 (encounter trigger) renders the templated banner directly when combat starts — `combat_start` lives in `combat.combat_log` but is never part of an `executePlayerAction` batch, so the regular useCombat drain wouldn't see it.
-- StoryFeed.tsx adds a `combat_start` styling branch: 15px bold italic, light-coral, center-aligned, with thin 35%-opacity rules above and below.
+- `templates.ts::renderRoutineCombatEvent` now handles `combat_start`. Format: 1 enemy: `"You encounter X at <loc>."`; 2 enemies: `"... X and Y at <loc>."`; 3+ Oxford comma chain.
+- Removed `combat_start` from useCombat's `isDramaticEvent` set (no LLM call).
+- useGameLoop step 7c-3 renders the banner directly. StoryFeed.tsx adds 15px bold italic, light-coral, center-aligned styling with thin coral rules.
 
 **Task 3 — Turn boundary separators (BG-style):**
 - `CombatEvent.type` extended with `"player_turn_start"` and `"enemy_phase_start"`.
-- `combat-engine.ts::executePlayerAction` now:
-  - Emits `enemy_phase_start` after `advanceTurn()` runs and the next combatant is an enemy AND combat hasn't ended
-  - Emits `player_turn_start` after the enemy loop completes IFF an enemy phase actually fired AND control returned to the player AND combat didn't end (no separator on victory/defeat/flee)
-- Also fixed a latent bug: `advanced.events` (which carries `round_start`) wasn't being pushed into the returned events array — only into `combat_log`. Now both.
-- Templates: `player_turn_start` → `"─── Your turn ───"`, `enemy_phase_start` → `"─── Enemies' turn ───"`, `round_start` → `"─── Round N ───"` (using `roundNumber` from context).
-- StoryFeed.tsx renders all three separator types as 11px italic, 0.55 opacity, center-aligned, no ⚔ prefix.
+- combat-engine emits these at phase transitions (NOT on victory/defeat/flee).
+- Templates: `"─── Your turn ───"` / `"─── Enemies' turn ───"` / `"─── Round N ───"`. StoryFeed renders 11px italic 0.55 opacity center-aligned.
+- Also fixed latent bug: `advanced.events` (round_start) wasn't returned in events array.
 
-**Task 4 — Pacing delays at turn transitions:**
-- Constants in `useCombat.ts`: `ENEMY_PHASE_DELAY_MS = 800`, `PLAYER_TURN_DELAY_MS = 800`, `ENEMY_TURN_GAP_MS = 500`.
-- `projectCombatEventsToFeed` sleeps 800ms before pushing `enemy_phase_start`, 800ms before pushing `player_turn_start`, 500ms between successive distinct enemy actors during the enemy phase.
-- No delay before routine player events — instant feedback when the player clicks.
-- LLM events get their existing API latency as the delay; no extra sleep on top.
-- `isResolving` stays true for the full drain so ActionBar is disabled the whole time — no double-tap during pacing.
+**Task 4 — Pacing delays:**
+- `ENEMY_PHASE_DELAY_MS = 800`, `PLAYER_TURN_DELAY_MS = 800`, `ENEMY_TURN_GAP_MS = 500`.
+- No delay before routine player events. LLM events get API latency.
 
 **Task 5 — Header pill prominence:**
-- `useCombat` exposes a `displayPhase: "player" | "enemy"` decoupled from `combat.current_turn_index`. Set BEFORE each pacing sleep so the pill flips ahead of the feed at phase transitions. Resynced to engine's authoritative index after the drain ends.
-- CombatMode header pill: 11px bold uppercase mono, 0.24em letter-spacing, padded box with tinted background (combat-player/combat-enemy mixed 28% into bg-2), 1px colored border, 200ms ease-out transition on background/border/color.
-- Fallback to engine's index when `displayPhase` is omitted (defensive against future callers).
+- `displayPhase` decoupled from `current_turn_index`, flips ahead of feed at transitions, 200ms transition.
 
-**Tests (36 new, 209 total passing):**
-- `templates.test.ts` (+13): `combat_start` with 1/2/3+/4+ enemies × with/without location, empty/whitespace location handling, no-names defensive default, `player_turn_start` separator, `enemy_phase_start` separator, `round_start` with and without round number.
-- `combat-flow.test.ts` (+5): turn-separator emission ordering, victory/defeat/flee-success paths emit no separators (combat ended).
-- `starting-equipment.test.ts` (+18): every genre × background (15 combos) verified for equipped weapon with valid damage_die, equipped armor with non-negative armor_bonus, ≥1 consumable; potion id stability; buildItem stable-id + UUID paths; stackable defaults; quantity defaults; unknown background returns empty payload.
-
-**Build impact:** `/game` route 104 → 105 kB. Build, tsc, and 209 jest tests all green.
+**Tests:** 36 new (templates 13, combat-flow 5, starting-equipment 18). 209 total. `/game` 104 → 105 kB.
 
 ### Combat Day 20 — Prompt 3/3: UI + Narrator + Bestiary + Preamble (commit abf73e6 — 173/173 tests, clean build)
 
-**Task 1 — CSS color tokens + animation keyframes:**
-- Seven combat color variables (`--combat-player`, `--combat-enemy`, `--combat-player-crit`, `--combat-enemy-crit`, `--combat-victory`, `--combat-defeat`, `--combat-flee`).
-- New `@keyframes combat-portrait-shake` (4 oscillations / 400ms / ~6px) plus `.combat-portrait-shake` utility.
+**Task 1 — CSS color tokens + animation keyframes:** Seven combat color variables. New `@keyframes combat-portrait-shake` (4 oscillations / 400ms / ~6px).
 
-**Task 2 — `/components/game/CombatMode/`:**
-- `CombatMode.tsx` — top panel. Side-by-side: player LEFT, divider, enemies RIGHT. Header pill + `shakeMap` for crits.
-- `CombatantRow.tsx` — single column. Discriminated union over `isPlayer`. Crown ♛ + bold name when `is_boss`.
-- `PortraitSlot.tsx` — reserved square ~128px with `portraitUrl` prop wired for future image swap.
-- `HPBar.tsx` — 300ms width transition, color thresholds.
-- `ActionBar.tsx` — Attack/Defend/Use Item/Flee. Plain text labels.
-- `TargetPicker.tsx` — inline hint banner + Esc handler.
-- `UseItemPicker.tsx` — modal listing CONSUMABLE rows.
+**Task 2 — `/components/game/CombatMode/`:** CombatMode (side-by-side player LEFT, divider, enemies RIGHT), CombatantRow (discriminated union over isPlayer, crown ♛ for boss), PortraitSlot (~128px reserved with portraitUrl prop wired), HPBar (300ms transition), ActionBar, TargetPicker, UseItemPicker.
 
 **Task 3 — Page integration:** `useCombat()` plumbed alongside `useGameLoop()`. CombatMode replaces NavigationBar + InputBar at `min-height: min(33vh, 360px)`.
 
-**Task 4 — Story-feed combat events:** Per-event styling by `event_type`/`actor`/`outcome`. Templated routine events via `renderRoutineCombatEvent`, dramatic events via `/api/game/narrate-combat`. Variant selection deterministic via timestamp hash.
+**Task 4 — Story-feed combat events:** Per-event styling. Templated routine via `renderRoutineCombatEvent`, dramatic via `/api/game/narrate-combat`. Variant selection deterministic.
 
-**Task 5 — Combat narrator API (`/api/game/narrate-combat`):** Auth-gated. Genre-specific tone primer (Fantasy = blood-and-steel, etc.). Hard rules: no monologue, no inventing damage, 1-2 sentences. Model: `claude-sonnet-4-5`, max_tokens 250.
+**Task 5 — Combat narrator API:** Auth-gated. Genre tone primer. Hard rules: no monologue, no inventing damage, 1-2 sentences. Model: `claude-sonnet-4-5`, max_tokens 250.
 
-**Task 6 — Bestiary codex:** `writeBestiaryEntry` on `combat_start`, deduplicated by `enemy.id`. Description: flavor + HP range + damage die + first-seen location.
+**Task 6 — Bestiary codex:** `writeBestiaryEntry` on `combat_start`, deduplicated by `enemy.id`.
 
-**Task 7 — New-game preamble:** `recent_messages.length === 0` → `"Your adventure begins. What will you do first?"` rendered as `isFreshGamePreamble` italic low-opacity serif.
+**Task 7 — New-game preamble:** `recent_messages.length === 0` triggers `"Your adventure begins. What will you do first?"`.
 
-**Task 8 — Animations:** HP bar 300ms transition, crit portrait shake 400ms via transient `shakeMap`.
+**Task 8 — Animations:** HP bar 300ms transition. Crit portrait shake 400ms via transient `shakeMap`.
 
-**Task 9 — 24 new tests, 173 total passing.**
+**Task 9 — 24 new tests, 173 total.**
 
 ### Prompt 2.5 — Navigation Fix (commit 25ff111 — 149/149 tests, clean build)
 
-Hyphenated region names (`"The Chain-Keeps Borderland"`) slugify to `the_chainkeeps_borderland` while canonical id is `the_chain_keeps_borderland`. directHit fallback misses, classifyMove returns WORLD_EXPLORE, apply-regional-bible re-fires.
-
-**Architecture extraction:** `lib/game/region-expansion-guard.ts` with three pure helpers (`isRegionAlreadyExpanded`, `isApplyRegionalBibleRedundant`, `mergeNodePreservingDiscovered`).
-
-**Fix 1 — Step 4d reclassification:** Known region = GRAPH_NAVIGATE, not WORLD_EXPLORE.
-**Fix 2 — Idempotence guard:** redundant apply returns 200 with `skipped: true`.
-**Fix 3 — Preserve discovered on re-apply.**
-**`arrivedAt` patched** to read from `updatedState` (post-reclassification).
-
-**Tests:** 16 new, 149 total.
+Hyphenated region names slugify wrong → directHit fallback misses → apply-regional-bible re-fires. Architecture extraction: `lib/game/region-expansion-guard.ts` with three pure helpers. Step 4d reclassifies known regions as GRAPH_NAVIGATE. apply-regional-bible idempotent. Discovered preserved on re-apply. 16 new tests.
 
 ### Combat Day 20 — Prompt 2/3: Resolver + Triggers + Turn Loop (commit a4e5975 — 133/133 tests, clean build)
 
-**Task 1 — Combat state in types/game.ts:** `CombatEnemyInstance`, `CombatEvent`, `CombatState` interfaces. `MasterState` extended with `combat`, `last_settlement_hub_id`, `navigation_trail`.
-
-**Task 2 — `/lib/game/combat-resolver.ts` (pure math):** d20 hit/dmg/init/flee/use_item.
-
-**Task 3 — Encounter trigger in step 7c-3:** `shouldRollEncounter`, `resolveEnemyLookup` (4-layer fall-through), `rollEncounter`.
-
-**Task 4 — Turn loop in `/lib/game/combat-engine.ts`:** `executePlayerAction`, `advanceEnemyTurn`, victory/defeat/flee handlers.
-
-**Task 5 — Tracking in step 7c-2:** `navigation_trail` (last 5), `last_settlement_hub_id`.
-
-**Task 6 — Console combat logger** (replaced in V8.34 with story-feed rendering).
-
-**Task 7 — Dev override:** `window.__forceEncounter`.
-
-**Task 8 — 61 new tests, 133 total.**
+Combat state types, combat-resolver (pure math), encounter trigger in step 7c-3, turn loop, navigation_trail tracking, console logger (replaced V8.34), dev override. 61 new tests.
 
 ### Combat Day 20 — Prompt 1/3: Data Foundation (commit 1024287 — 72/72 tests, clean build)
 
-**Task 1 — Enemy types in types/game.ts.**
-**Task 2 — Bestiary files** (Fantasy 14 entries, others 3 placeholders each).
-**Task 3-5 — WorldBible + RegionBible LLM prompt extensions + apply persistence with validate-don't-500.**
-**Task 6 — Stub loot drops.**
-**Task 7 — 29 new tests, 72 total.**
+Enemy interface, bestiary files (Fantasy 14, others 3 each), WorldBible/RegionBible LLM extensions, validate-don't-500, stub loot drops. 29 new tests.
 
 ### Region / Resilience Round (commit 87c89a3 — 43/43 tests)
 Region tier description from parent for any node; map defaults to Local; landmark color flipped to mint; new region wires origin symmetrically; RegionBible stub fallback.
@@ -195,8 +181,9 @@ Domain 1 (Engine):     World graph, navigation, stat checks, dialogue option
                        (V8.32), encounter triggers (V8.32), region expansion
                        guard (V8.33), combat UI (V8.34), bestiary codex
                        (V8.34), starting equipment module (V8.35), turn
-                       separators + pacing (V8.35), loot resolver (pending
-                       Day 21) — pure code
+                       separators + pacing (V8.35), initiative kickoff
+                       (V8.36), inventory stats display (V8.36), loot
+                       resolver (pending Day 21) — pure code
 Domain 2 (Content):    WCD, WorldBible (with enemies + encounter tagging),
                        RegionBible (same), NPCs, items, bestiary,
                        starting-equipment loadouts (V8.35) — frozen
@@ -213,7 +200,7 @@ AI during gameplay:
   ⏳ Container search   — pending Container+Loot system
 ```
 
-### Combat System ✅ COMPLETE (V8.31 + V8.32 + V8.34 + V8.35)
+### Combat System ✅ COMPLETE (V8.31 + V8.32 + V8.34 + V8.35 + V8.36)
 ```
 DATA LAYER (V8.31):
   Enemy interface, two-tier bestiary, encounter tagging, stub loot drops.
@@ -225,10 +212,22 @@ RESOLVER LAYER (V8.32):
 TRIGGER LAYER (V8.32):
   shouldRollEncounter / resolveEnemyLookup / rollEncounter.
 
-TURN LOOP (V8.32, separators V8.35):
+TURN LOOP (V8.32, separators V8.35, kickoff V8.36):
   /lib/game/combat-engine.ts — full action resolution + auto-advance.
+  Shared advanceUntilPlayerTurnOrEnd helper used by both
+  executePlayerAction (post-action) and kickoffCombatIfEnemyFirst
+  (combat-start when enemy has initiative).
   Emits player_turn_start + enemy_phase_start at phase transitions.
-  round_start now correctly returned in events array (V8.35 bug fix).
+
+INITIATIVE KICKOFF (V8.36):
+  kickoffCombatIfEnemyFirst — when turn_order[0] !== PLAYER, runs the
+  enemy phase before player gets control. Uses shared
+  advanceUntilPlayerTurnOrEnd helper. Emits enemy_phase_start +
+  player_turn_start to frame the kickoff phase in the feed.
+  useCombat.kickoffCombat fires from a useEffect watching
+  masterState.combat.encounter_id + active. Tracked via
+  useRef<Set<string>> to prevent double-fire. setDisplayPhase("enemy")
+  fires synchronously so no "Your turn" flash on enemy-first encounters.
 
 STATE TRACKING (V8.32):
   master_state.combat / last_settlement_hub_id / navigation_trail.
@@ -236,43 +235,33 @@ STATE TRACKING (V8.32):
 UI LAYER (V8.34):
   /components/game/CombatMode/ — CombatMode, CombatantRow, PortraitSlot,
     HPBar, ActionBar, TargetPicker, UseItemPicker.
-  Side-by-side layout: player left, divider, enemies right.
-  Story feed combat events with per-event styling.
-  HP bar 300ms transition. Crit portrait shake 400ms.
 
 NARRATION LAYER (V8.34, refined V8.35):
   /api/game/narrate-combat — genre-specific tone primer.
   Templated: combat_start (V8.35), player_turn_start, enemy_phase_start,
              round_start, all routine events.
   LLM dramatic: crit, kill, victory, defeat, flee_success.
-  Deterministic variant selection by event timestamp hash.
 
 PACING (V8.35):
-  ENEMY_PHASE_DELAY_MS = 800 (before "Enemies' turn" separator)
-  PLAYER_TURN_DELAY_MS = 800 (before "Your turn" separator)
-  ENEMY_TURN_GAP_MS = 500 (between successive distinct enemy actors)
-  No delay before routine player events.
+  ENEMY_PHASE_DELAY_MS = 800 / PLAYER_TURN_DELAY_MS = 800 /
+  ENEMY_TURN_GAP_MS = 500. No delay before routine player events.
 
 UI INDICATORS (V8.35):
-  CombatMode header pill — 11px bold uppercase mono, 0.24em spacing,
-  tinted background (combat-player/combat-enemy 28% into bg-2),
-  1px colored border, 200ms transition.
-  displayPhase decoupled from current_turn_index — flips ahead of feed
-  at phase transitions. Authoritatively resynced after drain.
+  CombatMode header pill — 11px bold uppercase mono. displayPhase
+  decoupled from current_turn_index.
 
 BESTIARY CODEX (V8.34):
   writeBestiaryEntry on combat_start (deduplicated by enemy.id).
-  Description: flavor + HP range + damage die + first-seen location.
 
 STARTING EQUIPMENT (V8.35):
-  /lib/game/starting-equipment.ts — extracted from new-game route.
-  15 backgrounds (3 per genre × 5 genres). Each ships:
-    - Equipped weapon with effect.damage_die (1d4-1d8 by class)
-    - Equipped armor with effect.armor_bonus (0-2 by class)
-    - 2x basic health potion
-    - Class-flavor lore/key item where appropriate
+  /lib/game/starting-equipment.ts — 15 backgrounds, all equipped.
   Knight = Iron Sword 1d6 + Chainmail +2 + 2x potion.
-  Combat resolver reads from inventory; no fallback to fists at game start.
+
+INVENTORY DISPLAY (V8.36):
+  components/game/sidebar/InventoryPanel.tsx surfaces combat stats:
+  WEAPON → "Damage: 1d6", ARMOR → "Armor: +2", CONSUMABLE →
+  "Heal: 1d8+4" (canonical potion) or "Heal: N" (flat). KEY/LORE
+  show no stat line. EQUIPPED pill (--hl-pass green) on detail panel.
 
 DEV TOOLS (V8.32):
   window.__forceEncounter("enemy_id", ...) — dev-only override.
@@ -281,12 +270,10 @@ DEV TOOLS (V8.32):
 ### Region Expansion Guard ✅ (V8.33)
 ```
 /lib/game/region-expansion-guard.ts — pure helpers, two callers:
-
 isRegionAlreadyExpanded / isApplyRegionalBibleRedundant /
 mergeNodePreservingDiscovered.
 
-ROOT CAUSE: toSlug() strips hyphens. Guard works AROUND this. Fixing
-toSlug itself is high-blast-radius.
+ROOT CAUSE: toSlug() strips hyphens. Guard works AROUND this.
 ```
 
 ### Navigation Rules ✅ (Complete)
@@ -305,6 +292,7 @@ Combat trigger:
 - arrivedAt sourced from updatedState (post-reclassification)
 - combat_start writes bestiary codex entries (V8.34)
 - combat_start renders templated banner directly from useGameLoop (V8.35)
+- kickoffCombat fires from useEffect when enemy has initiative (V8.36)
 ```
 
 ### Map Description Sourcing ✅ (V8.27, hardened V8.28, generalized V8.30)
@@ -335,12 +323,13 @@ validateEnemy / validateEnemies / scrubEncounterRoster — warn-don't-500.
 
 ### Known issues
 
-**Prompt 4 — Polish Round (NEXT):**
-Dedicated visual polish round bundling four small UX issues. Each independent — no architecture dependencies. Best done together now that Combat is stable.
-- **Settlement hub card on new region arrival reads as back-from-settlement.** Functional but visually misleading. Card-typing issue in NavigationBar's region-zone D2 branch — needs to distinguish "settlement hub of CURRENT region" (deeper-into card) from "place player just left" (back card). Confirmed still present through V8.35 playtesting.
+**Prompt 4 — Polish Round (NEXT — design locked V8.36):**
+Dedicated visual polish round bundling four small UX issues plus the new card-grouping design. Each independent — no architecture dependencies. Best done together now that Combat is stable.
+- **Movement-direction grouped nav cards (NEW V8.36).** Nav bar groups cards into rows by movement direction: BACK / DEEPER / PEER / UNDISCOVERED. Empty groups don't render. Group labels light/optional. Tier color-coding (next bullet) layers on top within each group — direction tells where, color tells what kind of place.
+- **Tier-aware nav button colors (V8.33 request).** Each card type gets a distinct visual treatment by destination tier. Region cards (lavender), settlement cards (sky-blue), sub-location cards (mint), dungeon cards (new color). Layered with movement-direction grouping above.
+- **Settlement hub card on new region arrival reads as back-from-settlement.** Functional but visually misleading. Card-typing issue in NavigationBar's region-zone D2 branch — needs to distinguish "settlement hub of CURRENT region" (deeper-into card) from "place player just left" (back card). Confirmed still present through V8.36 playtesting.
 - **Map does not auto-switch tiers on cross-region arrival.** Initial-mount default works (V8.30) but doesn't re-fire on cross-zone arrival.
 - **NPC dialogue text needs higher contrast.** `.ew-said` doesn't read distinctly enough from surrounding ink-2 prose.
-- **Tier-aware nav button colors (V8.33 request).** Each card type currently looks identical regardless of destination tier. Region cards, dungeon cards, settlement cards, and sub-location cards each get distinct visual treatment. Distinct color per tier matching existing highlight tokens.
 
 **Map visual rework (dedicated session, post-Prompt-4):**
 - Per-node decorative shelf line under every node. Cleanup needed.
@@ -354,7 +343,7 @@ Dedicated visual polish round bundling four small UX issues. Each independent �
 - Adding RTL infrastructure is a separate task — not blocking.
 
 **Pacing tuning (V8.35 watchpoint):**
-- 800ms / 500ms / 800ms delays are tuned guesses. May need adjustment after extended playtest. Halving in a one-line follow-up is trivial if too slow.
+- 800ms / 500ms / 800ms delays are tuned guesses. May need adjustment after extended playtest.
 
 **Other deferred:**
 - NPC highlight color (orange) too similar to item highlight (yellow) in Fantasy.
@@ -363,14 +352,14 @@ Dedicated visual polish round bundling four small UX issues. Each independent �
 - Starting region nodes lack `grid_position` — masked by V8.28 isValidPos guard.
 - Behavior dispatch beyond flavor text deferred (combat-spec §6.3) — every enemy just attacks the player every turn.
 - `toSlug` strips hyphens — masked by V8.33 region-expansion-guard.
-- Combat balance at character level 1 vs regional enemies is intentionally punishing pre-Day-21 (Container + Loot adds better gear) and pre-Day-22 (leveling adds stat growth). Two regional enemies + starter equipment = "fight or flee" decision, not "win easily."
+- Combat balance at character level 1 vs regional enemies is intentionally punishing pre-Day-21 (Container + Loot adds better gear) and pre-Day-22 (leveling adds stat growth).
 
 ---
 
 ## 🏗️ Architecture
 
 ### The Two Domains ✅
-**Domain 1 (Engine — pure code):** Navigation, stat checks, dialogue option generation, combat resolver + turn loop + encounter triggers (V8.32), region expansion guard (V8.33), combat UI + narrator + bestiary (V8.34), turn separators + pacing + starting equipment module (V8.35), loot resolver (pending Day 21).
+**Domain 1 (Engine — pure code):** Navigation, stat checks, dialogue option generation, combat resolver + turn loop + encounter triggers (V8.32), region expansion guard (V8.33), combat UI + narrator + bestiary (V8.34), turn separators + pacing + starting equipment module (V8.35), initiative kickoff + inventory stats display (V8.36), loot resolver (pending Day 21).
 **Domain 2 (Content Library — frozen):** WCD, locations, NPCs, items, loot tables, main quest, bestiary, region enemies, starting equipment loadouts (V8.35).
 
 ### Generation Model ✅
@@ -441,6 +430,9 @@ Initial tier on mount: Local (V8.30).
 46. `player_turn_start` and `enemy_phase_start` events are emitted by combat-engine at phase transitions and rendered as separator lines in the story feed. They do NOT emit when combat ends in victory/defeat/flee. (V8.35)
 47. Pacing delays at turn transitions: 800ms before `enemy_phase_start`, 800ms before `player_turn_start`, 500ms between successive distinct enemy actors. No delay before routine player events — instant feedback when player clicks. LLM events get their existing API latency as the delay. (V8.35)
 48. CombatMode header pill `displayPhase` is decoupled from `combat.current_turn_index` and flips ahead of feed at phase transitions for visual responsiveness. Authoritatively resynced after drain. The pill — not the feed — is the canonical turn indicator. (V8.35)
+49. Enemy-turn loop logic is shared via `advanceUntilPlayerTurnOrEnd` (combat-engine.ts). Both `executePlayerAction` (post-action auto-advance) and `kickoffCombatIfEnemyFirst` (combat-start when enemy has initiative) call it. Single source of truth for the loop. (V8.36)
+50. When combat starts with `turn_order[0] !== PLAYER`, the initial enemy phase MUST fire before UI hands control to the player. `useCombat` watches `masterState.combat.encounter_id + active` via useEffect, fires `kickoffCombat` on fresh enemy-initiative encounters. Tracked via `useRef<Set<string>>` to prevent double-fire. setDisplayPhase("enemy") fires synchronously so no "Your turn" flash. (V8.36)
+51. Inventory detail panel surfaces combat stats: WEAPON → `Damage: <die>`, ARMOR → `Armor: +<bonus>` (always rendered, including +0), CONSUMABLE → `Heal: 1d8+4` (canonical potion id) or `Heal: N` (flat). KEY/LORE/CONTAINER show no stat line. EQUIPPED pill renders next to rarity when `selectedItem.equipped === true`. (V8.36)
 
 ---
 
@@ -490,7 +482,7 @@ COMBAT (V8.35):
 
 | System | When | Description |
 | --- | --- | --- |
-| Polish Round (Prompt 4) | NEXT | Settlement card label, tier auto-switch, NPC dialogue contrast, tier-aware nav button colors |
+| Polish Round (Prompt 4) | NEXT | Movement-direction grouped nav cards + tier color-coding, settlement card label, tier auto-switch, NPC dialogue contrast |
 | Map Visual Rework | After Prompt 4 | Dedicated session: decoration, geometry, sizing, hierarchy, label collision |
 | Container + Loot | Day 21 | Registry, loot tables, dungeon sub-levels, real loot beyond stub |
 | Skills + Leveling | Day 22 | XP, stat points, level gates, special combat abilities |
@@ -550,4 +542,4 @@ Claude Code pushes → user reports commit + test results → Claude.ai updates 
 
 ---
 
-*Last updated: V8.35 — Day 20.1 Combat Polish (commit 1215bb6): starting-equipment module extraction with 15 fully-equipped backgrounds, encounter banner template (no more LLM call for combat_start), turn boundary separators (player_turn_start + enemy_phase_start) emitted by engine, pacing delays 800/500/800ms, header pill displayPhase decoupled with 200ms color transition. 209/209 tests passing. /game route 104 → 105 kB. Foundational rules 43-48 added. Polish Round (Prompt 4) up next: settlement card label, tier auto-switch, NPC dialogue contrast, tier-aware nav button colors.*
+*Last updated: V8.36 — Day 20.2 Combat Hotfix (commit bf3871e): enemy-wins-initiative deadlock fixed via `kickoffCombatIfEnemyFirst` + shared `advanceUntilPlayerTurnOrEnd` refactor; useCombat fires kickoff via useEffect on fresh enemy-initiative encounters with double-fire guard; inventory detail panel now shows Damage/Armor/Heal stat line + EQUIPPED pill. 216/216 tests passing. /game route 105 → 106 kB. Foundational rules 49-51 added. Polish Round (Prompt 4) up next with V8.36 design lock-in: movement-direction grouped nav cards (BACK/DEEPER/PEER/UNDISCOVERED rows) + tier color-coding within each group + settlement card label + tier auto-switch + NPC dialogue contrast.*

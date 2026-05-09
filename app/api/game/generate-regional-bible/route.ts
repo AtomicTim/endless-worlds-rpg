@@ -231,7 +231,10 @@ consistent with the WCD):
           "is_interactable": true
         }
       ],
-      "ambient_type": "dungeon_corridor"
+      "ambient_type": "dungeon_corridor",
+      "encounter_chance": 0.6,
+      "encounter_roster": ["fantasy_skeleton", "${outline.id}_themed_enemy_id"],
+      "is_boss_room": false
     }
   ],
   "exits": [
@@ -240,6 +243,22 @@ consistent with the WCD):
       "target_region_id": "${originRegionId}",
       "from_location_id": "${outline.id}",
       "description": "[1 sentence]"
+    }
+  ],
+  "enemies": [
+    {
+      "id": "${outline.id}_themed_enemy_id",
+      "name": "[Themed Enemy Name]",
+      "description": "[1 sentence of WCD-consistent flavor for narration]",
+      "hp_range": [12, 18],
+      "agi_mod": 1,
+      "str_mod": 2,
+      "damage_die": "1d8",
+      "armor_bonus": 1,
+      "xp_value": 60,
+      "loot_table_id": "${outline.id}_themed_enemy_id_loot",
+      "is_boss": false,
+      "behavior_flavor": "[1-3 word phrase]"
     }
   ]
 }
@@ -259,10 +278,41 @@ array must be objects of shape {topic, content}. The topic is a
 NPC reveals on a passed stat check. Generate 1-2 entries per NPC.
 Do NOT emit plain strings — always {topic, content}.
 
-CRITICAL: Keep total response under 5000 tokens. Be concise.
+DAY 20 COMBAT — REGION ENEMIES & ENCOUNTER TAGGING:
+
+The "enemies" array must contain 3-5 region-themed enemies that
+thematically fit the WCD flavor and the region's atmosphere.
+Constraints:
+- 3-5 entries with UNIQUE ids prefixed with the region id
+  (e.g. "${outline.id}_husk_warden")
+- description: 1 sentence of WCD-consistent flavor for narration
+- hp_range: [min, max] — common 8-25, elite 25-50, boss 50-100
+- agi_mod and str_mod: integers between -2 and +4
+- armor_bonus: integer between 0 and 3
+- damage_die: one of "1d4", "1d6", "1d8", "1d10", "2d4", "2d6", "2d8"
+- xp_value: integer between 25 and 1000 scaled to difficulty
+- behavior_flavor: 1-3 word phrase
+- is_boss: false unless this enemy IS a region-tied boss
+- loot_table_id: stub of form "<enemy_id>_loot"
+
+ENCOUNTER TAGGING for combat-eligible region_locations:
+The standalone region_location IS combat-eligible. It MUST carry:
+- encounter_chance: 0.4-0.7 for normal areas, 1.0 for boss rooms,
+  0.0 for peaceful sites
+- encounter_roster: 2-4 enemy ids drawn from this region's enemies
+  array AND/OR the genre bestiary (e.g. "fantasy_skeleton",
+  "fantasy_cultist"). Mix region-specific and bestiary entries.
+- is_boss_room: true only for the climactic location of a boss
+
+The settlement hub and tavern sub-location are NOT combat-eligible
+— omit encounter_chance/encounter_roster on those (or set chance
+to 0).
+
+CRITICAL: Keep total response under 5500 tokens. Be concise.
 Atmosphere: max 2 sentences. NPC fields: 1 sentence each.
-Object descriptions: 1 short sentence. Do not elaborate beyond
-the template lengths shown above.`;
+Object descriptions: 1 short sentence. Enemy descriptions: 1
+sentence. Do not elaborate beyond the template lengths shown
+above.`;
 }
 
 /**
@@ -346,6 +396,11 @@ function buildStubBible(
         description:      `The track leads back toward ${originRegionName}.`,
       },
     ],
+    // Day 20 Combat — stub bible has no enemies. Encounter triggers
+    // at combat-eligible nodes will fall through to the genre
+    // bestiary. The region simply has no themed roster until it's
+    // re-generated.
+    enemies: [],
   };
 }
 
@@ -394,14 +449,13 @@ async function callClaude(client: Anthropic, userPrompt: string): Promise<string
   // from a simpler prompt is acceptable; speed matters more here than for
   // WCD/WorldBible/narration.
   //
-  // FIX 5 — max_tokens bumped 3500 → 6000. Haiku was truncating the
-  // JSON at ~13 K chars when creative content filled all 3500 tokens.
-  // 6000 gives enough headroom for the full skeleton plus atmospheric
-  // prose while keeping Haiku's sub-second latency advantage over Sonnet.
+  // Day 20 — bumped 6000 → 7000 to give the haiku headroom for the
+  // 3-5 enemy entries added at combat-spec §6.5. The stub fallback in
+  // the POST handler still catches any remaining truncation.
   console.log("[RegionBible] Using haiku model");
   const message = await client.messages.create({
     model:      "claude-haiku-4-5-20251001",
-    max_tokens: 6000,
+    max_tokens: 7000,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });

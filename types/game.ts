@@ -180,6 +180,15 @@ export interface WorldNode {
    *  region_location even when graph back-connections are missing.
    *  Mirrored from LocationDefinition.is_settlement_node at apply time. */
   is_settlement_node?: boolean;
+  // ── Day 20 Combat — encounter tagging mirrored onto the graph node ────────
+  /** Mirrored from LocationDefinition.encounter_chance. Read at arrival
+   *  time by the encounter trigger (Prompt 2) so combat resolution
+   *  doesn't need to re-fetch the bible blob. */
+  encounter_chance?:   number;
+  /** Mirrored from LocationDefinition.encounter_roster. */
+  encounter_roster?:   string[];
+  /** Mirrored from LocationDefinition.is_boss_room. */
+  is_boss_room?:       boolean;
 }
 
 export interface WorldGraph {
@@ -346,6 +355,19 @@ export interface LocationDefinition {
   atmosphere:          string;
   /** Bidirectional graph connections — IDs of other LocationDefinitions. */
   connections:         string[];
+  // ── Day 20 Combat — encounter tagging (combat-spec §3, §6.7) ──────────────
+  /** Probability of triggering a combat encounter on arrival. 0.0-1.0.
+   *  0.0 (default) for peaceful locations, 0.4-0.7 for normal combat
+   *  zones, 1.0 for boss rooms and obvious combat areas. */
+  encounter_chance?:   number;
+  /** Enemy ids drawn from the genre bestiary or the region's enemies
+   *  array. The encounter trigger picks 1-4 of these per fight. Empty
+   *  / undefined when encounter_chance is 0. */
+  encounter_roster?:   string[];
+  /** Boss rooms guarantee combat (chance 1.0) and lock until cleared.
+   *  Encounter handler treats this as a flag to wire boss-fight rules
+   *  (no flee, fixed enemy group from roster). */
+  is_boss_room?:       boolean;
   /** IDs of NPCs that live / work here (NPCDefinition.id). */
   npc_ids:             string[];
   /** Tier 1 named interactable objects this location contains. */
@@ -388,6 +410,46 @@ export interface NPCDefinition {
   speciality?:       string;
   /** Starting trust score (0-100). */
   default_trust:     number;
+}
+
+// ---------------------------------------------------------------------------
+// Day 20 Combat — Enemy data structure (combat-spec §6.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Domain 2 frozen content. Lives either in the genre bestiary
+ * (`/lib/game/bestiary/<genre>.ts`) or in `RegionBible.enemies` /
+ * `RegionOutline.enemies`. The combat resolver (Prompt 2) reads stats
+ * from this shape when spawning encounters; HP is randomized within
+ * `hp_range` per spawn.
+ */
+export interface Enemy {
+  /** Stable id used in encounter rosters. Genre prefix keeps them
+   *  unique across regions (e.g. "fantasy_goblin", "ash_wraith_knight"). */
+  id:               string;
+  name:             string;
+  /** 1-sentence description for AI narration. Not stat-block prose. */
+  description:      string;
+  /** [min, max] inclusive — randomized per spawn. */
+  hp_range:         [number, number];
+  /** Typically -2 to +4. Drives initiative and dodge DC. */
+  agi_mod:          number;
+  /** Typically -2 to +4. Adds to damage roll. */
+  str_mod:          number;
+  /** Dice notation: "1d4", "1d6", "1d8", "1d10", "2d4", "2d6", "2d8". */
+  damage_die:       string;
+  /** Typically 0-3. Adds to target DC. */
+  armor_bonus:      number;
+  /** Base XP awarded on kill. Scales with difficulty. */
+  xp_value:         number;
+  /** Reference to a Day 21 loot table; stub-shaped for Day 20. */
+  loot_table_id:    string;
+  /** Boss flag: guarantees combat, locks flee, awards higher loot. */
+  is_boss:          boolean;
+  /** 1-3 word phrase consumed by the narrator only ("aggressive melee",
+   *  "ranged ambusher", "defensive caster"). Not mechanically dispatched
+   *  in Day 20 — every enemy just attacks each turn. */
+  behavior_flavor:  string;
 }
 
 export interface RegionExit {
@@ -447,6 +509,11 @@ export interface RegionOutline {
   location_count:       number;
   /** WCD landmark id when this region contains one. */
   landmark_id?:         string;
+  /** Day 20 Combat — 1-2 themed enemies sketched at WorldBible time.
+   *  Less detail than RegionBible.enemies (which holds the full 3-5).
+   *  When the region is expanded, the RegionBible prompt receives this
+   *  list so the full enemy roster can build on the outline thematically. */
+  enemies?:             Enemy[];
 }
 
 export interface RegionBible {
@@ -489,6 +556,12 @@ export interface RegionBible {
   /** Every NPC in this region — real names from generation. */
   npcs:                 NPCDefinition[];
   exits:                RegionExit[];
+
+  /** Day 20 Combat (combat-spec §6.5) — 3-5 region-themed enemies
+   *  generated alongside the RegionBible. Frozen content: spawned by
+   *  encounter triggers later, never modified at runtime. Optional
+   *  for legacy bibles generated before Day 20. */
+  enemies?:             Enemy[];
 }
 
 export interface WorldBible {
@@ -604,8 +677,19 @@ export interface Metadata {
    *  game_sessions.world_bible jsonb column so the game loop can match
    *  WORLD_EXPLORE destinations against adjacent_regions without an extra
    *  DB roundtrip per move. The bible itself never changes after Day 19B
-   *  applied it; only world_state and visited_locations evolve. */
+   *  applied it; only world_state and visited_locations evolve.
+   *
+   *  Day 20 Combat — `world_bible.starting_region.enemies` and
+   *  `world_bible.adjacent_regions[i].enemies` ride along inside this
+   *  blob; no extra column needed for WorldBible-time enemies. */
   world_bible?: WorldBible;
+  /** Day 20 Combat — RegionBibles for regions the player has expanded
+   *  into via apply-regional-bible. Keyed by region id. The enemies
+   *  array on each region is the authoritative source for combat
+   *  triggers in expanded regions; the genre bestiary covers the rest.
+   *  The full RegionBible blob is preserved so future systems (loot
+   *  tables, faction quests) have the same shape they need. */
+  region_bibles?: Record<string, RegionBible>;
 }
 
 // ---------------------------------------------------------------------------

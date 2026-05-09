@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { AssetCategory, LocationStatus } from "@/types/game";
+import { AssetCategory, Genre, LocationStatus } from "@/types/game";
 import type { Json } from "@/types/database";
 import type {
+  Enemy,
   LocationDefinition,
   MasterState,
   NPCDefinition,
@@ -11,6 +12,7 @@ import type {
   WorldGraph,
   WorldNode,
 } from "@/types/game";
+import { getGenreBestiary } from "@/lib/game/bestiary";
 
 /**
  * Day 19D — Apply a freshly-generated RegionBible to a session.
@@ -173,6 +175,92 @@ function regionZoneToAsset(
   };
 }
 
+// ── Day 20 Combat — Enemy validation + encounter scrubbing ─────────────────────
+// Mirrors apply-world-bible. Same shape, same warn-don't-500 pattern.
+
+const VALID_DAMAGE_DIE = /^\d+d\d+$/;
+
+function validateEnemy(raw: unknown, context: string): Enemy | null {
+  if (!raw || typeof raw !== "object") {
+    console.warn(`[apply-regional-bible] Enemy in ${context} is not an object — dropping.`);
+    return null;
+  }
+  const o = raw as Record<string, unknown>;
+  const id   = typeof o.id   === "string" ? o.id.trim()   : "";
+  const name = typeof o.name === "string" ? o.name.trim() : "";
+  const desc = typeof o.description === "string" ? o.description.trim() : "";
+  if (!id || !name || !desc) {
+    console.warn(`[apply-regional-bible] Enemy in ${context} missing id/name/description — dropping.`);
+    return null;
+  }
+  const hpRange = Array.isArray(o.hp_range) ? o.hp_range : null;
+  if (
+    !hpRange ||
+    hpRange.length !== 2 ||
+    typeof hpRange[0] !== "number" || typeof hpRange[1] !== "number" ||
+    hpRange[0] <= 0 || hpRange[0] > hpRange[1]
+  ) {
+    console.warn(`[apply-regional-bible] Enemy ${id} has malformed hp_range — dropping.`);
+    return null;
+  }
+  const damageDie = typeof o.damage_die === "string" ? o.damage_die.trim() : "";
+  if (!VALID_DAMAGE_DIE.test(damageDie)) {
+    console.warn(`[apply-regional-bible] Enemy ${id} has invalid damage_die "${damageDie}" — dropping.`);
+    return null;
+  }
+  const num = (v: unknown, fallback: number) =>
+    typeof v === "number" && Number.isFinite(v) ? v : fallback;
+  return {
+    id,
+    name,
+    description:     desc,
+    hp_range:        [hpRange[0], hpRange[1]],
+    agi_mod:         num(o.agi_mod,     0),
+    str_mod:         num(o.str_mod,     0),
+    damage_die:      damageDie,
+    armor_bonus:     num(o.armor_bonus, 0),
+    xp_value:        num(o.xp_value,   25),
+    loot_table_id:   typeof o.loot_table_id === "string" && o.loot_table_id.trim()
+                       ? o.loot_table_id.trim()
+                       : `${id}_loot`,
+    is_boss:         typeof o.is_boss === "boolean" ? o.is_boss : false,
+    behavior_flavor: typeof o.behavior_flavor === "string"
+                       ? o.behavior_flavor.trim() || "aggressive"
+                       : "aggressive",
+  };
+}
+
+function validateEnemies(rawList: unknown, context: string): Enemy[] {
+  if (!Array.isArray(rawList)) return [];
+  const out: Enemy[] = [];
+  for (const raw of rawList) {
+    const enemy = validateEnemy(raw, context);
+    if (enemy) out.push(enemy);
+  }
+  return out;
+}
+
+function scrubEncounterRoster(
+  roster:   string[] | undefined,
+  validIds: Set<string>,
+  context:  string
+): string[] {
+  if (!Array.isArray(roster)) return [];
+  const out: string[] = [];
+  for (const id of roster) {
+    if (typeof id !== "string" || !id.trim()) continue;
+    const trimmed = id.trim();
+    if (!validIds.has(trimmed)) {
+      console.warn(
+        `[apply-regional-bible] encounter_roster at ${context} references unknown enemy "${trimmed}" — stripping.`
+      );
+      continue;
+    }
+    out.push(trimmed);
+  }
+  return out;
+}
+
 function objectToAsset(
   obj: LocationDefinition["objects"][number],
   parentLocationId: string,
@@ -262,6 +350,41 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
   const currentMasterState = row.master_state as unknown as MasterState;
+
+  // ── 0c. Day 20 Combat — validate enemies + scrub encounter rosters ─────────
+  // Same warn-don't-500 pattern as apply-world-bible. The bible is mutated
+  // in place; the validated shape rides into master_state.metadata.region_bibles
+  // at step 7 so combat triggers (Prompt 2) read clean data.
+  const regionEnemies = validateEnemies(
+    bibleNarrowed.enemies,
+    `region "${bibleNarrowed.id}"`
+  );
+  bibleNarrowed.enemies = regionEnemies;
+  console.log(
+    `[apply-regional-bible] enemies validated: ${regionEnemies.length} entries for ${bibleNarrowed.name}.`
+  );
+
+  // Build the resolvable enemy id set: genre bestiary + this region's
+  // validated enemies. encounter_roster is scrubbed against this.
+  const rbGenre       = (currentMasterState.metadata?.genre ?? Genre.FANTASY) as Genre;
+  const validEnemyIds = new Set<string>();
+  for (const e of getGenreBestiary(rbGenre)) validEnemyIds.add(e.id);
+  for (const e of regionEnemies)              validEnemyIds.add(e.id);
+
+  for (const loc of bibleNarrowed.locations) {
+    if (Array.isArray(loc.encounter_roster)) {
+      loc.encounter_roster = scrubEncounterRoster(
+        loc.encounter_roster, validEnemyIds, `location "${loc.id}"`
+      );
+    }
+  }
+  for (const loc of bibleNarrowed.region_locations ?? []) {
+    if (Array.isArray(loc.encounter_roster)) {
+      loc.encounter_roster = scrubEncounterRoster(
+        loc.encounter_roster, validEnemyIds, `region_location "${loc.id}"`
+      );
+    }
+  }
 
   // ── 1. Build all world_asset rows ──────────────────────────────────────────
   // Day 20 — geographic restructure: region_locations are standalone
@@ -400,6 +523,12 @@ export async function POST(request: NextRequest) {
       // CHANGE 2 — flag the settlement node so NavigationBar's parent
       // search succeeds. Sub-locations and standalone zones carry false.
       is_settlement_node: loc.is_settlement_node === true,
+      // Day 20 Combat — mirror encounter fields onto the graph node.
+      encounter_chance:   typeof loc.encounter_chance === "number"
+                            ? loc.encounter_chance : undefined,
+      encounter_roster:   Array.isArray(loc.encounter_roster) && loc.encounter_roster.length > 0
+                            ? [...loc.encounter_roster] : undefined,
+      is_boss_room:       loc.is_boss_room === true ? true : undefined,
     };
   }
 
@@ -454,6 +583,13 @@ export async function POST(request: NextRequest) {
       discovered:         false,
       map_position:       loc.grid_position,
       is_settlement_node: false,
+      // Day 20 Combat — region_locations are the prime combat-eligible
+      // nodes in an expanded region. Mirror encounter fields here.
+      encounter_chance:   typeof loc.encounter_chance === "number"
+                            ? loc.encounter_chance : undefined,
+      encounter_roster:   Array.isArray(loc.encounter_roster) && loc.encounter_roster.length > 0
+                            ? [...loc.encounter_roster] : undefined,
+      is_boss_room:       loc.is_boss_room === true ? true : undefined,
     };
   }
 
@@ -754,8 +890,24 @@ export async function POST(request: NextRequest) {
   //   - current_location_id / current_node_id pointing at the region zone
   //   - visited_locations including the region zone
   //   - location_status: ARRIVING (the player just crossed the border)
+  // Day 20 Combat — accumulate RegionBibles in metadata.region_bibles
+  // keyed by region id. Combat triggers (Prompt 2) read enemies from
+  // either world_bible.starting_region.enemies (starting region) or
+  // metadata.region_bibles[regionId].enemies (expanded regions).
+  // Replaces any prior entry for the same region id so a re-applied
+  // bible (cache miss + retry) refreshes cleanly.
+  const priorRegionBibles = currentMasterState.metadata?.region_bibles ?? {};
+  const nextRegionBibles  = {
+    ...priorRegionBibles,
+    [bibleNarrowed.id]: bibleNarrowed,
+  };
+
   const patchedMasterState: MasterState = {
     ...currentMasterState,
+    metadata: {
+      ...currentMasterState.metadata,
+      region_bibles: nextRegionBibles,
+    },
     world_state: {
       ...currentMasterState.world_state,
       current_location_id: regionZoneId,

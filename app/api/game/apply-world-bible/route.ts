@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { AssetCategory, LocationStatus } from "@/types/game";
 import type { Json } from "@/types/database";
 import type {
+  Enemy,
   LocationDefinition,
   MasterState,
   NPCDefinition,
@@ -12,6 +13,8 @@ import type {
   WorldGraph,
   WorldNode,
 } from "@/types/game";
+import { Genre } from "@/types/game";
+import { getGenreBestiary } from "@/lib/game/bestiary";
 
 /**
  * Day 19B — Apply a freshly-generated WorldBible to a session.
@@ -31,6 +34,108 @@ interface RequestBody {
   session_id?: string;
   bible?:      WorldBible;
   wcd?:        WorldConsistencyDocument;
+}
+
+// ── Day 20 Combat — Enemy validation + encounter scrubbing ─────────────────────
+
+const VALID_DAMAGE_DIE = /^\d+d\d+$/;
+
+/**
+ * Validate a single enemy entry against the Enemy interface shape.
+ * Returns the enemy on success or null when any required field is
+ * missing / malformed. Resilience pattern from V8.30: warn-don't-500
+ * — the world is still playable without one enemy slot filled.
+ */
+function validateEnemy(raw: unknown, context: string): Enemy | null {
+  if (!raw || typeof raw !== "object") {
+    console.warn(`[apply-world-bible] Enemy in ${context} is not an object — dropping.`);
+    return null;
+  }
+  const o = raw as Record<string, unknown>;
+  const id   = typeof o.id   === "string" ? o.id.trim()   : "";
+  const name = typeof o.name === "string" ? o.name.trim() : "";
+  const desc = typeof o.description === "string" ? o.description.trim() : "";
+  if (!id || !name || !desc) {
+    console.warn(`[apply-world-bible] Enemy in ${context} missing id/name/description — dropping.`);
+    return null;
+  }
+  const hpRange = Array.isArray(o.hp_range) ? o.hp_range : null;
+  if (
+    !hpRange ||
+    hpRange.length !== 2 ||
+    typeof hpRange[0] !== "number" || typeof hpRange[1] !== "number" ||
+    hpRange[0] <= 0 || hpRange[0] > hpRange[1]
+  ) {
+    console.warn(`[apply-world-bible] Enemy ${id} has malformed hp_range — dropping.`);
+    return null;
+  }
+  const damageDie = typeof o.damage_die === "string" ? o.damage_die.trim() : "";
+  if (!VALID_DAMAGE_DIE.test(damageDie)) {
+    console.warn(`[apply-world-bible] Enemy ${id} has invalid damage_die "${damageDie}" — dropping.`);
+    return null;
+  }
+  const num = (v: unknown, fallback: number) =>
+    typeof v === "number" && Number.isFinite(v) ? v : fallback;
+  return {
+    id,
+    name,
+    description:     desc,
+    hp_range:        [hpRange[0], hpRange[1]],
+    agi_mod:         num(o.agi_mod,     0),
+    str_mod:         num(o.str_mod,     0),
+    damage_die:      damageDie,
+    armor_bonus:     num(o.armor_bonus, 0),
+    xp_value:        num(o.xp_value,   25),
+    loot_table_id:   typeof o.loot_table_id === "string" && o.loot_table_id.trim()
+                       ? o.loot_table_id.trim()
+                       : `${id}_loot`,
+    is_boss:         typeof o.is_boss === "boolean" ? o.is_boss : false,
+    behavior_flavor: typeof o.behavior_flavor === "string"
+                       ? o.behavior_flavor.trim() || "aggressive"
+                       : "aggressive",
+  };
+}
+
+/**
+ * Run the enemy validator over an enemies array. Returns only the
+ * entries that passed, never throws — keeps the apply route
+ * resilient when the AI emits one malformed entry.
+ */
+function validateEnemies(rawList: unknown, context: string): Enemy[] {
+  if (!Array.isArray(rawList)) return [];
+  const out: Enemy[] = [];
+  for (const raw of rawList) {
+    const enemy = validateEnemy(raw, context);
+    if (enemy) out.push(enemy);
+  }
+  return out;
+}
+
+/**
+ * Strip encounter_roster ids that don't resolve to either the
+ * region's enemies array OR the genre bestiary. Logs each dropped
+ * id so unwired references show up in the server log instead of
+ * surfacing as a missing-enemy crash at combat time.
+ */
+function scrubEncounterRoster(
+  roster:        string[] | undefined,
+  validIds:      Set<string>,
+  context:       string
+): string[] {
+  if (!Array.isArray(roster)) return [];
+  const out: string[] = [];
+  for (const id of roster) {
+    if (typeof id !== "string" || !id.trim()) continue;
+    const trimmed = id.trim();
+    if (!validIds.has(trimmed)) {
+      console.warn(
+        `[apply-world-bible] encounter_roster at ${context} references unknown enemy "${trimmed}" — stripping.`
+      );
+      continue;
+    }
+    out.push(trimmed);
+  }
+  return out;
 }
 
 // ── Helpers: convert bible entries into WorldAsset rows ────────────────────────
@@ -345,6 +450,65 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── 1c. Day 20 Combat — validate enemies + scrub encounter rosters ─────────
+  // The AI sometimes drops fields or emits malformed numbers. validateEnemy
+  // returns null on bad shape; we collect only the survivors. The
+  // bibleNarrowed object is mutated in place so the JSON blob persisted in
+  // step 6 contains only validated enemies (no garbage rides along).
+  //
+  // PERSISTENCE NOTE: enemies live inside the WorldBible JSON blob written
+  // to game_sessions.world_bible (jsonb). They ride along with the bible —
+  // no separate column or table needed. The mirror onto
+  // master_state.metadata.world_bible carries the same data into runtime.
+  const startingEnemies = validateEnemies(
+    bibleNarrowed.starting_region.enemies,
+    `starting_region "${bibleNarrowed.starting_region.id}"`
+  );
+  bibleNarrowed.starting_region.enemies = startingEnemies;
+  console.log(
+    `[apply-world-bible] starting_region.enemies validated: ${startingEnemies.length} entries.`
+  );
+
+  for (const region of bibleNarrowed.adjacent_regions) {
+    const validated = validateEnemies(region.enemies, `adjacent_region "${region.id}"`);
+    region.enemies = validated;
+  }
+  const adjacentTotal = bibleNarrowed.adjacent_regions.reduce(
+    (n, r) => n + (r.enemies?.length ?? 0), 0
+  );
+  console.log(
+    `[apply-world-bible] adjacent_regions enemies validated: ${adjacentTotal} entries across ${bibleNarrowed.adjacent_regions.length} outlines.`
+  );
+
+  // Build the set of every enemy id that's resolvable from this WorldBible:
+  //   - the genre's hand-authored bestiary
+  //   - this region's validated enemies
+  //   - every adjacent_region's validated outline enemies
+  // encounter_roster references are scrubbed against this set; unknown ids
+  // are dropped with a warning (they would otherwise crash at combat time).
+  const wbGenre        = (current.metadata?.genre ?? Genre.FANTASY) as Genre;
+  const validEnemyIds  = new Set<string>();
+  for (const e of getGenreBestiary(wbGenre)) validEnemyIds.add(e.id);
+  for (const e of startingEnemies) validEnemyIds.add(e.id);
+  for (const region of bibleNarrowed.adjacent_regions) {
+    for (const e of region.enemies ?? []) validEnemyIds.add(e.id);
+  }
+
+  for (const loc of bibleNarrowed.starting_region.locations) {
+    if (Array.isArray(loc.encounter_roster)) {
+      loc.encounter_roster = scrubEncounterRoster(
+        loc.encounter_roster, validEnemyIds, `location "${loc.id}"`
+      );
+    }
+  }
+  for (const loc of bibleNarrowed.starting_region.region_locations ?? []) {
+    if (Array.isArray(loc.encounter_roster)) {
+      loc.encounter_roster = scrubEncounterRoster(
+        loc.encounter_roster, validEnemyIds, `region_location "${loc.id}"`
+      );
+    }
+  }
+
   // ── 2. Build all world_assets rows ─────────────────────────────────────────
   // Day 20 geographic restructure: region_locations are standalone
   // locations in the geographic area (dungeons, wilderness, shrines)
@@ -516,6 +680,13 @@ export async function POST(request: NextRequest) {
       // is_expandable. Sub-locations and standalone region locations
       // explicitly carry false.
       is_settlement_node: loc.is_settlement_node === true,
+      // Day 20 Combat — mirror encounter fields so the trigger reads
+      // from the graph node (Prompt 2) without re-fetching the bible.
+      encounter_chance:   typeof loc.encounter_chance === "number"
+                            ? loc.encounter_chance : undefined,
+      encounter_roster:   Array.isArray(loc.encounter_roster) && loc.encounter_roster.length > 0
+                            ? [...loc.encounter_roster] : undefined,
+      is_boss_room:       loc.is_boss_room === true ? true : undefined,
     };
   }
 
@@ -575,6 +746,13 @@ export async function POST(request: NextRequest) {
       map_position:       loc.grid_position,
       // Standalone landmarks are never the settlement hub.
       is_settlement_node: false,
+      // Day 20 Combat — mirror encounter fields. region_locations are
+      // the most likely combat-eligible nodes in the starting region.
+      encounter_chance:   typeof loc.encounter_chance === "number"
+                            ? loc.encounter_chance : undefined,
+      encounter_roster:   Array.isArray(loc.encounter_roster) && loc.encounter_roster.length > 0
+                            ? [...loc.encounter_roster] : undefined,
+      is_boss_room:       loc.is_boss_room === true ? true : undefined,
     };
     // FIX 3 — diagnostic. Surface the three fields the WorldMap
     // predicate keys off so a generation regression is immediately

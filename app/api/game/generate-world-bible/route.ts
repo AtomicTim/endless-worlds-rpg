@@ -173,7 +173,10 @@ Return EXACTLY this JSON structure (fill in the values):
         "connections": ["settlement_slug"],
         "npc_ids": [],
         "objects": [{"id": "region_obj_slug", "name": "Tier 1 Object Name", "description": "1 sentence", "is_interactable": true}],
-        "ambient_type": "dungeon_corridor"
+        "ambient_type": "dungeon_corridor",
+        "encounter_chance": 0.6,
+        "encounter_roster": ["fantasy_goblin", "fantasy_skeleton", "<region_id>_themed_enemy_id"],
+        "is_boss_room": false
       }
     ],
     "npcs": [
@@ -204,7 +207,23 @@ Return EXACTLY this JSON structure (fill in the values):
         "default_trust": 50
       }
     ],
-    "exits": []
+    "exits": [],
+    "enemies": [
+      {
+        "id": "<region_id>_themed_enemy_id",
+        "name": "Themed Enemy Name",
+        "description": "1 sentence of WCD-consistent flavor for the narrator.",
+        "hp_range": [12, 18],
+        "agi_mod": 1,
+        "str_mod": 2,
+        "damage_die": "1d8",
+        "armor_bonus": 1,
+        "xp_value": 60,
+        "loot_table_id": "<region_id>_themed_enemy_id_loot",
+        "is_boss": false,
+        "behavior_flavor": "1-3 word phrase"
+      }
+    ]
   },
   "adjacent_regions": [
     {
@@ -216,7 +235,23 @@ Return EXACTLY this JSON structure (fill in the values):
       "distance": "adjacent",
       "atmosphere_hint": "1 sentence",
       "key_npc_count": 2,
-      "location_count": 3
+      "location_count": 3,
+      "enemies": [
+        {
+          "id": "<region_slug>_outline_enemy_id",
+          "name": "Outline Enemy Name",
+          "description": "1 sentence of WCD-consistent flavor.",
+          "hp_range": [10, 16],
+          "agi_mod": 0,
+          "str_mod": 1,
+          "damage_die": "1d6",
+          "armor_bonus": 1,
+          "xp_value": 50,
+          "loot_table_id": "<region_slug>_outline_enemy_id_loot",
+          "is_boss": false,
+          "behavior_flavor": "1-3 word phrase"
+        }
+      ]
     }
   ],
   "main_quest": {
@@ -256,7 +291,59 @@ button label the player sees ("Bandits in the foothills",
 "The old crypt"); content is the full WCD-consistent sentence the
 NPC will reveal on a passed stat check. Generate 2-4 knowledge items
 per NPC, each centered on something the player would plausibly want
-to ask about. Do NOT emit plain strings — always {topic, content}.`;
+to ask about. Do NOT emit plain strings — always {topic, content}.
+
+DAY 20 COMBAT — REGION ENEMIES & ENCOUNTER TAGGING:
+
+starting_region.enemies — generate 3-5 region-themed enemies that
+thematically fit the WCD flavor and the region's atmosphere.
+Constraints (every enemy must obey these):
+- 3-5 entries, each with a UNIQUE id prefixed with the region id
+  (e.g. "the_ashwood_forest_husk_warden")
+- description: 1 sentence of WCD-consistent flavor for the narrator
+- hp_range: [min, max] — common 8-25, elite 25-50, boss 50-100
+- agi_mod and str_mod: integers between -2 and +4
+- armor_bonus: integer between 0 and 3
+- damage_die: one of "1d4", "1d6", "1d8", "1d10", "2d4", "2d6", "2d8"
+- xp_value: integer between 25 and 1000 scaled to difficulty
+- behavior_flavor: 1-3 word phrase (e.g. "ranged ambusher",
+  "implacable melee", "defensive caster")
+- is_boss: false unless this enemy IS the main quest antagonist
+- loot_table_id: stub of form "<enemy_id>_loot" — Day 21 will wire
+  the real loot tables to these ids without changing the bible.
+
+adjacent_regions[i].enemies — give 1-2 enemies per outline (less
+detail, since the full roster is generated when the region is
+expanded into a RegionBible). Same shape, same constraints.
+
+ENCOUNTER TAGGING for combat-eligible locations:
+For each location of type "dungeon", "wilderness", "ruin", "stronghold",
+"port", or similar combat-eligible location, also produce:
+- encounter_chance: float 0.0-1.0
+  • 0.0 for peaceful story locations (taverns, shops, settlements)
+  • 0.4-0.7 for normal combat zones (wilderness paths, dungeon halls)
+  • 1.0 for boss rooms and obvious combat areas
+- encounter_roster: 2-4 enemy ids drawn from this region's enemies
+  array AND/OR the genre bestiary (e.g. "fantasy_goblin",
+  "fantasy_skeleton" for fantasy; equivalent ids for other genres).
+  Mix region-specific and bestiary entries so encounters feel both
+  themed and varied.
+- is_boss_room: true only for the climactic location of a boss.
+
+The tavern, shop, smithy, shrine, and settlement hub are NOT
+combat-eligible — leave their encounter_chance unset (or 0) and
+omit encounter_roster. The standalone region_location IS combat-
+eligible — it MUST carry encounter_chance and encounter_roster.
+
+Example combat-tagged location (a dungeon entrance with mixed
+roster):
+{
+  "id": "the_thorned_cloister",
+  "type": "dungeon",
+  "encounter_chance": 0.7,
+  "encounter_roster": ["fantasy_skeleton", "fantasy_cultist", "the_ashwood_forest_husk_warden"],
+  "is_boss_room": false
+}`;
 }
 
 function stripJsonFences(raw: string): string {
@@ -674,9 +761,13 @@ function validateBible(parsed: unknown): { ok: true; bible: WorldBible } | { ok:
 }
 
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
+  // Day 20 — bumped 8000 → 10000 to accommodate the new
+  // starting_region.enemies array (3-5 entries) and adjacent_region
+  // outline enemies (1-2 each). The WorldBible already runs near the
+  // 8 K boundary on rich worlds; combat content adds ~600-1000 tokens.
   const message = await client.messages.create({
     model:      "claude-sonnet-4-5",
-    max_tokens: 8000,
+    max_tokens: 10000,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });

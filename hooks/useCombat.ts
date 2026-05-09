@@ -1,15 +1,16 @@
 "use client";
 
-import { useCallback } from "react";
-import { useGameStore } from "@/lib/stores/game-store";
+import { useCallback, useState } from "react";
+import { useGameStore, makeMessage } from "@/lib/stores/game-store";
 import { LocationStatus } from "@/types/game";
-import type { CombatState, MasterState, PlayerState } from "@/types/game";
+import type { CombatEvent, CombatState, MasterState, PlayerState } from "@/types/game";
 import {
   executePlayerAction as engineExecute,
   PLAYER_ID,
   type CombatResolutionPayload,
   type PlayerActionInput,
 } from "@/lib/game/combat-engine";
+import { renderRoutineCombatEvent } from "@/lib/game/combat-narration/templates";
 
 /**
  * Day 20 Combat — React hook layer.
@@ -59,35 +60,78 @@ if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
   };
 }
 
+/**
+ * Events whose outcomes get LLM-narrated prose. Everything else
+ * uses the templated pool in lib/game/combat-narration/templates.
+ * Spec §10 + Prompt 3 locked decision.
+ */
+function isDramaticEvent(ev: CombatEvent): boolean {
+  if (ev.type === "combat_start")  return true;
+  if (ev.type === "victory")       return true;
+  if (ev.type === "defeat")        return true;
+  if (ev.type === "flee_success")  return true;
+  if (ev.outcome === "crit")       return true;
+  if (ev.outcome === "kill")       return true;
+  // round_start has no narration — silent.
+  return false;
+}
+
 export function useCombat() {
   const masterState = useGameStore((s) => s.masterState);
   const setMasterState = useGameStore((s) => s.setMasterState);
+  const addMessage = useGameStore((s) => s.addMessage);
+
+  // True while we're awaiting the engine + LLM fetches for the
+  // dramatic events. UI gates the action bar on this so the player
+  // can't submit a second action mid-resolution.
+  const [isResolving, setIsResolving] = useState(false);
 
   /**
    * Submit a player combat action. Resolves through the engine,
-   * applies the resulting state + handles victory/defeat/flee
-   * teleports.
+   * splices state, then walks the emitted events: routine events
+   * get templated story-feed lines instantly, dramatic events
+   * (combat_start/crit/kill/victory/defeat/flee_success) hit the
+   * /api/game/narrate-combat endpoint for prose. The action bar
+   * stays disabled until all narration has landed.
    */
   const submitCombatAction = useCallback(
-    (action: PlayerActionInput) => {
+    async (action: PlayerActionInput) => {
       const state = useGameStore.getState().masterState;
       if (!state || !state.combat?.active) {
         console.warn("[useCombat] submitCombatAction with no active combat — ignored.");
         return;
       }
-      const result = engineExecute({
-        action,
-        state:                  state.combat,
-        player:                 state.player_state,
-        world_genre:            state.metadata.genre,
-        last_settlement_hub_id: state.last_settlement_hub_id,
-        navigation_trail:       state.navigation_trail,
-      });
 
-      const next = applyCombatResult(state, result.newState, result.newPlayer, result.resolution);
-      setMasterState(next);
+      setIsResolving(true);
+      try {
+        const result = engineExecute({
+          action,
+          state:                  state.combat,
+          player:                 state.player_state,
+          world_genre:            state.metadata.genre,
+          last_settlement_hub_id: state.last_settlement_hub_id,
+          navigation_trail:       state.navigation_trail,
+        });
+
+        const next = applyCombatResult(
+          state, result.newState, result.newPlayer, result.resolution
+        );
+        setMasterState(next);
+
+        // Project events into the story feed.
+        await projectCombatEventsToFeed({
+          events:           result.events,
+          combat:           result.newState ?? state.combat,
+          player:           result.newPlayer,
+          world_genre:      String(state.metadata.genre),
+          regionAtmosphere: regionAtmosphereFor(state),
+          addMessage,
+        });
+      } finally {
+        setIsResolving(false);
+      }
     },
-    [setMasterState]
+    [setMasterState, addMessage]
   );
 
   return {
@@ -97,8 +141,133 @@ export function useCombat() {
     isPlayerTurn:
       masterState?.combat?.active === true &&
       masterState.combat.turn_order[masterState.combat.current_turn_index] === PLAYER_ID,
+    /** Engine + narration in flight; action bar should disable. */
+    isResolving,
     submitCombatAction,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Combat events -> story feed projection
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ProjectArgs {
+  events:           CombatEvent[];
+  combat:           CombatState;
+  player:           PlayerState;
+  world_genre:      string;
+  regionAtmosphere: string;
+  addMessage:       (m: ReturnType<typeof makeMessage>) => void;
+}
+
+async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void> {
+  const enemyNameByInstanceId = (id: string): string | undefined =>
+    args.combat.enemies.find((e) => e.instance_id === id)?.name;
+
+  for (const event of args.events) {
+    // Round_start events are silent in the feed (header counter is enough).
+    if (event.type === "round_start") continue;
+
+    if (isDramaticEvent(event)) {
+      // Dramatic — fetch LLM prose, then push.
+      const text = await fetchCombatNarration(event, args);
+      if (text) {
+        args.addMessage(
+          makeMessage("COMBAT", text, makeCombatMessageMetadata(event))
+        );
+      }
+      continue;
+    }
+
+    // Routine — pull a templated line. Falls back to a minimal sentence
+    // if the templates file returns null (defensive against future
+    // event types we haven't added templates for).
+    const itemForTemplate =
+      event.type === "use_item" && event.weapon_or_item
+        ? event.weapon_or_item
+        : undefined;
+    const templated = renderRoutineCombatEvent(event, {
+      enemyName:  enemyNameByInstanceId,
+      playerName: args.player.name,
+      itemName:   itemForTemplate,
+    });
+    if (templated) {
+      args.addMessage(
+        makeMessage("COMBAT", templated, makeCombatMessageMetadata(event))
+      );
+    }
+  }
+}
+
+async function fetchCombatNarration(
+  event: CombatEvent,
+  args:  ProjectArgs
+): Promise<string> {
+  try {
+    const res = await fetch("/api/game/narrate-combat", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        event,
+        combat_context: {
+          player_name:       args.player.name,
+          player_class:      args.player.background,
+          enemies: args.combat.enemies.map((e) => ({
+            name:            e.name,
+            description:     e.description,
+            behavior_flavor: e.behavior_flavor,
+            alive:           e.alive,
+          })),
+          region_atmosphere: args.regionAtmosphere,
+        },
+        genre: args.world_genre,
+      }),
+    });
+    if (!res.ok) {
+      console.error("[useCombat] narrate-combat failed:", await res.text());
+      return fallbackForDramaticEvent(event);
+    }
+    const data = await res.json() as { text?: string };
+    return data.text?.trim() || fallbackForDramaticEvent(event);
+  } catch (err) {
+    console.error("[useCombat] narrate-combat threw:", err);
+    return fallbackForDramaticEvent(event);
+  }
+}
+
+function fallbackForDramaticEvent(event: CombatEvent): string {
+  switch (event.type) {
+    case "combat_start": return "Combat begins.";
+    case "victory":      return "The last foe falls.";
+    case "defeat":       return "Darkness closes in.";
+    case "flee_success": return "You break free.";
+    case "kill":         return "The enemy collapses.";
+    default:
+      if (event.outcome === "crit") return "A critical strike lands.";
+      return "";
+  }
+}
+
+/** StoryMessage metadata payload — StoryFeed reads this to apply
+ *  combat-specific styling per locked decisions §10. */
+function makeCombatMessageMetadata(event: CombatEvent): Record<string, unknown> {
+  return {
+    combat: true,
+    event_type:   event.type,
+    actor:        event.actor,
+    target:       event.target,
+    outcome:      event.outcome,
+    damage_dealt: event.damage_dealt,
+  };
+}
+
+function regionAtmosphereFor(state: MasterState): string {
+  // Look at the current location asset's atmosphere if present;
+  // safe to fall back to "" for the LLM (region context is just a
+  // tonal hint, not a fact source).
+  const wb = state.metadata.world_bible;
+  if (!wb) return "";
+  return wb.starting_region.atmosphere ?? "";
 }
 
 /**

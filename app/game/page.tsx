@@ -13,11 +13,13 @@ import { InventoryPanel } from "@/components/game/sidebar/InventoryPanel";
 import { LogBook } from "@/components/game/sidebar/LogBook";
 import { WorldMap } from "@/components/game/WorldMap";
 import { NavigationBar } from "@/components/game/NavigationBar";
+import { CombatMode } from "@/components/game/CombatMode";
 import { AssetCategory, Genre } from "@/types/game";
 import type { MasterState } from "@/types/game";
 import { createClient } from "@/lib/supabase/client";
 import { useGameStore, makeMessage } from "@/lib/stores/game-store";
 import { useGameLoop } from "@/hooks/useGameLoop";
+import { useCombat } from "@/hooks/useCombat";
 import { getAllWorldAssets, getWorldAssetsForLocation, normalizeLocationId, saveCodexEntry } from "@/lib/game/codex";
 import { formatLocationId } from "@/lib/game/location-formatter";
 
@@ -46,6 +48,8 @@ export default function GamePage() {
   const locationAssets = useGameStore((s) => s.locationAssets);
 
   const { submitAction, navigateTo, isProcessing, processingStep, buyItem, sellItem, openTrade } = useGameLoop();
+  const { combat: activeCombat, isResolving: combatResolving, submitCombatAction } = useCombat();
+  const inCombat = activeCombat?.active === true;
 
   // ── Load session on mount ─────────────────────────────────────────────────
   // Reads ?session_id= from the URL to load a specific save slot.
@@ -141,12 +145,19 @@ export default function GamePage() {
           });
         }
       } else {
-        // Fresh session — show the opening welcome message.
+        // V8.34 (Prompt 3 Task 7) — fresh session preamble. Replaces the
+        // generic "Resuming your adventure" head that was firing on
+        // brand-new games. Two short lines: a SYSTEM divider for the
+        // opening beat + a soft prompt for the player's first input.
         const worldName    = WORLD_NAMES[state.metadata.genre] ?? "World";
         const locationName = formatLocationId(state.world_state.current_location_id);
         store.addMessage(makeMessage("SYSTEM",
           `You are ${state.player_state.name}, a ${state.player_state.background} in the ${worldName}. ` +
-          `Your adventure begins at ${locationName}. What do you do?`
+          `Your adventure begins at ${locationName}.`
+        ));
+        store.addMessage(makeMessage("SYSTEM",
+          "Your adventure begins. What will you do first?",
+          { isFreshGamePreamble: true }
         ));
       }
 
@@ -298,29 +309,41 @@ export default function GamePage() {
             }
           />
           <TradeModal onBuy={buyItem} onSell={sellItem} />
-          {/* Navigation redesign — UI-driven movement strip. Sits between
-              the modals and the InputBar so it's part of the bottom
-              chrome. NavigationBar returns null when there are no
-              connections to display. */}
-          <NavigationBar
-            masterState={masterState}
-            worldGraph={masterState?.world_graph}
-            onNavigate={(nodeId) => navigateTo(nodeId)}
-            genre={genre}
-          />
-          <InputBar
-            ref={inputBarRef}
-            onSubmit={(input) => {
-              // While a dialogue is active (modal visible OR collapsed), pin the
-              // active NPC name so the Intent Parser doesn't have to extract it
-              // from quoted speech. Non-DIALOGUE actions ignore the override
-              // inside submitAction (it only applies when action_type === DIALOGUE).
-              const activeNpc = useGameStore.getState().currentDialogueNpc;
-              void submitAction(input, activeNpc ? { npcName: activeNpc } : undefined);
-            }}
-            disabled={isProcessing}
-            processingStep={processingStep}
-          />
+          {/* V8.34 (Prompt 3 Task 3) — when combat is active, swap the
+              navigation strip + input bar for the CombatMode panel.
+              CombatMode covers more vertical space so the player has
+              room for portraits + HP bars + action buttons; the story
+              feed above it shrinks via flex but stays scrollable. */}
+          {inCombat && activeCombat && masterState ? (
+            <CombatMode
+              combat={activeCombat}
+              player={masterState.player_state}
+              isResolving={combatResolving}
+              onAction={(a) => { void submitCombatAction(a); }}
+            />
+          ) : (
+            <>
+              <NavigationBar
+                masterState={masterState}
+                worldGraph={masterState?.world_graph}
+                onNavigate={(nodeId) => navigateTo(nodeId)}
+                genre={genre}
+              />
+              <InputBar
+                ref={inputBarRef}
+                onSubmit={(input) => {
+                  // While a dialogue is active (modal visible OR collapsed), pin the
+                  // active NPC name so the Intent Parser doesn't have to extract it
+                  // from quoted speech. Non-DIALOGUE actions ignore the override
+                  // inside submitAction (it only applies when action_type === DIALOGUE).
+                  const activeNpc = useGameStore.getState().currentDialogueNpc;
+                  void submitAction(input, activeNpc ? { npcName: activeNpc } : undefined);
+                }}
+                disabled={isProcessing}
+                processingStep={processingStep}
+              />
+            </>
+          )}
         </>
       }
       sidebar={

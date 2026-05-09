@@ -75,6 +75,15 @@
     --hl-pass:     #a3e635;
     --hl-fail:     #f87171;
 
+    /* Day 20 Combat — event color tokens (combat-spec §10) */
+    --combat-player:       #7ab8c8;  /* routine player actions */
+    --combat-enemy:        #e87c6d;  /* routine enemy actions */
+    --combat-player-crit:  #3b82a8;  /* player crit — deeper blue, bold */
+    --combat-enemy-crit:   #c0392b;  /* enemy crit — blood red, bold */
+    --combat-victory:      #7dbb8e;  /* mossy green — victory line */
+    --combat-defeat:       #a93226;  /* dark red — defeat line */
+    --combat-flee:         #a8a29c;  /* dusty grey-tan — flee line */
+
     /* Type stack */
     --serif: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;
     --sans:  'Inter Tight', 'Inter', system-ui, sans-serif;
@@ -317,6 +326,25 @@
 
 .sidebar-slide-in {
   animation: slideInRight 0.25s ease-out both;
+}
+
+/* ── Day 20 Combat — crit portrait shake ───────────────────────────────
+   ~400ms total, 4 oscillations, ~6px amplitude. Applied as a transient
+   class on the combatant's portrait when they take a critical hit. */
+@keyframes combat-portrait-shake {
+  0%   { transform: translateX(0);  }
+  12%  { transform: translateX(-6px); }
+  25%  { transform: translateX(6px);  }
+  37%  { transform: translateX(-5px); }
+  50%  { transform: translateX(5px);  }
+  62%  { transform: translateX(-4px); }
+  75%  { transform: translateX(4px);  }
+  87%  { transform: translateX(-2px); }
+  100% { transform: translateX(0);  }
+}
+
+.combat-portrait-shake {
+  animation: combat-portrait-shake 400ms ease-in-out;
 }
 
 /* ── Art loader scan-line effect ────────────────────────────────────── */

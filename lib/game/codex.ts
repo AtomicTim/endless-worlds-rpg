@@ -291,6 +291,48 @@ export async function saveCodexEntry(
   }
 }
 
+/**
+ * Day 20 Combat — write a bestiary codex entry on first encounter
+ * (combat-spec §6 + Prompt 3 spec).
+ *
+ * One entry per enemy.id (NOT per spawn instance). The description
+ * field carries the formatted block the Codex Bestiary tab renders:
+ *   <enemy.description>
+ *   HP: <min>-<max> · DMG: <die> · First seen: <location_name>
+ *
+ * saveCodexEntry returns { created } from its idempotency
+ * pre-check, so repeat encounters with the same enemy.id resolve
+ * to created=false and the caller can suppress the "added to
+ * codex" toast.
+ */
+export async function writeBestiaryEntry(
+  sessionId: string,
+  enemy: {
+    id:           string;
+    name:         string;
+    description:  string;
+    hp_range:     [number, number];
+    damage_die:   string;
+  },
+  firstSeenLocationId: string,
+  firstSeenLocationName: string
+): Promise<{ created: boolean }> {
+  const description =
+    `${enemy.description}\n\n` +
+    `HP: ${enemy.hp_range[0]}-${enemy.hp_range[1]}\n` +
+    `Damage: ${enemy.damage_die}\n` +
+    `First seen: ${firstSeenLocationName}`;
+
+  return saveCodexEntry(sessionId, {
+    id:                  `bestiary_${enemy.id}`,
+    category:            "BESTIARY",
+    name:                enemy.name,
+    description,
+    first_seen_location: firstSeenLocationId,
+    significance:        "NOTABLE",
+  });
+}
+
 // ── World Asset reads ─────────────────────────────────────────────────────────
 
 /**

@@ -7,7 +7,7 @@ import { resolveAction } from "@/lib/game/logic-resolver";
 import { narrateAction } from "@/lib/game/narrator";
 import { applyStateDelta, addLogEntry, addToInventory, removeFromInventory, updateNPCTrust, findNpcInRegistry, seedNpcRegistry, addNpcToCurrentNode } from "@/lib/game/state-utils";
 import { isNarrativeAction, isEquipIntent, isDropIntent, isReadIntent } from "@/lib/game/action-classifier";
-import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, normalizeLocationId } from "@/lib/game/codex";
+import { saveCodexEntry, saveWorldAsset, getWorldAssetsForLocation, normalizeAssetId, normalizeLocationId, writeBestiaryEntry } from "@/lib/game/codex";
 import { generateLocationStub } from "@/lib/game/location-stub-generator";
 import { findAmbientResponse } from "@/lib/game/ambient-objects";
 import {
@@ -2364,6 +2364,34 @@ export function useGameLoop() {
                 result.enemyNames ?? []
               );
               updatedState = { ...updatedState, combat: result.combat };
+              // Day 20 — bestiary codex entries on first encounter.
+              // One entry per unique enemy.id; saveCodexEntry's
+              // ignoreDuplicates makes repeat encounters a no-op
+              // server-side. Surface a "✦ added to codex" toast
+              // only on the first sighting (created === true).
+              const seenEnemyIds = new Set<string>();
+              for (const inst of result.combat.enemies) {
+                if (seenEnemyIds.has(inst.enemy_id)) continue;
+                seenEnemyIds.add(inst.enemy_id);
+                void writeBestiaryEntry(
+                  sessionId,
+                  {
+                    id:          inst.enemy_id,
+                    name:        inst.name,
+                    description: inst.description,
+                    hp_range:    [inst.max_hp, inst.max_hp],
+                    damage_die:  inst.damage_die,
+                  },
+                  arrivedNode.id,
+                  arrivedNode.name
+                ).then(({ created }) => {
+                  if (created) {
+                    store.addMessage(
+                      makeMessage("SYSTEM", `✦ ${inst.name} added to codex`)
+                    );
+                  }
+                });
+              }
             }
           }
         }

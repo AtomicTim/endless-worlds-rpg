@@ -246,6 +246,25 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
       }
 
       case "SYSTEM": {
+        // V8.34 — soft preamble for fresh games. Italic + low opacity
+        // so it reads as an invitation, not a system event.
+        if (metadata?.isFreshGamePreamble === true) {
+          return (
+            <div
+              className="message-enter ew-serif"
+              style={{
+                fontSize:    14,
+                fontStyle:   "italic",
+                color:       "var(--ink-3)",
+                opacity:     0.85,
+                margin:      "10px 0 18px",
+                lineHeight:  1.5,
+              }}
+            >
+              {content}
+            </div>
+          );
+        }
         // Player action echo — Fix 5: muted teal to mark the player's
         // own input apart from system events / narration.
         if (content.startsWith("> ")) {
@@ -323,21 +342,53 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
         );
       }
 
-      case "COMBAT":
+      case "COMBAT": {
+        // Day 20 Combat — style by event metadata (locked decisions §10).
+        // Fields: combat, event_type, actor, target, outcome.
+        const m = metadata ?? {};
+        const eventType = typeof m.event_type === "string" ? m.event_type : null;
+        const actor     = typeof m.actor === "string" ? m.actor : null;
+        const outcome   = typeof m.outcome === "string" ? m.outcome : null;
+
+        // Event-class buckets:
+        //   victory / defeat / flee_success → 1.5x bold colored line
+        //   crit                              → bold + darker color, ⚔ prefix
+        //   routine                           → normal weight + side color, ⚔ prefix
+        const isVictory = eventType === "victory";
+        const isDefeat  = eventType === "defeat";
+        const isFlee    = eventType === "flee_success";
+        const isHero    = isVictory || isDefeat || isFlee;
+        const isCrit    = outcome === "crit";
+        const isPlayer  = actor === "PLAYER";
+
+        const color = isVictory ? "var(--combat-victory)"
+          : isDefeat ? "var(--combat-defeat)"
+          : isFlee   ? "var(--combat-flee)"
+          : isCrit
+            ? (isPlayer ? "var(--combat-player-crit)" : "var(--combat-enemy-crit)")
+            : (isPlayer ? "var(--combat-player)" : "var(--combat-enemy)");
+
+        const fontSize = isHero ? 19 : 13;
+        const fontWeight = isHero || isCrit ? 700 : 400;
+        const fontStyle  = isHero ? "normal" : "italic";
+
         return (
           <p
             className="message-enter ew-serif"
             style={{
-              color:      "var(--hl-fail)",
-              fontSize:   13,
-              fontStyle:  "italic",
-              margin:     "6px 0",
+              color,
+              fontSize,
+              fontWeight,
+              fontStyle,
+              margin:        isHero ? "10px 0" : "6px 0",
+              letterSpacing: isHero ? "0.04em" : undefined,
             }}
           >
             <span style={{ marginRight: 6 }}>⚔</span>
             {content}
           </p>
         );
+      }
 
       case "DIALOGUE": {
         // NPC speech bubble — design's NPCSpeech component.

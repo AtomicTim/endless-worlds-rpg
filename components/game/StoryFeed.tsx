@@ -343,12 +343,84 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
       }
 
       case "COMBAT": {
-        // Day 20 Combat — style by event metadata (locked decisions §10).
-        // Fields: combat, event_type, actor, target, outcome.
+        // Day 20 / 20.1 Combat — style by event metadata (combat-spec §10
+        // + locked decisions). Fields: combat, event_type, actor,
+        // outcome.
         const m = metadata ?? {};
         const eventType = typeof m.event_type === "string" ? m.event_type : null;
         const actor     = typeof m.actor === "string" ? m.actor : null;
         const outcome   = typeof m.outcome === "string" ? m.outcome : null;
+
+        // Day 20.1 TASK 3 — turn-boundary separators. Subtle, italic,
+        // low-opacity, center-aligned. No ⚔ prefix, no metadata icons.
+        if (
+          eventType === "round_start" ||
+          eventType === "player_turn_start" ||
+          eventType === "enemy_phase_start"
+        ) {
+          return (
+            <div
+              className="message-enter ew-serif"
+              style={{
+                fontSize:      11,
+                fontStyle:     "italic",
+                color:         "var(--ink-2)",
+                opacity:       0.55,
+                textAlign:     "center",
+                letterSpacing: "0.18em",
+                margin:        "10px 0",
+              }}
+            >
+              {content}
+            </div>
+          );
+        }
+
+        // Day 20.1 TASK 2 — encounter banner. Bigger than routine but
+        // smaller than victory/defeat. Bold + italic, center-aligned,
+        // light coral. Optional thin rule above/below for separation.
+        if (eventType === "combat_start") {
+          return (
+            <div
+              className="message-enter"
+              style={{
+                margin:    "12px 0",
+                textAlign: "center",
+              }}
+            >
+              <div
+                style={{
+                  height:     1,
+                  background: "color-mix(in srgb, var(--combat-encounter-banner) 35%, transparent)",
+                  margin:     "0 auto 8px",
+                  maxWidth:   320,
+                }}
+              />
+              <p
+                className="ew-serif"
+                style={{
+                  margin:        0,
+                  color:         "var(--combat-encounter-banner)",
+                  fontSize:      15,
+                  fontWeight:    700,
+                  fontStyle:     "italic",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                <span style={{ marginRight: 6 }}>⚔</span>
+                {content}
+              </p>
+              <div
+                style={{
+                  height:     1,
+                  background: "color-mix(in srgb, var(--combat-encounter-banner) 35%, transparent)",
+                  margin:     "8px auto 0",
+                  maxWidth:   320,
+                }}
+              />
+            </div>
+          );
+        }
 
         // Event-class buckets:
         //   victory / defeat / flee_success → 1.5x bold colored line

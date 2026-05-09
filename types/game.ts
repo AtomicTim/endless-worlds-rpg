@@ -761,6 +761,7 @@ export interface CombatEnemyInstance {
  */
 export interface CombatEvent {
   type:                  | "combat_start" | "round_start"
+                         | "player_turn_start" | "enemy_phase_start"
                          | "player_attack" | "enemy_attack"
                          | "defend"       | "use_item"
                          | "flee_attempt"

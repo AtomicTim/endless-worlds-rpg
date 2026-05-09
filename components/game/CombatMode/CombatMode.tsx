@@ -26,10 +26,15 @@ interface Props {
   player:       PlayerState;
   /** True while the engine is mid-resolution; disables the action bar. */
   isResolving?: boolean;
+  /** Day 20.1 TASK 5 — UI-facing turn phase. Set by useCombat ahead
+   *  of the feed during turn transitions so the header pill is the
+   *  canonical turn indicator. Falls back to the engine's authoritative
+   *  index when omitted (e.g. an old caller). */
+  displayPhase?: "player" | "enemy";
   onAction:     (action: PlayerActionInput) => void;
 }
 
-export function CombatMode({ combat, player, isResolving, onAction }: Props) {
+export function CombatMode({ combat, player, isResolving, displayPhase, onAction }: Props) {
   const [attackTargeting, setAttackTargeting] = useState(false);
   const [showItemPicker,  setShowItemPicker]  = useState(false);
 
@@ -122,26 +127,64 @@ export function CombatMode({ combat, player, isResolving, onAction }: Props) {
       }}
     >
       {/* ── Header ───────────────────────────────────────────────────── */}
-      <div
-        className="ew-mono"
-        style={{
-          padding:        "8px 14px",
-          borderBottom:   "1px solid var(--line)",
-          fontSize:       10,
-          letterSpacing:  "0.32em",
-          color:          "var(--combat-enemy-crit)",
-          fontWeight:     700,
-          textTransform:  "uppercase",
-          display:        "flex",
-          justifyContent: "space-between",
-          alignItems:     "center",
-        }}
-      >
-        <span>⚔ Combat — Round {combat.round_number}</span>
-        <span style={{ color: "var(--ink-4)", fontSize: 9, fontWeight: 400 }}>
-          {isPlayerTurn ? "Your turn" : "Enemy turn..."}
-        </span>
-      </div>
+      {/* Day 20.1 TASK 5 — turn pill is the canonical phase indicator.
+          Reads displayPhase (lagged by useCombat across the drain
+          delays) so it stays in sync with the feed pacing instead
+          of jumping ahead to the engine's auto-resolved index. */}
+      {(() => {
+        const effectivePhase: "player" | "enemy" =
+          displayPhase ?? (isPlayerTurn ? "player" : "enemy");
+        const isPillPlayer = effectivePhase === "player";
+        const pillBg = isPillPlayer
+          ? "color-mix(in srgb, var(--combat-player) 28%, var(--bg-2))"
+          : "color-mix(in srgb, var(--combat-enemy) 28%, var(--bg-2))";
+        const pillBorder = isPillPlayer
+          ? "var(--combat-player)"
+          : "var(--combat-enemy)";
+        const pillColor = isPillPlayer
+          ? "var(--combat-player)"
+          : "var(--combat-enemy)";
+        const pillLabel = isPillPlayer ? "Your turn" : "Enemy turn";
+        return (
+          <div
+            className="ew-mono"
+            style={{
+              padding:        "8px 14px",
+              borderBottom:   "1px solid var(--line)",
+              fontSize:       10,
+              letterSpacing:  "0.32em",
+              color:          "var(--combat-enemy-crit)",
+              fontWeight:     700,
+              textTransform:  "uppercase",
+              display:        "flex",
+              justifyContent: "space-between",
+              alignItems:     "center",
+              gap:            10,
+            }}
+          >
+            <span>⚔ Combat — Round {combat.round_number}</span>
+            <span
+              role="status"
+              aria-live="polite"
+              style={{
+                fontFamily:     "var(--mono)",
+                fontSize:       11,
+                letterSpacing:  "0.24em",
+                fontWeight:     700,
+                textTransform:  "uppercase",
+                padding:        "4px 10px",
+                borderRadius:   3,
+                background:     pillBg,
+                border:         `1px solid ${pillBorder}`,
+                color:          pillColor,
+                transition:     "background 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out",
+              }}
+            >
+              {pillLabel}
+            </span>
+          </div>
+        );
+      })()}
 
       {/* ── Roster (player | divider | enemies) ───────────────────── */}
       <div

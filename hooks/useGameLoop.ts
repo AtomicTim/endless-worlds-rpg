@@ -20,6 +20,7 @@ import {
 import { rollEncounterWithPlayer, shouldRollEncounter } from "@/lib/game/combat-engine";
 import { consumeForcedEncounter } from "@/hooks/useCombat";
 import { isRegionAlreadyExpanded } from "@/lib/game/region-expansion-guard";
+import { renderRoutineCombatEvent } from "@/lib/game/combat-narration/templates";
 import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { DialogueOption, Item, MasterState, ParsedAction, RegionBible, RegionOutline, ResolutionResult, StoredMessage, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
 
@@ -2364,6 +2365,31 @@ export function useGameLoop() {
                 result.enemyNames ?? []
               );
               updatedState = { ...updatedState, combat: result.combat };
+
+              // Day 20.1 TASK 2 — push the templated encounter banner
+              // into the story feed. combat_start lives in combat_log
+              // but isn't part of any executePlayerAction batch (the
+              // engine emits it from rollEncounter), so the regular
+              // useCombat drain never sees it. Render here at the
+              // moment combat begins.
+              const combatStartEvent = result.combat.combat_log.find(
+                (e) => e.type === "combat_start"
+              );
+              if (combatStartEvent) {
+                const banner = renderRoutineCombatEvent(combatStartEvent, {
+                  enemyNames:   result.combat.enemies.map((e) => e.name),
+                  locationName: arrivedNode.name,
+                });
+                if (banner) {
+                  store.addMessage(makeMessage("COMBAT", banner, {
+                    combat:     true,
+                    event_type: "combat_start",
+                    actor:      "PLAYER",
+                    target:     null,
+                    outcome:    null,
+                  }));
+                }
+              }
               // Day 20 — bestiary codex entries on first encounter.
               // One entry per unique enemy.id; saveCodexEntry's
               // ignoreDuplicates makes repeat encounters a no-op

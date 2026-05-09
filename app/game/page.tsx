@@ -48,7 +48,12 @@ export default function GamePage() {
   const locationAssets = useGameStore((s) => s.locationAssets);
 
   const { submitAction, navigateTo, isProcessing, processingStep, buyItem, sellItem, openTrade } = useGameLoop();
-  const { combat: activeCombat, isResolving: combatResolving, submitCombatAction } = useCombat();
+  const {
+    combat:           activeCombat,
+    isResolving:      combatResolving,
+    displayPhase:     combatDisplayPhase,
+    submitCombatAction,
+  } = useCombat();
   const inCombat = activeCombat?.active === true;
 
   // ── Load session on mount ─────────────────────────────────────────────────
@@ -319,6 +324,7 @@ export default function GamePage() {
               combat={activeCombat}
               player={masterState.player_state}
               isResolving={combatResolving}
+              displayPhase={combatDisplayPhase}
               onAction={(a) => { void submitCombatAction(a); }}
             />
           ) : (

@@ -29,9 +29,23 @@ export function renderRoutineCombatEvent(
     playerName?: string;
     /** Item display name for use_item events. */
     itemName?:  string;
+    /** combat_start: list of names of every spawned enemy, in order. */
+    enemyNames?: string[];
+    /** combat_start / encounter banner: human-readable location name. */
+    locationName?: string;
+    /** round_start: 1-based round counter. */
+    roundNumber?: number;
   } = {}
 ): string | null {
   switch (event.type) {
+    case "combat_start":
+      return renderCombatStart(context);
+    case "round_start":
+      return renderRoundSeparator(context.roundNumber);
+    case "player_turn_start":
+      return "─── Your turn ───";
+    case "enemy_phase_start":
+      return "─── Enemies' turn ───";
     case "player_attack": {
       const targetId = event.target;
       const resolved =
@@ -58,6 +72,53 @@ export function renderRoutineCombatEvent(
     default:
       return null;
   }
+}
+
+// ── combat_start banner (Day 20.1 TASK 2) ──────────────────────────────────
+
+/**
+ * Build the encounter banner from a list of enemy names + optional
+ * location name. Templated (not LLM) per locked design — at the
+ * moment of "what's happening?" the player wants clarity, not
+ * flavor. Format:
+ *   1 enemy:    "You encounter X at <location>."
+ *   2 enemies:  "You encounter X and Y at <location>."
+ *   3+ enemies: "You encounter X, Y, and Z at <location>."
+ *   no location: drop the " at <location>" suffix.
+ */
+function renderCombatStart(ctx: {
+  enemyNames?:   string[];
+  locationName?: string;
+}): string {
+  const names = ctx.enemyNames ?? [];
+  const where = ctx.locationName?.trim();
+  const list = formatEnemyList(names);
+  if (!list) {
+    // No names supplied — defensive default. Combat still renders
+    // with a generic banner instead of an empty line.
+    return where ? `You encounter foes at ${where}.` : "Foes appear.";
+  }
+  return where
+    ? `You encounter ${list} at ${where}.`
+    : `You encounter ${list}.`;
+}
+
+function formatEnemyList(names: string[]): string {
+  if (names.length === 0) return "";
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  // 3+ — Oxford-comma list.
+  const head = names.slice(0, -1).join(", ");
+  const tail = names[names.length - 1];
+  return `${head}, and ${tail}`;
+}
+
+function renderRoundSeparator(round: number | undefined): string {
+  if (typeof round === "number" && round > 0) {
+    return `─── Round ${round} ───`;
+  }
+  // Fallback when round number wasn't threaded through.
+  return "─── New round ───";
 }
 
 // ── Variant pools ──────────────────────────────────────────────────────────

@@ -621,6 +621,24 @@ export function executePlayerAction({
   // Advance turn pointer, then auto-resolve enemy turns until player's turn or end.
   const advanced = advanceTurn(s);
   s = appendEvents(advanced.state, advanced.events);
+  events.push(...advanced.events);
+
+  // Day 20.1 TASK 3 — emit enemy_phase_start when control transitions
+  // to an enemy phase. Used by useCombat for the 800ms pacing pause +
+  // by templates.ts for the "─── Enemies' turn ───" separator.
+  // Skipped when combat already ended (victory/defeat — defensive;
+  // shouldn't reach here in those cases).
+  const isEnemyNext = s.turn_order[s.current_turn_index] !== PLAYER_ID;
+  const enemyPhaseHappened = isEnemyNext && !checkVictory(s) && !checkDefeat(p);
+  if (enemyPhaseHappened) {
+    const phaseEvent = makeEvent({
+      type:   "enemy_phase_start",
+      actor:  PLAYER_ID,
+      target: null,
+    });
+    s = appendEvents(s, [phaseEvent]);
+    events.push(phaseEvent);
+  }
 
   while (s.turn_order[s.current_turn_index] !== PLAYER_ID && !checkVictory(s) && !checkDefeat(p)) {
     const enemyTurn = advanceEnemyTurn({
@@ -647,6 +665,26 @@ export function executePlayerAction({
   // ran a full round of enemy turns under the defend buff — clear it.
   if (s.turn_order[s.current_turn_index] === PLAYER_ID && s.player_defending) {
     s = { ...s, player_defending: false };
+  }
+
+  // Day 20.1 TASK 3 — emit player_turn_start when control returns to
+  // the player AFTER an enemy phase actually fired. If isEnemyNext was
+  // false (player got initiative twice in a row, or the loop didn't
+  // execute), there was no enemy phase to separate from — skip the
+  // separator. Also skipped on victory/defeat (combat won't continue).
+  if (
+    enemyPhaseHappened &&
+    s.turn_order[s.current_turn_index] === PLAYER_ID &&
+    !checkVictory(s) &&
+    !checkDefeat(p)
+  ) {
+    const phaseEvent = makeEvent({
+      type:   "player_turn_start",
+      actor:  PLAYER_ID,
+      target: null,
+    });
+    s = appendEvents(s, [phaseEvent]);
+    events.push(phaseEvent);
   }
 
   return { newState: s, newPlayer: p, events };

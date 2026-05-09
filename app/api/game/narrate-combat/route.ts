@@ -115,17 +115,22 @@ engine's values are final.`;
 }
 
 const FALLBACK_TEXT_BY_TYPE: Record<CombatEvent["type"], string> = {
-  combat_start:  "Steel meets the air. Combat begins.",
-  round_start:   "",
-  player_attack: "You strike — and connect.",
-  enemy_attack:  "The enemy lands a blow.",
-  defend:        "You raise your guard.",
-  use_item:      "You use an item.",
-  flee_attempt:  "You move to disengage.",
-  kill:          "The enemy collapses, lifeless.",
-  victory:       "The last foe falls. The clearing is yours.",
-  defeat:        "Darkness closes in. You fall.",
-  flee_success:  "You break free into the open.",
+  combat_start:      "Steel meets the air. Combat begins.",
+  round_start:       "",
+  // Day 20.1 — turn-boundary separators are templated client-side; the
+  // narrate-combat route never sees them, but the Record must cover
+  // every CombatEvent.type for type completeness.
+  player_turn_start: "",
+  enemy_phase_start: "",
+  player_attack:     "You strike — and connect.",
+  enemy_attack:      "The enemy lands a blow.",
+  defend:            "You raise your guard.",
+  use_item:          "You use an item.",
+  flee_attempt:      "You move to disengage.",
+  kill:              "The enemy collapses, lifeless.",
+  victory:           "The last foe falls. The clearing is yours.",
+  defeat:            "Darkness closes in. You fall.",
+  flee_success:      "You break free into the open.",
 };
 
 export async function POST(request: NextRequest) {

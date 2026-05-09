@@ -189,10 +189,11 @@ describe("variant determinism", () => {
   });
 });
 
+// Day 20.1 — combat_start is now templated (banner). round_start /
+// player_turn_start / enemy_phase_start are templated separators.
+// Only victory / defeat / kill stay LLM-only.
+
 describe("non-routine events return null", () => {
-  it("combat_start", () => {
-    expect(renderRoutineCombatEvent(makeEvent({ type: "combat_start" }))).toBeNull();
-  });
   it("victory", () => {
     expect(renderRoutineCombatEvent(makeEvent({ type: "victory" }))).toBeNull();
   });
@@ -202,7 +203,100 @@ describe("non-routine events return null", () => {
   it("kill", () => {
     expect(renderRoutineCombatEvent(makeEvent({ type: "kill", outcome: "kill" }))).toBeNull();
   });
-  it("round_start", () => {
-    expect(renderRoutineCombatEvent(makeEvent({ type: "round_start" }))).toBeNull();
+});
+
+// Day 20.1 TASK 2 — combat_start banner.
+
+describe("renderRoutineCombatEvent — combat_start banner (Day 20.1 TASK 2)", () => {
+  it("1 enemy with location: 'You encounter X at <loc>.'", () => {
+    const out = renderRoutineCombatEvent(
+      makeEvent({ type: "combat_start" }),
+      { enemyNames: ["Goblin"], locationName: "The Thorned Cloister" }
+    );
+    expect(out).toBe("You encounter Goblin at The Thorned Cloister.");
+  });
+
+  it("2 enemies with location: '... and ... at <loc>.'", () => {
+    const out = renderRoutineCombatEvent(
+      makeEvent({ type: "combat_start" }),
+      { enemyNames: ["Goblin", "Skeleton"], locationName: "The Thorned Cloister" }
+    );
+    expect(out).toBe("You encounter Goblin and Skeleton at The Thorned Cloister.");
+  });
+
+  it("3+ enemies with location: Oxford-comma list at <loc>.", () => {
+    const out = renderRoutineCombatEvent(
+      makeEvent({ type: "combat_start" }),
+      { enemyNames: ["Goblin", "Skeleton", "Orc"], locationName: "The Thorned Cloister" }
+    );
+    expect(out).toBe("You encounter Goblin, Skeleton, and Orc at The Thorned Cloister.");
+  });
+
+  it("4+ enemies with location: Oxford-comma list with full chain", () => {
+    const out = renderRoutineCombatEvent(
+      makeEvent({ type: "combat_start" }),
+      {
+        enemyNames:   ["Goblin", "Skeleton", "Orc", "Bandit"],
+        locationName: "The Thorned Cloister",
+      }
+    );
+    expect(out).toBe("You encounter Goblin, Skeleton, Orc, and Bandit at The Thorned Cloister.");
+  });
+
+  it("drops the 'at <location>' suffix when location_name is omitted", () => {
+    const out = renderRoutineCombatEvent(
+      makeEvent({ type: "combat_start" }),
+      { enemyNames: ["Goblin"] }
+    );
+    expect(out).toBe("You encounter Goblin.");
+  });
+
+  it("drops the suffix when location_name is empty / whitespace", () => {
+    const out = renderRoutineCombatEvent(
+      makeEvent({ type: "combat_start" }),
+      { enemyNames: ["Goblin"], locationName: "   " }
+    );
+    expect(out).toBe("You encounter Goblin.");
+  });
+
+  it("falls back to a generic banner when no enemy names supplied", () => {
+    // Defensive — combat_start should always carry names, but the
+    // template doesn't crash if it doesn't.
+    const out = renderRoutineCombatEvent(
+      makeEvent({ type: "combat_start" }),
+      { locationName: "The Thorned Cloister" }
+    );
+    expect(out).toBe("You encounter foes at The Thorned Cloister.");
+  });
+});
+
+// Day 20.1 TASK 3 — turn-boundary separators.
+
+describe("renderRoutineCombatEvent — turn separators (Day 20.1 TASK 3)", () => {
+  it("player_turn_start renders the 'Your turn' separator", () => {
+    expect(
+      renderRoutineCombatEvent(makeEvent({ type: "player_turn_start" }))
+    ).toBe("─── Your turn ───");
+  });
+
+  it("enemy_phase_start renders the 'Enemies' turn' separator", () => {
+    expect(
+      renderRoutineCombatEvent(makeEvent({ type: "enemy_phase_start" }))
+    ).toBe("─── Enemies' turn ───");
+  });
+
+  it("round_start renders 'Round N' when roundNumber is supplied", () => {
+    expect(
+      renderRoutineCombatEvent(
+        makeEvent({ type: "round_start" }),
+        { roundNumber: 2 }
+      )
+    ).toBe("─── Round 2 ───");
+  });
+
+  it("round_start falls back to 'New round' without a number", () => {
+    expect(
+      renderRoutineCombatEvent(makeEvent({ type: "round_start" }))
+    ).toBe("─── New round ───");
   });
 });

@@ -2,118 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createNewMasterState } from "@/lib/game/state-factory";
 import { saveMasterState } from "@/lib/game/state-persistence";
-import { Genre, Difficulty, ItemType, ItemRarity } from "@/types/game";
-import type { Attributes, Item } from "@/types/game";
+import { Genre, Difficulty } from "@/types/game";
+import type { Attributes } from "@/types/game";
+import { BACKGROUND_CONFIGS, buildItem } from "@/lib/game/starting-equipment";
 
-interface BackgroundConfig {
-  bonusAttribute: keyof Attributes;
-  startingItemName: string;
-  startingItemType: ItemType;
-  startingItemDescription: string;
-}
-
-const BACKGROUND_CONFIGS: Record<Genre, Record<string, BackgroundConfig>> = {
-  [Genre.FANTASY]: {
-    knight: {
-      bonusAttribute: "strength",
-      startingItemName: "Iron Sword",
-      startingItemType: ItemType.WEAPON,
-      startingItemDescription: "A well-balanced iron sword, worn but reliable.",
-    },
-    rogue: {
-      bonusAttribute: "agility",
-      startingItemName: "Lockpicks",
-      startingItemType: ItemType.KEY,
-      startingItemDescription: "A set of delicate picks. Not many doors remain closed to you.",
-    },
-    mage: {
-      bonusAttribute: "intelligence",
-      startingItemName: "Spell Tome",
-      startingItemType: ItemType.LORE,
-      startingItemDescription: "A tome of basic arcane knowledge. The ink seems to shift when unobserved.",
-    },
-  },
-  [Genre.CYBERPUNK]: {
-    netrunner: {
-      bonusAttribute: "intelligence",
-      startingItemName: "Neural Deck",
-      startingItemType: ItemType.WEAPON,
-      startingItemDescription: "A jury-rigged interface deck. It still jacks in.",
-    },
-    fixer: {
-      bonusAttribute: "charisma",
-      startingItemName: "Burner Phone",
-      startingItemType: ItemType.KEY,
-      startingItemDescription: "Pre-loaded with a dozen untraceable contacts. Handle with care.",
-    },
-    street_samurai: {
-      bonusAttribute: "agility",
-      startingItemName: "Katana",
-      startingItemType: ItemType.WEAPON,
-      startingItemDescription: "A mono-edged blade. Old world steel. Doesn't need batteries.",
-    },
-  },
-  [Genre.HORROR_LOVECRAFTIAN]: {
-    investigator: {
-      bonusAttribute: "intelligence",
-      startingItemName: "Case Notes",
-      startingItemType: ItemType.LORE,
-      startingItemDescription: "Pages of investigation notes. The last entry trails off mid-sentence.",
-    },
-    cultist: {
-      bonusAttribute: "perception",
-      startingItemName: "Forbidden Text",
-      startingItemType: ItemType.LORE,
-      startingItemDescription: "A fragment of a text that should not exist. Reading it costs something.",
-    },
-    survivor: {
-      bonusAttribute: "strength",
-      startingItemName: "Makeshift Club",
-      startingItemType: ItemType.WEAPON,
-      startingItemDescription: "Table leg, nails, duct tape. It works.",
-    },
-  },
-  [Genre.SPACE_OPERA]: {
-    commander: {
-      bonusAttribute: "charisma",
-      startingItemName: "Command Badge",
-      startingItemType: ItemType.KEY,
-      startingItemDescription: "Worn insignia of rank. Doors open. Crews listen. Sometimes.",
-    },
-    pilot: {
-      bonusAttribute: "agility",
-      startingItemName: "Nav Charts",
-      startingItemType: ItemType.LORE,
-      startingItemDescription: "Star charts of the outer sectors. Several routes are marked unsafe.",
-    },
-    engineer: {
-      bonusAttribute: "intelligence",
-      startingItemName: "Engineer's Toolkit",
-      startingItemType: ItemType.KEY,
-      startingItemDescription: "Multi-tool with calibrated instruments. You can fix almost anything.",
-    },
-  },
-  [Genre.POST_APOCALYPTIC]: {
-    scavenger: {
-      bonusAttribute: "perception",
-      startingItemName: "Scrap Tool",
-      startingItemType: ItemType.KEY,
-      startingItemDescription: "A repurposed multi-tool salvaged from the ruins. Worth its weight.",
-    },
-    raider: {
-      bonusAttribute: "strength",
-      startingItemName: "Pipe Wrench",
-      startingItemType: ItemType.WEAPON,
-      startingItemDescription: "Heavy. Durable. Persuasive.",
-    },
-    medic: {
-      bonusAttribute: "intelligence",
-      startingItemName: "First Aid Kit",
-      startingItemType: ItemType.CONSUMABLE,
-      startingItemDescription: "Half-depleted but still useful. Bandages, antibiotics, a tourniquet.",
-    },
-  },
-};
+/**
+ * Day 20.1 — combat-functional starting equipment now lives in
+ * lib/game/starting-equipment.ts (Next.js App Router routes can only
+ * export HTTP handlers + a small whitelist of config symbols).
+ */
 
 interface NewGameBody {
   genre: Genre;
@@ -167,22 +64,16 @@ export async function POST(request: NextRequest) {
   // Override default attributes with player's chosen distribution
   state.player_state.attributes = { ...attributes };
 
-  // Apply background bonus and add starting item
+  // Apply background bonus and add starting items.
   const bgConfig = BACKGROUND_CONFIGS[genre]?.[background];
   if (bgConfig) {
-    const attr = bgConfig.bonusAttribute;
-    state.player_state.attributes[attr] = Math.min(10, state.player_state.attributes[attr] + 2);
-
-    const startingItem: Item = {
-      id:          crypto.randomUUID(),
-      name:        bgConfig.startingItemName,
-      type:        bgConfig.startingItemType,
-      rarity:      ItemRarity.COMMON,
-      description: bgConfig.startingItemDescription,
-      quantity:    1,
-      stackable:   bgConfig.startingItemType === ItemType.CONSUMABLE,
-    };
-    state.player_state.inventory.push(startingItem);
+    state.player_state.attributes[bgConfig.bonusAttribute] = Math.min(
+      10,
+      state.player_state.attributes[bgConfig.bonusAttribute] + 2
+    );
+    for (const spec of bgConfig.startingItems) {
+      state.player_state.inventory.push(buildItem(spec));
+    }
   }
 
   const sessionId = state.metadata.session_id;

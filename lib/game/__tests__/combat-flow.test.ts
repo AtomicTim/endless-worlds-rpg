@@ -296,6 +296,127 @@ describe("integration: defend halves incoming damage", () => {
 });
 
 // ===========================================================================
+// Day 20.1 TASK 3 — turn-boundary phase events
+// ===========================================================================
+
+describe("phase events: enemy_phase_start + player_turn_start (Day 20.1)", () => {
+  it("emits enemy_phase_start after a player action when enemies remain", () => {
+    // 1 goblin, full HP. Player attacks but doesn't kill.
+    // Player rolls d20=14 (hit), d8=1 → damage 3 (str_mod 2). Goblin
+    // hp 8 → 5. Survives. Loop should advance into enemy phase.
+    const combat = makeCombatState([
+      makeEnemy("g1", { current_hp: 8, max_hp: 8 }),
+    ]);
+    const player = makePlayer();
+    // Sequence: player attack d20+dmg, then enemy attack.
+    const rng = seqRng([0.65, 0.0, 0.5, 0.5]);
+
+    const result = executePlayerAction({
+      action:      { action: "attack", target_instance_id: "g1" },
+      state:       combat,
+      player,
+      world_genre: Genre.FANTASY,
+      rng,
+    });
+
+    const types = result.events.map((e) => e.type);
+    expect(types).toContain("enemy_phase_start");
+  });
+
+  it("emits player_turn_start after enemy phase when control returns to player", () => {
+    const combat = makeCombatState([
+      makeEnemy("g1", { current_hp: 8, max_hp: 8 }),
+    ]);
+    const player = makePlayer();
+    const rng = seqRng([0.65, 0.0, 0.5, 0.5]);
+
+    const result = executePlayerAction({
+      action:      { action: "attack", target_instance_id: "g1" },
+      state:       combat,
+      player,
+      world_genre: Genre.FANTASY,
+      rng,
+    });
+
+    const types = result.events.map((e) => e.type);
+    expect(types).toContain("player_turn_start");
+    // Order: enemy_phase_start must precede player_turn_start.
+    const enemyIdx  = types.indexOf("enemy_phase_start");
+    const playerIdx = types.indexOf("player_turn_start");
+    expect(enemyIdx).toBeGreaterThanOrEqual(0);
+    expect(playerIdx).toBeGreaterThan(enemyIdx);
+  });
+
+  it("does NOT emit phase events on victory (combat ends — no next phase)", () => {
+    // Goblin has 1 HP — single attack kills it.
+    const combat = makeCombatState([
+      makeEnemy("g1", { current_hp: 1, max_hp: 1 }),
+    ]);
+    const player = makePlayer();
+    // Crit: d20=20, then crit's bonus die (1d8 max + 1d8 + str = 8+8+2 = 18)
+    const rng = seqRng([0.95, 0.95]);
+
+    const result = executePlayerAction({
+      action:      { action: "attack", target_instance_id: "g1" },
+      state:       combat,
+      player,
+      world_genre: Genre.FANTASY,
+      rng,
+    });
+
+    expect(result.resolution?.kind).toBe("victory");
+    const types = result.events.map((e) => e.type);
+    expect(types).not.toContain("enemy_phase_start");
+    expect(types).not.toContain("player_turn_start");
+  });
+
+  it("does NOT emit phase events on defeat (combat ends in enemy phase)", () => {
+    const combat = makeCombatState([makeEnemy("g1")]);
+    const player = makePlayer({ health: 1, xp: 100 });
+    // Player fumble, then enemy crit lethal.
+    const rng = seqRng([0.0, 0.95, 0.95]);
+
+    const result = executePlayerAction({
+      action:                 { action: "attack", target_instance_id: "g1" },
+      state:                  combat,
+      player,
+      world_genre:            Genre.FANTASY,
+      last_settlement_hub_id: "settlement",
+      rng,
+    });
+
+    expect(result.resolution?.kind).toBe("defeat");
+    const types = result.events.map((e) => e.type);
+    // enemy_phase_start fires before the enemy turn that kills the
+    // player — that's correct (the phase did happen). But
+    // player_turn_start MUST NOT appear: control never returned to
+    // the player.
+    expect(types).not.toContain("player_turn_start");
+  });
+
+  it("does NOT emit phase events on successful flee (combat ends mid-action)", () => {
+    const combat = makeCombatState([makeEnemy("g1")]);
+    const player = makePlayer();
+    // d20 = 20 (0.95). Player AGI mod = +2. flee_roll = 22. dc = 11. Success.
+    const rng = seqRng([0.95]);
+
+    const result = executePlayerAction({
+      action:           { action: "flee" },
+      state:            combat,
+      player,
+      world_genre:      Genre.FANTASY,
+      navigation_trail: ["origin_a", "origin_b", "the_thorned_cloister"],
+      rng,
+    });
+
+    expect(result.resolution?.kind).toBe("flee_success");
+    const types = result.events.map((e) => e.type);
+    expect(types).not.toContain("enemy_phase_start");
+    expect(types).not.toContain("player_turn_start");
+  });
+});
+
+// ===========================================================================
 // rollEncounter -> executePlayerAction wiring
 // ===========================================================================
 

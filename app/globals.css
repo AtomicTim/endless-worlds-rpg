@@ -76,13 +76,14 @@
     --hl-fail:     #f87171;
 
     /* Day 20 Combat — event color tokens (combat-spec §10) */
-    --combat-player:       #7ab8c8;  /* routine player actions */
-    --combat-enemy:        #e87c6d;  /* routine enemy actions */
-    --combat-player-crit:  #3b82a8;  /* player crit — deeper blue, bold */
-    --combat-enemy-crit:   #c0392b;  /* enemy crit — blood red, bold */
-    --combat-victory:      #7dbb8e;  /* mossy green — victory line */
-    --combat-defeat:       #a93226;  /* dark red — defeat line */
-    --combat-flee:         #a8a29c;  /* dusty grey-tan — flee line */
+    --combat-player:           #7ab8c8;  /* routine player actions */
+    --combat-enemy:            #e87c6d;  /* routine enemy actions */
+    --combat-player-crit:      #3b82a8;  /* player crit — deeper blue, bold */
+    --combat-enemy-crit:       #c0392b;  /* enemy crit — blood red, bold */
+    --combat-victory:          #7dbb8e;  /* mossy green — victory line */
+    --combat-defeat:           #a93226;  /* dark red — defeat line */
+    --combat-flee:             #a8a29c;  /* dusty grey-tan — flee line */
+    --combat-encounter-banner: #f4a07a;  /* light coral — combat_start banner (Day 20.1) */
 
     /* Type stack */
     --serif: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;

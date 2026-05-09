@@ -1,16 +1,16 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.30
-**Status:** Active Development — Movement Track Frozen, Combat System Next
+**Version:** 8.31
+**Status:** Active Development — Combat Day 20, Prompt 1/3 (Data Foundation) Complete
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
-**Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions.
+**Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions. /docs/combat-spec.md — The authoritative source for combat system design.
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Movement track is functional end-to-end (multi-region travel, descriptions, dialogue, cache pipeline all working). Three minor polish items deferred to bundle with combat work. → combat system (Day 20).
+**Current Phase:** Combat Day 20, Prompt 1 of 3 complete (data foundation). Combat resolver math + encounter triggers up next (Prompt 2). Combat UI follows (Prompt 3).
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -33,8 +33,11 @@
 | Targeted Fix Round (dc5bcd8) | Region travel 500, region zone description | ✅ Complete |
 | Polish Round (b7032f9) | Tier-aware highlight colors, NPC speech, region cards, key warnings | ✅ Complete |
 | Region/Resilience Round (87c89a3) | Region desc from any node, default tier, landmark color, origin region card, RegionBible stub fallback | ✅ Complete |
-| **Movement Track** | **Verified end-to-end through multi-region playtest** | ✅ **FROZEN — minor polish bundled into combat round** |
-| 20 | Combat System | ⏳ Next |
+| Movement Track | Verified end-to-end through multi-region playtest | ✅ FROZEN |
+| Combat Spec | /docs/combat-spec.md design doc | ✅ Frozen |
+| **20 — Combat Prompt 1/3** | **Data foundation: enemy types, bestiary, generation, encounter tagging** | ✅ **Complete (commit 1024287)** |
+| 20 — Combat Prompt 2/3 | Resolver math + encounter triggers + turn loop | ⏳ Next |
+| 20 — Combat Prompt 3/3 | Combat mode UI + narration integration | ⏳ Pending |
 | Map Visual Rework | Dedicated session | ⏳ Deferred (post-combat) |
 | 21 | Container + Loot | ⏳ Pending |
 | 22 | Skills + Leveling | ⏳ Pending |
@@ -42,6 +45,58 @@
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir removed. Genre renderers restored (pickModule re-enabled).**
+
+### Combat Day 20 — Prompt 1/3: Data Foundation (commit 1024287 — 72/72 tests, clean build)
+
+**Authoritative spec:** /docs/combat-spec.md (locked at V8.30 design pass).
+
+**Task 1 — Enemy types in types/game.ts:**
+- New `Enemy` interface (combat-spec §6.2): id, name, description, hp_range, agi_mod, str_mod, damage_die, armor_bonus, xp_value, loot_table_id, is_boss, behavior_flavor.
+- `LocationDefinition` extended with optional `encounter_chance`, `encounter_roster`, `is_boss_room` (§3 / §6.7).
+- `WorldNode` mirrors the same three encounter fields so combat triggers (Prompt 2) read straight from the graph.
+- `RegionBible.enemies?: Enemy[]` and `RegionOutline.enemies?: Enemy[]` added.
+- `Metadata.region_bibles?: Record<string, RegionBible>` added — accumulates expanded RegionBibles so combat triggers can resolve enemies for any region.
+
+**Task 2 — Bestiary files:**
+- `/lib/game/bestiary/fantasy.ts` — all 14 entries from spec §6.4 verbatim (giant rat → dragon whelp). Stats, dice, xp, armor match the table. Descriptions are 1 sentence each. `is_boss: false` on all 14. `loot_table_id` follows `<id>_loot` stub pattern.
+- `/lib/game/bestiary/cyber.ts`, `horror.ts`, `space.ts`, `apoc.ts` — 3 placeholder enemies each, themed appropriately (street_thug / security_drone / gang_enforcer; shambling_thrall / void_whisperer / flesh_construct; hostile_drone / rogue_synthetic / void_predator; feral_scavenger / rad_zombie / raider_chief). Stats roughly map to the Fantasy ladder.
+- `/lib/game/bestiary/index.ts` — `getGenreBestiary(genre)` and `findGenreEnemy(genre, id)` helpers. Returns `[]` for unknown genres.
+
+**Task 3 — WorldBible LLM prompt extension:**
+- Added `enemies` array to `starting_region` template (3-5) and to each `adjacent_region` outline template (1-2).
+- New "DAY 20 COMBAT" instruction block at the end of the prompt covering id prefix, hp ranges, mod ranges, allowed dice, xp range, behavior_flavor format, is_boss policy, loot_table_id stub pattern.
+- New "ENCOUNTER TAGGING" block for combat-eligible locations with worked example.
+- max_tokens bumped 8000 → 10000.
+
+**Task 4 — apply-world-bible persistence:**
+- New `validateEnemy` / `validateEnemies` helpers. Warn-don't-500 on malformed entries.
+- New `scrubEncounterRoster` helper that strips ids unresolvable against (genre bestiary ∪ region enemies ∪ adjacent-region outline enemies).
+- Encounter fields mirrored onto every `WorldNode` in steps 4a (settlement-side) and 4b (region_locations).
+- Persistence: WorldBible enemies live inside the `world_bible` jsonb blob. No schema migration needed; rides along automatically.
+
+**Task 5 — RegionBible parity:**
+- Same prompt extensions for region-themed enemies + encounter tagging on the standalone region_location.
+- Same validate-enemy + scrub-roster helpers in apply, mirrored onto graph nodes.
+- New `master_state.metadata.region_bibles[regionId]` accumulator — stores each expanded RegionBible so combat triggers can resolve enemies for any region.
+- max_tokens bumped 6000 → 7000.
+- Stub fallback bible now includes `enemies: []` (combat falls through to genre bestiary on stub regions).
+
+**Task 6 — Stub loot drops:**
+- `/lib/game/loot/stub-drops.ts` — `rollStubDrops(enemy, rng?)` returns `{ gold, items }`.
+- 25-50% gold drop chance, scaled linearly with xp_value. Gold amount = 1d6 + xp/10.
+- 5% chance of `consumable_basic_health_potion`.
+- Optional injectable RNG for tests; defaults to `Math.random`.
+- Not called yet — Prompt 2's combat resolver will wire it.
+
+**Task 7 — Tests:**
+- 29 new tests, 72 total passing.
+- `fantasy.test.ts` — 14 entries, no duplicate ids, hp ranges valid, damage_die format + allowed-set, mod / armor / xp bounds, is_boss false, loot_table_id pattern, monotonic xp ladder, compile-time Enemy probe.
+- `index.test.ts` — `getGenreBestiary` returns correct array per genre, `[]` for unknown / undefined, placeholder bestiaries ≥3 entries, `findGenreEnemy` positive + negative cases.
+- `stub-drops.test.ts` — deterministic seqRng cases for each branch, 5000-sample sweep on goblin (xp 25 → ~26%) and dragon whelp (xp 350 → 34%), 10000-sample 5% potion rate (±1.5pp), gold-amount bounds.
+
+**Untouched per blast-radius guard:** useGameLoop.ts (only reads new types), all UI components, narrator pipeline, combat-resolver.ts (Prompt 2), combat mode UI (Prompt 3).
+
+**Live verification not yet run:** the Fantasy world end-to-end test (signing in, generating a real world, observing `[apply-world-bible] starting_region.enemies validated:` and `adjacent_regions enemies validated:` log lines + combat-tagged nodes) is part of the testing checklist below.
 
 ### Region / Resilience Round (commit 87c89a3 — 43/43 tests, clean build)
 
@@ -174,15 +229,42 @@ Step 5 reads `physical_description` from world_asset before narrator call. On ca
 ### Architecture Status ✅
 ```
 Domain 1 (Engine):     World graph, navigation, stat checks, dialogue option
-                       generation, combat (pending), loot (pending) — pure code
-Domain 2 (Content):    WCD, WorldBible, RegionBible, NPCs, items — frozen
+                       generation, combat resolver (pending Prompt 2),
+                       loot resolver (pending Day 21) — pure code
+Domain 2 (Content):    WCD, WorldBible (now with enemies + encounter tagging),
+                       RegionBible (same), NPCs, items, bestiary — frozen
 
 AI during gameplay:
   ✅ Arrival narration  — first visit only, cached permanently after
   ✅ Dialogue options   — built by code, AI writes response only
   ✅ Action narration   — 1-4 sentences
   ✅ NPC not present    — hardcoded "X isn't here"
-  ⏳ Container search  — pending Container+Loot system
+  ⏳ Combat round narration — pending Prompt 3
+  ⏳ Container search   — pending Container+Loot system
+```
+
+### Combat Data Model ✅ (V8.31 — Prompt 1/3)
+```
+Enemy interface (combat-spec §6.2): id, name, description, hp_range,
+  agi_mod, str_mod, damage_die, armor_bonus, xp_value, loot_table_id,
+  is_boss, behavior_flavor.
+
+Two-tier enemy structure:
+  Hand-authored bestiary  → /lib/game/bestiary/<genre>.ts
+                            Fantasy fully populated (14 entries).
+                            Cyber/Horror/Space/Apoc placeholder (3 each).
+  LLM-generated regional  → WorldBible/RegionBible "enemies" array.
+                            3-5 per starting/expanded region.
+                            1-2 per adjacent region outline.
+
+Encounter tagging on combat-eligible nodes:
+  encounter_chance: 0.0-1.0 — 0.4-0.7 typical, 1.0 boss rooms, 0.0 peaceful
+  encounter_roster: enemy ids drawn from bestiary OR region.enemies
+  is_boss_room: locks combat (no flee — defeat = settlement teleport)
+
+Stub loot drops (Day 20 placeholder):
+  rollStubDrops(enemy) → 25-50% gold, 5% basic health potion.
+  Real loot tables come Day 21.
 ```
 
 ### Navigation Rules ✅ (Complete)
@@ -253,19 +335,32 @@ italic, weight 600 (V8.29). Pending higher-contrast pass — see
 "Wrap-up Polish" in Known Issues.
 ```
 
-### RegionBible Resilience ✅ (V8.30)
+### RegionBible Resilience ✅ (V8.30, extended V8.31)
 ```
 Model: claude-haiku-4-5-20251001
-max_tokens: 6000 (bumped from 3500)
+max_tokens: 7000 (bumped from 6000 in V8.31 to accommodate enemies array)
 Prompt: includes "Keep total response under 5000 tokens. Be concise."
 
 Failure modes:
 - First parse fail → retry once
 - Retry parse fail → return 200 with stub bible (hub + tavern + 1 NPC
-  + back-exit). Player can still traverse. Console warns
-  [RegionBible] Returning stub fallback for observability.
+  + back-exit + enemies: []). Player can still traverse.
+  Console warns [RegionBible] Returning stub fallback for observability.
 
 Player is never blocked from traversal by an LLM JSON malformation.
+Stub regions fall through to genre bestiary for any combat encounters.
+```
+
+### WorldBible Resilience ✅ (V8.31)
+```
+Model: claude-sonnet-4-5
+max_tokens: 10000 (bumped from 8000 in V8.31 to accommodate enemies array
+and encounter tagging on combat-eligible locations).
+
+apply-world-bible validates:
+  - validateEnemy / validateEnemies — warn-don't-500 on malformed entries
+  - scrubEncounterRoster — strips ids unresolvable against
+    (genre bestiary ∪ region.enemies ∪ adjacent-region outline.enemies)
 ```
 
 ### Known issues
@@ -289,18 +384,19 @@ These are minor visual/UX issues identified in the V8.30 multi-region playtest. 
 - Hub node not added to codex on first arrival to new region
 - Step 7 individual branches: confirm each branch sets `discovered: true` (currently relying on Fix 2 safety net)
 - Starting region nodes consistently lack `grid_position` — currently masked by V8.28 isValidPos guard with `console.warn`. Worth investigating data path at world generation eventually so the warn stops firing on every new region apply.
+- Behavior dispatch beyond flavor text deferred (combat-spec §6.3) — every enemy just attacks the player every turn until a future combat-depth pass.
 
 ---
 
 ## 🏗️ Architecture
 
 ### The Two Domains ✅
-**Domain 1 (Engine — pure code):** Navigation, stat checks, dialogue option generation, combat (pending), loot resolution (pending).
-**Domain 2 (Content Library — frozen):** WCD, locations, NPCs, items, loot tables, main quest.
+**Domain 1 (Engine — pure code):** Navigation, stat checks, dialogue option generation, combat resolver (pending Prompt 2), loot resolver (pending).
+**Domain 2 (Content Library — frozen):** WCD, locations, NPCs, items, loot tables, main quest, bestiary, region enemies.
 
 ### Generation Model ✅
-RegionBible: claude-haiku-4-5-20251001, max_tokens: 6000 (V8.30). Stub fallback on double-parse-failure.
-WorldBible: claude-sonnet-4-5, 8000 tokens.
+RegionBible: claude-haiku-4-5-20251001, max_tokens: 7000 (V8.31). Stub fallback on double-parse-failure. Includes 3-5 region enemies + encounter tagging on combat-eligible nodes.
+WorldBible: claude-sonnet-4-5, max_tokens: 10000 (V8.31). Includes 3-5 starting-region enemies, 1-2 per adjacent-region outline, encounter tagging.
 WCD now includes `world_description` (2-3 sentence world summary).
 Knowledge format: `{topic, content}` pairs. Legacy string → auto-converted.
 Region zone assets: constitution.physical_description AND constitution.atmosphere both populated from same source (V8.28).
@@ -357,6 +453,10 @@ NPE from malformed grid_position entries (V8.28).
 21. Map tier defaults to Local on initial mount for any non-region-zone node. Region zone nodes default to Region tier. User's manual tier choice never overridden mid-session. (V8.30)
 22. New region creation always wires the origin region into the new region's connections AND vice versa, so adjacent-region travel is symmetric across any region depth. (V8.30)
 23. RegionBible parse failure must never block the player. Double-parse-failure returns 200 with a stub bible (hub + tavern + 1 NPC + back-exit) and a console warning. (V8.30)
+24. Enemy entries follow the Enemy interface in types/game.ts. Validation is warn-don't-500 — malformed entries get skipped, never crash apply routes. (V8.31)
+25. Encounter rosters reference enemy ids that must resolve against (genre bestiary ∪ region.enemies ∪ adjacent-region outline.enemies). Unresolvable ids are scrubbed out at apply time, never crash. (V8.31)
+26. metadata.region_bibles accumulates expanded RegionBibles by id so combat triggers (Prompt 2) can resolve regional enemies for any region. (V8.31)
+27. Combat system design defers to /docs/combat-spec.md. Any code change to combat updates the spec FIRST, code SECOND. (V8.31)
 
 ---
 
@@ -389,7 +489,8 @@ NPC highlights:        var(--accent) orange (too similar to item yellow — futu
 
 | System | When | Description |
 | --- | --- | --- |
-| Combat System | NOW (Day 20) | Turn-based, code resolves, AI narrates. Bundle Wrap-up Polish (3 items). |
+| Combat Prompt 2/3 | NEXT | Resolver math + encounter triggers in step 7 + turn loop state machine |
+| Combat Prompt 3/3 | After 2/3 | Combat mode UI + narration integration + victory/defeat handlers |
 | Map Visual Rework | After combat | Dedicated session: decoration, geometry, sizing, hierarchy, label collision |
 | Container + Loot | Day 21 | Registry, loot tables, dungeon sub-levels |
 | Skills + Leveling | Day 22 | XP, stat points, level gates |
@@ -442,7 +543,8 @@ NPC highlights:        var(--accent) orange (too similar to item yellow — futu
 **Claude.ai owns all CLAUDE.md updates.**
 Claude Code pushes → user reports commit + test results → Claude.ai updates CLAUDE.md + provides testing checklist → user verifies → next prompt.
 **All architecture decisions defer to /docs/architecture-spec.md.**
+**All combat decisions defer to /docs/combat-spec.md.**
 
 ---
 
-*Last updated: V8.30 — Movement track frozen after end-to-end multi-region playtest. Three minor polish items (settlement card label on new region arrival, tier auto-switch on cross-zone arrival, NPC dialogue contrast bump) deferred to bundle with Combat round. Combat system (Day 20) up next.*
+*Last updated: V8.31 — Combat Day 20 Prompt 1/3 (commit 1024287): Enemy types in types/game.ts, full Fantasy bestiary (14 entries) + skeleton placeholders for 4 other genres, WorldBible/RegionBible LLM prompt extensions for region-themed enemies + encounter tagging, validate-don't-500 persistence in both apply routes, metadata.region_bibles accumulator, stub loot drop function ready for Prompt 2 wire-up. 72/72 tests passing. Combat resolver + encounter triggers (Prompt 2) up next.*

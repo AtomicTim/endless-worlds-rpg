@@ -538,6 +538,24 @@ export function useGameLoop() {
       return;
     }
 
+    // Day 20.3 TASK 2 — combat input is button-only. Typed commands
+    // ("use potion", "attack goblin", etc.) during combat would route
+    // through parseIntent / resolveAction and could double-fire item
+    // consumption or attack resolution outside the combat-engine's
+    // turn loop. Block early with a system message; don't echo the
+    // input, don't consume a combat turn, don't run any narrator.
+    // forceMoveToNode is allowed to slip through (programmatic nav
+    // teleports — defeat warp, flee rollback — are dispatched by
+    // useCombat itself). Combat input handling lands in Day 20.4.
+    if (!forceMoveToNode && state.combat?.active === true) {
+      store.addMessage(
+        makeMessage("SYSTEM", "Combat input is disabled — use the action buttons.", {
+          isCombatInputBlocked: true,
+        })
+      );
+      return;
+    }
+
     // Echo the player's command into the feed — only for typed input.
     // Direct-navigation clicks are intentionally silent here; the
     // narrator's ARRIVING beat is the player-facing record.

@@ -1,5 +1,9 @@
 import type { CombatEvent } from "@/types/game";
-import { renderRoutineCombatEvent } from "../templates";
+import {
+  renderCritBanner,
+  renderResolutionBanner,
+  renderRoutineCombatEvent,
+} from "../templates";
 
 function makeEvent(p: Partial<CombatEvent> & { type: CombatEvent["type"] }): CombatEvent {
   return {
@@ -121,7 +125,7 @@ describe("renderRoutineCombatEvent — defend / use_item / flee_attempt", () => 
     expect(renderRoutineCombatEvent(ev)).toBe("You raise your guard.");
   });
 
-  it("use_item interpolates the item name and heal amount (negative damage = heal)", () => {
+  it("use_item interpolates the item name and heal amount (Day 20.3 TASK 2 wording)", () => {
     const ev = makeEvent({
       type:           "use_item",
       target:         "PLAYER",
@@ -130,9 +134,31 @@ describe("renderRoutineCombatEvent — defend / use_item / flee_attempt", () => 
       weapon_or_item: "Basic Health Potion",
     });
     const out = renderRoutineCombatEvent(ev);
-    expect(out).not.toBeNull();
-    expect(out!.includes("Basic Health Potion")).toBe(true);
-    expect(out!.includes("8 HP")).toBe(true);
+    expect(out).toBe("You use Basic Health Potion. Restored 8 HP.");
+  });
+
+  it("use_item without heal effect drops the heal suffix (Day 20.3 TASK 2)", () => {
+    const ev = makeEvent({
+      type:           "use_item",
+      target:         "PLAYER",
+      outcome:        "item_used",
+      // No damage_dealt → fallback path; no "Restored N HP" suffix.
+      weapon_or_item: "Strange Trinket",
+    });
+    const out = renderRoutineCombatEvent(ev);
+    expect(out).toBe("You use Strange Trinket.");
+  });
+
+  it("use_item with damage_dealt = 0 still drops the heal suffix", () => {
+    const ev = makeEvent({
+      type:           "use_item",
+      target:         "PLAYER",
+      outcome:        "item_used",
+      damage_dealt:   0,
+      weapon_or_item: "Inert Tonic",
+    });
+    const out = renderRoutineCombatEvent(ev);
+    expect(out).toBe("You use Inert Tonic.");
   });
 
   it("flee_attempt fail renders a templated line", () => {
@@ -267,6 +293,54 @@ describe("renderRoutineCombatEvent — combat_start banner (Day 20.1 TASK 2)", (
       { locationName: "The Thorned Cloister" }
     );
     expect(out).toBe("You encounter foes at The Thorned Cloister.");
+  });
+});
+
+// Day 20.3 TASK 3 — CRITICAL HIT banner.
+
+describe("renderCritBanner (Day 20.3 TASK 3)", () => {
+  it("interpolates damage from the event when present", () => {
+    const ev = makeEvent({
+      type:         "player_attack",
+      outcome:      "crit",
+      damage_dealt: 14,
+    });
+    expect(renderCritBanner(ev)).toBe("⚔ CRITICAL HIT — 14 damage.");
+  });
+
+  it("falls back to a generic banner when damage isn't carried", () => {
+    const ev = makeEvent({
+      type:    "player_attack",
+      outcome: "crit",
+    });
+    expect(renderCritBanner(ev)).toBe("⚔ CRITICAL HIT.");
+  });
+
+  it("treats zero damage as missing (banner doesn't lie about a 0-damage crit)", () => {
+    const ev = makeEvent({
+      type:         "player_attack",
+      outcome:      "crit",
+      damage_dealt: 0,
+    });
+    expect(renderCritBanner(ev)).toBe("⚔ CRITICAL HIT.");
+  });
+});
+
+// Day 20.3 TASK 5 — Victory / Defeat / Escaped banner words.
+
+describe("renderResolutionBanner (Day 20.3 TASK 5)", () => {
+  it("victory → 'Victory'", () => {
+    expect(renderResolutionBanner(makeEvent({ type: "victory" }))).toBe("Victory");
+  });
+  it("defeat → 'Defeat'", () => {
+    expect(renderResolutionBanner(makeEvent({ type: "defeat" }))).toBe("Defeat");
+  });
+  it("flee_success → 'Escaped'", () => {
+    expect(renderResolutionBanner(makeEvent({ type: "flee_success" }))).toBe("Escaped");
+  });
+  it("returns null for non-resolution events", () => {
+    expect(renderResolutionBanner(makeEvent({ type: "player_attack" }))).toBeNull();
+    expect(renderResolutionBanner(makeEvent({ type: "kill" }))).toBeNull();
   });
 });
 

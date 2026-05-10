@@ -348,6 +348,64 @@
   animation: combat-portrait-shake 400ms ease-in-out;
 }
 
+/* ── Day 20.3 TASK 1 — full-width combat turn separators ───────────────
+   round_start / player_turn_start / enemy_phase_start render as a
+   centered label with rule-line flanks that extend to the story
+   panel edges. Replaces the V8.35 fixed-width "─── label ───" form. */
+.combat-turn-separator {
+  display:     flex;
+  align-items: center;
+  gap:         0.75rem;
+  margin:      0.5rem 0;
+  opacity:     0.55;
+}
+.combat-turn-separator-line {
+  flex:       1;
+  border-top: 1px solid var(--ink-2);
+}
+.combat-turn-separator-label {
+  font-size:      11px;
+  font-style:     italic;
+  color:          var(--ink-2);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  white-space:    nowrap;
+  font-family:    var(--serif);
+}
+
+/* ── Day 20.3 TASK 3 — CRITICAL HIT banner (line 1 of the crit
+   two-line render). Color comes from inline style per actor
+   (combat-player-crit vs combat-enemy-crit). */
+.combat-crit-banner {
+  font-family:    var(--mono);
+  font-size:      13px;
+  font-weight:    700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin:         0.25rem 0 0 0;
+}
+
+/* ── Day 20.3 TASK 5 — Victory / Defeat / Escaped two-line banner
+   (line 1 word + line 2 short prose). Color comes from inline
+   style per resolution type. */
+.combat-resolution-block {
+  text-align: center;
+  margin:     0.75rem 0 0.25rem;
+}
+.combat-resolution-banner {
+  font-size:      18px;
+  font-weight:    700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-family:    var(--mono);
+}
+.combat-resolution-prose {
+  font-size:  13px;
+  font-style: italic;
+  margin-top: 0.25rem;
+  font-family: var(--serif);
+}
+
 /* ── Art loader scan-line effect ────────────────────────────────────── */
 @keyframes svgScan {
   0%   { background-position: 0 0;        }

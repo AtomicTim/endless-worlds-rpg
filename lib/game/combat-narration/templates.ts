@@ -203,11 +203,42 @@ function renderEnemyAttack(event: CombatEvent, actor: string): string | null {
 }
 
 function renderUseItem(event: CombatEvent, itemName?: string): string {
+  // Day 20.3 TASK 2 — "Restored N HP" instead of "+N HP" (clearer
+  // wording per locked design). Falls back to "You use <item>." for
+  // non-heal consumables (Day 21+ items).
   // damage_dealt is negative for heal events — see combat-engine.
   const heal = event.damage_dealt != null ? Math.abs(event.damage_dealt) : 0;
-  const name = itemName ?? event.weapon_or_item ?? "a potion";
-  if (heal > 0) return `You drink ${name}. +${heal} HP.`;
-  return `You drink ${name}. No effect.`;
+  const name = itemName ?? event.weapon_or_item ?? "an item";
+  if (heal > 0) return `You use ${name}. Restored ${heal} HP.`;
+  return `You use ${name}.`;
+}
+
+/**
+ * Day 20.3 TASK 3 — CRITICAL HIT banner string (line 1 of the
+ * two-line crit render). The LLM prose follows on line 2. Damage
+ * suffix interpolated from event.damage_dealt; falls back to the
+ * generic banner when damage isn't carried.
+ */
+export function renderCritBanner(event: CombatEvent): string {
+  const dmg = event.damage_dealt;
+  if (typeof dmg === "number" && dmg > 0) {
+    return `⚔ CRITICAL HIT — ${dmg} damage.`;
+  }
+  return "⚔ CRITICAL HIT.";
+}
+
+/**
+ * Day 20.3 TASK 5 — Victory / Defeat / Escaped banner word
+ * (line 1 of the two-line resolution render). Short, title-case;
+ * StoryFeed CSS handles uppercasing + font sizing + centering.
+ */
+export function renderResolutionBanner(event: CombatEvent): string | null {
+  switch (event.type) {
+    case "victory":      return "Victory";
+    case "defeat":       return "Defeat";
+    case "flee_success": return "Escaped";
+    default:             return null;
+  }
 }
 
 function renderFleeFail(event: CombatEvent): string {

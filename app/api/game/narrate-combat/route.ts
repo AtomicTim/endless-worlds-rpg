@@ -82,15 +82,22 @@ function buildUserPrompt(
   const itemNote = event.weapon_or_item ? `weapon/item: ${event.weapon_or_item}` : "";
   const flavorNote = event.context_note ? `flavor: ${event.context_note}` : "";
 
-  // Length guidance per spec: 1 sentence default, 2-3 on crit/kill/
-  // victory/defeat/successful-flee.
-  const lengthHint =
-    event.outcome === "crit"
-    || event.outcome === "kill"
-    || event.type === "victory"
-    || event.type === "defeat"
-    || (event.type === "flee_attempt" && event.outcome === "fled")
-    || event.type === "combat_start"
+  // Day 20.3 TASK 5 — Victory / Defeat / Successful Flee got a
+  // dedicated banner-word line in the story feed. The LLM prose now
+  // sits BELOW the banner as a single short flavor sentence, not a
+  // wall of dramatic prose. Tighten the length cap accordingly.
+  // Crits keep their 2-3 sentence latitude (banner above is just a
+  // damage marker; the prose still earns the tier-3 budget).
+  const isResolution =
+    event.type === "victory" ||
+    event.type === "defeat" ||
+    (event.type === "flee_attempt" && event.outcome === "fled") ||
+    event.type === "flee_success";
+  const lengthHint = isResolution
+    ? "Write ONE sentence, max 20 words. Punchy, not flowery."
+    : event.outcome === "crit"
+      || event.outcome === "kill"
+      || event.type === "combat_start"
       ? "Write 2-3 sentences."
       : "Write 1 sentence.";
 
@@ -161,9 +168,18 @@ export async function POST(request: NextRequest) {
 
   try {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    // Day 20.3 TASK 5 — resolution events (victory/defeat/flee_success)
+    // get a tighter token budget to nudge the model toward the locked
+    // "ONE sentence, max 20 words" rule. Crits keep the wider budget
+    // for tier-3 prose.
+    const isResolutionEvent =
+      event.type === "victory" ||
+      event.type === "defeat" ||
+      event.type === "flee_success" ||
+      (event.type === "flee_attempt" && event.outcome === "fled");
     const message = await anthropic.messages.create({
       model:      "claude-sonnet-4-5",
-      max_tokens: 250,
+      max_tokens: isResolutionEvent ? 120 : 250,
       system:     SYSTEM_PROMPT,
       messages:   [{ role: "user", content: userPrompt }],
     });

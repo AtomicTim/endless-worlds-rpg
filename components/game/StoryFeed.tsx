@@ -343,35 +343,107 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
       }
 
       case "COMBAT": {
-        // Day 20 / 20.1 Combat — style by event metadata (combat-spec §10
-        // + locked decisions). Fields: combat, event_type, actor,
-        // outcome.
+        // Day 20 / 20.1 / 20.3 Combat — style by event metadata.
+        // Fields: combat, event_type, actor, outcome,
+        // is_crit_banner, is_crit_prose, is_resolution_banner,
+        // resolution_prose.
         const m = metadata ?? {};
-        const eventType = typeof m.event_type === "string" ? m.event_type : null;
-        const actor     = typeof m.actor === "string" ? m.actor : null;
-        const outcome   = typeof m.outcome === "string" ? m.outcome : null;
+        const eventType            = typeof m.event_type === "string" ? m.event_type : null;
+        const actor                = typeof m.actor === "string" ? m.actor : null;
+        const outcome              = typeof m.outcome === "string" ? m.outcome : null;
+        const isCritBanner         = m.is_crit_banner === true;
+        const isCritProse          = m.is_crit_prose === true;
+        const isResolutionBanner   = m.is_resolution_banner === true;
+        const resolutionProse      = typeof m.resolution_prose === "string" ? m.resolution_prose : "";
 
-        // Day 20.1 TASK 3 — turn-boundary separators. Subtle, italic,
-        // low-opacity, center-aligned. No ⚔ prefix, no metadata icons.
+        // Day 20.3 TASK 1 — full-width turn separators. Strip the
+        // V8.35 dash bookends from the templated string and render
+        // the label centered between flex-grown rule lines.
         if (
           eventType === "round_start" ||
           eventType === "player_turn_start" ||
           eventType === "enemy_phase_start"
         ) {
+          const label = content
+            .replace(/^─+\s*/, "")
+            .replace(/\s*─+$/, "")
+            .trim();
+          return (
+            <div className="message-enter combat-turn-separator">
+              <span className="combat-turn-separator-line" aria-hidden />
+              <span className="combat-turn-separator-label">{label}</span>
+              <span className="combat-turn-separator-line" aria-hidden />
+            </div>
+          );
+        }
+
+        // Day 20.3 TASK 3 — CRITICAL HIT banner (line 1 of the
+        // two-line crit render). Color from actor.
+        if (isCritBanner) {
+          const isPlayerCrit = actor === "PLAYER";
+          const color = isPlayerCrit
+            ? "var(--combat-player-crit)"
+            : "var(--combat-enemy-crit)";
           return (
             <div
-              className="message-enter ew-serif"
-              style={{
-                fontSize:      11,
-                fontStyle:     "italic",
-                color:         "var(--ink-2)",
-                opacity:       0.55,
-                textAlign:     "center",
-                letterSpacing: "0.18em",
-                margin:        "10px 0",
-              }}
+              className="message-enter combat-crit-banner"
+              style={{ color }}
             >
               {content}
+            </div>
+          );
+        }
+
+        // Day 20.3 TASK 3 — crit prose (line 2). Same color as the
+        // banner, italic bold serif so it reads as the dramatic
+        // sibling to the banner above.
+        if (isCritProse) {
+          const isPlayerCrit = actor === "PLAYER";
+          const color = isPlayerCrit
+            ? "var(--combat-player-crit)"
+            : "var(--combat-enemy-crit)";
+          return (
+            <p
+              className="message-enter ew-serif"
+              style={{
+                color,
+                fontSize:   13,
+                fontWeight: 700,
+                fontStyle:  "italic",
+                margin:     "2px 0 6px",
+              }}
+            >
+              <span style={{ marginRight: 6 }}>⚔</span>
+              {content}
+            </p>
+          );
+        }
+
+        // Day 20.3 TASK 5 — Victory / Defeat / Escaped two-line
+        // banner. Banner word above (uppercase 18px bold), short
+        // LLM prose below (italic 13px), both centered, both colored
+        // by resolution type.
+        if (isResolutionBanner) {
+          const color =
+            eventType === "victory" ? "var(--combat-victory)"
+            : eventType === "defeat" ? "var(--combat-defeat)"
+            : "var(--combat-flee)";
+          return (
+            <div className="message-enter combat-resolution-block">
+              <div
+                className="combat-resolution-banner"
+                style={{ color }}
+              >
+                {content}
+              </div>
+              {resolutionProse && (
+                <div
+                  className="combat-resolution-prose"
+                  style={{ color }}
+                >
+                  {resolutionProse}
+                </div>
+              )}
             </div>
           );
         }
@@ -423,26 +495,21 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
         }
 
         // Event-class buckets:
-        //   victory / defeat / flee_success → 1.5x bold colored line
-        //   crit                              → bold + darker color, ⚔ prefix
+        //   victory / defeat / flee_success → handled above as
+        //     isResolutionBanner two-line block (Day 20.3 TASK 5)
+        //   crit                              → handled above as
+        //     isCritBanner + isCritProse two-line block (Day 20.3 TASK 3)
         //   routine                           → normal weight + side color, ⚔ prefix
-        const isVictory = eventType === "victory";
-        const isDefeat  = eventType === "defeat";
-        const isFlee    = eventType === "flee_success";
-        const isHero    = isVictory || isDefeat || isFlee;
         const isCrit    = outcome === "crit";
         const isPlayer  = actor === "PLAYER";
 
-        const color = isVictory ? "var(--combat-victory)"
-          : isDefeat ? "var(--combat-defeat)"
-          : isFlee   ? "var(--combat-flee)"
-          : isCrit
-            ? (isPlayer ? "var(--combat-player-crit)" : "var(--combat-enemy-crit)")
-            : (isPlayer ? "var(--combat-player)" : "var(--combat-enemy)");
+        const color = isCrit
+          ? (isPlayer ? "var(--combat-player-crit)" : "var(--combat-enemy-crit)")
+          : (isPlayer ? "var(--combat-player)" : "var(--combat-enemy)");
 
-        const fontSize = isHero ? 19 : 13;
-        const fontWeight = isHero || isCrit ? 700 : 400;
-        const fontStyle  = isHero ? "normal" : "italic";
+        const fontSize   = 13;
+        const fontWeight = isCrit ? 700 : 400;
+        const fontStyle  = "italic" as const;
 
         return (
           <p
@@ -452,8 +519,7 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
               fontSize,
               fontWeight,
               fontStyle,
-              margin:        isHero ? "10px 0" : "6px 0",
-              letterSpacing: isHero ? "0.04em" : undefined,
+              margin: "6px 0",
             }}
           >
             <span style={{ marginRight: 6 }}>⚔</span>

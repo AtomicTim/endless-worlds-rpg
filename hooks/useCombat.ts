@@ -11,7 +11,11 @@ import {
   type CombatResolutionPayload,
   type PlayerActionInput,
 } from "@/lib/game/combat-engine";
-import { renderRoutineCombatEvent } from "@/lib/game/combat-narration/templates";
+import {
+  renderCritBanner,
+  renderResolutionBanner,
+  renderRoutineCombatEvent,
+} from "@/lib/game/combat-narration/templates";
 
 /**
  * Day 20 Combat — React hook layer.
@@ -293,16 +297,61 @@ interface ProjectArgs {
   setDisplayPhase:  (phase: "player" | "enemy") => void;
 }
 
+/**
+ * Day 20.3 TASK 4 — pre-scan helper. When a victory event is in the
+ * batch, the killing crit's prose duplicates the victory line — feels
+ * redundant. Build a Set of indices to skip:
+ *   - the LAST crit/kill before the victory event has its prose
+ *     suppressed (banner stays — it's still a crit)
+ *   - kill events when victory is in the batch are dropped entirely
+ *     (the victory banner already says everything the kill prose did)
+ * Returns: { suppressProseAt, skipEntirely } sets keyed by index.
+ */
+export function planEventSuppression(events: CombatEvent[]): {
+  suppressProseAt: Set<number>;
+  skipEntirely:    Set<number>;
+} {
+  const suppressProseAt = new Set<number>();
+  const skipEntirely    = new Set<number>();
+
+  const victoryIdx = events.findIndex((e) => e.type === "victory");
+  if (victoryIdx < 0) return { suppressProseAt, skipEntirely };
+
+  // Drop kill events entirely when victory is present.
+  for (let i = 0; i < victoryIdx; i += 1) {
+    if (events[i].type === "kill") skipEntirely.add(i);
+  }
+
+  // Suppress prose on the last crit before the victory (the killing
+  // blow). Banner still renders; LLM prose doesn't fire.
+  for (let i = victoryIdx - 1; i >= 0; i -= 1) {
+    if (events[i].outcome === "crit") {
+      suppressProseAt.add(i);
+      break;
+    }
+  }
+  return { suppressProseAt, skipEntirely };
+}
+
 async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void> {
   const enemyNameByInstanceId = (id: string): string | undefined =>
     args.combat.enemies.find((e) => e.instance_id === id)?.name;
+
+  // Day 20.3 TASK 4 — pre-scan the batch for prose-suppression rules.
+  const { suppressProseAt, skipEntirely } = planEventSuppression(args.events);
 
   // Day 20.1 TASK 4 — pacing across enemy turns. Track which enemy
   // last acted so we can insert a 500ms gap between successive
   // distinct enemies (one resolves → pause → next resolves).
   let prevEnemyActor: string | null = null;
 
-  for (const event of args.events) {
+  for (let i = 0; i < args.events.length; i += 1) {
+    const event = args.events[i];
+
+    // Skip events flagged by the victory pre-scan (kill events when
+    // victory is in the batch — banner says it all).
+    if (skipEntirely.has(i)) continue;
+
     // Day 20.1 TASK 4 — pacing delays + pill sync at phase boundaries.
     // setDisplayPhase fires BEFORE the sleep so the header pill is
     // already in sync by the time the separator line lands in the feed.
@@ -328,8 +377,57 @@ async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void> {
       prevEnemyActor = null;
     }
 
+    // ── Day 20.3 TASK 3 — CRITICAL HIT two-line render ───────────────
+    // For player_attack / enemy_attack with outcome === "crit", push
+    // the templated banner FIRST (instant), then fall through to the
+    // dramatic-event LLM prose (line 2). Suppress prose when victory
+    // follows in the same batch (TASK 4).
+    if (
+      event.outcome === "crit" &&
+      (event.type === "player_attack" || event.type === "enemy_attack")
+    ) {
+      const banner = renderCritBanner(event);
+      args.addMessage(
+        makeMessage("COMBAT", banner, {
+          ...makeCombatMessageMetadata(event),
+          is_crit_banner: true,
+        })
+      );
+      if (suppressProseAt.has(i)) continue;  // killing blow → no prose
+      const text = await fetchCombatNarration(event, args);
+      if (text) {
+        args.addMessage(
+          makeMessage("COMBAT", text, {
+            ...makeCombatMessageMetadata(event),
+            is_crit_prose: true,
+          })
+        );
+      }
+      continue;
+    }
+
+    // ── Day 20.3 TASK 5 — Victory / Defeat / Escaped two-line render ─
+    // Banner word first (instant), then shortened LLM prose below.
+    if (
+      event.type === "victory" ||
+      event.type === "defeat" ||
+      event.type === "flee_success"
+    ) {
+      const banner = renderResolutionBanner(event);
+      const text = await fetchCombatNarration(event, args);
+      args.addMessage(
+        makeMessage("COMBAT", banner ?? "", {
+          ...makeCombatMessageMetadata(event),
+          is_resolution_banner: true,
+          resolution_prose:     text,
+        })
+      );
+      continue;
+    }
+
     if (isDramaticEvent(event)) {
-      // Dramatic — fetch LLM prose, then push.
+      // Dramatic non-resolution, non-crit (kill events when no
+      // victory is present, defensive). Fetch LLM prose and push.
       const text = await fetchCombatNarration(event, args);
       if (text) {
         args.addMessage(

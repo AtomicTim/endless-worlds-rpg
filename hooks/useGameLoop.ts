@@ -2399,12 +2399,18 @@ export function useGameLoop() {
                   locationName: arrivedNode.name,
                 });
                 if (banner) {
-                  store.addMessage(makeMessage("COMBAT", banner, {
-                    combat:     true,
-                    event_type: "combat_start",
-                    actor:      "PLAYER",
-                    target:     null,
-                    outcome:    null,
+                  // Day 20.4 TASK 2 — banner is the new
+                  // RoutineEventResult shape ({ primary, rolls }).
+                  // combat_start carries no rolls suffix, but pass
+                  // the field through anyway for shape consistency
+                  // with the regular drain pipeline.
+                  store.addMessage(makeMessage("COMBAT", banner.primary, {
+                    combat:       true,
+                    event_type:   "combat_start",
+                    actor:        "PLAYER",
+                    target:       null,
+                    outcome:      null,
+                    rolls_suffix: banner.rolls,
                   }));
                 }
               }

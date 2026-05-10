@@ -181,6 +181,123 @@ describe("integration: defeat path", () => {
     // Currency 90% (gold for fantasy)
     expect(result.newPlayer.resources.gold).toBe(Math.floor(100 * 0.9));
   });
+
+  // ── Day 20.4 TASK 4 — fallback chain ──────────────────────────────────
+  it("falls back to defeat_fallback_node_id when last_settlement_hub_id is missing", () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const combat = makeCombatState([makeEnemy("g1")], { pre_combat_xp: 0 });
+      const player = makePlayer({ health: 1 });
+      // Force enemy crit to KO player.
+      const rng = seqRng([0.0, 0.95, 0.95]);
+
+      const result = executePlayerAction({
+        action:                   { action: "attack", target_instance_id: "g1" },
+        state:                    combat,
+        player,
+        world_genre:              Genre.FANTASY,
+        // No last_settlement_hub_id → must fall back.
+        defeat_fallback_node_id:  "starting_region_settlement",
+        rng,
+      });
+
+      expect(result.resolution?.kind).toBe("defeat");
+      if (result.resolution?.kind !== "defeat") throw new Error("expected defeat");
+      expect(result.resolution.teleport_to_node_id).toBe("starting_region_settlement");
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("last_settlement_hub_id missing"),
+        "starting_region_settlement"
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("falls back to encounter origin when both settlement ids missing (defensive)", () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const combat = makeCombatState([makeEnemy("g1")], {
+        pre_combat_xp:    0,
+        origin_node_id:   "encounter_origin_node",
+      });
+      const player = makePlayer({ health: 1 });
+      const rng = seqRng([0.0, 0.95, 0.95]);
+
+      const result = executePlayerAction({
+        action:      { action: "attack", target_instance_id: "g1" },
+        state:       combat,
+        player,
+        world_genre: Genre.FANTASY,
+        rng,
+      });
+
+      expect(result.resolution?.kind).toBe("defeat");
+      if (result.resolution?.kind !== "defeat") throw new Error("expected defeat");
+      expect(result.resolution.teleport_to_node_id).toBe("encounter_origin_node");
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("both last_settlement_hub_id and defeat_fallback_node_id missing"),
+        "encounter_origin_node"
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("populates destination metadata on defeat events when world_graph_nodes supplied", () => {
+    const combat = makeCombatState([makeEnemy("g1")], { pre_combat_xp: 0 });
+    const player = makePlayer({ health: 1 });
+    const rng = seqRng([0.0, 0.95, 0.95]);
+
+    // Build a tiny graph: settlement node + a region zone above it.
+    const world_graph_nodes = {
+      oathwatch_crossing: {
+        id:                 "oathwatch_crossing",
+        name:               "Oathwatch Crossing",
+        type:               "zone" as const,
+        zone_id:            "the_rust_valley",
+        is_expandable:      false,
+        connections:        [],
+        npc_ids:            [],
+        item_ids:           [],
+        asset_id:           "location_oathwatch_crossing",
+        discovered:         true,
+        map_position:       { x: 0, y: 0 },
+        is_settlement_node: true,
+      },
+      the_rust_valley: {
+        id:                 "the_rust_valley",
+        name:               "The Rust Valley",
+        type:               "zone" as const,
+        zone_id:            "the_rust_valley",
+        is_expandable:      true,
+        connections:        ["oathwatch_crossing"],
+        npc_ids:            [],
+        item_ids:           [],
+        asset_id:           "location_the_rust_valley",
+        discovered:         true,
+        map_position:       { x: 0, y: 0 },
+      },
+    };
+
+    const result = executePlayerAction({
+      action:                  { action: "attack", target_instance_id: "g1" },
+      state:                   combat,
+      player,
+      world_genre:             Genre.FANTASY,
+      last_settlement_hub_id:  "oathwatch_crossing",
+      world_graph_nodes,
+      rng,
+    });
+
+    if (result.resolution?.kind !== "defeat") throw new Error("expected defeat");
+    const defeatEvent = result.events.find((e) => e.type === "defeat");
+    expect(defeatEvent?.destination).toEqual({
+      node_id:     "oathwatch_crossing",
+      node_name:   "Oathwatch Crossing",
+      region_id:   "the_rust_valley",
+      region_name: "The Rust Valley",
+    });
+  });
 });
 
 // ===========================================================================

@@ -135,11 +135,18 @@ export function useCombat() {
       try {
         const result = engineExecute({
           action,
-          state:                  state.combat,
-          player:                 state.player_state,
-          world_genre:            state.metadata.genre,
-          last_settlement_hub_id: state.last_settlement_hub_id,
-          navigation_trail:       state.navigation_trail,
+          state:                   state.combat,
+          player:                  state.player_state,
+          world_genre:             state.metadata.genre,
+          last_settlement_hub_id:  state.last_settlement_hub_id,
+          navigation_trail:        state.navigation_trail,
+          // Day 20.4 TASK 4 — defeat teleport fallbacks. Resolve the
+          // starting region's settlement id from world_bible (or its
+          // own id if settlement_id wasn't populated). world_graph
+          // nodes flow through so handleDefeat / handleFleeSuccess
+          // can resolve display names + parent region.
+          defeat_fallback_node_id: defeatFallbackFor(state),
+          world_graph_nodes:       state.world_graph?.nodes,
         });
 
         const next = applyCombatResult(
@@ -196,10 +203,14 @@ export function useCombat() {
       setIsResolving(true);
       try {
         const result = kickoffCombatIfEnemyFirst({
-          state:                  state.combat,
-          player:                 state.player_state,
-          world_genre:            state.metadata.genre,
-          last_settlement_hub_id: state.last_settlement_hub_id,
+          state:                   state.combat,
+          player:                  state.player_state,
+          world_genre:             state.metadata.genre,
+          last_settlement_hub_id:  state.last_settlement_hub_id,
+          // Day 20.4 TASK 4 — defeat teleport fallbacks (also fire
+          // when the kickoff phase KOs the player on first hit).
+          defeat_fallback_node_id: defeatFallbackFor(state),
+          world_graph_nodes:       state.world_graph?.nodes,
         });
 
         const next = applyCombatResult(
@@ -388,9 +399,10 @@ async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void> {
     ) {
       const banner = renderCritBanner(event);
       args.addMessage(
-        makeMessage("COMBAT", banner, {
+        makeMessage("COMBAT", banner.primary, {
           ...makeCombatMessageMetadata(event),
           is_crit_banner: true,
+          rolls_suffix:   banner.rolls,
         })
       );
       if (suppressProseAt.has(i)) continue;  // killing blow → no prose
@@ -408,6 +420,8 @@ async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void> {
 
     // ── Day 20.3 TASK 5 — Victory / Defeat / Escaped two-line render ─
     // Banner word first (instant), then shortened LLM prose below.
+    // Day 20.4 TASK 4 — defeat / flee_success carry destination
+    // metadata for the templated info line.
     if (
       event.type === "victory" ||
       event.type === "defeat" ||
@@ -420,6 +434,10 @@ async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void> {
           ...makeCombatMessageMetadata(event),
           is_resolution_banner: true,
           resolution_prose:     text,
+          // Resolved by handleDefeat / handleFleeSuccess. StoryFeed
+          // reads this to render "You wake at <Settlement> in
+          // <Region>." or "You break to <Node>." below the prose.
+          destination:          event.destination,
         })
       );
       continue;
@@ -462,8 +480,14 @@ async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void> {
       roundNumber:  roundForSeparator,
     });
     if (templated) {
+      // Day 20.4 TASK 2 — pass the rolls suffix through metadata so
+      // StoryFeed can render the dimmed-mono breakdown next to the
+      // primary line.
       args.addMessage(
-        makeMessage("COMBAT", templated, makeCombatMessageMetadata(event))
+        makeMessage("COMBAT", templated.primary, {
+          ...makeCombatMessageMetadata(event),
+          rolls_suffix: templated.rolls,
+        })
       );
     }
   }
@@ -527,13 +551,31 @@ function fallbackForDramaticEvent(event: CombatEvent): string {
  *  combat-specific styling per locked decisions §10. */
 function makeCombatMessageMetadata(event: CombatEvent): Record<string, unknown> {
   return {
-    combat: true,
+    combat:       true,
     event_type:   event.type,
     actor:        event.actor,
     target:       event.target,
     outcome:      event.outcome,
     damage_dealt: event.damage_dealt,
+    // Day 20.4 — granular rolls forwarded through metadata so the
+    // floating-damage hook + StoryFeed can read damage_die_roll /
+    // crit_max_damage directly off the COMBAT message.
+    rolls:        event.rolls,
   };
+}
+
+/**
+ * Day 20.4 TASK 4 — secondary defeat-teleport target. Pulled from
+ * the WorldBible's starting_region settlement so we always have a
+ * named hub to fall back on, even when the player has not yet
+ * arrived at any settlement (which would normally populate
+ * last_settlement_hub_id via useGameLoop step 7c-2). Falls through
+ * to the region zone id when settlement_id wasn't populated.
+ */
+function defeatFallbackFor(state: MasterState): string | undefined {
+  const sr = state.metadata.world_bible?.starting_region;
+  if (!sr) return undefined;
+  return sr.settlement_id ?? sr.id;
 }
 
 function regionAtmosphereFor(state: MasterState): string {

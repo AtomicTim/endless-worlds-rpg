@@ -1027,6 +1027,14 @@ export async function POST(request: NextRequest) {
       location_status:     LocationStatus.PRESENT,
     },
     world_graph: worldGraph,
+    // Day 20.4 TASK 4 — seed last_settlement_hub_id at spawn so the
+    // first defeat in any new game teleports back to the starting
+    // settlement, not the region zone. World-gen always lands the
+    // player at the starting region's settlement_id (which carries
+    // is_settlement_node=true), so this is a one-line write.
+    // useGameLoop step 7c-2 then keeps it current as the player
+    // visits other settlements.
+    last_settlement_hub_id: startingNodeId,
   };
 
   // ── 6. Persist master_state + dedicated columns ────────────────────────────

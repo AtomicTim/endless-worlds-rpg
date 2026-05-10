@@ -2,9 +2,10 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { ItemType } from "@/types/game";
-import type { CombatState, PlayerState } from "@/types/game";
+import type { CombatEvent, CombatState, PlayerState } from "@/types/game";
 import type { PlayerActionInput } from "@/lib/game/combat-engine";
 import { PLAYER_ID } from "@/lib/game/combat-engine";
+import type { FloatingDamageEntry } from "./CombatantRow";
 import { CombatantRow } from "./CombatantRow";
 import { ActionBar } from "./ActionBar";
 import { TargetPicker } from "./TargetPicker";
@@ -44,21 +45,27 @@ export function CombatMode({ combat, player, isResolving, displayPhase, onAction
   // for ~400ms. Trigger detection lives here in the parent so
   // CombatantRow stays a stateless renderer.
   const [shakeMap, setShakeMap] = useState<Record<string, number>>({});
+  // Day 20.4 TASK 3 — floating damage / heal numbers, keyed by
+  // combatant id ("PLAYER" for the player, instance_id for enemies).
+  // Pushed when a damage event arrives, removed after 1100ms.
+  const [floatingByActor, setFloatingByActor] =
+    useState<Record<string, FloatingDamageEntry[]>>({});
   const [lastSeenLogLength, setLastSeenLogLength] = useState(0);
 
   useEffect(() => {
     if (combat.combat_log.length <= lastSeenLogLength) return;
     const newEvents = combat.combat_log.slice(lastSeenLogLength);
-    const additions: Record<string, number> = {};
+
+    // Crit shake.
+    const shakeAdds: Record<string, number> = {};
     for (const ev of newEvents) {
       if (ev.outcome === "crit" && ev.target) {
-        additions[ev.target] = Date.now();
+        shakeAdds[ev.target] = Date.now();
       }
     }
-    if (Object.keys(additions).length > 0) {
-      setShakeMap((prev) => ({ ...prev, ...additions }));
-      // Clear each shake after 400ms.
-      for (const id of Object.keys(additions)) {
+    if (Object.keys(shakeAdds).length > 0) {
+      setShakeMap((prev) => ({ ...prev, ...shakeAdds }));
+      for (const id of Object.keys(shakeAdds)) {
         setTimeout(() => {
           setShakeMap((prev) => {
             const next = { ...prev };
@@ -68,6 +75,39 @@ export function CombatMode({ combat, player, isResolving, displayPhase, onAction
         }, 400);
       }
     }
+
+    // Day 20.4 TASK 3 — floating damage / heal numbers.
+    const floatAdds: Record<string, FloatingDamageEntry[]> = {};
+    for (const ev of newEvents) {
+      const entry = makeFloatingEntry(ev);
+      if (!entry) continue;
+      const id = entry.targetId;
+      if (!floatAdds[id]) floatAdds[id] = [];
+      floatAdds[id].push(entry.payload);
+    }
+    if (Object.keys(floatAdds).length > 0) {
+      setFloatingByActor((prev) => {
+        const next = { ...prev };
+        for (const [id, entries] of Object.entries(floatAdds)) {
+          next[id] = [...(next[id] ?? []), ...entries];
+        }
+        return next;
+      });
+      // Schedule removal of each entry after 1100ms.
+      for (const [id, entries] of Object.entries(floatAdds)) {
+        for (const e of entries) {
+          setTimeout(() => {
+            setFloatingByActor((prev) => {
+              const list = (prev[id] ?? []).filter((x) => x.key !== e.key);
+              const next = { ...prev };
+              if (list.length === 0) delete next[id]; else next[id] = list;
+              return next;
+            });
+          }, 1100);
+        }
+      }
+    }
+
     setLastSeenLogLength(combat.combat_log.length);
   }, [combat.combat_log, lastSeenLogLength]);
 
@@ -206,7 +246,11 @@ export function CombatMode({ combat, player, isResolving, displayPhase, onAction
             paddingRight:   8,
           }}
         >
-          <CombatantRow combatant={player} isPlayer />
+          <CombatantRow
+            combatant={player}
+            isPlayer
+            floatingDamage={floatingByActor[PLAYER_ID]}
+          />
         </div>
 
         {/* Divider */}
@@ -237,6 +281,7 @@ export function CombatMode({ combat, player, isResolving, displayPhase, onAction
               key={e.instance_id}
               combatant={e}
               isPlayer={false}
+              floatingDamage={floatingByActor[e.instance_id]}
               isTargetable={attackTargeting}
               onTargetClick={() => handleTargetSelected(e.instance_id)}
               shake={!!shakeMap[e.instance_id]}
@@ -271,4 +316,73 @@ export function CombatMode({ combat, player, isResolving, displayPhase, onAction
       )}
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Day 20.4 TASK 3 — translate a CombatEvent → floating-number entry.
+// Returns null when the event has nothing to float.
+//
+// Player attack hits: float over the targeted enemy (instance_id).
+// Enemy attack hits:  float over the player ("PLAYER" sentinel).
+// use_item heals:     float over the player.
+// Crits use larger size + crit color.
+// Miss / fumble / defend / flee / phase events: null.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function makeFloatingEntry(
+  event: CombatEvent
+): { targetId: string; payload: FloatingDamageEntry } | null {
+  // Heal: use_item with negative damage_dealt (engine convention).
+  if (
+    event.type === "use_item" &&
+    typeof event.damage_dealt === "number" &&
+    event.damage_dealt < 0
+  ) {
+    const dieRoll = event.rolls?.damage_die_roll;
+    if (typeof dieRoll !== "number" || dieRoll <= 0) return null;
+    return {
+      targetId: PLAYER_ID,
+      payload: {
+        key:   `heal_${event.timestamp}`,
+        value: dieRoll,
+        kind:  "heal",
+        color: "var(--hl-pass)",
+      },
+    };
+  }
+
+  // Damage: player_attack / enemy_attack with hit or crit.
+  if (event.type !== "player_attack" && event.type !== "enemy_attack") return null;
+  if (event.outcome !== "hit" && event.outcome !== "crit") return null;
+
+  const isPlayerActor = event.actor === PLAYER_ID;
+  // Resolve target id for the float anchor.
+  const targetId =
+    typeof event.target === "string" && event.target.length > 0
+      ? event.target
+      : (isPlayerActor ? "" : PLAYER_ID);
+  if (!targetId) return null;
+
+  // Crits surface TOTAL damage (the climactic moment); regular hits
+  // surface the rolled damage die value (the "interesting" part —
+  // the str_mod is just a flat add).
+  const isCrit = event.outcome === "crit";
+  const value  = isCrit
+    ? (event.damage_dealt ?? 0)
+    : (event.rolls?.damage_die_roll ?? event.damage_dealt ?? 0);
+  if (value <= 0) return null;
+
+  const color = isCrit
+    ? (isPlayerActor ? "var(--combat-player-crit)" : "var(--combat-enemy-crit)")
+    : (isPlayerActor ? "var(--combat-player)"      : "var(--combat-enemy)");
+
+  return {
+    targetId,
+    payload: {
+      key:   `${event.type}_${event.timestamp}_${event.actor}_${targetId}`,
+      value,
+      kind:  isCrit ? "crit" : "hit",
+      color,
+    },
+  };
 }

@@ -465,15 +465,21 @@ export type CombatResolutionPayload =
  */
 export function executePlayerAction({
   action, state, player, world_genre, last_settlement_hub_id,
-  navigation_trail, rng = DEFAULT_RNG,
+  navigation_trail, defeat_fallback_node_id, world_graph_nodes,
+  rng = DEFAULT_RNG,
 }: {
-  action:                  PlayerActionInput;
-  state:                   CombatState;
-  player:                  PlayerState;
-  world_genre:             Genre | string | undefined;
-  last_settlement_hub_id?: string;
-  navigation_trail?:       string[];
-  rng?:                    Rng;
+  action:                   PlayerActionInput;
+  state:                    CombatState;
+  player:                   PlayerState;
+  world_genre:              Genre | string | undefined;
+  last_settlement_hub_id?:  string;
+  navigation_trail?:        string[];
+  /** Day 20.4 TASK 4 — secondary defeat teleport target. */
+  defeat_fallback_node_id?: string;
+  /** Day 20.4 TASK 4 — used by handleDefeat / handleFleeSuccess to
+   *  populate destination metadata (display name + parent region). */
+  world_graph_nodes?:       Record<string, WorldNode>;
+  rng?:                     Rng;
 }): PlayerActionResult {
   if (state.turn_order[state.current_turn_index] !== PLAYER_ID) {
     // Out-of-turn submissions get dropped without state change. The
@@ -520,6 +526,7 @@ export function executePlayerAction({
         remaining_target_hp: remaining,
         weapon_or_item:      weaponName(player),
         context_note:        target.behavior_flavor,
+        rolls:               result.rolls,
       }));
       if (result.killed_target) {
         events.push(makeEvent({
@@ -531,6 +538,7 @@ export function executePlayerAction({
           remaining_target_hp: 0,
           weapon_or_item:      weaponName(player),
           context_note:        target.name,
+          rolls:               result.rolls,
         }));
       }
       break;
@@ -571,6 +579,7 @@ export function executePlayerAction({
         context_note:        result.item_consumed
                               ? `healed ${result.healed_amount} hp`
                               : "no effect",
+        rolls:               result.rolls,
       }));
       break;
     }
@@ -586,12 +595,14 @@ export function executePlayerAction({
         target:       null,
         outcome:      flee.success ? "fled" : "fled_failed",
         context_note: `roll ${flee.flee_roll} vs DC ${flee.flee_dc.toFixed(1)}`,
+        rolls:        flee.rolls,
       }));
       if (flee.success) {
         // Resolve flee — state dismissed.
         const fleePayload = handleFleeSuccess({
-          state:            appendEvents(s, events),
+          state:             appendEvents(s, events),
           navigation_trail,
+          world_graph_nodes,
         });
         return {
           newState:   undefined,
@@ -645,10 +656,12 @@ export function executePlayerAction({
   // reuse the same loop semantics. The defend-buff clear that used
   // to live below moved into the helper.
   const advanceResult = advanceUntilPlayerTurnOrEnd({
-    state:                  s,
-    player:                 p,
+    state:                   s,
+    player:                  p,
     last_settlement_hub_id,
     world_genre,
+    defeat_fallback_node_id,
+    world_graph_nodes,
     rng,
   });
   events.push(...advanceResult.events);
@@ -691,13 +704,17 @@ export function executePlayerAction({
  * the player. behavior_flavor is narrator-only.
  */
 export function advanceEnemyTurn({
-  state, player, last_settlement_hub_id, world_genre, rng = DEFAULT_RNG,
+  state, player, last_settlement_hub_id, world_genre,
+  defeat_fallback_node_id, world_graph_nodes, rng = DEFAULT_RNG,
 }: {
-  state:                   CombatState;
-  player:                  PlayerState;
-  last_settlement_hub_id?: string;
-  world_genre:             Genre | string | undefined;
-  rng?:                    Rng;
+  state:                    CombatState;
+  player:                   PlayerState;
+  last_settlement_hub_id?:  string;
+  world_genre:              Genre | string | undefined;
+  /** Day 20.4 TASK 4 — defeat teleport fallbacks. */
+  defeat_fallback_node_id?: string;
+  world_graph_nodes?:       Record<string, WorldNode>;
+  rng?:                     Rng;
 }): PlayerActionResult {
   const events: CombatEvent[] = [];
   const currentId = state.turn_order[state.current_turn_index];
@@ -739,6 +756,9 @@ export function advanceEnemyTurn({
   const newHealth = Math.max(0, player.health - damage);
   const newPlayer: PlayerState = { ...player, health: newHealth };
 
+  // Defend buff post-roll halve mutates `damage` but leaves the
+  // resolver's raw rolls intact. UI can show both — the d20 hit
+  // detail + the actual landed damage — without surprise.
   events.push(makeEvent({
     type:                "enemy_attack",
     actor:               actor.instance_id,
@@ -748,16 +768,19 @@ export function advanceEnemyTurn({
     remaining_target_hp: newHealth,
     weapon_or_item:      null,
     context_note:        actor.behavior_flavor,
+    rolls:               result.rolls,
   }));
 
   // Did the enemy KO the player?
   if (newHealth <= 0) {
     const sWithEvents = appendEvents(state, events);
     const defeat = handleDefeat({
-      state:                  sWithEvents,
-      player:                 newPlayer,
+      state:                   sWithEvents,
+      player:                  newPlayer,
       last_settlement_hub_id,
       world_genre,
+      defeat_fallback_node_id,
+      world_graph_nodes,
     });
     return {
       newState:   undefined,
@@ -786,13 +809,17 @@ export function advanceEnemyTurn({
  * — this helper just runs the mechanical loop.
  */
 export function advanceUntilPlayerTurnOrEnd({
-  state, player, world_genre, last_settlement_hub_id, rng = DEFAULT_RNG,
+  state, player, world_genre, last_settlement_hub_id,
+  defeat_fallback_node_id, world_graph_nodes, rng = DEFAULT_RNG,
 }: {
-  state:                   CombatState;
-  player:                  PlayerState;
-  world_genre:             Genre | string | undefined;
-  last_settlement_hub_id?: string;
-  rng?:                    Rng;
+  state:                    CombatState;
+  player:                   PlayerState;
+  world_genre:              Genre | string | undefined;
+  last_settlement_hub_id?:  string;
+  /** Day 20.4 TASK 4 — defeat teleport fallbacks. */
+  defeat_fallback_node_id?: string;
+  world_graph_nodes?:       Record<string, WorldNode>;
+  rng?:                     Rng;
 }): PlayerActionResult {
   let s: CombatState = state;
   let p = player;
@@ -804,10 +831,12 @@ export function advanceUntilPlayerTurnOrEnd({
     !checkDefeat(p)
   ) {
     const enemyTurn = advanceEnemyTurn({
-      state:                  s,
-      player:                 p,
+      state:                   s,
+      player:                  p,
       last_settlement_hub_id,
       world_genre,
+      defeat_fallback_node_id,
+      world_graph_nodes,
       rng,
     });
     if (enemyTurn.resolution) {
@@ -854,13 +883,17 @@ export function advanceUntilPlayerTurnOrEnd({
  * executePlayerAction does.
  */
 export function kickoffCombatIfEnemyFirst({
-  state, player, world_genre, last_settlement_hub_id, rng = DEFAULT_RNG,
+  state, player, world_genre, last_settlement_hub_id,
+  defeat_fallback_node_id, world_graph_nodes, rng = DEFAULT_RNG,
 }: {
-  state:                   CombatState;
-  player:                  PlayerState;
-  world_genre:             Genre | string | undefined;
-  last_settlement_hub_id?: string;
-  rng?:                    Rng;
+  state:                    CombatState;
+  player:                   PlayerState;
+  world_genre:              Genre | string | undefined;
+  last_settlement_hub_id?:  string;
+  /** Day 20.4 TASK 4 — defeat teleport fallbacks. */
+  defeat_fallback_node_id?: string;
+  world_graph_nodes?:       Record<string, WorldNode>;
+  rng?:                     Rng;
 }): PlayerActionResult {
   // Player has initiative — no-op. Combat proceeds with the player's
   // first action as normal.
@@ -887,10 +920,12 @@ export function kickoffCombatIfEnemyFirst({
 
   // Run the enemy turns.
   const result = advanceUntilPlayerTurnOrEnd({
-    state:                  s,
+    state:                   s,
     player,
     world_genre,
     last_settlement_hub_id,
+    defeat_fallback_node_id,
+    world_graph_nodes,
     rng,
   });
   events.push(...result.events);
@@ -1011,14 +1046,34 @@ export interface DefeatResult {
  * of the genre's currency key, XP rolled back to pre_combat_xp.
  * Returns the teleport target id; the hook layer applies it to
  * world_state.current_node_id.
+ *
+ * Day 20.4 TASK 4 — explicit fallback chain with diagnostic logs.
+ * Caller can pass:
+ *   - last_settlement_hub_id (preferred — soulslike model)
+ *   - defeat_fallback_node_id (starting region settlement; safe net
+ *     when last_settlement_hub_id was never set)
+ *   - world_graph_nodes (for resolving destination display name +
+ *     parent region name into the event's destination metadata)
+ *
+ * Cross-region teleport is INTENDED. Defeat returns the player to
+ * whatever settlement they last visited, even if that's in a
+ * previous region. Settlements are the deliberate checkpoint.
  */
 export function handleDefeat({
   state, player, last_settlement_hub_id, world_genre,
+  defeat_fallback_node_id, world_graph_nodes,
 }: {
-  state:                   CombatState;
-  player:                  PlayerState;
-  last_settlement_hub_id?: string;
-  world_genre:             Genre | string | undefined;
+  state:                    CombatState;
+  player:                   PlayerState;
+  last_settlement_hub_id?:  string;
+  world_genre:              Genre | string | undefined;
+  /** Day 20.4 TASK 4 — secondary fallback, e.g.
+   *  metadata.world_bible.starting_region.settlement_id. */
+  defeat_fallback_node_id?: string;
+  /** Day 20.4 TASK 4 — used to resolve display names + parent
+   *  region for the destination metadata. Optional; when omitted
+   *  the destination payload is built from ids only. */
+  world_graph_nodes?:       Record<string, WorldNode>;
 }): DefeatResult {
   const halvedHp    = Math.max(1, Math.floor(player.max_health * 0.5));
   const currencyKey = currencyKeyFor(world_genre);
@@ -1033,11 +1088,26 @@ export function handleDefeat({
     },
   };
 
-  // Resolve teleport target: last visited settlement, or fall back
-  // to the encounter origin (prompt says "starting settlement" but
-  // we don't carry that on master_state explicitly — origin is the
-  // cleanest fallback).
-  const teleportTo = last_settlement_hub_id ?? state.origin_node_id;
+  // Day 20.4 TASK 4 — fallback chain with explicit diagnostic logging.
+  let teleportTo: string;
+  if (last_settlement_hub_id) {
+    teleportTo = last_settlement_hub_id;
+  } else if (defeat_fallback_node_id) {
+    console.warn(
+      "[handleDefeat] last_settlement_hub_id missing — falling back to starting settlement:",
+      defeat_fallback_node_id
+    );
+    teleportTo = defeat_fallback_node_id;
+  } else {
+    console.warn(
+      "[handleDefeat] both last_settlement_hub_id and defeat_fallback_node_id missing — falling back to encounter origin:",
+      state.origin_node_id
+    );
+    teleportTo = state.origin_node_id;
+  }
+
+  // Resolve destination metadata for the StoryFeed info line.
+  const destination = resolveDefeatDestination(teleportTo, world_graph_nodes);
 
   const events: CombatEvent[] = [makeEvent({
     type:         "defeat",
@@ -1045,6 +1115,7 @@ export function handleDefeat({
     target:       null,
     outcome:      null,
     context_note: `teleport to ${teleportTo}`,
+    destination,
   })];
 
   // eslint-disable-next-line no-console
@@ -1057,6 +1128,46 @@ export function handleDefeat({
   };
 }
 
+/**
+ * Day 20.4 TASK 4 — build the destination metadata payload by
+ * looking up the teleport target node + its parent geographic
+ * region. Returns ids-only when world_graph_nodes isn't supplied.
+ */
+function resolveDefeatDestination(
+  nodeId: string,
+  nodes:  Record<string, WorldNode> | undefined
+): { node_id: string; node_name: string; region_id?: string; region_name?: string } {
+  const node = nodes?.[nodeId];
+  if (!node) {
+    return { node_id: nodeId, node_name: nodeId };
+  }
+  // Walk zone_id chain to the geographic region zone (zone_id === id).
+  let regionId:   string | undefined;
+  let regionName: string | undefined;
+  let cur:        WorldNode | undefined = node;
+  const visited = new Set<string>();
+  while (cur && !visited.has(cur.id)) {
+    visited.add(cur.id);
+    if (!cur.zone_id || cur.zone_id === cur.id) {
+      // Only count this as a "region" when it's distinct from the
+      // node itself (settlement nodes are at zone_id = region id, so
+      // their chain naturally walks UP to the region).
+      if (cur.id !== node.id) {
+        regionId   = cur.id;
+        regionName = cur.name;
+      }
+      break;
+    }
+    cur = nodes?.[cur.zone_id];
+  }
+  return {
+    node_id:     node.id,
+    node_name:   node.name,
+    region_id:   regionId,
+    region_name: regionName,
+  };
+}
+
 export interface FleeSuccessResult {
   newCurrentNodeId: string;
   events:           CombatEvent[];
@@ -1066,24 +1177,35 @@ export interface FleeSuccessResult {
  * Flee success — return one node back along the navigation_trail.
  * If the trail is too short (player started here), fall back to
  * the combat's origin node.
+ *
+ * Day 20.4 TASK 4 — accepts an optional world_graph_nodes for
+ * resolving the destination's display name into the flee_success
+ * event payload (no region context — flee is a short hop).
  */
 export function handleFleeSuccess({
-  state, navigation_trail,
+  state, navigation_trail, world_graph_nodes,
 }: {
-  state:             CombatState;
-  navigation_trail?: string[];
+  state:              CombatState;
+  navigation_trail?:  string[];
+  world_graph_nodes?: Record<string, WorldNode>;
 }): FleeSuccessResult {
   const trail = Array.isArray(navigation_trail) ? navigation_trail : [];
   // The trail's last entry is "where the player is now". The previous
   // entry is "where they came from" — that's the rollback target.
   const previous = trail.length >= 2 ? trail[trail.length - 2] : null;
   const target   = previous ?? state.origin_node_id;
+  const targetNode = world_graph_nodes?.[target];
   const events: CombatEvent[] = [makeEvent({
     type:         "flee_success",
     actor:        "PLAYER",
     target:       null,
     outcome:      "fled",
     context_note: `returned to ${target}`,
+    destination: {
+      node_id:   target,
+      node_name: targetNode?.name ?? target,
+      // No region context for short-hop flees per spec.
+    },
   })];
   // eslint-disable-next-line no-console
   console.log(`[Combat] Fled. Returned to ${target}.`);

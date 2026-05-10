@@ -355,6 +355,20 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
         const isCritProse          = m.is_crit_prose === true;
         const isResolutionBanner   = m.is_resolution_banner === true;
         const resolutionProse      = typeof m.resolution_prose === "string" ? m.resolution_prose : "";
+        // Day 20.4 TASK 2 — dimmed-mono roll-detail suffix. Optional;
+        // events without rolls (turn separators, defend, combat_start)
+        // pass null and the suffix span doesn't render.
+        const rollsSuffix          = typeof m.rolls_suffix === "string" ? m.rolls_suffix : null;
+        // Day 20.4 TASK 4 — defeat / flee_success destination payload
+        // for the templated info line below the resolution prose.
+        const destination = m.destination as
+          | {
+              node_id:      string;
+              node_name:    string;
+              region_id?:   string;
+              region_name?: string;
+            }
+          | undefined;
 
         // Day 20.3 TASK 1 — full-width turn separators. Strip the
         // V8.35 dash bookends from the templated string and render
@@ -378,7 +392,8 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
         }
 
         // Day 20.3 TASK 3 — CRITICAL HIT banner (line 1 of the
-        // two-line crit render). Color from actor.
+        // two-line crit render). Color from actor. Day 20.4 TASK 2
+        // — append the dimmed-mono rolls suffix when present.
         if (isCritBanner) {
           const isPlayerCrit = actor === "PLAYER";
           const color = isPlayerCrit
@@ -390,6 +405,9 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
               style={{ color }}
             >
               {content}
+              {rollsSuffix && (
+                <span className="combat-roll-detail">{rollsSuffix}</span>
+              )}
             </div>
           );
         }
@@ -428,6 +446,20 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
             eventType === "victory" ? "var(--combat-victory)"
             : eventType === "defeat" ? "var(--combat-defeat)"
             : "var(--combat-flee)";
+
+          // Day 20.4 TASK 4 — templated destination info line. Defeat
+          // includes the parent region ("at <Settlement> in <Region>");
+          // flee is a short hop without region context ("to <Node>").
+          // Victory has no destination — player stays where they were.
+          let destinationLine: string | null = null;
+          if (eventType === "defeat" && destination) {
+            destinationLine = destination.region_name
+              ? `You wake at ${destination.node_name} in ${destination.region_name}.`
+              : `You wake at ${destination.node_name}.`;
+          } else if (eventType === "flee_success" && destination) {
+            destinationLine = `You break to ${destination.node_name}.`;
+          }
+
           return (
             <div className="message-enter combat-resolution-block">
               <div
@@ -442,6 +474,11 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
                   style={{ color }}
                 >
                   {resolutionProse}
+                </div>
+              )}
+              {destinationLine && (
+                <div className="combat-resolution-destination">
+                  {destinationLine}
                 </div>
               )}
             </div>
@@ -524,6 +561,12 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
           >
             <span style={{ marginRight: 6 }}>⚔</span>
             {content}
+            {/* Day 20.4 TASK 2 — dimmed-mono roll-detail suffix
+                appended after routine event lines (hit/miss/fumble/
+                heal/flee_fail). Null on events without rolls. */}
+            {rollsSuffix && (
+              <span className="combat-roll-detail">{rollsSuffix}</span>
+            )}
           </p>
         );
       }

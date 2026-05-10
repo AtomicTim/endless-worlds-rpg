@@ -1,4 +1,4 @@
-import type { Enemy } from "@/types/game";
+import type { CombatEventRolls, Enemy } from "@/types/game";
 
 /**
  * Day 20 Combat — pure math layer (combat-spec §5).
@@ -133,6 +133,9 @@ export interface AttackResult {
   target_dc:      number;
   /** True when damage >= target.current_hp. */
   killed_target:  boolean;
+  /** Day 20.4 — granular roll detail for the inline-display +
+   *  floating-damage features. Populated for every outcome. */
+  rolls:          CombatEventRolls;
 }
 
 export function resolveAttack({
@@ -142,7 +145,7 @@ export function resolveAttack({
   target:   TargetInput;
   rng?:     Rng;
 }): AttackResult {
-  const hit_roll = rollD20(rng);
+  const hit_roll  = rollD20(rng);
   const target_dc = 10 + target.agi_mod + target.armor_bonus;
 
   // Critical fumble: nat 1 always misses, no damage. (§5.2)
@@ -154,18 +157,20 @@ export function resolveAttack({
       hit_total:     hit_roll + attacker.agi_mod,
       target_dc,
       killed_target: false,
+      rolls: {
+        d20:          hit_roll,
+        d20_modifier: attacker.agi_mod,
+        target_dc,
+      },
     };
   }
 
   // Critical hit: nat 20 always hits, double damage formula. (§5.2)
   // damage = max_die + 1d(die) + str_mod, min 1.
   if (hit_roll === 20) {
-    const critDamage = Math.max(
-      1,
-      maxDamageDie(attacker.damage_die)
-        + rollDamageDie(attacker.damage_die, rng)
-        + attacker.str_mod
-    );
+    const critMax  = maxDamageDie(attacker.damage_die);
+    const bonusRoll = rollDamageDie(attacker.damage_die, rng);
+    const critDamage = Math.max(1, critMax + bonusRoll + attacker.str_mod);
     return {
       outcome:       "crit",
       damage:        critDamage,
@@ -173,15 +178,22 @@ export function resolveAttack({
       hit_total:     hit_roll + attacker.agi_mod,
       target_dc,
       killed_target: critDamage >= target.current_hp,
+      rolls: {
+        d20:             hit_roll,
+        d20_modifier:    attacker.agi_mod,
+        target_dc,
+        damage_die:      attacker.damage_die,
+        damage_die_roll: bonusRoll,
+        crit_max_damage: critMax,
+        str_modifier:    attacker.str_mod,
+      },
     };
   }
 
   const hit_total = hit_roll + attacker.agi_mod;
   if (hit_total >= target_dc) {
-    const damage = Math.max(
-      1,
-      rollDamageDie(attacker.damage_die, rng) + attacker.str_mod
-    );
+    const dieRoll = rollDamageDie(attacker.damage_die, rng);
+    const damage  = Math.max(1, dieRoll + attacker.str_mod);
     return {
       outcome:       "hit",
       damage,
@@ -189,6 +201,14 @@ export function resolveAttack({
       hit_total,
       target_dc,
       killed_target: damage >= target.current_hp,
+      rolls: {
+        d20:             hit_roll,
+        d20_modifier:    attacker.agi_mod,
+        target_dc,
+        damage_die:      attacker.damage_die,
+        damage_die_roll: dieRoll,
+        str_modifier:    attacker.str_mod,
+      },
     };
   }
 
@@ -199,6 +219,11 @@ export function resolveAttack({
     hit_total,
     target_dc,
     killed_target: false,
+    rolls: {
+      d20:          hit_roll,
+      d20_modifier: attacker.agi_mod,
+      target_dc,
+    },
   };
 }
 
@@ -234,6 +259,8 @@ export interface FleeResult {
   success:   boolean;
   flee_roll: number;
   flee_dc:   number;
+  /** Day 20.4 — granular roll detail. */
+  rolls:     CombatEventRolls;
 }
 
 export function resolveFlee({
@@ -250,9 +277,19 @@ export function resolveFlee({
   const avgAgi = living.length === 0
     ? 0
     : living.reduce((sum, e) => sum + e.agi_mod, 0) / living.length;
-  const flee_roll = rollD20(rng) + player.agi_mod;
+  const d20       = rollD20(rng);
+  const flee_roll = d20 + player.agi_mod;
   const flee_dc   = 10 + avgAgi;
-  return { success: flee_roll >= flee_dc, flee_roll, flee_dc };
+  return {
+    success: flee_roll >= flee_dc,
+    flee_roll,
+    flee_dc,
+    rolls: {
+      d20,
+      d20_modifier: player.agi_mod,
+      target_dc:    flee_dc,
+    },
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -266,6 +303,9 @@ export interface UseItemResult {
   healed_amount:  number;
   new_hp:         number;
   item_consumed:  boolean;
+  /** Day 20.4 — granular roll detail. Populated for the basic health
+   *  potion (1d8 + 4). Empty for unknown items (no-op resolution). */
+  rolls?:         CombatEventRolls;
 }
 
 export function resolveUseItem({
@@ -286,12 +326,18 @@ export function resolveUseItem({
     };
   }
   // Heal 1d8 + 4, capped at max_hp.
-  const heal = rollDamageDie("1d8", rng) + 4;
-  const new_hp = Math.min(player.max_hp, player.current_hp + heal);
-  const actual = new_hp - player.current_hp;
+  const dieRoll = rollDamageDie("1d8", rng);
+  const heal    = dieRoll + 4;
+  const new_hp  = Math.min(player.max_hp, player.current_hp + heal);
+  const actual  = new_hp - player.current_hp;
   return {
     healed_amount: actual,
     new_hp,
     item_consumed: true,
+    rolls: {
+      damage_die:      "1d8",
+      damage_die_roll: dieRoll,
+      // No d20 / target_dc on heals; +4 is a flat bonus, not a STR modifier.
+    },
   };
 }

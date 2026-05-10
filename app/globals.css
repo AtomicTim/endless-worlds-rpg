@@ -348,6 +348,66 @@
   animation: combat-portrait-shake 400ms ease-in-out;
 }
 
+/* ── Day 20.4 TASK 3 — floating damage / heal number ───────────────────
+   Anchored to the top-edge of a portrait wrapper (which sits above
+   the PortraitSlot), floats upward ~56px while scaling and fading
+   over 1100ms. Color injected via inline style per actor (combat-
+   player / combat-enemy / hl-pass for heal). Crit numbers are
+   bigger via the --crit modifier; heal numbers prefix with "+". */
+@keyframes combat-float-damage {
+  0%   { transform: translate(-50%, 0)     scale(0.6); opacity: 0; }
+  15%  { transform: translate(-50%, -8px)  scale(1.2); opacity: 1; }
+  50%  { transform: translate(-50%, -28px) scale(1.0); opacity: 1; }
+  100% { transform: translate(-50%, -56px) scale(0.9); opacity: 0; }
+}
+
+.combat-float-damage {
+  position:        absolute;
+  left:            50%;
+  bottom:          100%;
+  transform:       translate(-50%, 0);
+  pointer-events:  none;
+  font-family:     var(--mono);
+  font-weight:     700;
+  font-size:       28px;
+  text-shadow:     0 1px 2px rgba(0,0,0,0.5),
+                   0 0 4px rgba(0,0,0,0.4);
+  white-space:     nowrap;
+  animation:       combat-float-damage 1100ms ease-out forwards;
+}
+
+.combat-float-damage--crit {
+  font-size: 36px;
+}
+
+.combat-float-damage--heal::before {
+  content: "+";
+}
+
+/* ── Day 20.4 TASK 2 — inline roll-detail suffix on combat events ──────
+   Dimmed mono parenthetical that follows the primary event line. */
+.combat-roll-detail {
+  font-size:    10px;
+  color:        var(--ink-2);
+  opacity:      0.6;
+  margin-left:  0.4em;
+  font-family:  var(--mono);
+}
+
+/* ── Day 20.4 TASK 4 — defeat / flee destination info line ─────────────
+   Templated info that lands BELOW the resolution-prose, lower
+   opacity to read as info not drama. Shares centering with the
+   resolution block. */
+.combat-resolution-destination {
+  font-size:    12px;
+  font-style:   italic;
+  font-family:  var(--serif);
+  color:        var(--ink-2);
+  opacity:      0.75;
+  margin-top:   0.5rem;
+  letter-spacing: 0.02em;
+}
+
 /* ── Day 20.3 TASK 1 — full-width combat turn separators ───────────────
    round_start / player_turn_start / enemy_phase_start render as a
    centered label with rule-line flanks that extend to the story

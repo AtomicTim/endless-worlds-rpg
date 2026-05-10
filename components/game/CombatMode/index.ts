@@ -5,3 +5,4 @@ export { HPBar } from "./HPBar";
 export { ActionBar } from "./ActionBar";
 export { TargetPicker } from "./TargetPicker";
 export { UseItemPicker } from "./UseItemPicker";
+export { FloatingDamage } from "./FloatingDamage";

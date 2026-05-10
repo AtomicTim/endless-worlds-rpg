@@ -4,6 +4,20 @@ import React from "react";
 import type { CombatEnemyInstance, PlayerState } from "@/types/game";
 import { PortraitSlot } from "./PortraitSlot";
 import { HPBar } from "./HPBar";
+import { FloatingDamage } from "./FloatingDamage";
+
+/**
+ * Day 20.4 TASK 3 — one floating-number entry pushed into the
+ * portrait wrapper from the CombatMode parent. Each entry has a
+ * unique key so React can track multiple in flight at once. Parent
+ * removes entries after the 1100ms animation completes.
+ */
+export interface FloatingDamageEntry {
+  key:   string;
+  value: number;
+  kind:  "hit" | "crit" | "heal";
+  color: string;
+}
 
 /**
  * Day 20 Combat — one combatant column.
@@ -16,23 +30,27 @@ import { HPBar } from "./HPBar";
  */
 
 interface PlayerProps {
-  combatant:    PlayerState;
-  isPlayer:     true;
-  isTargetable?: false;
-  onTargetClick?: never;
-  shake?:        boolean;
+  combatant:       PlayerState;
+  isPlayer:        true;
+  isTargetable?:   false;
+  onTargetClick?:  never;
+  shake?:          boolean;
+  /** Day 20.4 TASK 3 — currently-animating floating numbers. */
+  floatingDamage?: FloatingDamageEntry[];
 }
 interface EnemyProps {
-  combatant:    CombatEnemyInstance;
-  isPlayer:     false;
-  isTargetable?: boolean;
-  onTargetClick?: () => void;
-  shake?:        boolean;
+  combatant:       CombatEnemyInstance;
+  isPlayer:        false;
+  isTargetable?:   boolean;
+  onTargetClick?:  () => void;
+  shake?:          boolean;
+  /** Day 20.4 TASK 3 — currently-animating floating numbers. */
+  floatingDamage?: FloatingDamageEntry[];
 }
 type Props = PlayerProps | EnemyProps;
 
 export function CombatantRow(props: Props) {
-  const { isPlayer, shake } = props;
+  const { isPlayer, shake, floatingDamage } = props;
 
   // Field extraction differs by role; PlayerState uses health/max_health,
   // CombatEnemyInstance uses current_hp/max_hp.
@@ -81,13 +99,27 @@ export function CombatantRow(props: Props) {
         transition:     "opacity 200ms",
       }}
     >
-      <PortraitSlot
-        name={name}
-        isPlayer={isPlayer}
-        isBoss={isBoss}
-        isTargetable={isTargetable}
-        shake={shake}
-      />
+      {/* Day 20.4 TASK 3 — portrait wrapper with position:relative (no
+          overflow clip) so floating-damage numbers can extend ABOVE
+          the portrait. PortraitSlot keeps its own overflow:hidden
+          for the inner img clipping. */}
+      <div style={{ position: "relative", width: "100%", maxWidth: 128 }}>
+        <PortraitSlot
+          name={name}
+          isPlayer={isPlayer}
+          isBoss={isBoss}
+          isTargetable={isTargetable}
+          shake={shake}
+        />
+        {(floatingDamage ?? []).map((f) => (
+          <FloatingDamage
+            key={f.key}
+            value={f.value}
+            kind={f.kind}
+            color={f.color}
+          />
+        ))}
+      </div>
 
       <div
         style={{

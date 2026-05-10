@@ -255,6 +255,75 @@ describe("resolveAttack", () => {
     expect(r.outcome).toBe("hit");
     expect(r.killed_target).toBe(true);
   });
+
+  // ── Day 20.4 TASK 1 — granular rolls payload ────────────────────────────
+  it("populates rolls.d20 / d20_modifier / target_dc on every outcome", () => {
+    // Hit
+    {
+      const r = resolveAttack({
+        attacker: baseAttacker,
+        target:   baseTarget,
+        rng:      seqRng([0.65, 0.55]),
+      });
+      expect(r.rolls.d20).toBe(14);
+      expect(r.rolls.d20_modifier).toBe(2);
+      expect(r.rolls.target_dc).toBe(12);
+    }
+    // Miss
+    {
+      const r = resolveAttack({
+        attacker: baseAttacker,
+        target:   baseTarget,
+        rng:      seqRng([0.20]),
+      });
+      expect(r.rolls.d20).toBe(5);
+      expect(r.rolls.d20_modifier).toBe(2);
+      expect(r.rolls.target_dc).toBe(12);
+      expect(r.rolls.damage_die).toBeUndefined();
+    }
+    // Fumble
+    {
+      const r = resolveAttack({
+        attacker: baseAttacker,
+        target:   baseTarget,
+        rng:      seqRng([0.0]),
+      });
+      expect(r.rolls.d20).toBe(1);
+      expect(r.rolls.target_dc).toBe(12);
+      expect(r.rolls.damage_die).toBeUndefined();
+    }
+  });
+
+  it("populates damage_die / damage_die_roll / str_modifier on hit", () => {
+    // d20 = 14, d6 = 4 (0.55), str_mod = 1 → damage 5
+    const r = resolveAttack({
+      attacker: baseAttacker,
+      target:   baseTarget,
+      rng:      seqRng([0.65, 0.55]),
+    });
+    expect(r.outcome).toBe("hit");
+    expect(r.rolls.damage_die).toBe("1d6");
+    expect(r.rolls.damage_die_roll).toBe(4);
+    expect(r.rolls.str_modifier).toBe(1);
+  });
+
+  it("populates crit_max_damage + bonus damage_die_roll + str_modifier on crit", () => {
+    // d20 = 20 (crit), bonus d6 = 6 (0.95).
+    // crit damage = max(1d6)=6 + d6(6) + str(1) = 13.
+    const r = resolveAttack({
+      attacker: baseAttacker,
+      target:   baseTarget,
+      rng:      seqRng([0.95, 0.95]),
+    });
+    expect(r.outcome).toBe("crit");
+    expect(r.rolls.crit_max_damage).toBe(6);
+    expect(r.rolls.damage_die).toBe("1d6");
+    expect(r.rolls.damage_die_roll).toBe(6);
+    expect(r.rolls.str_modifier).toBe(1);
+    // damage_die_roll is the BONUS die, not the same as final damage.
+    // Final damage is on r.damage.
+    expect(r.damage).toBe(13);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -341,6 +410,21 @@ describe("resolveFlee", () => {
     });
     expect(r.flee_dc).toBe(10);
   });
+
+  // ── Day 20.4 TASK 1 — rolls payload ──────────────────────────────────────
+  it("populates rolls.d20 / d20_modifier / target_dc on flee", () => {
+    const r = resolveFlee({
+      player: { agi_mod: 2 },
+      enemies: [{ alive: true, agi_mod: 1 }],
+      rng:    seqRng([0.95]),  // d20 = 20
+    });
+    expect(r.rolls.d20).toBe(20);
+    expect(r.rolls.d20_modifier).toBe(2);
+    expect(r.rolls.target_dc).toBe(11);  // 10 + 1 (single living enemy)
+    // No damage fields on flee.
+    expect(r.rolls.damage_die).toBeUndefined();
+    expect(r.rolls.str_modifier).toBeUndefined();
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -381,5 +465,23 @@ describe("resolveUseItem", () => {
     expect(r.healed_amount).toBe(0);
     expect(r.new_hp).toBe(5);
     expect(r.item_consumed).toBe(false);
+    // No-op resolution doesn't carry rolls.
+    expect(r.rolls).toBeUndefined();
+  });
+
+  // ── Day 20.4 TASK 1 — rolls payload ──────────────────────────────────────
+  it("populates rolls.damage_die / damage_die_roll on heal", () => {
+    // d8 = 4 (0.45). heal = 4 + 4 = 8.
+    const r = resolveUseItem({
+      item_id: BASIC_HEALTH_POTION_ID,
+      player:  { current_hp: 5, max_hp: 20 },
+      rng:     seqRng([0.45]),
+    });
+    expect(r.rolls).toBeDefined();
+    expect(r.rolls!.damage_die).toBe("1d8");
+    expect(r.rolls!.damage_die_roll).toBe(4);
+    // No d20 / target_dc / str_modifier on heals.
+    expect(r.rolls!.d20).toBeUndefined();
+    expect(r.rolls!.str_modifier).toBeUndefined();
   });
 });

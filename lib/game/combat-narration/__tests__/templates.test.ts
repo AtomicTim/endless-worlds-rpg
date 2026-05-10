@@ -32,7 +32,7 @@ describe("renderRoutineCombatEvent — player_attack", () => {
     });
     const out = renderRoutineCombatEvent(ev, { enemyName: ENEMY_LOOKUP });
     expect(out).not.toBeNull();
-    expect(out!.includes("6 damage")).toBe(true);
+    expect(out!.primary.includes("6 damage")).toBe(true);
   });
 
   it("renders a miss line for outcome=miss", () => {
@@ -44,7 +44,7 @@ describe("renderRoutineCombatEvent — player_attack", () => {
     });
     const out = renderRoutineCombatEvent(ev, { enemyName: ENEMY_LOOKUP });
     expect(out).not.toBeNull();
-    expect(out!.toLowerCase()).not.toMatch(/damage/);
+    expect(out!.primary.toLowerCase()).not.toMatch(/damage/);
   });
 
   it("renders a fumble line for outcome=fumble", () => {
@@ -56,7 +56,7 @@ describe("renderRoutineCombatEvent — player_attack", () => {
     });
     const out = renderRoutineCombatEvent(ev, { enemyName: ENEMY_LOOKUP });
     expect(out).not.toBeNull();
-    expect(typeof out).toBe("string");
+    expect(typeof out!.primary).toBe("string");
   });
 
   it("returns null for outcome=crit (LLM-narrated)", () => {
@@ -78,7 +78,7 @@ describe("renderRoutineCombatEvent — player_attack", () => {
       damage_dealt: 4,
     });
     const out = renderRoutineCombatEvent(ev, { enemyName: () => undefined });
-    expect(out!.includes("4 damage")).toBe(true);
+    expect(out!.primary.includes("4 damage")).toBe(true);
   });
 });
 
@@ -93,7 +93,7 @@ describe("renderRoutineCombatEvent — enemy_attack", () => {
     });
     const out = renderRoutineCombatEvent(ev, { enemyName: ENEMY_LOOKUP });
     expect(out).not.toBeNull();
-    expect(out!.includes("3 damage")).toBe(true);
+    expect(out!.primary.includes("3 damage")).toBe(true);
   });
 
   it("renders a miss line for outcome=miss", () => {
@@ -105,7 +105,7 @@ describe("renderRoutineCombatEvent — enemy_attack", () => {
     });
     const out = renderRoutineCombatEvent(ev, { enemyName: ENEMY_LOOKUP });
     expect(out).not.toBeNull();
-    expect(out!.toLowerCase()).not.toMatch(/damage/);
+    expect(out!.primary.toLowerCase()).not.toMatch(/damage/);
   });
 
   it("returns null for outcome=crit", () => {
@@ -122,7 +122,10 @@ describe("renderRoutineCombatEvent — enemy_attack", () => {
 describe("renderRoutineCombatEvent — defend / use_item / flee_attempt", () => {
   it("defend renders a fixed line", () => {
     const ev = makeEvent({ type: "defend", outcome: "defended" });
-    expect(renderRoutineCombatEvent(ev)).toBe("You raise your guard.");
+    expect(renderRoutineCombatEvent(ev)).toEqual({
+      primary: "You raise your guard.",
+      rolls:   null,
+    });
   });
 
   it("use_item interpolates the item name and heal amount (Day 20.3 TASK 2 wording)", () => {
@@ -134,7 +137,7 @@ describe("renderRoutineCombatEvent — defend / use_item / flee_attempt", () => 
       weapon_or_item: "Basic Health Potion",
     });
     const out = renderRoutineCombatEvent(ev);
-    expect(out).toBe("You use Basic Health Potion. Restored 8 HP.");
+    expect(out?.primary).toBe("You use Basic Health Potion. Restored 8 HP.");
   });
 
   it("use_item without heal effect drops the heal suffix (Day 20.3 TASK 2)", () => {
@@ -146,7 +149,7 @@ describe("renderRoutineCombatEvent — defend / use_item / flee_attempt", () => 
       weapon_or_item: "Strange Trinket",
     });
     const out = renderRoutineCombatEvent(ev);
-    expect(out).toBe("You use Strange Trinket.");
+    expect(out?.primary).toBe("You use Strange Trinket.");
   });
 
   it("use_item with damage_dealt = 0 still drops the heal suffix", () => {
@@ -158,7 +161,7 @@ describe("renderRoutineCombatEvent — defend / use_item / flee_attempt", () => 
       weapon_or_item: "Inert Tonic",
     });
     const out = renderRoutineCombatEvent(ev);
-    expect(out).toBe("You use Inert Tonic.");
+    expect(out?.primary).toBe("You use Inert Tonic.");
   });
 
   it("flee_attempt fail renders a templated line", () => {
@@ -186,8 +189,11 @@ describe("variant determinism", () => {
     const a = renderRoutineCombatEvent(ev1, { enemyName: ENEMY_LOOKUP });
     const b = renderRoutineCombatEvent(ev1, { enemyName: ENEMY_LOOKUP });
     const c = renderRoutineCombatEvent(ev1, { enemyName: ENEMY_LOOKUP });
-    expect(a).toBe(b);
-    expect(a).toBe(c);
+    // Day 20.4 — return shape is { primary, rolls }; same event input
+    // must produce the same primary string (rolls suffix may differ if
+    // event.rolls payloads differ, but here event is identical).
+    expect(a?.primary).toBe(b?.primary);
+    expect(a?.primary).toBe(c?.primary);
   });
 
   it("different timestamps may pick different variants (smoke test)", () => {
@@ -207,7 +213,7 @@ describe("variant determinism", () => {
         { ...baseEvent, timestamp: i * 7919 + 13 },
         { enemyName: ENEMY_LOOKUP }
       );
-      if (out) seen.add(out);
+      if (out) seen.add(out.primary);
     }
     // The pool has 4 variants; 200 well-spaced timestamps should hit
     // more than one of them.
@@ -239,7 +245,7 @@ describe("renderRoutineCombatEvent — combat_start banner (Day 20.1 TASK 2)", (
       makeEvent({ type: "combat_start" }),
       { enemyNames: ["Goblin"], locationName: "The Thorned Cloister" }
     );
-    expect(out).toBe("You encounter Goblin at The Thorned Cloister.");
+    expect(out?.primary).toBe("You encounter Goblin at The Thorned Cloister.");
   });
 
   it("2 enemies with location: '... and ... at <loc>.'", () => {
@@ -247,7 +253,7 @@ describe("renderRoutineCombatEvent — combat_start banner (Day 20.1 TASK 2)", (
       makeEvent({ type: "combat_start" }),
       { enemyNames: ["Goblin", "Skeleton"], locationName: "The Thorned Cloister" }
     );
-    expect(out).toBe("You encounter Goblin and Skeleton at The Thorned Cloister.");
+    expect(out?.primary).toBe("You encounter Goblin and Skeleton at The Thorned Cloister.");
   });
 
   it("3+ enemies with location: Oxford-comma list at <loc>.", () => {
@@ -255,7 +261,7 @@ describe("renderRoutineCombatEvent — combat_start banner (Day 20.1 TASK 2)", (
       makeEvent({ type: "combat_start" }),
       { enemyNames: ["Goblin", "Skeleton", "Orc"], locationName: "The Thorned Cloister" }
     );
-    expect(out).toBe("You encounter Goblin, Skeleton, and Orc at The Thorned Cloister.");
+    expect(out?.primary).toBe("You encounter Goblin, Skeleton, and Orc at The Thorned Cloister.");
   });
 
   it("4+ enemies with location: Oxford-comma list with full chain", () => {
@@ -266,7 +272,7 @@ describe("renderRoutineCombatEvent — combat_start banner (Day 20.1 TASK 2)", (
         locationName: "The Thorned Cloister",
       }
     );
-    expect(out).toBe("You encounter Goblin, Skeleton, Orc, and Bandit at The Thorned Cloister.");
+    expect(out?.primary).toBe("You encounter Goblin, Skeleton, Orc, and Bandit at The Thorned Cloister.");
   });
 
   it("drops the 'at <location>' suffix when location_name is omitted", () => {
@@ -274,7 +280,7 @@ describe("renderRoutineCombatEvent — combat_start banner (Day 20.1 TASK 2)", (
       makeEvent({ type: "combat_start" }),
       { enemyNames: ["Goblin"] }
     );
-    expect(out).toBe("You encounter Goblin.");
+    expect(out?.primary).toBe("You encounter Goblin.");
   });
 
   it("drops the suffix when location_name is empty / whitespace", () => {
@@ -282,7 +288,7 @@ describe("renderRoutineCombatEvent — combat_start banner (Day 20.1 TASK 2)", (
       makeEvent({ type: "combat_start" }),
       { enemyNames: ["Goblin"], locationName: "   " }
     );
-    expect(out).toBe("You encounter Goblin.");
+    expect(out?.primary).toBe("You encounter Goblin.");
   });
 
   it("falls back to a generic banner when no enemy names supplied", () => {
@@ -292,20 +298,20 @@ describe("renderRoutineCombatEvent — combat_start banner (Day 20.1 TASK 2)", (
       makeEvent({ type: "combat_start" }),
       { locationName: "The Thorned Cloister" }
     );
-    expect(out).toBe("You encounter foes at The Thorned Cloister.");
+    expect(out?.primary).toBe("You encounter foes at The Thorned Cloister.");
   });
 });
 
 // Day 20.3 TASK 3 — CRITICAL HIT banner.
 
-describe("renderCritBanner (Day 20.3 TASK 3)", () => {
+describe("renderCritBanner (Day 20.3 TASK 3 / Day 20.4 TASK 2 shape)", () => {
   it("interpolates damage from the event when present", () => {
     const ev = makeEvent({
       type:         "player_attack",
       outcome:      "crit",
       damage_dealt: 14,
     });
-    expect(renderCritBanner(ev)).toBe("⚔ CRITICAL HIT — 14 damage.");
+    expect(renderCritBanner(ev).primary).toBe("⚔ CRITICAL HIT — 14 damage.");
   });
 
   it("falls back to a generic banner when damage isn't carried", () => {
@@ -313,7 +319,7 @@ describe("renderCritBanner (Day 20.3 TASK 3)", () => {
       type:    "player_attack",
       outcome: "crit",
     });
-    expect(renderCritBanner(ev)).toBe("⚔ CRITICAL HIT.");
+    expect(renderCritBanner(ev).primary).toBe("⚔ CRITICAL HIT.");
   });
 
   it("treats zero damage as missing (banner doesn't lie about a 0-damage crit)", () => {
@@ -322,7 +328,36 @@ describe("renderCritBanner (Day 20.3 TASK 3)", () => {
       outcome:      "crit",
       damage_dealt: 0,
     });
-    expect(renderCritBanner(ev)).toBe("⚔ CRITICAL HIT.");
+    expect(renderCritBanner(ev).primary).toBe("⚔ CRITICAL HIT.");
+  });
+
+  it("returns rolls suffix when event.rolls populated (Day 20.4 TASK 2)", () => {
+    const ev = makeEvent({
+      type:         "player_attack",
+      outcome:      "crit",
+      damage_dealt: 11,
+      rolls: {
+        d20:             20,
+        d20_modifier:    2,
+        target_dc:       12,
+        damage_die:      "1d6",
+        damage_die_roll: 3,
+        crit_max_damage: 6,
+        str_modifier:    2,
+      },
+    });
+    const out = renderCritBanner(ev);
+    expect(out.primary).toBe("⚔ CRITICAL HIT — 11 damage.");
+    expect(out.rolls).toBe("(d20: 20 | 6 (max) + 3 (1d6) + 2)");
+  });
+
+  it("returns null rolls when event.rolls absent", () => {
+    const ev = makeEvent({
+      type:         "player_attack",
+      outcome:      "crit",
+      damage_dealt: 7,
+    });
+    expect(renderCritBanner(ev).rolls).toBeNull();
   });
 });
 
@@ -350,13 +385,13 @@ describe("renderRoutineCombatEvent — turn separators (Day 20.1 TASK 3)", () =>
   it("player_turn_start renders the 'Your turn' separator", () => {
     expect(
       renderRoutineCombatEvent(makeEvent({ type: "player_turn_start" }))
-    ).toBe("─── Your turn ───");
+    ).toEqual({ primary: "─── Your turn ───", rolls: null });
   });
 
   it("enemy_phase_start renders the 'Enemies' turn' separator", () => {
     expect(
       renderRoutineCombatEvent(makeEvent({ type: "enemy_phase_start" }))
-    ).toBe("─── Enemies' turn ───");
+    ).toEqual({ primary: "─── Enemies' turn ───", rolls: null });
   });
 
   it("round_start renders 'Round N' when roundNumber is supplied", () => {
@@ -365,12 +400,12 @@ describe("renderRoutineCombatEvent — turn separators (Day 20.1 TASK 3)", () =>
         makeEvent({ type: "round_start" }),
         { roundNumber: 2 }
       )
-    ).toBe("─── Round 2 ───");
+    ).toEqual({ primary: "─── Round 2 ───", rolls: null });
   });
 
   it("round_start falls back to 'New round' without a number", () => {
     expect(
       renderRoutineCombatEvent(makeEvent({ type: "round_start" }))
-    ).toBe("─── New round ───");
+    ).toEqual({ primary: "─── New round ───", rolls: null });
   });
 });

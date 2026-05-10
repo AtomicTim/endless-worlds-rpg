@@ -1,4 +1,16 @@
-import type { CombatEvent } from "@/types/game";
+import type { CombatEvent, CombatEventRolls } from "@/types/game";
+
+/**
+ * Day 20.4 TASK 2 — return shape for renderRoutineCombatEvent and
+ * renderCritBanner. `primary` is the always-rendered event line;
+ * `rolls` is an optional dimmed-mono parenthetical suffix
+ * surfacing the d20 / damage breakdown for that event. StoryFeed
+ * renders both spans separately.
+ */
+export interface RoutineEventResult {
+  primary: string;
+  rolls:   string | null;
+}
 
 /**
  * Day 20 Combat — templated narration (combat-spec §10).
@@ -36,42 +48,126 @@ export function renderRoutineCombatEvent(
     /** round_start: 1-based round counter. */
     roundNumber?: number;
   } = {}
-): string | null {
+): RoutineEventResult | null {
+  // Helper: wrap a primary string with the standard rolls suffix
+  // computed from event.rolls. Events without a rolls payload (or
+  // events where rolls don't apply, like turn separators) get null.
+  const wrap = (primary: string | null): RoutineEventResult | null => {
+    if (primary == null) return null;
+    return { primary, rolls: buildRollsSuffix(event) };
+  };
+
   switch (event.type) {
     case "combat_start":
-      return renderCombatStart(context);
+      // No rolls on combat_start; the encounter banner is informational.
+      return { primary: renderCombatStart(context), rolls: null };
     case "round_start":
-      return renderRoundSeparator(context.roundNumber);
+      return { primary: renderRoundSeparator(context.roundNumber), rolls: null };
     case "player_turn_start":
-      return "─── Your turn ───";
+      return { primary: "─── Your turn ───", rolls: null };
     case "enemy_phase_start":
-      return "─── Enemies' turn ───";
+      return { primary: "─── Enemies' turn ───", rolls: null };
     case "player_attack": {
       const targetId = event.target;
       const resolved =
         typeof targetId === "string" && targetId !== "PLAYER"
           ? context.enemyName?.(targetId)
           : undefined;
-      return renderPlayerAttack(event, resolved ?? "the enemy");
+      return wrap(renderPlayerAttack(event, resolved ?? "the enemy"));
     }
     case "enemy_attack": {
       const resolved =
         event.actor !== "PLAYER"
           ? context.enemyName?.(event.actor)
           : undefined;
-      return renderEnemyAttack(event, resolved ?? "The enemy");
+      return wrap(renderEnemyAttack(event, resolved ?? "The enemy"));
     }
     case "defend":
-      return "You raise your guard.";
+      return { primary: "You raise your guard.", rolls: null };
     case "use_item":
-      return renderUseItem(event, context.itemName);
+      return wrap(renderUseItem(event, context.itemName));
     case "flee_attempt":
       // Successful flee is dramatic — leave to LLM. Failed is templated.
-      if (event.outcome === "fled_failed") return renderFleeFail(event);
+      if (event.outcome === "fled_failed") return wrap(renderFleeFail(event));
       return null;
     default:
       return null;
   }
+}
+
+// ── Day 20.4 TASK 2 — roll suffix builder ──────────────────────────────────
+
+/**
+ * Build the dimmed-mono parenthetical suffix that surfaces the
+ * d20 / damage breakdown for a CombatEvent. Returns null for events
+ * with no rolls payload (turn separators, defend, combat_start).
+ *
+ * Formats by outcome:
+ *   hit:    "(d20: 17 vs 12 | 1d6+2)"
+ *   crit:   "(d20: 20 | 6 (max) + 3 (1d6) + 0)"
+ *   miss:   "(d20: 4 vs 12)"
+ *   fumble: "(d20: 1)"
+ *   heal:   "(1d8: 4 +4)"
+ *   flee:   "(d20: 6 vs 11)"
+ */
+function buildRollsSuffix(event: CombatEvent): string | null {
+  const r: CombatEventRolls | undefined = event.rolls;
+  if (!r) return null;
+
+  // Use-item heal: no d20, just the heal die roll + flat +4.
+  if (event.type === "use_item") {
+    if (typeof r.damage_die_roll === "number" && r.damage_die) {
+      // The +4 is the basic-potion flat bonus (resolveUseItem adds
+      // it directly, not via str_modifier). Surfacing it as a
+      // hardcoded "+4" matches the user-visible math for Day 20.
+      return `(${r.damage_die}: ${r.damage_die_roll} +4)`;
+    }
+    return null;
+  }
+
+  if (typeof r.d20 !== "number") return null;
+
+  // Fumble: nat 1, no DC comparison needed (always misses).
+  if (event.outcome === "fumble") {
+    return `(d20: ${r.d20})`;
+  }
+
+  // Crit: d20 = 20, breakdown of (max + bonus die + str_mod).
+  if (event.outcome === "crit") {
+    const parts: string[] = [`d20: ${r.d20}`];
+    if (
+      typeof r.crit_max_damage === "number" &&
+      typeof r.damage_die_roll === "number" &&
+      r.damage_die
+    ) {
+      const strMod = typeof r.str_modifier === "number" ? r.str_modifier : 0;
+      parts.push(
+        `${r.crit_max_damage} (max) + ${r.damage_die_roll} (${r.damage_die}) + ${strMod}`
+      );
+    }
+    return `(${parts.join(" | ")})`;
+  }
+
+  // Hit: d20 + AGI vs DC, plus damage breakdown "<die>+<str_mod>".
+  if (event.outcome === "hit") {
+    const dc = typeof r.target_dc === "number" ? r.target_dc : 0;
+    const total = r.d20 + (r.d20_modifier ?? 0);
+    const parts: string[] = [`d20: ${total} vs ${dc}`];
+    if (r.damage_die && typeof r.str_modifier === "number") {
+      const sign = r.str_modifier >= 0 ? "+" : "";
+      parts.push(`${r.damage_die}${sign}${r.str_modifier}`);
+    } else if (r.damage_die) {
+      parts.push(r.damage_die);
+    }
+    return `(${parts.join(" | ")})`;
+  }
+
+  // Miss / fled / fled_failed — d20 vs DC.
+  if (typeof r.target_dc === "number") {
+    const total = r.d20 + (r.d20_modifier ?? 0);
+    return `(d20: ${total} vs ${r.target_dc})`;
+  }
+  return `(d20: ${r.d20})`;
 }
 
 // ── combat_start banner (Day 20.1 TASK 2) ──────────────────────────────────
@@ -214,17 +310,18 @@ function renderUseItem(event: CombatEvent, itemName?: string): string {
 }
 
 /**
- * Day 20.3 TASK 3 — CRITICAL HIT banner string (line 1 of the
- * two-line crit render). The LLM prose follows on line 2. Damage
- * suffix interpolated from event.damage_dealt; falls back to the
- * generic banner when damage isn't carried.
+ * Day 20.3 TASK 3 + Day 20.4 TASK 2 — CRITICAL HIT banner (line 1
+ * of the two-line crit render). Returns the banner string + an
+ * optional rolls suffix for inline display. Damage in the banner
+ * interpolates from event.damage_dealt (the resolved final damage);
+ * the rolls suffix shows the breakdown (max + bonus + str_mod).
  */
-export function renderCritBanner(event: CombatEvent): string {
+export function renderCritBanner(event: CombatEvent): RoutineEventResult {
   const dmg = event.damage_dealt;
-  if (typeof dmg === "number" && dmg > 0) {
-    return `⚔ CRITICAL HIT — ${dmg} damage.`;
-  }
-  return "⚔ CRITICAL HIT.";
+  const primary = typeof dmg === "number" && dmg > 0
+    ? `⚔ CRITICAL HIT — ${dmg} damage.`
+    : "⚔ CRITICAL HIT.";
+  return { primary, rolls: buildRollsSuffix(event) };
 }
 
 /**

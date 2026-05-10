@@ -786,6 +786,57 @@ export interface CombatEvent {
    *  behavior_flavor / region atmosphere without the resolver having
    *  to infer it. */
   context_note:          string | null;
+  /** Day 20.4 — granular roll detail for inline display + floating
+   *  damage numbers. Optional and additive: existing consumers that
+   *  ignore this field continue to work. Populated by combat-resolver
+   *  on hit / miss / fumble / crit / flee / use_item. Other event
+   *  types omit it. */
+  rolls?: CombatEventRolls;
+  /** Day 20.4 TASK 4 — defeat / flee_success destination metadata.
+   *  Resolved by handleDefeat / handleFleeSuccess at teleport time
+   *  using the world_graph. StoryFeed renders an info line
+   *  ("You wake at <Settlement> in <Region>.") below the resolution
+   *  prose. Defeat carries node + region context; flee_success
+   *  drops region (short hop). */
+  destination?: CombatEventDestination;
+}
+
+/**
+ * Day 20.4 — granular roll breakdown for a CombatEvent. Every field
+ * is optional because the relevant data depends on the event type
+ * (no d20 on a heal, no damage_die on a miss, etc.). UI consumers
+ * read what's present and skip what isn't.
+ */
+export interface CombatEventRolls {
+  /** Raw d20 roll (1-20). Present on hit/miss/crit/fumble/flee. */
+  d20?:             number;
+  /** Modifier added to d20 (AGI mod for attacks/flee). */
+  d20_modifier?:    number;
+  /** Difficulty class compared against (10 + AGI + armor for attacks). */
+  target_dc?:       number;
+  /** Damage die notation, e.g. "1d6". Present on hit/crit/use_item. */
+  damage_die?:      string;
+  /** Raw die roll. For crits this is the BONUS die (the +1d(die)
+   *  part of crit math); the max value is in crit_max_damage. */
+  damage_die_roll?: number;
+  /** Crits only — the maxed value of the damage die (e.g. 6 for 1d6). */
+  crit_max_damage?: number;
+  /** Strength mod added to damage rolls. Absent on heal events. */
+  str_modifier?:    number;
+}
+
+/**
+ * Day 20.4 TASK 4 — Defeat / flee_success destination payload.
+ * Resolved by the combat engine at teleport time so StoryFeed can
+ * render a templated info line below the resolution prose. Region
+ * fields are omitted for short-hop events (flee_success only carries
+ * the previous node). */
+export interface CombatEventDestination {
+  node_id:      string;
+  node_name:    string;
+  /** Defeat: region zone id + name. Flee_success: undefined. */
+  region_id?:   string;
+  region_name?: string;
 }
 
 export interface CombatState {

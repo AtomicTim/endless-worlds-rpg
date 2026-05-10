@@ -8,6 +8,67 @@
 
 ---
 
+## 🎮 Game Vision
+
+The north-star scenario this entire project is being built for:
+
+> **Tim and his wife (or a friend) are sitting in the living room on a Saturday night. One of them says "let's play." Both pull out phones, tap a website, pick a genre, name a character. Within a couple minutes they're in a brand-new world neither has seen before — a quest waiting, NPCs to meet, dungeons to crawl, lore to discover. They play for an hour or two and walk away having had a real D&D-style adventure.**
+
+This scenario drives every design decision. If a feature makes that scenario *better*, it's worth building. If it doesn't, it's polish or scope creep.
+
+### What this game IS
+
+- **A pickup D&D-style RPG.** Sit down, play in a few minutes, walk away when you're done. Like ordering a pizza vs cooking dinner.
+- **Procedurally generated every game.** No two playthroughs share a world. Quest line, locations, NPCs, lore, win condition — all generated fresh.
+- **AI-narrated with D&D-style prose.** Descriptions that hit home. The kind of language a good DM would use, not flat database text.
+- **CRPG-depth mechanics.** Real stat checks, inventory, leveling, gear, combat math — not just choose-your-own-adventure clicking.
+- **Multiple play styles supported simultaneously.** The game does not railroad. The same world can be:
+  - **Long quest playthrough** — follow the breadcrumbs, beat the win condition, hours of play
+  - **Speedrun-the-end** — figure out the win condition fast and rush it
+  - **Pure exploration** — wander regions, see what's out there, no quest pressure
+  - **Settlement-focused** — grind levels, talk to NPCs, develop the character
+  - **Lifestyle/job grind** (eventual) — become the best blacksmith / scholar / merchant in the realm; affects how the world reacts to you
+  - **Mixed** — switch modes mid-session
+- **Mobile-first accessible.** Designed for phone screens, fast-loading, runs on web. The phone in your pocket IS the game console.
+- **Multiplayer eventually** (post-MVP). Two phones, one shared world, take turns or play simultaneously.
+- **User-customizable worlds eventually** (post-MVP). Player can guide AI on world themes — "haunted Victorian England" / "post-apocalyptic Mars colony" / "kingdom of warring deities" — beyond the fixed genre presets.
+
+### What this game IS NOT
+
+- **Not Baldur's Gate.** No 80-hour campaigns. No mouse-and-keyboard required. No tactical combat with positioning grids. The complexity should be in narrative depth and character growth, not in interface complexity.
+- **Not a CYOA / interactive fiction tool.** Real mechanics matter — dice, stats, gear, levels, consequences. The AI is a narrator, not the entire game system.
+- **Not a long-term commitment to a single character.** Worlds are disposable; characters are disposable. The replayability is from running NEW playthroughs, not from grinding one to max level.
+- **Not a tabletop replacement.** It complements physical D&D — it's the option for when you DON'T have a DM, four hours, and a kitchen table.
+- **Not a hardcore strategy game.** Combat should feel impactful and tactical-ish, but the goal is dramatic narrative beats with mechanical weight, not min-maxing.
+
+### Competitive positioning
+
+> **"Baldur's Gate depth without Baldur's Gate overhead. D&D feel without needing a DM."**
+
+The market gap this fills: there is no easy, fast, accessible way to have a D&D-style adventure on a phone with a friend. Existing options force a tradeoff:
+- Real D&D → needs DM, prep, hours, table
+- Baldur's Gate / Pillars / similar CRPGs → desktop, complex UI, long campaigns, single-player
+- Choose-your-own-adventure apps → no real mechanics, no replayability
+- AI Dungeon and clones → no structured RPG layer, easy to break, no real game
+- Tabletop simulators / Roll20 → still need a DM and party
+
+This game wins by being structured-but-light, AI-narrated-but-mechanically-grounded, mobile-first, multiplayer-aware, and replayable by design.
+
+### Design principles derived from this vision
+
+These should guide ALL feature decisions. When in doubt, check the principle.
+
+1. **Pickup-friendly.** Time from "let's play" to "playing" must stay short. World gen, character creation, first-action latency — all within the patience window of "we just sat down."
+2. **Mobile-first viewport.** Every UI is verified on phone-width before desktop polish. Combat panel, nav, story feed, modals — all phone-readable first.
+3. **Multiple play styles supported.** No system should force one playstyle. Settlements need self-contained content (jobs, NPCs, training) so settlement-focus players can ignore the main quest. Quest must be optional, not gating. Exploration must be rewarded (codex entries, lore, hidden locations) without quest reasons.
+4. **Procedural variety > authored depth.** Lean on AI generation for breadth (different worlds every time) and code structure for reliability (mechanics work consistently across all worlds). Hand-authored content should be content templates and rules, not specific story content.
+5. **Multiplayer-aware architecture.** Decisions made now should not preclude 2-4 player co-op. Specifically: deterministic combat (RNG injected ✓), serializable state (✓), event-driven UI (✓), party-of-N character schema (currently single-player; will need extension), turn-syncing infrastructure (will need Supabase realtime channels).
+6. **Customization-aware architecture.** WCD generation prompts and genre system should be designed so user-supplied themes / constraints can plug in later without a rewrite.
+7. **D&D-style narration is the soul.** Combat narration, arrival narration, dramatic moments — they need to feel like a good DM is describing them. Tone, weight, specificity matter. Generic "you attack the goblin and hit" is failure; "your blade catches the goblin's collarbone with a wet crunch" is the bar.
+8. **Death must matter.** Defeat costs something real (HP, currency, XP rollback). Settlements as checkpoints become a deliberate mechanic, not a forgettable formality. (V8.36 cross-region defeat-teleport behavior is part of this.)
+
+---
+
 ## 🎯 Project Roles & Working Mode
 
 **Vision & Creative Direction:** Tim (the user). Drives game vision, design intent, feature priority, what the game IS at its core. First-time game developer, building the type of game he's always wanted to play and that doesn't currently exist.
@@ -24,7 +85,7 @@ While ultimately deferring to creative-director call on vision questions. Creati
 
 **Decision flow:**
 1. Tim describes what he wants
-2. Claude.ai assesses: is this the right thing right now? Is there a better way? Does it create future problems?
+2. Claude.ai assesses: is this the right thing right now? Is there a better way? Does it create future problems? Does it serve the Game Vision?
 3. Claude.ai responds with feasibility analysis, alternative approaches if relevant, recommended sequencing if scope concerns exist
 4. Tim makes the creative-director call (override or accept the recommendation)
 5. Claude.ai writes the prompt for Claude Code with locked decisions and explicit don't-touch boundaries
@@ -44,25 +105,37 @@ Day 20 was originally scoped as a single combat prompt. It expanded to seven com
 
 **Concern:** Continued combat polish risks tuning combat math around level-1 starter equipment forever. Real difficulty calibration only happens after loot tables (Day 21) and leveling (Day 22) land. Tim has already encountered this — fights against high-AGI regional enemies that require flee, with no path to grow past it.
 
-**Recommended sequence after Day 20.4 lands:**
-1. **Polish Round (Prompt 4)** — clear visible UX debt (nav grouping, tier colors, settlement card label, tier auto-switch, NPC dialogue contrast). Small, focused, no architecture risk. Hurts every session, not just combat.
+**Recommended sequence after Day 20.4 lands (CONFIRMED V8.37):**
+1. **Polish Round (Prompt 4)** — clear visible UX debt (nav grouping, tier colors, settlement card label, tier auto-switch, NPC dialogue contrast). Bundle mobile-viewport QA pass.
 2. **Day 21 — Container + Loot** — real loot tables, dungeon containers, merchant inventories. Combat balance solves itself when better gear drops.
-3. **Day 22 — Skills + Leveling** — XP gates, stat points, level-gated abilities. Character growth becomes real.
+3. **Day 22 — Skills + Leveling** — XP gates, stat points, level gates, special combat abilities.
 4. **Vertical slice playtest** — full game start → main-quest progression → win condition (with placeholder content where needed). Surface integration issues before adding more features.
 5. **Day 23 — Main Quest Thread** — informed by playtest insights.
-6. **Day 20.5 — Verbal Action / Taunt** — DEFERRED. The mechanic shines more when stats/gear matter. Current "Combat input is disabled" message is acceptable interim. Verbal action is a "feels great" feature, not critical-path.
+6. **Day 20.5 — Verbal Action / Taunt** — DEFERRED. Mechanic shines more when stats/gear matter.
 
-**Why this sequence:** prioritizes critical-path systems (loot, leveling, quest) over polish features, gets to a playable end-to-end game faster, saves verbal action for when it'll have real teeth (post-leveling). The taunt mechanic resolving 1d20 + charisma_mod + quality_mod will be more interesting when charisma is something the player can invest in via leveling, and when distract/intimidate gear can drop from loot.
+**Tim confirmed this sequence in V8.37.** Verbal action is officially deferred to post-Day-22.
 
-**Tim's call to make.** This is a recommendation, not a decision. Verbal action IS fully designed and queued; if creative direction prioritizes it over loot/leveling, that's a valid override. Whatever Tim decides, the sequencing ratio (critical-path : polish) is the thing to keep an eye on going forward.
+### V8.37 — Vision capture
+
+Tim laid out the full game vision in detail (captured in 🎮 Game Vision section above). Key new additions to engineering awareness:
+- **Mobile-first** is a hard requirement, not aspirational. Polish Round should bundle mobile-viewport QA pass.
+- **Multiplayer is in scope** (post-MVP). Architecture decisions in Day 21-23 should not preclude 2-4 player co-op. Specifically watch: party-of-N character schema (currently single-player), turn-syncing infrastructure (currently single-client).
+- **Customization layer is in scope** (post-MVP). Genre system might evolve from fixed-5 to "preset + user modifiers." World gen prompts should be designed so user-supplied themes can plug in.
+- **Lifestyle skills / jobs system** is part of the long-term vision. Day 22 leveling design should consider: do we lay foundations for lifestyle skills (XP per skill domain — combat / crafting / social) now, or scope leveling as combat-stats-only first and add skill domains later? Open question.
+
+**World generation perf concern (V8.37):** 35s WCD + 120s WorldBible = 2.5min from "let's play" to "playable." Borderline for the pickup-play scenario, especially before multiplayer where two players watch the same loading screen. NOT urgent for single-player MVP but flagged as a future perf budget item. Possible mitigations: parallel WCD/WorldBible generation, faster model for sub-content, pre-warmed world pool background-generated.
 
 ### Open strategic questions / future discussions
-- **External playtest timing.** When does the first "stranger plays the game" playtest happen? Useful before locking final UI patterns. Likely best post-Day-22 (combat with growth) or post-Day-23 (full progression loop).
-- **Difficulty tuning model.** Once leveling lands, does combat need a difficulty toggle (easy / standard / hard), or should world tier handle this implicitly via region depth (deeper = harder)?
-- **Random travel encounters** (per combat-spec §3 deferral). When does this layer in? Currently slated post-Day-21; might fit better as part of Day 22 or Day 23 depending on quest design (don't want random encounters interrupting quest breadcrumbs).
-- **Verbal action redundancy risk.** If Day 22 leveling adds a Charisma skill tree with active abilities (intimidate, persuade, etc.), the verbal-action types might need reconciling with skill abilities to avoid duplication. Worth designing leveling first, then verbal action with knowledge of what skills exist.
-- **NPC behavior dispatch** (combat-spec §6.3 deferral). Currently every enemy just attacks the player. Behavior dispatch (target weakest, focus, retreat at low HP, summon) is queued for "future combat-depth pass." Likely best after the player has more tactical options (verbal action + skills + better gear) so enemies have something to react to.
-- **Map visual rework.** Pure visual debt; no architecture risk; deferred to its own session. Not a critical-path item.
+
+- **Multiplayer timing.** Pre-launch or post-launch v2? Affects whether Day 25-ish is a multiplayer foundation round or whether we ship single-player first and add multiplayer later. Tim to decide before Day 22.
+- **Customization layer timing.** Pre-launch or post-launch v2? Affects how generalized world generation needs to be in Day 21+. Tim to decide before Day 23.
+- **Skills/jobs system depth at Day 22.** Combat-stat-only leveling first (faster), or lifestyle-skill foundations now (more work, sets up bigger vision)? Tim to decide before Day 22.
+- **External playtest timing.** When does the first "stranger plays the game" playtest happen? Likely best post-Day-22 or post-Day-23.
+- **Difficulty tuning model.** Once leveling lands, does combat need a difficulty toggle (easy / standard / hard), or should world tier handle this implicitly via region depth?
+- **Random travel encounters** (per combat-spec §3 deferral). Currently slated post-Day-21; might fit better as part of Day 22 or Day 23 depending on quest design (don't want random encounters interrupting quest breadcrumbs).
+- **Verbal action redundancy risk.** If Day 22 leveling adds a Charisma skill tree with active abilities (intimidate, persuade, etc.), the verbal-action types might need reconciling with skill abilities.
+- **NPC behavior dispatch** (combat-spec §6.3 deferral). Currently every enemy just attacks the player. Behavior dispatch (target weakest, focus, retreat at low HP, summon) is queued for "future combat-depth pass."
+- **Map visual rework.** Pure visual debt; deferred to its own session. Not critical-path.
 
 ---
 
@@ -87,12 +160,12 @@ Day 20 was originally scoped as a single combat prompt. It expanded to seven com
 | 20.2 — Combat Hotfix (bf3871e) | Initiative kickoff fix + inventory stats display | ✅ Complete |
 | 20.3 — Combat Polish 2 (732e944) | Full-width separators, item use locked to buttons, CRITICAL HIT banner, victory/defeat/escaped two-line render, prose suppression on victory-killing-blow | ✅ Complete |
 | **20.4 — Combat Polish 3** | **Floating damage numbers over portraits + inline roll details in story-feed events + defeat teleport fix (init last_settlement_hub_id at spawn, cross-region teleport to last settlement, "You wake at X in Y" templated message line)** | ⏳ **In flight** |
-| Polish Round (Prompt 4) | Movement-direction grouped nav cards + tier color-coding + settlement card label + tier auto-switch + NPC dialogue contrast | ⏳ Recommended next post-20.4 |
-| 21 | Container + Loot — registry, loot tables, dungeon sub-levels, real loot beyond stub | ⏳ Recommended after Polish Round |
-| 22 | Skills + Leveling — XP, stat points, level gates, special combat abilities | ⏳ Recommended after Day 21 |
-| Vertical slice playtest | Full game start → win condition with placeholder content where needed | ⏳ Recommended before Day 23 |
-| 23 | Main Quest Thread — breadcrumb injection, quest tracking | ⏳ Recommended post-playtest |
-| 20.5 — Verbal Action System | Chat input hijack: taunt / distract / intimidate via LLM judging + charisma check + status effects (DESIGN LOCKED, deferred per V8.37 trajectory note) | ⏳ Deferred post-Day-22 |
+| Polish Round (Prompt 4) | Movement-direction grouped nav cards + tier color-coding + settlement card label + tier auto-switch + NPC dialogue contrast + mobile-viewport QA bundle | ⏳ Confirmed next post-20.4 |
+| 21 | Container + Loot — registry, loot tables, dungeon sub-levels, real loot beyond stub | ⏳ Confirmed after Polish Round |
+| 22 | Skills + Leveling — XP, stat points, level gates, special combat abilities | ⏳ Confirmed after Day 21 |
+| Vertical slice playtest | Full game start → win condition with placeholder content where needed | ⏳ Confirmed before Day 23 |
+| 23 | Main Quest Thread — breadcrumb injection, quest tracking | ⏳ Confirmed post-playtest |
+| 20.5 — Verbal Action System | Chat input hijack: taunt / distract / intimidate via LLM judging + charisma check + status effects (DESIGN LOCKED, deferred to post-Day-22 per V8.37) | ⏳ Deferred post-Day-22 |
 | Map Visual Rework | Dedicated session | ⏳ Deferred (no critical-path dependency) |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
@@ -290,14 +363,15 @@ Model: claude-sonnet-4-5, max_tokens: 10000. validateEnemy/validateEnemies/scrub
 - Defeat teleport fix: initialize last_settlement_hub_id at game spawn in apply-world-bible, cross-region teleport to last visited settlement (soulslike model — death is meaningful), templated "You wake at <Settlement> in <Region>." info line below resolution prose
 - Flee success destination message: "You break to <Node>." templated line below flee prose
 
-**Polish Round (Prompt 4) — design locked V8.36, recommended next:**
+**Polish Round (Prompt 4) — design locked V8.36, confirmed next:**
 - Movement-direction grouped nav cards (BACK / DEEPER / PEER / UNDISCOVERED rows)
 - Tier color-coding within each group (region lavender, settlement sky-blue, sub-location mint, dungeon new color)
 - Settlement hub card on new region arrival reads as back-from-settlement — card-typing fix
 - Map does not auto-switch tiers on cross-region arrival
 - NPC dialogue text needs higher contrast (.ew-said too close to ink-2)
+- **Mobile-viewport QA pass** — verify combat panel, nav, story feed, modals all phone-readable (V8.37 vision addition)
 
-**Day 20.5 — Verbal Action System (DEFERRED post-Day-22 per V8.37 trajectory):**
+**Day 20.5 — Verbal Action System (DEFERRED post-Day-22):**
 Replaces the V8.37 "Combat input is disabled" interim block.
 - Player types verbal action during combat → `/api/game/parse-combat-verbal-action` LLM judges quality (poor/decent/good/brilliant), target enemy, type (taunt/distract/intimidate/non_combat)
 - Engine resolves: 1d20 + charisma_mod + quality_mod vs 10 + target.agi_mod
@@ -316,6 +390,9 @@ Replaces the V8.37 "Combat input is disabled" interim block.
 
 **Pacing tuning (V8.35 watchpoint):**
 - 800/500/800ms delays may need adjustment after extended playtest.
+
+**World gen perf (V8.37 vision flag):**
+- 35s WCD + 120s WorldBible = 2.5min "let's play" → "playable." Borderline for pickup-play scenario, especially pre-multiplayer. Possible mitigations: parallel WCD/WorldBible, faster sub-content model, pre-warmed pool.
 
 **Other deferred:**
 - NPC highlight color (orange) too similar to item highlight (yellow) in Fantasy.
@@ -497,8 +574,9 @@ COMBAT (V8.37):
 Claude Code pushes → user reports commit + test results → Claude.ai updates CLAUDE.md + provides testing checklist → user verifies → next prompt.
 **All architecture decisions defer to /docs/architecture-spec.md.**
 **All combat decisions defer to /docs/combat-spec.md.**
+**All vision/scope decisions defer to 🎮 Game Vision section above.**
 **All strategic / sequencing decisions captured in 📋 Strategic Trajectory Notes section above.**
 
 ---
 
-*Last updated: V8.37 (docs-only update) — Added 🎯 Project Roles & Working Mode and 📋 Strategic Trajectory Notes sections at top of doc to formalize Tim-as-creative-director / Claude.ai-as-tech-director model and capture the combat-scope-drift assessment + recommended sequencing (Polish Round → Day 21 Loot → Day 22 Leveling → vertical slice playtest → Day 23 Quest → Day 20.5 Verbal Action deferred to last). Day 20.4 (in flight) re-titled "Combat Polish 3" reflecting actual scope (floating numbers + inline rolls + defeat teleport fix). Day 20.5 Verbal Action explicitly marked deferred with rationale. Phase table reorganized to show recommended sequence.*
+*Last updated: V8.37 (docs-only update, second pass) — Added 🎮 Game Vision section capturing the full pickup-D&D-on-phones north-star scenario, what the game IS / IS NOT, competitive positioning ("BG depth without BG overhead"), and 8 design principles derived from vision (pickup-friendly, mobile-first, multi-playstyle, procedural variety, multiplayer-aware, customization-aware, D&D-style narration as soul, death must matter). Strategic Trajectory Notes extended with vision capture entry flagging mobile-first hard requirement, multiplayer architecture awareness, customization layer awareness, world-gen perf concern (2.5min "let's play" → "playable" borderline). Tim confirmed sequencing: Polish Round → Day 21 Loot → Day 22 Leveling → playtest → Day 23 Quest → Day 20.5 Verbal Action deferred. Polish Round scope expanded to include mobile-viewport QA bundle.*

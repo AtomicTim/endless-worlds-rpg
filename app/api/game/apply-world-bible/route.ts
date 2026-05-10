@@ -1060,6 +1060,13 @@ export async function POST(request: NextRequest) {
     "[apply-world-bible] Set current_location_id:",
     startingNodeId
   );
+  // Day 20.4.1 TASK 4 — visibility log for the spawn-init defeat
+  // teleport target. Should match current_location_id (settlement
+  // node) on every fresh game; mismatch = bug.
+  console.log(
+    "[apply-world-bible] Set last_settlement_hub_id:",
+    startingNodeId
+  );
   console.log(
     `[apply-world-bible] Applied: ${bibleNarrowed.starting_region.name}, ` +
     `${bibleNarrowed.starting_region.locations.length} locations, ` +

@@ -5,6 +5,7 @@ import { Package } from "lucide-react";
 import { Genre, ItemType, ItemRarity } from "@/types/game";
 import type { Item } from "@/types/game";
 import { useGameStore } from "@/lib/stores/game-store";
+import { useCombat } from "@/hooks/useCombat";
 import { SidebarPanel } from "./SidebarPanel";
 import { getGenreColors } from "@/components/game/genre-ui";
 
@@ -44,6 +45,15 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
   const inventory    = useGameStore((s) => s.masterState?.player_state.inventory) ?? [];
   const isProcessing = useGameStore((s) => s.isProcessing);
   const genre        = useGameStore((s) => s.masterState?.metadata.genre) ?? Genre.FANTASY;
+  // Day 20.4.1 TASK 2 — when combat is active, the sidebar Use button
+  // must route through the combat-engine action loop instead of
+  // useGameLoop.submitAction (which would hit the V8.37 input gate
+  // and show "Combat input is disabled"). Read combat slice + the
+  // submitCombatAction binding from useCombat. Non-CONSUMABLE items
+  // (weapons, armor, lore, keys) lose their action button entirely
+  // during combat — combat resolution doesn't include those flows.
+  const inCombat              = useGameStore((s) => s.masterState?.combat?.active === true);
+  const { submitCombatAction, isResolving: combatResolving } = useCombat();
   // Day 18 — currency from genre config; null for Horror (no currency).
   const currencyLbl  = getGenreColors(genre).currency;
   const hasCurrency  = currencyLbl !== null;
@@ -407,8 +417,10 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
             </p>
           ) : (
             <div className="flex gap-1 pt-0.5">
+              {/* Day 20.4.1 TASK 2 — equip/unequip is gated to non-combat
+                  flows. Combat doesn't expose mid-fight gear swap. */}
               {(selectedItem.type === ItemType.WEAPON || selectedItem.type === ItemType.ARMOR) &&
-                onSubmit && (
+                onSubmit && !inCombat && (
                   <button
                     className="flex-1 rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-opacity disabled:opacity-40"
                     style={{ backgroundColor: "var(--color-accent)", color: "#000" }}
@@ -427,9 +439,22 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
                 <button
                   className="flex-1 rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-opacity disabled:opacity-40"
                   style={{ backgroundColor: "var(--color-primary)", color: "#000" }}
-                  disabled={isProcessing}
+                  disabled={isProcessing || (inCombat && combatResolving)}
                   onClick={() => {
-                    onSubmit(`use ${selectedItem.name}`);
+                    // Day 20.4.1 TASK 2 — when combat is active, route
+                    // through useCombat.submitCombatAction so the
+                    // engine consumes a turn properly. The
+                    // useGameLoop.submitAction path would hit the
+                    // V8.37 "Combat input is disabled" gate and the
+                    // potion would never be consumed.
+                    if (inCombat) {
+                      void submitCombatAction({
+                        action:  "use_item",
+                        item_id: selectedItem.id,
+                      });
+                    } else {
+                      onSubmit(`use ${selectedItem.name}`);
+                    }
                     setSelectedId(null);
                   }}
                 >
@@ -437,7 +462,10 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
                 </button>
               )}
 
-              {selectedItem.type === ItemType.LORE && onSubmit && (
+              {/* Day 20.4.1 TASK 2 — read/search/drop are non-combat
+                  flows; hidden when combat is active. Combat input
+                  gating in useGameLoop would block these anyway. */}
+              {selectedItem.type === ItemType.LORE && onSubmit && !inCombat && (
                 <button
                   className="flex-1 rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-opacity disabled:opacity-40"
                   style={{ backgroundColor: "var(--color-primary)", color: "#000" }}
@@ -451,7 +479,7 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
                 </button>
               )}
 
-              {selectedItem.type === ItemType.CONTAINER && onSubmit && (
+              {selectedItem.type === ItemType.CONTAINER && onSubmit && !inCombat && (
                 <button
                   className="flex-1 rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-opacity disabled:opacity-40"
                   style={{
@@ -470,7 +498,7 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
                 </button>
               )}
 
-              {onSubmit && (
+              {onSubmit && !inCombat && (
                 <button
                   className="rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-opacity disabled:opacity-40"
                   style={{

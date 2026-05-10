@@ -2340,10 +2340,20 @@ export function useGameLoop() {
         // Track last_settlement_hub_id (defeat teleport target) and the
         // last 5 visited nodes (flee rollback). Both ride alongside the
         // existing master_state and don't impact narrator behavior.
+        //
+        // Day 20.4.1 TASK 4 — drop the `category === "settlement_hub"`
+        // fallback. apply-world-bible step 4c builds the geographic
+        // region zone with category copied from
+        // bibleNarrowed.starting_region.type, which the WorldBible
+        // prompt template hard-codes to "settlement_hub". So that
+        // category match was returning TRUE for region zones and
+        // overwriting last_settlement_hub_id with the region id —
+        // making defeat teleports respawn in the region zone instead
+        // of the settlement. is_settlement_node is reliably set
+        // explicitly on settlement nodes by both apply routes, so
+        // checking that flag alone is correct + sufficient.
         const arrivedNode = updatedState.world_graph?.nodes[arrivedAt];
-        const isSettlementHub =
-          arrivedNode?.is_settlement_node === true ||
-          arrivedNode?.category === "settlement_hub";
+        const isSettlementHub = arrivedNode?.is_settlement_node === true;
         const trail = (updatedState.navigation_trail ?? []).filter((id) => id !== undefined);
         const updatedTrail = [...trail, arrivedAt].slice(-5);
         updatedState = {

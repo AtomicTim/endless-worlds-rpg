@@ -102,6 +102,15 @@ export function renderRoutineCombatEvent(
  * d20 / damage breakdown for a CombatEvent. Returns null for events
  * with no rolls payload (turn separators, defend, combat_start).
  *
+ * Day 20.4.1 TASK 3 — display rules:
+ *   • Show the RAW d20 value (1-20), not the modifier-applied total.
+ *     Modifiers are visible via the damage breakdown ("|1d6+2") for
+ *     attacks; flee shows raw vs DC because the AGI mod isn't
+ *     interesting to surface.
+ *   • Always Math.round(target_dc). Flee DC averages enemy AGI mods
+ *     and can land on a fractional value (10.666...); we round for
+ *     display while the raw float drives the actual pass/fail check.
+ *
  * Formats by outcome:
  *   hit:    "(d20: 17 vs 12 | 1d6+2)"
  *   crit:   "(d20: 20 | 6 (max) + 3 (1d6) + 0)"
@@ -148,11 +157,10 @@ function buildRollsSuffix(event: CombatEvent): string | null {
     return `(${parts.join(" | ")})`;
   }
 
-  // Hit: d20 + AGI vs DC, plus damage breakdown "<die>+<str_mod>".
+  // Hit: raw d20 vs DC, plus damage breakdown "<die>+<str_mod>".
   if (event.outcome === "hit") {
-    const dc = typeof r.target_dc === "number" ? r.target_dc : 0;
-    const total = r.d20 + (r.d20_modifier ?? 0);
-    const parts: string[] = [`d20: ${total} vs ${dc}`];
+    const dc = typeof r.target_dc === "number" ? Math.round(r.target_dc) : 0;
+    const parts: string[] = [`d20: ${r.d20} vs ${dc}`];
     if (r.damage_die && typeof r.str_modifier === "number") {
       const sign = r.str_modifier >= 0 ? "+" : "";
       parts.push(`${r.damage_die}${sign}${r.str_modifier}`);
@@ -162,10 +170,9 @@ function buildRollsSuffix(event: CombatEvent): string | null {
     return `(${parts.join(" | ")})`;
   }
 
-  // Miss / fled / fled_failed — d20 vs DC.
+  // Miss / fled / fled_failed — raw d20 vs DC.
   if (typeof r.target_dc === "number") {
-    const total = r.d20 + (r.d20_modifier ?? 0);
-    return `(d20: ${total} vs ${r.target_dc})`;
+    return `(d20: ${r.d20} vs ${Math.round(r.target_dc)})`;
   }
   return `(d20: ${r.d20})`;
 }

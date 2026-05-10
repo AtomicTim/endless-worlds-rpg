@@ -319,70 +319,92 @@ export function CombatMode({ combat, player, isResolving, displayPhase, onAction
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Day 20.4 TASK 3 — translate a CombatEvent → floating-number entry.
-// Returns null when the event has nothing to float.
+// Day 20.4 TASK 3 + Day 20.4.1 TASK 1 — translate a CombatEvent → floating-
+// number entry. Returns null when the event has nothing to float.
 //
-// Player attack hits: float over the targeted enemy (instance_id).
-// Enemy attack hits:  float over the player ("PLAYER" sentinel).
-// use_item heals:     float over the player.
-// Crits use larger size + crit color.
-// Miss / fumble / defend / flee / phase events: null.
+// Routing rules (locked by Day 20.4.1):
+//   player_attack hit/crit → host = event.target (the targeted ENEMY's
+//     instance_id). Color = combat-player(-crit). Show damage_die_roll
+//     on hit; TOTAL damage on crit.
+//   enemy_attack hit/crit  → host = "PLAYER" (string sentinel). Color =
+//     combat-enemy(-crit). Show damage_die_roll on hit; TOTAL damage on
+//     crit.
+//   use_item heal          → host = "PLAYER". Color = hl-pass. Show
+//     damage_die_roll (the heal die roll, before the flat +4 bonus).
+//   defend / miss / fumble / flee / phase events: null.
+//
+// Routing is explicit per event.type — no conditional fallback that could
+// misroute when one of actor/target ever shows up empty.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function makeFloatingEntry(
+export function makeFloatingEntry(
   event: CombatEvent
 ): { targetId: string; payload: FloatingDamageEntry } | null {
-  // Heal: use_item with negative damage_dealt (engine convention).
-  if (
-    event.type === "use_item" &&
-    typeof event.damage_dealt === "number" &&
-    event.damage_dealt < 0
-  ) {
-    const dieRoll = event.rolls?.damage_die_roll;
-    if (typeof dieRoll !== "number" || dieRoll <= 0) return null;
-    return {
-      targetId: PLAYER_ID,
-      payload: {
-        key:   `heal_${event.timestamp}`,
-        value: dieRoll,
-        kind:  "heal",
-        color: "var(--hl-pass)",
-      },
-    };
+  switch (event.type) {
+    // ── Player struck an enemy → float over the ENEMY portrait ───────────
+    case "player_attack": {
+      if (event.outcome !== "hit" && event.outcome !== "crit") return null;
+      const enemyId = typeof event.target === "string" && event.target.length > 0
+        ? event.target
+        : null;
+      if (!enemyId || enemyId === PLAYER_ID) return null;
+      const isCrit = event.outcome === "crit";
+      const value  = isCrit
+        ? (event.damage_dealt ?? 0)
+        : (event.rolls?.damage_die_roll ?? event.damage_dealt ?? 0);
+      if (value <= 0) return null;
+      return {
+        targetId: enemyId,
+        payload: {
+          key:   `${event.type}_${event.timestamp}_${enemyId}`,
+          value,
+          kind:  isCrit ? "crit" : "hit",
+          color: isCrit ? "var(--combat-player-crit)" : "var(--combat-player)",
+        },
+      };
+    }
+
+    // ── Enemy struck the player → float over the PLAYER portrait ────────
+    case "enemy_attack": {
+      if (event.outcome !== "hit" && event.outcome !== "crit") return null;
+      const isCrit = event.outcome === "crit";
+      const value  = isCrit
+        ? (event.damage_dealt ?? 0)
+        : (event.rolls?.damage_die_roll ?? event.damage_dealt ?? 0);
+      if (value <= 0) return null;
+      return {
+        targetId: PLAYER_ID,
+        payload: {
+          key:   `${event.type}_${event.timestamp}_${event.actor}`,
+          value,
+          kind:  isCrit ? "crit" : "hit",
+          color: isCrit ? "var(--combat-enemy-crit)" : "var(--combat-enemy)",
+        },
+      };
+    }
+
+    // ── Player used a heal item → float over the PLAYER portrait ────────
+    case "use_item": {
+      // Heal events store healed amount as negative damage_dealt
+      // (engine convention; see resolveUseItem in combat-engine).
+      if (typeof event.damage_dealt !== "number" || event.damage_dealt >= 0) return null;
+      const dieRoll = event.rolls?.damage_die_roll;
+      if (typeof dieRoll !== "number" || dieRoll <= 0) return null;
+      return {
+        targetId: PLAYER_ID,
+        payload: {
+          key:   `heal_${event.timestamp}`,
+          value: dieRoll,
+          kind:  "heal",
+          color: "var(--hl-pass)",
+        },
+      };
+    }
+
+    // Everything else (defend, kill, flee_attempt, victory, defeat,
+    // round_start, player_turn_start, enemy_phase_start, combat_start):
+    // no floating number.
+    default:
+      return null;
   }
-
-  // Damage: player_attack / enemy_attack with hit or crit.
-  if (event.type !== "player_attack" && event.type !== "enemy_attack") return null;
-  if (event.outcome !== "hit" && event.outcome !== "crit") return null;
-
-  const isPlayerActor = event.actor === PLAYER_ID;
-  // Resolve target id for the float anchor.
-  const targetId =
-    typeof event.target === "string" && event.target.length > 0
-      ? event.target
-      : (isPlayerActor ? "" : PLAYER_ID);
-  if (!targetId) return null;
-
-  // Crits surface TOTAL damage (the climactic moment); regular hits
-  // surface the rolled damage die value (the "interesting" part —
-  // the str_mod is just a flat add).
-  const isCrit = event.outcome === "crit";
-  const value  = isCrit
-    ? (event.damage_dealt ?? 0)
-    : (event.rolls?.damage_die_roll ?? event.damage_dealt ?? 0);
-  if (value <= 0) return null;
-
-  const color = isCrit
-    ? (isPlayerActor ? "var(--combat-player-crit)" : "var(--combat-enemy-crit)")
-    : (isPlayerActor ? "var(--combat-player)"      : "var(--combat-enemy)");
-
-  return {
-    targetId,
-    payload: {
-      key:   `${event.type}_${event.timestamp}_${event.actor}_${targetId}`,
-      value,
-      kind:  isCrit ? "crit" : "hit",
-      color,
-    },
-  };
 }

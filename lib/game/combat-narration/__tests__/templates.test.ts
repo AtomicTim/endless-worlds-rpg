@@ -361,6 +361,79 @@ describe("renderCritBanner (Day 20.3 TASK 3 / Day 20.4 TASK 2 shape)", () => {
   });
 });
 
+// Day 20.4.1 TASK 3 — buildRollsSuffix display rules.
+
+describe("rolls suffix — Day 20.4.1 TASK 3 display rules", () => {
+  it("shows RAW d20 (not d20+modifier) on hit", () => {
+    const ev = makeEvent({
+      type:         "player_attack",
+      outcome:      "hit",
+      damage_dealt: 5,
+      rolls: {
+        d20:             14,    // raw
+        d20_modifier:    2,
+        target_dc:       12,
+        damage_die:      "1d6",
+        damage_die_roll: 4,
+        str_modifier:    1,
+      },
+    });
+    const out = renderRoutineCombatEvent(ev);
+    // Should show raw 14, NOT 16 (=14+2).
+    expect(out?.rolls).toBe("(d20: 14 vs 12 | 1d6+1)");
+  });
+
+  it("shows RAW d20 on miss", () => {
+    const ev = makeEvent({
+      type:    "player_attack",
+      outcome: "miss",
+      rolls:   { d20: 5, d20_modifier: 2, target_dc: 12 },
+    });
+    const out = renderRoutineCombatEvent(ev);
+    // Raw 5, not total 7.
+    expect(out?.rolls).toBe("(d20: 5 vs 12)");
+  });
+
+  it("shows RAW d20 = 1 on fumble (never 0 even with negative modifier)", () => {
+    const ev = makeEvent({
+      type:    "player_attack",
+      outcome: "fumble",
+      rolls:   { d20: 1, d20_modifier: -1, target_dc: 12 },
+    });
+    const out = renderRoutineCombatEvent(ev);
+    // Pre-Day 20.4.1: rendered as "d20: 0" because total = 1 + (-1).
+    // Post-fix: must show raw 1.
+    expect(out?.rolls).toBe("(d20: 1)");
+  });
+
+  it("rounds fractional flee DC to integer (Day 20.4.1 TASK 3a)", () => {
+    // Fractional DC (10.666...) comes from averaging an odd number
+    // of enemy AGI mods. Display rounds; the raw float still drives
+    // the engine's pass/fail check.
+    const ev = makeEvent({
+      type:    "flee_attempt",
+      outcome: "fled_failed",
+      rolls:   {
+        d20:          6,
+        d20_modifier: -1,
+        target_dc:    10.666666666666666,
+      },
+    });
+    const out = renderRoutineCombatEvent(ev);
+    expect(out?.rolls).toBe("(d20: 6 vs 11)");
+  });
+
+  it("rounds fractional flee DC down on .4 (banker's rounding not used)", () => {
+    const ev = makeEvent({
+      type:    "flee_attempt",
+      outcome: "fled_failed",
+      rolls:   { d20: 6, d20_modifier: 0, target_dc: 10.4 },
+    });
+    const out = renderRoutineCombatEvent(ev);
+    expect(out?.rolls).toBe("(d20: 6 vs 10)");
+  });
+});
+
 // Day 20.3 TASK 5 — Victory / Defeat / Escaped banner words.
 
 describe("renderResolutionBanner (Day 20.3 TASK 5)", () => {

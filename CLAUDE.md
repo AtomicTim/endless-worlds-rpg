@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.37
-**Status:** Day 20 Combat COMPLETE + 20.1/20.2/20.3 polish landed — Day 20.4 (Combat Polish 3) in flight
+**Version:** 8.38
+**Status:** Day 20 Combat COMPLETE through 20.4 — Polish Round (Prompt 4) Next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions. /docs/combat-spec.md — The authoritative source for combat system design.
@@ -27,11 +27,11 @@ This scenario drives every design decision. If a feature makes that scenario *be
   - **Speedrun-the-end** — figure out the win condition fast and rush it
   - **Pure exploration** — wander regions, see what's out there, no quest pressure
   - **Settlement-focused** — grind levels, talk to NPCs, develop the character
-  - **Lifestyle/job grind** (eventual) — become the best blacksmith / scholar / merchant in the realm; affects how the world reacts to you
+  - **Lifestyle/job grind** — become the best blacksmith / scholar / merchant in the realm; affects how the world reacts to you
   - **Mixed** — switch modes mid-session
 - **Mobile-first accessible.** Designed for phone screens, fast-loading, runs on web. The phone in your pocket IS the game console.
-- **Multiplayer eventually** (post-MVP). Two phones, one shared world, take turns or play simultaneously.
-- **User-customizable worlds eventually** (post-MVP). Player can guide AI on world themes — "haunted Victorian England" / "post-apocalyptic Mars colony" / "kingdom of warring deities" — beyond the fixed genre presets.
+- **Multiplayer (PRE-LAUNCH per V8.38).** Two phones, one shared world, take turns or play simultaneously. Active requirement, not just future-proofing.
+- **User-customizable worlds (PRE-LAUNCH per V8.38).** Player can guide AI on world themes — "haunted Victorian England" / "post-apocalyptic Mars colony" / "kingdom of warring deities" — beyond the fixed genre presets. Slot near end of pre-launch sequence.
 
 ### What this game IS NOT
 
@@ -45,103 +45,126 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 > **"Baldur's Gate depth without Baldur's Gate overhead. D&D feel without needing a DM."**
 
-The market gap this fills: there is no easy, fast, accessible way to have a D&D-style adventure on a phone with a friend. Existing options force a tradeoff:
-- Real D&D → needs DM, prep, hours, table
-- Baldur's Gate / Pillars / similar CRPGs → desktop, complex UI, long campaigns, single-player
-- Choose-your-own-adventure apps → no real mechanics, no replayability
-- AI Dungeon and clones → no structured RPG layer, easy to break, no real game
-- Tabletop simulators / Roll20 → still need a DM and party
+The market gap this fills: there is no easy, fast, accessible way to have a D&D-style adventure on a phone with a friend. Existing options force a tradeoff (real D&D needs DM/prep/table; CRPGs are desktop and long; CYOA apps lack mechanics; AI Dungeon clones lack structure). This game wins by being structured-but-light, AI-narrated-but-mechanically-grounded, mobile-first, multiplayer-aware, replayable by design.
 
-This game wins by being structured-but-light, AI-narrated-but-mechanically-grounded, mobile-first, multiplayer-aware, and replayable by design.
+### Design principles
 
-### Design principles derived from this vision
-
-These should guide ALL feature decisions. When in doubt, check the principle.
-
-1. **Pickup-friendly.** Time from "let's play" to "playing" must stay short. World gen, character creation, first-action latency — all within the patience window of "we just sat down."
-2. **Mobile-first viewport.** Every UI is verified on phone-width before desktop polish. Combat panel, nav, story feed, modals — all phone-readable first.
-3. **Multiple play styles supported.** No system should force one playstyle. Settlements need self-contained content (jobs, NPCs, training) so settlement-focus players can ignore the main quest. Quest must be optional, not gating. Exploration must be rewarded (codex entries, lore, hidden locations) without quest reasons.
-4. **Procedural variety > authored depth.** Lean on AI generation for breadth (different worlds every time) and code structure for reliability (mechanics work consistently across all worlds). Hand-authored content should be content templates and rules, not specific story content.
-5. **Multiplayer-aware architecture.** Decisions made now should not preclude 2-4 player co-op. Specifically: deterministic combat (RNG injected ✓), serializable state (✓), event-driven UI (✓), party-of-N character schema (currently single-player; will need extension), turn-syncing infrastructure (will need Supabase realtime channels).
-6. **Customization-aware architecture.** WCD generation prompts and genre system should be designed so user-supplied themes / constraints can plug in later without a rewrite.
-7. **D&D-style narration is the soul.** Combat narration, arrival narration, dramatic moments — they need to feel like a good DM is describing them. Tone, weight, specificity matter. Generic "you attack the goblin and hit" is failure; "your blade catches the goblin's collarbone with a wet crunch" is the bar.
-8. **Death must matter.** Defeat costs something real (HP, currency, XP rollback). Settlements as checkpoints become a deliberate mechanic, not a forgettable formality. (V8.36 cross-region defeat-teleport behavior is part of this.)
+1. **Pickup-friendly.** Time from "let's play" to "playing" must stay short.
+2. **Mobile-first viewport.** Every UI verified on phone-width before desktop polish.
+3. **Multiple play styles supported.** No system forces one playstyle. Quest is optional, exploration is rewarded.
+4. **Procedural variety > authored depth.** Lean on AI for breadth, code for reliability.
+5. **Multiplayer-aware architecture (PRE-LAUNCH).** Day 21-23 actively support party-of-N. Day 24 wires the multiplayer layer.
+6. **Customization-aware architecture (PRE-LAUNCH).** World gen prompts designed so user-supplied themes plug in. Day 25 wires the customization layer.
+7. **D&D-style narration is the soul.** Combat narration, arrival narration — feel like a good DM is describing them.
+8. **Death must matter.** Defeat costs HP, currency, XP rollback. Settlements are deliberate checkpoints (V8.36 cross-region teleport per soulslike model).
 
 ---
 
 ## 🎯 Project Roles & Working Mode
 
-**Vision & Creative Direction:** Tim (the user). Drives game vision, design intent, feature priority, what the game IS at its core. First-time game developer, building the type of game he's always wanted to play and that doesn't currently exist.
+**Vision & Creative Direction:** Tim (the user). Drives game vision, design intent, feature priority. First-time game developer, building a game that doesn't currently exist.
 
-**Senior Engineering / Tech Direction:** Claude.ai (this assistant). Translates vision into architecture, flags scope/risk/feasibility concerns, suggests alternatives, recommends sequencing based on game-production patterns. Has explicit license to push back when:
+**Senior Engineering / Tech Direction:** Claude.ai (this assistant). Translates vision into architecture, flags scope/risk/feasibility, suggests alternatives, recommends sequencing. Has explicit license to push back when:
 - Something is premature given current foundations
-- A cleaner / more reliable approach exists that Tim hasn't considered
+- A cleaner approach exists Tim hasn't considered
 - Scope is drifting in a way that risks future-proofing
 - Critical-path systems are being skipped for polish features
 
-While ultimately deferring to creative-director call on vision questions. Creative input from Claude.ai is welcome too, not just engineering pushback.
+Defers to creative-director call on vision questions. Creative input from Claude.ai is welcome too.
 
-**Implementation:** Claude Code (local Sonnet agent on Tim's machine). Executes round-by-round prompts written by Claude.ai based on Tim's direction.
+**Implementation:** Claude Code (local Sonnet agent). Executes round-by-round prompts.
 
-**Decision flow:**
-1. Tim describes what he wants
-2. Claude.ai assesses: is this the right thing right now? Is there a better way? Does it create future problems? Does it serve the Game Vision?
-3. Claude.ai responds with feasibility analysis, alternative approaches if relevant, recommended sequencing if scope concerns exist
-4. Tim makes the creative-director call (override or accept the recommendation)
-5. Claude.ai writes the prompt for Claude Code with locked decisions and explicit don't-touch boundaries
-6. Claude Code implements; Tim verifies; Claude.ai updates CLAUDE.md
+**Decision flow:** Tim describes → Claude.ai assesses (right thing, right way, right time) → Tim decides → Claude.ai writes prompt with locked decisions → Claude Code implements → Tim verifies → Claude.ai updates CLAUDE.md.
 
-**This means:** Tim's instinct to do something a particular way is an opening position, not a final decision, until Claude.ai has weighed in. Tim retains full override authority but expects pushback when warranted. Strategic discussions get captured in the Strategic Trajectory Notes section below for future Claude sessions to inherit.
+**This means:** Tim's instinct is an opening position, not a final decision, until Claude.ai has weighed in. Tim retains full override authority but expects pushback when warranted. Strategic discussions captured in 📋 Strategic Trajectory Notes below.
 
 ---
 
 ## 📋 Strategic Trajectory Notes
 
-Living section. Captures meta-discussions about project direction, sequencing concerns, recommended pivots, and architectural debates that don't fit in feature documentation. New Claude sessions should read this for current strategic context before proposing prompts.
+Living section. Captures meta-discussions about project direction, sequencing, recommended pivots, architectural debates. New Claude sessions read this for current strategic context before proposing prompts.
+
+### V8.38 — Three strategic decisions LOCKED
+
+**Decision 1: Multiplayer = PRE-LAUNCH (NOT post-launch v2).**
+This shifts from "passive constraint" to "active requirement." Day 21/22/23 design must actively support 2-4 player co-op (party-friendly schemas, no single-player assumptions baked in), with a dedicated **Day 24 — Multiplayer Foundation** phase between Day 23 (Quest) and launch prep.
+
+Day 24 scope (preliminary):
+- Party-of-N character schema (current single-character → party array)
+- Supabase realtime channels for state sync across clients
+- Turn-syncing infrastructure (lock-when-not-your-turn, skip-on-disconnect)
+- Shared story feed (one DM narrating to all players)
+- Loot/quest decision rules (round-robin loot? vote on quest decisions? first-to-trigger?)
+- Session ownership / invite model
+
+Concrete impacts on upcoming phases:
+- **Day 21 Loot:** drops need "who gets it?" rules. Inventory per-character. Merchant transactions per-character.
+- **Day 22 Leveling:** XP per-character to alive participants. Skills per-character.
+- **Day 23 Quest:** quest state shared. Breadcrumbs visible to all. Decisions: anyone? vote? first-to-trigger?
+- **Combat:** party initiative includes all. Action gating per active player.
+- **Save model:** session = party array of characters, not single character.
+
+**Decision 2: Customization layer = PRE-LAUNCH but towards end.**
+User-supplied theme prompts ("haunted Victorian England", etc.) plumbed into world generation. **Day 25 — Customization Layer** post-Day-24, pre-launch.
+
+Difficulty assessment (Tim asked "is this too hard?" — answer: not too hard, but not trivial):
+- **Easy parts (~3-4 hours):** WCD field, UI textbox + presets, plumb theme through generation prompts
+- **Medium parts (~3-4 hours):** Genre+theme interaction rules, validation, presets vs freeform UX
+- **Hard parts (~1 day):** Quality-tuning prompts so theme actually shows up coherently in WorldBible/RegionBible/NPCs/locations, edge cases, playtesting across 5 genres × theme types
+- **Real risk:** content coherence. If user types theme and only WCD honors it but content is generic, feels broken. Sonnet handles thematic guidance well; needs playtest iterations.
+
+Total: 1-2 day session. Manageable.
+
+**Decision 3: Day 22 skills = FOUNDATIONS NOW (middle path).**
+Lay groundwork for lifestyle skill system without full depth.
+
+Day 22 scope (preliminary):
+- Skill domain enum (Combat / Crafting / Social / Exploration — final list TBD at design time)
+- Each skill has level / XP / max_level
+- Combat skill domain fully wired with real XP hooks (kill XP, damage XP, etc.)
+- Other domains: schema exists, hooks stubbed but inactive
+- Skill checks usable against any domain level (so quest design can use them)
+- Skill points awarded on level-up, spendable in any domain
+
+Means: Day 22 ships with combat-stat-only growth from player perspective, but data model supports lifestyle skills cleanly when Day 24+ adds them. No retrofit needed.
 
 ### V8.37 — Combat scope drift assessment + recommended sequencing
 
-Day 20 was originally scoped as a single combat prompt. It expanded to seven commits (1, 2, 2.5, 3, 20.1, 20.2, 20.3, with 20.4 in flight). Each round was justified individually but cumulatively this represents heavy investment in combat polish ahead of the systems combat depends on (loot, leveling, quest).
+Day 20 expanded from one prompt to eight commits (1, 2, 2.5, 3, 20.1, 20.2, 20.3, 20.4). Each justified individually but cumulatively heavy combat investment ahead of dependent systems.
 
-**Concern:** Continued combat polish risks tuning combat math around level-1 starter equipment forever. Real difficulty calibration only happens after loot tables (Day 21) and leveling (Day 22) land. Tim has already encountered this — fights against high-AGI regional enemies that require flee, with no path to grow past it.
+**Confirmed sequence (V8.37 + V8.38 amendments):**
+1. **Polish Round (Prompt 4)** — clear UX debt + mobile-viewport QA bundle
+2. **Day 21 — Container + Loot** (multiplayer-aware: per-character inventory, drop rules)
+3. **Day 22 — Skills + Leveling** (multiplayer-aware: per-character XP/skills; foundations for lifestyle skills)
+4. **Vertical slice playtest** — full game start → win condition with placeholders
+5. **Day 23 — Main Quest Thread** (multiplayer-aware: shared quest state)
+6. **Day 24 — Multiplayer Foundation** (NEW per V8.38)
+7. **Day 25 — Customization Layer** (NEW per V8.38)
+8. **Day 20.5 — Verbal Action / Taunt** — DEFERRED to last; mechanic shines after stats/gear matter
 
-**Recommended sequence after Day 20.4 lands (CONFIRMED V8.37):**
-1. **Polish Round (Prompt 4)** — clear visible UX debt (nav grouping, tier colors, settlement card label, tier auto-switch, NPC dialogue contrast). Bundle mobile-viewport QA pass.
-2. **Day 21 — Container + Loot** — real loot tables, dungeon containers, merchant inventories. Combat balance solves itself when better gear drops.
-3. **Day 22 — Skills + Leveling** — XP gates, stat points, level gates, special combat abilities.
-4. **Vertical slice playtest** — full game start → main-quest progression → win condition (with placeholder content where needed). Surface integration issues before adding more features.
-5. **Day 23 — Main Quest Thread** — informed by playtest insights.
-6. **Day 20.5 — Verbal Action / Taunt** — DEFERRED. Mechanic shines more when stats/gear matter.
+### Vision capture (V8.37 → V8.38)
 
-**Tim confirmed this sequence in V8.37.** Verbal action is officially deferred to post-Day-22.
+- **Mobile-first** is hard requirement. Polish Round bundles mobile QA pass.
+- **Multiplayer pre-launch** is active requirement (V8.38).
+- **Customization pre-launch** is active requirement (V8.38).
+- **Lifestyle skills** foundation in Day 22 (V8.38).
 
-### V8.37 — Vision capture
+**World gen perf concern:** 35s WCD + 120s WorldBible = 2.5min "let's play" → "playable." Borderline for pickup-play, especially pre-multiplayer. Mitigations TBD: parallel WCD/WorldBible generation, faster sub-content model, pre-warmed pool. NOT urgent for single-player MVP.
 
-Tim laid out the full game vision in detail (captured in 🎮 Game Vision section above). Key new additions to engineering awareness:
-- **Mobile-first** is a hard requirement, not aspirational. Polish Round should bundle mobile-viewport QA pass.
-- **Multiplayer is in scope** (post-MVP). Architecture decisions in Day 21-23 should not preclude 2-4 player co-op. Specifically watch: party-of-N character schema (currently single-player), turn-syncing infrastructure (currently single-client).
-- **Customization layer is in scope** (post-MVP). Genre system might evolve from fixed-5 to "preset + user modifiers." World gen prompts should be designed so user-supplied themes can plug in.
-- **Lifestyle skills / jobs system** is part of the long-term vision. Day 22 leveling design should consider: do we lay foundations for lifestyle skills (XP per skill domain — combat / crafting / social) now, or scope leveling as combat-stats-only first and add skill domains later? Open question.
+### Open strategic questions
 
-**World generation perf concern (V8.37):** 35s WCD + 120s WorldBible = 2.5min from "let's play" to "playable." Borderline for the pickup-play scenario, especially before multiplayer where two players watch the same loading screen. NOT urgent for single-player MVP but flagged as a future perf budget item. Possible mitigations: parallel WCD/WorldBible generation, faster model for sub-content, pre-warmed world pool background-generated.
-
-### Open strategic questions / future discussions
-
-- **Multiplayer timing.** Pre-launch or post-launch v2? Affects whether Day 25-ish is a multiplayer foundation round or whether we ship single-player first and add multiplayer later. Tim to decide before Day 22.
-- **Customization layer timing.** Pre-launch or post-launch v2? Affects how generalized world generation needs to be in Day 21+. Tim to decide before Day 23.
-- **Skills/jobs system depth at Day 22.** Combat-stat-only leveling first (faster), or lifestyle-skill foundations now (more work, sets up bigger vision)? Tim to decide before Day 22.
-- **External playtest timing.** When does the first "stranger plays the game" playtest happen? Likely best post-Day-22 or post-Day-23.
-- **Difficulty tuning model.** Once leveling lands, does combat need a difficulty toggle (easy / standard / hard), or should world tier handle this implicitly via region depth?
-- **Random travel encounters** (per combat-spec §3 deferral). Currently slated post-Day-21; might fit better as part of Day 22 or Day 23 depending on quest design (don't want random encounters interrupting quest breadcrumbs).
-- **Verbal action redundancy risk.** If Day 22 leveling adds a Charisma skill tree with active abilities (intimidate, persuade, etc.), the verbal-action types might need reconciling with skill abilities.
-- **NPC behavior dispatch** (combat-spec §6.3 deferral). Currently every enemy just attacks the player. Behavior dispatch (target weakest, focus, retreat at low HP, summon) is queued for "future combat-depth pass."
-- **Map visual rework.** Pure visual debt; deferred to its own session. Not critical-path.
+- **External playtest timing.** Likely best post-Day-22 or post-Day-23.
+- **Difficulty tuning model.** Toggle (easy/standard/hard) vs implicit world-tier scaling?
+- **Random travel encounters** (combat-spec §3 deferral). Slate post-Day-21? Or fold into Day 22/23?
+- **Verbal action redundancy risk.** If Day 22 adds Charisma skill tree, verbal action types may need reconciling.
+- **NPC behavior dispatch** (combat-spec §6.3 deferral). Future combat-depth pass.
+- **Map visual rework.** Pure visual debt; deferred dedicated session.
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Day 20 Combat fully playable end-to-end with proper pacing, equipment, initiative kickoff, and dramatic two-line crit/resolution rendering. Day 20.4 (floating damage numbers + inline roll details + defeat teleport fix) currently in flight. Combat input is currently blocked with a system message during fights.
+**Current Phase:** Day 20 Combat fully complete through Polish 3. Combat input is button-only during fights (V8.37 interim, replaced by Day 20.5 verbal action much later). Polish Round (Prompt 4) is next, bundling visible UX debt + mobile-viewport QA.
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -152,73 +175,101 @@ Tim laid out the full game vision in detail (captured in 🎮 Game Vision sectio
 | 19A–19F | World Generation Architecture | ✅ Complete |
 | Movement Track | Verified end-to-end | ✅ FROZEN |
 | Combat Spec | /docs/combat-spec.md design doc | ✅ Frozen |
-| 20 — Combat Prompt 1/3 (1024287) | Data foundation: enemy types, bestiary, encounter tagging | ✅ Complete |
-| 20 — Combat Prompt 2/3 (a4e5975) | Resolver + encounter triggers + turn loop | ✅ Complete |
+| 20 — Combat Prompt 1/3 (1024287) | Data foundation | ✅ Complete |
+| 20 — Combat Prompt 2/3 (a4e5975) | Resolver + triggers + turn loop | ✅ Complete |
 | 20 — Prompt 2.5 Nav Fix (25ff111) | Region trigger reclassification | ✅ Complete |
-| 20 — Combat Prompt 3/3 (abf73e6) | Combat mode UI + narration + bestiary codex + new-game string fix | ✅ Complete |
-| 20.1 — Combat Polish (1215bb6) | Starting equipment, encounter banner, turn separators, pacing, header pill | ✅ Complete |
-| 20.2 — Combat Hotfix (bf3871e) | Initiative kickoff fix + inventory stats display | ✅ Complete |
-| 20.3 — Combat Polish 2 (732e944) | Full-width separators, item use locked to buttons, CRITICAL HIT banner, victory/defeat/escaped two-line render, prose suppression on victory-killing-blow | ✅ Complete |
-| **20.4 — Combat Polish 3** | **Floating damage numbers over portraits + inline roll details in story-feed events + defeat teleport fix (init last_settlement_hub_id at spawn, cross-region teleport to last settlement, "You wake at X in Y" templated message line)** | ⏳ **In flight** |
-| Polish Round (Prompt 4) | Movement-direction grouped nav cards + tier color-coding + settlement card label + tier auto-switch + NPC dialogue contrast + mobile-viewport QA bundle | ⏳ Confirmed next post-20.4 |
-| 21 | Container + Loot — registry, loot tables, dungeon sub-levels, real loot beyond stub | ⏳ Confirmed after Polish Round |
-| 22 | Skills + Leveling — XP, stat points, level gates, special combat abilities | ⏳ Confirmed after Day 21 |
-| Vertical slice playtest | Full game start → win condition with placeholder content where needed | ⏳ Confirmed before Day 23 |
-| 23 | Main Quest Thread — breadcrumb injection, quest tracking | ⏳ Confirmed post-playtest |
-| 20.5 — Verbal Action System | Chat input hijack: taunt / distract / intimidate via LLM judging + charisma check + status effects (DESIGN LOCKED, deferred to post-Day-22 per V8.37) | ⏳ Deferred post-Day-22 |
+| 20 — Combat Prompt 3/3 (abf73e6) | Combat UI + narration + bestiary | ✅ Complete |
+| 20.1 — Combat Polish (1215bb6) | Starting equipment + encounter banner + turn separators + pacing | ✅ Complete |
+| 20.2 — Combat Hotfix (bf3871e) | Initiative kickoff fix + inventory stats | ✅ Complete |
+| 20.3 — Combat Polish 2 (732e944) | Full-width separators + button-only combat input + CRITICAL HIT banner + resolution two-line render + planEventSuppression | ✅ Complete |
+| **20.4 — Combat Polish 3 (fc508f3)** | **Floating damage numbers + inline roll details + defeat teleport fix (3-tier fallback + spawn init + cross-region soulslike model + "You wake at X in Y" templated message)** | ✅ **Complete** |
+| Polish Round (Prompt 4) | Movement-direction grouped nav cards + tier color-coding + settlement card label + tier auto-switch + NPC dialogue contrast + mobile-viewport QA bundle | ⏳ NEXT |
+| Day 21 | Container + Loot — registry, loot tables, dungeon containers, per-character inventory rules (multiplayer-aware) | ⏳ After Polish Round |
+| Day 22 | Skills + Leveling — XP, stat points, level gates + skill domain foundations (Combat wired, others stubbed) per V8.38 | ⏳ After Day 21 |
+| Vertical slice playtest | Full game start → win condition with placeholder content | ⏳ Before Day 23 |
+| Day 23 | Main Quest Thread — breadcrumb injection, quest tracking (multiplayer-aware: shared quest state) | ⏳ Post-playtest |
+| Day 24 | Multiplayer Foundation — party schema, Supabase realtime, turn-sync, shared feed, loot/quest decision rules | ⏳ Pre-launch (V8.38 lock) |
+| Day 25 | Customization Layer — user-supplied theme prompts, theme presets, genre-theme interaction | ⏳ Pre-launch toward end (V8.38 lock) |
+| Day 20.5 | Verbal Action System — chat input hijack: taunt/distract/intimidate via LLM judging + charisma check | ⏳ Deferred to last (post-Day-25) |
 | Map Visual Rework | Dedicated session | ⏳ Deferred (no critical-path dependency) |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir removed. Genre renderers restored (pickModule re-enabled).**
 
-### Day 20.3 — Combat Polish 2 (commit 732e944 — 233/233 tests, clean build)
+### Day 20.4 — Combat Polish 3 (commit fc508f3 — 243/243 tests, /game 106→108 kB)
 
-Six-task polish round resolving story-feed rendering issues from V8.36 playtest + locking down combat input integrity.
+Five-task polish round resolving V8.37 playtest issues + closing the defeat-teleport bug at the root cause.
 
-**Task 1 — Full-width turn separators:** New flex-based CSS in globals.css. StoryFeed strips the V8.35 dash decoration from `round_start` / `player_turn_start` / `enemy_phase_start` and renders rule-line ── label ── rule-line spanning full story-panel width.
+**Task 1 — Roll details on CombatEvent:**
+- New `CombatEventRolls` interface in types/game.ts: `{ d20?, d20_modifier?, target_dc?, damage_die?, damage_die_roll?, crit_max_damage?, str_modifier? }`. Pure data extension; existing consumers ignore unknown fields.
+- `combat-resolver.ts`: `AttackResult.rolls` populated on every outcome (hit/miss/crit/fumble); `FleeResult.rolls` populated with d20 + DC; `UseItemResult.rolls` populated on heal with `damage_die: "1d8"` + raw die roll. Crits return the bonus die roll plus `crit_max_damage`.
+- `combat-engine.ts`: every `player_attack`, `enemy_attack`, `kill`, `use_item`, `flee_attempt` event passes `rolls: result.rolls` into `makeEvent`. Defend / phase-separator events omit it.
 
-**Task 2 — Lock item use to buttons:** `templates.ts::renderUseItem` produces `"You use Basic Health Potion. Restored 8 HP."` (was "+N HP."). `useGameLoop.submitAction` early-bails on `combat.active` with system message `"Combat input is disabled — use the action buttons."` `forceMoveToNode` allowed through (defeat/flee teleports). INTERIM until Day 20.5 verbal action.
+**Task 2 — Inline roll-detail in templated events:**
+- `templates.ts` return shape changed from `string | null` to `{ primary: string; rolls: string | null } | null`. New `RoutineEventResult` interface.
+- New `buildRollsSuffix(event)` helper renders subtle parenthetical breakdowns:
+  - Hit: `(d20: 17 vs 12 | 1d6+2)`
+  - Crit: `(d20: 20 | 6 (max) + 3 (1d6) + 0)`
+  - Miss: `(d20: 4 vs 12)`
+  - Fumble: `(d20: 1)`
+  - Heal: `(1d8: 4 +4)`
+  - Flee fail: `(d20: 6 vs 11)`
+- `renderCritBanner` returns same `{primary, rolls}` shape. `renderRoutineCombatEvent` wraps every templated path through `wrap()` helper.
+- `useCombat.projectCombatEventsToFeed` passes rolls suffix through metadata as `rolls_suffix`.
+- New CSS class `.combat-roll-detail` (10px dim mono, 0.6 opacity). StoryFeed renders suffix as a `<span>` sibling on routine events + crit banner.
 
-**Task 3 — CRITICAL HIT banner (two-line render):** New `renderCritBanner(event)` in templates.ts. `useCombat::projectCombatEventsToFeed` intercepts crit events: pushes templated banner FIRST (instant), then fetches LLM prose. Both styled with same actor-derived color (player blue / enemy red).
+**Task 3 — Floating damage number over portrait:**
+- New `@keyframes combat-float-damage` (1100ms, scale 0.6→1.2→1.0→0.9, opacity fade-in/fade-out, translate-Y -56px). New `.combat-float-damage` (28px mono bold + text-shadow, absolutely positioned) + `.combat-float-damage--crit` (36px) + `.combat-float-damage--heal::before { content: "+" }`.
+- New `components/game/CombatMode/FloatingDamage.tsx` — stateless single-number renderer.
+- `CombatantRow` wraps `PortraitSlot` in `position: relative` div (overflow allowed) so floating numbers extend above. Accepts `floatingDamage: FloatingDamageEntry[]` prop.
+- `CombatMode` parent maintains `floatingByActor: Record<string, FloatingDamageEntry[]>` keyed by combatant id (PLAYER for player, instance_id for enemies). The same useEffect driving the crit shake feeds floating numbers via `makeFloatingEntry(event)`:
+  - `player_attack` hit/crit → enemy instance_id, hit color or crit color. Hits show rolled damage die value; crits show TOTAL damage.
+  - `enemy_attack` hit/crit → "PLAYER", combat-enemy / combat-enemy-crit color.
+  - `use_item` heal → "PLAYER", `--hl-pass` green, kind="heal" (CSS + prefix).
+  - miss / fumble / defend / flee / phase events → null.
+- Each entry removed via setTimeout(1100ms). Crit shake fires concurrently per V8.34.
 
-**Task 4 — Suppress crit/kill prose on victory:** New `planEventSuppression(events)` pure helper. When victory present: kill events dropped entirely, last crit before victory has prose suppressed (banner only). Crit-kill→victory now produces 1 LLM call (was 3). Defeat batches untouched.
+**Task 4 — Defeat teleport: spawn init + 3-tier fallback + destination messaging:**
+- `apply-world-bible/route.ts`: at game spawn, write `last_settlement_hub_id: startingNodeId` alongside `current_location_id` (root cause fix for V8.37 fall-through bug — field is now always populated from game start).
+- `handleDefeat` accepts new optional inputs: `defeat_fallback_node_id` (typically `world_bible.starting_region.settlement_id`) and `world_graph_nodes` (for resolving display names). 3-tier fallback chain with explicit `console.warn` at each fall-through:
+  1. `last_settlement_hub_id` (preferred — soulslike model, cross-region OK)
+  2. `defeat_fallback_node_id` (warns)
+  3. `state.origin_node_id` (warns)
+- New `resolveDefeatDestination` walks the `zone_id` chain to find the parent geographic region. Returns `{ node_id, node_name, region_id?, region_name? }` on the defeat event's `destination` field.
+- `handleFleeSuccess` accepts `world_graph_nodes` and populates `destination: { node_id, node_name }` (no region — short hop).
+- New `defeatFallbackFor(state)` helper in useCombat reads `state.metadata.world_bible?.starting_region.settlement_id ?? id`. Both `submitCombatAction` and `kickoffCombat` thread it + `world_graph.nodes` into the engine.
+- `CombatEvent` extended with optional `destination: CombatEventDestination`.
+- StoryFeed renders templated info line below resolution prose:
+  - Defeat with region: `"You wake at <Settlement> in <Region>."`
+  - Defeat without region: `"You wake at <Settlement>."`
+  - Flee_success: `"You break to <Node>."`
+- New CSS class `.combat-resolution-destination` (12px italic serif, 0.75 opacity — reads as info, not drama).
+- Victory does NOT get a destination line (player stays put).
 
-**Task 5 — Victory/Defeat/Escaped two-line banner:** New `renderResolutionBanner(event)`. Mono 18px bold uppercase banner + serif italic 13px ≤20-word LLM prose, both centered. `narrate-combat` resolution events: max_tokens 250→120, prompt enforces "ONE sentence, max 20 words."
+**Task 5 — Tests (10 new, 243 total):**
+- `combat-resolver.test.ts` (+5): rolls.d20/d20_modifier/target_dc on every outcome; damage_die/damage_die_roll/str_modifier on hit; crit_max_damage + bonus die + str_modifier on crit; flee rolls; heal rolls + no_op skip.
+- `combat-flow.test.ts` (+3): defeat path falls back to `defeat_fallback_node_id` with correct warn line when `last_settlement_hub_id` missing; falls back to encounter origin when both missing (with second warn line); destination metadata populates correctly with world_graph_nodes (settlement + region resolution).
+- `templates.test.ts` (+2 + many shape migrations): renderCritBanner returns new `{primary, rolls}` shape; rolls suffix populates with full crit math breakdown; rolls null when event.rolls absent.
 
-**Tests:** 17 new (templates +8, combat-suppression +9). 233 total.
-**Build impact:** `/game` route 106 kB unchanged.
+### Day 20.3 — Combat Polish 2 (commit 732e944 — 233/233 tests)
+Six-task round: full-width flex turn separators, item use locked to buttons (templated heal amount + chat input system message), CRITICAL HIT two-line banner (templated banner + LLM prose), `planEventSuppression` saves crit/kill prose on victory-killing-blow (3 LLM calls → 1), Victory/Defeat/Escaped two-line centered banner with ≤20-word LLM prose. /game 106 kB unchanged.
 
-### Day 20.2 — Combat Hotfix + Inventory Stats (commit bf3871e — 216/216 tests, clean build)
+### Day 20.2 — Combat Hotfix + Inventory Stats (commit bf3871e — 216/216 tests)
+Initiative kickoff fix via shared `advanceUntilPlayerTurnOrEnd` + `kickoffCombatIfEnemyFirst` + useEffect-driven kickoff trigger with double-fire guard. Inventory cards now show Damage/Armor/Heal stats + EQUIPPED pill. /game 105→106 kB.
 
-ROOT CAUSE: `executePlayerAction` was the only place enemy turns auto-advance; if `rollInitiative` seated an enemy at `turn_order[0]`, permanent deadlock.
+### Day 20.1 — Combat Polish (commit 1215bb6 — 209/209 tests)
+Starting equipment auto-equipped via new `lib/game/starting-equipment.ts` module (15 backgrounds × full equip + 2× potion); encounter banner templated (no LLM call); turn boundary separators emitted by combat-engine; pacing delays 800/500/800ms; header pill displayPhase decoupled from current_turn_index. /game 104→105 kB.
 
-**Engine fix:** Extracted enemy-turn loop into shared `advanceUntilPlayerTurnOrEnd`. New `kickoffCombatIfEnemyFirst` runs enemy phase when player doesn't have initiative.
-
-**Hook fix:** New `kickoffCombat()` async fn. useEffect watches `masterState.combat.encounter_id + active`, fires kickoff with double-fire guard via `useRef<Set<string>>`. setDisplayPhase("enemy") fires synchronously so no "Your turn" flash.
-
-**Inventory cards:** `combatStatsLine(item)` helper: `"Damage: 1d6"` / `"Armor: +2"` (always renders, including +0) / `"Heal: 1d8+4"` (canonical potion) or `"Heal: N"` (flat). EQUIPPED pill (--hl-pass green) on detail panel.
-
-**Tests:** 7 new. 216 total. `/game` 105 → 106 kB.
-
-### Day 20.1 — Combat Polish (commit 1215bb6 — 209/209 tests, clean build)
-
-Starting equipment auto-equipped + combat-functional via new `lib/game/starting-equipment.ts` module (15 backgrounds × full equip + 2× potion each); encounter banner templated; turn boundary separators (`player_turn_start` / `enemy_phase_start` events emitted by combat-engine; `round_start` events now correctly returned in events array — latent bug fix); pacing delays 800/500/800ms; header pill `displayPhase` decoupled from `current_turn_index`.
-
-36 new tests, 209 total. `/game` 104 → 105 kB.
-
-### Combat Day 20 — Prompt 3/3 (commit abf73e6 — 173/173 tests, clean build)
-
-Combat mode UI (CombatMode + 6 child components, side-by-side layout, ~128px portrait slots reserved); templated routine + LLM dramatic narration via `/api/game/narrate-combat`; bestiary codex on `combat_start` (deduplicated by `enemy.id`); new-game preamble; HP bar 300ms transition + crit portrait shake 400ms. 24 new tests. `/game` 96 → 104 kB.
+### Combat Day 20 — Prompt 3/3 (commit abf73e6 — 173/173 tests)
+Combat mode UI (CombatMode + 6 child components, side-by-side layout, ~128px portrait slots); templated routine + LLM dramatic narration via `/api/game/narrate-combat`; bestiary codex on combat_start; new-game preamble; HP bar 300ms transition + crit portrait shake 400ms. /game 96→104 kB.
 
 ### Combat Day 20 — Earlier rounds (foundation)
-- **Prompt 2.5 Nav Fix (25ff111):** hyphenated region names slugify wrong → idempotent `apply-regional-bible` + `region-expansion-guard` helpers. 16 new tests, 149 total.
-- **Prompt 2/3 (a4e5975):** Combat state types, combat-resolver (pure math), encounter trigger in step 7c-3, turn loop. 61 new tests, 133 total.
-- **Prompt 1/3 (1024287):** Enemy interface, bestiary files, WorldBible/RegionBible LLM extensions, validate-don't-500. 29 new tests, 72 total.
+- **Prompt 2.5 Nav Fix (25ff111):** idempotent apply-regional-bible + region-expansion-guard helpers. 16 new tests, 149 total.
+- **Prompt 2/3 (a4e5975):** combat-resolver (pure math), encounter trigger in step 7c-3, turn loop. 61 new tests, 133 total.
+- **Prompt 1/3 (1024287):** Enemy interface, bestiary files, WorldBible/RegionBible LLM extensions. 29 new tests, 72 total.
 
 ### Pre-Combat (movement track)
-- **Region/Resilience Round (87c89a3):** region tier description from parent for any node; map defaults to Local; landmark color flipped to mint; new region wires origin symmetrically; RegionBible stub fallback.
-- **Polish Round (b7032f9):** tier-aware highlight colors; NPC speech warm cream italic 600.
-- **Earlier rounds:** Targeted Fix (dc5bcd8), Regression Fix (75a7cd4), Bug Fix (57b0300), Architecture Hardening (57d27f3), and the 19A-19F generation phases.
+- **Region/Resilience Round (87c89a3), Polish Round (b7032f9), Targeted Fix (dc5bcd8), Regression Fix (75a7cd4), Bug Fix (57b0300), Architecture Hardening (57d27f3), 19A-19F generation phases.**
 
 ### Architecture Status ✅
 ```
@@ -230,7 +281,11 @@ Domain 1 (Engine):     World graph, navigation, stat checks, dialogue option
                        separators + pacing (V8.35), initiative kickoff +
                        inventory stats (V8.36), full-width separators +
                        crit banner + suppression + resolution banner
-                       (V8.37), loot resolver (pending Day 21) — pure code
+                       (V8.37), roll detail surfacing + inline roll
+                       suffix + floating damage numbers + defeat
+                       resilience (3-tier fallback + cross-region
+                       teleport) + destination messaging (V8.38), loot
+                       resolver (pending Day 21) — pure code
 Domain 2 (Content):    WCD, WorldBible (with enemies + encounter tagging),
                        RegionBible (same), NPCs, items, bestiary,
                        starting-equipment loadouts (V8.35) — frozen
@@ -240,185 +295,140 @@ AI during gameplay:
   ✅ Dialogue options   — built by code, AI writes response only
   ✅ Action narration   — 1-4 sentences (out-of-combat only)
   ✅ NPC not present    — hardcoded "X isn't here"
-  ✅ Combat round narration — selective dramatic events: crit (banner +
-                              prose two-line, V8.37), kill (suppressed when
-                              victory follows, V8.37), victory/defeat/
-                              flee_success (banner + ≤20-word prose
-                              centered two-line, V8.37). Genre tone primer.
-                              combat_start templated (V8.35).
-  ⏳ Container search   — pending Container+Loot system (Day 21)
-  ⏳ Verbal action      — DEFERRED post-Day-22 per V8.37 trajectory note
+  ✅ Combat narration   — selective dramatic events (crit / kill / victory /
+                          defeat / flee_success). Genre tone primer.
+                          Templated: combat_start, use_item, separators,
+                          CRITICAL HIT banner, resolution banners,
+                          inline roll suffix, destination messages.
+  ⏳ Container search   — pending Container+Loot (Day 21)
+  ⏳ Verbal action      — DEFERRED to Day 20.5 (post-Day-25)
 ```
 
-### Combat System ✅ COMPLETE (V8.31 + V8.32 + V8.34 + V8.35 + V8.36 + V8.37)
+### Combat System ✅ COMPLETE (V8.31 → V8.38)
 ```
-DATA LAYER (V8.31):
-  Enemy interface, two-tier bestiary, encounter tagging, stub loot drops.
+DATA LAYER (V8.31):     Enemy interface, two-tier bestiary, encounter
+                        tagging, stub loot drops.
 
-RESOLVER LAYER (V8.32):
-  /lib/game/combat-resolver.ts — pure math, RNG injected.
-  d20 hit/dmg/init/flee/use_item.
+RESOLVER LAYER (V8.32 + V8.38 rolls):
+                        /lib/game/combat-resolver.ts — pure math, RNG
+                        injected. d20 hit/dmg/init/flee/use_item.
+                        Result.rolls populated on every outcome (V8.38).
 
-TRIGGER LAYER (V8.32):
-  shouldRollEncounter / resolveEnemyLookup / rollEncounter.
+TRIGGER LAYER (V8.32):  shouldRollEncounter / resolveEnemyLookup /
+                        rollEncounter.
 
 TURN LOOP (V8.32, separators V8.35, kickoff V8.36):
-  /lib/game/combat-engine.ts — full action resolution + auto-advance.
-  Shared advanceUntilPlayerTurnOrEnd helper (V8.36) used by both
-  executePlayerAction and kickoffCombatIfEnemyFirst.
+                        /lib/game/combat-engine.ts — full action
+                        resolution + auto-advance. Shared
+                        advanceUntilPlayerTurnOrEnd helper (V8.36).
 
 INITIATIVE KICKOFF (V8.36):
-  kickoffCombatIfEnemyFirst — when turn_order[0] !== PLAYER, runs
-  enemy phase before player gets control. useCombat.kickoffCombat
-  fires from useEffect with double-fire guard.
+                        kickoffCombatIfEnemyFirst when turn_order[0] !==
+                        PLAYER. useCombat fires from useEffect with
+                        double-fire guard.
 
-UI LAYER (V8.34, refined V8.37):
-  /components/game/CombatMode/ — CombatMode, CombatantRow, PortraitSlot,
-    HPBar, ActionBar, TargetPicker, UseItemPicker.
-  Side-by-side layout. Story feed combat events with per-event styling.
-  Full-width turn separators (V8.37).
-  CRITICAL HIT banner two-line (V8.37).
-  Victory/Defeat/Escaped two-line centered (V8.37).
+UI LAYER (V8.34, refined V8.37 + V8.38):
+                        Side-by-side layout. Per-event styling.
+                        Full-width turn separators (V8.37).
+                        CRITICAL HIT two-line render (V8.37).
+                        Victory/Defeat/Escaped two-line centered (V8.37).
+                        Inline roll detail suffix on every event (V8.38).
+                        Floating damage numbers over portraits (V8.38).
+                        Destination message line on defeat/flee (V8.38).
 
-INPUT GATING (V8.37):
-  ActionBar buttons are the ONLY combat input path.
-  useGameLoop.submitAction early-bails on combat.active with system
-  message "Combat input is disabled — use the action buttons."
-  INTERIM until Day 20.5 (deferred post-Day-22) lands verbal action.
+INPUT GATING (V8.37):   ActionBar buttons are ONLY input path.
+                        useGameLoop.submitAction early-bails on
+                        combat.active. INTERIM until Day 20.5.
 
 NARRATION LAYER (V8.34, refined V8.35 + V8.37):
-  /api/game/narrate-combat — genre-specific tone primer.
-  Templated: combat_start (V8.35), use_item (V8.37 with heal amount),
-             round_start, player_turn_start, enemy_phase_start,
-             CRITICAL HIT banner (V8.37), Victory/Defeat/Escaped
-             banner (V8.37), all routine events.
-  LLM dramatic: crit prose (suppressed when victory follows, V8.37),
-                kill prose (dropped when victory follows, V8.37),
-                victory/defeat/flee_success prose (≤20 words, V8.37).
-  max_tokens: 250 for crit/kill, 120 for resolutions (V8.37).
+                        Templated: combat_start, use_item, separators,
+                        CRITICAL HIT banner, resolution banners, all
+                        routine events. LLM dramatic: crit / kill /
+                        victory / defeat / flee_success. Crit prose
+                        suppressed when victory follows (V8.37).
+                        max_tokens: 250 crit/kill, 120 resolutions.
 
 EVENT SUPPRESSION (V8.37):
-  planEventSuppression(events) pure helper pre-scans batches.
+                        planEventSuppression(events) pre-scans batches.
 
-PACING (V8.35):
-  ENEMY_PHASE_DELAY_MS = 800 / PLAYER_TURN_DELAY_MS = 800 /
-  ENEMY_TURN_GAP_MS = 500.
+DEFEAT RESILIENCE (V8.38):
+                        last_settlement_hub_id initialized at game
+                        spawn in apply-world-bible. handleDefeat 3-tier
+                        fallback chain (last_settlement_hub_id →
+                        defeat_fallback_node_id from
+                        world_bible.starting_region.settlement_id →
+                        origin_node_id) with explicit warn at each
+                        fall-through. Cross-region teleport intentional
+                        per soulslike model. resolveDefeatDestination
+                        walks zone_id chain to find parent geographic
+                        region. Templated "You wake at X in Y" line
+                        rendered below LLM prose.
 
-UI INDICATORS (V8.35):
-  CombatMode header pill — 11px bold uppercase mono. displayPhase
-  decoupled from current_turn_index.
+PACING (V8.35):         800/800/500ms transition delays.
 
-BESTIARY CODEX (V8.34):
-  writeBestiaryEntry on combat_start (deduplicated by enemy.id).
+UI INDICATORS (V8.35):  CombatMode header pill displayPhase decoupled
+                        from current_turn_index.
+
+BESTIARY CODEX (V8.34): writeBestiaryEntry on combat_start.
 
 STARTING EQUIPMENT (V8.35):
-  /lib/game/starting-equipment.ts — 15 backgrounds, all equipped.
+                        15 backgrounds, all equipped at game start.
 
 INVENTORY DISPLAY (V8.36):
-  Damage/Armor/Heal stat lines + EQUIPPED pill on detail panel.
+                        Damage/Armor/Heal lines + EQUIPPED pill.
 
-DEV TOOLS (V8.32):
-  window.__forceEncounter("enemy_id", ...) — dev-only override.
+DEV TOOLS (V8.32):      window.__forceEncounter("enemy_id", ...).
 ```
 
 ### Region Expansion Guard ✅ (V8.33)
-`/lib/game/region-expansion-guard.ts` — pure helpers. ROOT CAUSE: toSlug() strips hyphens. Guard works AROUND this.
+`/lib/game/region-expansion-guard.ts` — pure helpers. ROOT CAUSE: toSlug() strips hyphens. Guard works AROUND.
 
 ### Navigation Rules ✅ (Complete)
-```
-Map = PURELY VISUAL. Genre renderers active. All navigation via nav bar.
+Map = visual only. Card grammar: BACK / DEEPER / EXIT / PEER / UNDISCOVERED. Region trigger reclassification (V8.33). Combat trigger step 7c-3. last_settlement_hub_id + navigation_trail update on every arrival, initialized at spawn (V8.38).
 
-Card grammar: [← BACK] [→ DEEPER...] [↑ EXIT] [◆ PEER...] [◇ UNDISCOVERED...]
-
-Region trigger reclassification (V8.33): known region → GRAPH_NAVIGATE.
-Combat trigger (step 7c-3): shouldRollEncounter on every arrival.
-last_settlement_hub_id + navigation_trail update on every arrival.
-combat_start writes bestiary codex (V8.34) + renders templated banner (V8.35).
-kickoffCombat fires from useEffect when enemy has initiative (V8.36).
-Combat input blocked during fights with system message (V8.37 — interim).
-```
-
-### Map Description Sourcing ✅ (V8.27, hardened V8.28, generalized V8.30)
-```
-World tier  → wcd.world_description
-Region tier → currentRegion.atmosphere (via parentRegionId chain walk)
-Local tier  → currentLocation.atmosphere
-```
+### Map Description Sourcing ✅
+World→wcd.world_description / Region→currentRegion.atmosphere (parent walk) / Local→currentLocation.atmosphere.
 
 ### NPC Dialogue System ✅
-Option list built by code from NPC.knowledge[]. AI writes response text only. NPC quoted speech `.ew-said` class — pending higher-contrast pass in Polish Round.
+Options built by code. AI writes response only. `.ew-said` contrast pending Polish Round.
 
-### RegionBible Resilience ✅ (V8.30, extended V8.31, idempotent V8.33)
-Model: claude-haiku-4-5-20251001, max_tokens: 7000. Stub fallback. Idempotent.
+### RegionBible Resilience ✅
+claude-haiku-4-5-20251001, max_tokens 7000. Stub fallback. Idempotent.
 
-### WorldBible Resilience ✅ (V8.31)
-Model: claude-sonnet-4-5, max_tokens: 10000. validateEnemy/validateEnemies/scrubEncounterRoster — warn-don't-500.
+### WorldBible Resilience ✅
+claude-sonnet-4-5, max_tokens 10000. validateEnemy/validateEnemies/scrubEncounterRoster — warn-don't-500.
 
 ### Known issues
 
-**Day 20.4 — Combat Polish 3 (IN FLIGHT):**
-- Floating damage numbers over targeted combatant's portrait (28px bold, animated 1100ms float-fade, +prefix on heal, larger on crit, no animation on miss/fumble/defend/flee)
-- Roll detail surfaced on CombatEvent (rolls field with d20/d20_modifier/target_dc/damage_die/damage_die_roll/crit_max_damage/str_modifier)
-- Inline roll breakdown in templated story-feed events (subtle dim mono suffix: "(d20: 17 vs 12 | 1d6+2)")
-- Defeat teleport fix: initialize last_settlement_hub_id at game spawn in apply-world-bible, cross-region teleport to last visited settlement (soulslike model — death is meaningful), templated "You wake at <Settlement> in <Region>." info line below resolution prose
-- Flee success destination message: "You break to <Node>." templated line below flee prose
-
-**Polish Round (Prompt 4) — design locked V8.36, confirmed next:**
+**Polish Round (Prompt 4) — design locked V8.36 + V8.37, NEXT:**
 - Movement-direction grouped nav cards (BACK / DEEPER / PEER / UNDISCOVERED rows)
 - Tier color-coding within each group (region lavender, settlement sky-blue, sub-location mint, dungeon new color)
 - Settlement hub card on new region arrival reads as back-from-settlement — card-typing fix
 - Map does not auto-switch tiers on cross-region arrival
 - NPC dialogue text needs higher contrast (.ew-said too close to ink-2)
-- **Mobile-viewport QA pass** — verify combat panel, nav, story feed, modals all phone-readable (V8.37 vision addition)
+- **Mobile-viewport QA pass** — verify combat panel, nav, story feed, modals all phone-readable
 
-**Day 20.5 — Verbal Action System (DEFERRED post-Day-22):**
-Replaces the V8.37 "Combat input is disabled" interim block.
-- Player types verbal action during combat → `/api/game/parse-combat-verbal-action` LLM judges quality (poor/decent/good/brilliant), target enemy, type (taunt/distract/intimidate/non_combat)
-- Engine resolves: 1d20 + charisma_mod + quality_mod vs 10 + target.agi_mod
-- On success applies status_effect to target enemy for next round only:
-  - **Taunt**: target's next attack auto-targets player (+2 hit you, +2 AGI defense vs them)
-  - **Distract**: target's next attack -2 hit, -2 damage
-  - **Intimidate**: target loses next turn entirely; brilliant roll → 10% flee chance
-- Spammable (one per turn). Failure = turn forfeit.
-- New CombatEvent type `verbal_action`. New `CombatEnemyInstance.status_effect` field.
+**Day 20.5 — Verbal Action (deferred to last):**
+Replaces "Combat input is disabled" interim. Player types verbal action → LLM judges quality → 1d20 + charisma_mod + quality_mod vs 10 + target.agi_mod → status_effect (taunt/distract/intimidate, 1-round duration).
 
-**Map visual rework (dedicated session):**
-- Per-node decorative shelf line cleanup; connection line endpoint geometry; sizing/visual hierarchy; label collision.
-
-**Component test infrastructure (V8.34 deferral):**
-- jest is `testEnvironment: "node"` — no jsdom/RTL setup. Adding RTL is a separate task.
-
-**Pacing tuning (V8.35 watchpoint):**
-- 800/500/800ms delays may need adjustment after extended playtest.
-
-**World gen perf (V8.37 vision flag):**
-- 35s WCD + 120s WorldBible = 2.5min "let's play" → "playable." Borderline for pickup-play scenario, especially pre-multiplayer. Possible mitigations: parallel WCD/WorldBible, faster sub-content model, pre-warmed pool.
-
-**Other deferred:**
-- NPC highlight color (orange) too similar to item highlight (yellow) in Fantasy.
-- Hub node not added to codex on first arrival to new region.
-- Step 7 individual branches: confirm each sets `discovered: true` (relying on safety net).
-- Starting region nodes lack `grid_position` — masked by V8.28 isValidPos guard.
-- Behavior dispatch beyond flavor text deferred (combat-spec §6.3) — every enemy attacks the player. Future combat-depth pass.
-- `toSlug` strips hyphens — masked by V8.33 region-expansion-guard.
-- Combat balance at character level 1 vs regional enemies is intentionally punishing pre-Day-21/Day-22.
+**Other deferred:** Map visual rework, RTL component test infra, pacing tuning watchpoint, world-gen perf, NPC color overlap, hub codex, grid_position, behavior dispatch, toSlug bug, combat balance pre-Day-21/22.
 
 ---
 
 ## 🏗️ Architecture
 
 ### The Two Domains ✅
-**Domain 1 (Engine — pure code):** Navigation, stat checks, dialogue option generation, combat resolver + turn loop + encounter triggers (V8.32), region expansion guard (V8.33), combat UI + narrator + bestiary (V8.34), turn separators + pacing + starting equipment module (V8.35), initiative kickoff + inventory stats display (V8.36), full-width separators + crit banner + suppression + resolution banner (V8.37), loot resolver (pending Day 21).
+**Domain 1 (Engine — pure code):** Navigation, stat checks, dialogue option generation, combat resolver + turn loop + triggers (V8.32), region expansion guard (V8.33), combat UI + narrator + bestiary (V8.34), separators + pacing + starting equipment module (V8.35), initiative kickoff + inventory stats (V8.36), full-width separators + crit banner + suppression + resolution banner (V8.37), roll detail surfacing + inline roll suffix + floating damage numbers + defeat resilience + destination messaging (V8.38), loot resolver (Day 21).
 **Domain 2 (Content Library — frozen):** WCD, locations, NPCs, items, loot tables, main quest, bestiary, region enemies, starting equipment loadouts (V8.35).
 
 ### Generation Model ✅
-RegionBible: claude-haiku-4-5-20251001, max_tokens 7000. Stub fallback. Idempotent.
+RegionBible: claude-haiku-4-5-20251001, max_tokens 7000. Idempotent.
 WorldBible: claude-sonnet-4-5, max_tokens 10000. Includes enemies + encounter tagging.
 WCD includes `world_description`.
-Combat narrator: claude-sonnet-4-5. max_tokens 250 for crit/kill, 120 for resolutions (V8.37). Genre tone primer per call.
+Combat narrator: claude-sonnet-4-5. max_tokens 250 crit/kill, 120 resolutions.
 
 ### Map System ✅
-Genre renderers active (pickModule enabled). PAD=76. Tier switcher. Initial tier on mount: Local (V8.30). ⚠️ Tier auto-switch on cross-zone arrival pending — Polish Round. ⚠️ Map visual rework deferred to dedicated post-Polish-Round session.
+Genre renderers active (pickModule enabled). PAD=76. Tier switcher. Initial tier on mount: Local (V8.30). ⚠️ Tier auto-switch on cross-zone arrival pending — Polish Round. ⚠️ Visual rework deferred to dedicated session.
 
 ---
 
@@ -453,7 +463,7 @@ Genre renderers active (pickModule enabled). PAD=76. Tier switcher. Initial tier
 27. Combat system design defers to /docs/combat-spec.md. Spec FIRST, code SECOND. (V8.31)
 28. Combat math lives in `/lib/game/combat-resolver.ts`. Pure functions, RNG injected. (V8.32)
 29. Combat turn loop lives in `/lib/game/combat-engine.ts`. Defeat / victory / flee dismiss the combat state slice entirely. (V8.32)
-30. last_settlement_hub_id and navigation_trail update on every successful arrival in step 7c-2. Initialized at game spawn in apply-world-bible (V8.38, was V8.32 deferral). (V8.32)
+30. last_settlement_hub_id and navigation_trail update on every successful arrival in step 7c-2. INITIALIZED AT GAME SPAWN in apply-world-bible (V8.38). (V8.32 + V8.38)
 31. pre_combat_xp captured at encounter start. Defeat handler restores player.xp = pre_combat_xp. (V8.32)
 32. Encounter trigger is in step 7c-3. Activates only when shouldRollEncounter passes. (V8.32)
 33. Enemy behavior on Day 20 is hardcoded "attack the player" regardless of behavior_flavor field. (V8.32)
@@ -461,35 +471,38 @@ Genre renderers active (pickModule enabled). PAD=76. Tier switcher. Initial tier
 35. apply-regional-bible is idempotent: skipped: true when redundant. (V8.33)
 36. mergeNodePreservingDiscovered preserves discovered: true on re-apply. (V8.33)
 37. arrivedAt in step 7c reads from updatedState (post-reclassification). (V8.33)
-38. Combat narration is selective: routine events use code-templated lines (no API call); dramatic events call /api/game/narrate-combat. Variant selection deterministic via timestamp hash. (V8.34, refined V8.35: combat_start templated; refined V8.37: crit prose suppressed when victory follows)
-39. CombatMode is the bottom-strip swap when `master_state.combat?.active === true`. NavigationBar + InputBar hide; CombatMode renders at min-height: min(33vh, 360px). Story feed shrinks above but remains scrollable. (V8.34)
-40. Each combatant row reserves a portrait slot (~128px). Day 20: single-letter glyph placeholder. portraitUrl prop accepts real images later without layout change. (V8.34)
-41. Bestiary codex entries write on `combat_start`, deduplicated by enemy.id. Description: flavor + HP range + damage die + first-seen location. (V8.34)
-42. New game preamble: `recent_messages.length === 0` triggers "Your adventure begins. What will you do first?" with isFreshGamePreamble flag. (V8.34)
-43. Starting equipment lives in `lib/game/starting-equipment.ts` as a separate module — Next.js App Router routes can only export HTTP handlers. (V8.35)
+38. Combat narration is selective: routine events templated (no API call); dramatic events call /api/game/narrate-combat. Variant selection deterministic via timestamp hash. (V8.34, refined V8.35: combat_start templated; refined V8.37: crit prose suppressed when victory follows)
+39. CombatMode is the bottom-strip swap when `master_state.combat?.active === true`. (V8.34)
+40. Each combatant row reserves a portrait slot (~128px). portraitUrl prop accepts real images later. (V8.34)
+41. Bestiary codex entries write on `combat_start`, deduplicated by enemy.id. (V8.34)
+42. New game preamble: `recent_messages.length === 0` triggers "Your adventure begins. What will you do first?" (V8.34)
+43. Starting equipment lives in `lib/game/starting-equipment.ts` as separate module. (V8.35)
 44. Every starting weapon ships with `equipped: true` AND `effect.damage_die`. Every starting armor ships with `equipped: true` AND `effect.armor_bonus`. (V8.35)
 45. `combat_start` is templated, not LLM-narrated. Renders directly from useGameLoop step 7c-3. (V8.35)
-46. `player_turn_start` and `enemy_phase_start` events emitted by combat-engine at phase transitions. They do NOT emit when combat ends in victory/defeat/flee. (V8.35)
-47. Pacing delays at turn transitions: 800ms before `enemy_phase_start`, 800ms before `player_turn_start`, 500ms between successive distinct enemy actors. No delay before routine player events. (V8.35)
-48. CombatMode header pill `displayPhase` is decoupled from `combat.current_turn_index` and flips ahead of feed at phase transitions. The pill — not the feed — is the canonical turn indicator. (V8.35)
-49. Enemy-turn loop is shared via `advanceUntilPlayerTurnOrEnd` (combat-engine.ts). Both `executePlayerAction` and `kickoffCombatIfEnemyFirst` call it. Single source of truth. (V8.36)
-50. When combat starts with `turn_order[0] !== PLAYER`, the initial enemy phase MUST fire before UI hands control to the player via `kickoffCombat` from useEffect. Tracked via `useRef<Set<string>>` to prevent double-fire. setDisplayPhase("enemy") fires synchronously so no "Your turn" flash. (V8.36)
-51. Inventory detail panel surfaces combat stats: WEAPON → `Damage: <die>`, ARMOR → `Armor: +<bonus>` (always rendered, including +0), CONSUMABLE → `Heal: 1d8+4` or `Heal: N`. EQUIPPED pill renders next to rarity when `selectedItem.equipped === true`. (V8.36)
-52. Combat input is button-only when combat is active. `useGameLoop.submitAction` early-bails on `combat.active` with system message. INTERIM until Day 20.5 (DEFERRED post-Day-22) replaces with verbal action handling. forceMoveToNode allowed through (defeat/flee teleports). (V8.37)
-53. Use Item is templated only — never LLM. Format: `"You use <item>. Restored N HP."` with damage 0/null dropping the heal suffix. (V8.37)
-54. Crit events render as TWO lines: templated `"⚔ CRITICAL HIT — N damage."` banner first (instant, mono 13px bold uppercase), then LLM crit prose. Both styled with same actor-derived color. (V8.37)
-55. `planEventSuppression(events)` pre-scans event batches before story-feed projection. When victory is present: all kill events dropped entirely from feed; last crit before victory has prose suppressed (banner renders, no LLM call). Reduces a crit-kill→victory from 3 LLM calls to 1. Defeat batches intentionally untouched. (V8.37)
-56. Resolution events (victory/defeat/flee_success) render as two-line centered block: banner word + shortened LLM prose. narrate-combat uses max_tokens 120 with "ONE sentence, max 20 words" hint for resolutions; crit/kill keep 250. (V8.37)
+46. `player_turn_start` and `enemy_phase_start` events emitted by combat-engine at phase transitions. They do NOT emit when combat ends. (V8.35)
+47. Pacing delays at turn transitions: 800ms before enemy_phase_start, 800ms before player_turn_start, 500ms between successive distinct enemy actors. (V8.35)
+48. CombatMode header pill `displayPhase` is decoupled from `combat.current_turn_index` and flips ahead of feed. (V8.35)
+49. Enemy-turn loop is shared via `advanceUntilPlayerTurnOrEnd`. Single source of truth. (V8.36)
+50. When combat starts with `turn_order[0] !== PLAYER`, the initial enemy phase MUST fire before UI hands control to the player via `kickoffCombat` from useEffect. Tracked via useRef Set. (V8.36)
+51. Inventory detail panel surfaces combat stats: WEAPON Damage, ARMOR Armor (always renders, including +0), CONSUMABLE Heal. EQUIPPED pill on detail panel. (V8.36)
+52. Combat input is button-only when combat is active. submitAction early-bails on combat.active with system message. INTERIM until Day 20.5 (post-Day-25). (V8.37)
+53. Use Item is templated only. Format: `"You use <item>. Restored N HP."` (V8.37)
+54. Crit events render as TWO lines: templated banner first (instant), then LLM crit prose. Both styled with same actor-derived color. (V8.37)
+55. `planEventSuppression(events)` pre-scans event batches before story-feed projection. When victory present: kill events dropped, last crit before victory has prose suppressed. (V8.37)
+56. Resolution events render as two-line centered block: banner + ≤20-word LLM prose. max_tokens 120 for resolutions. (V8.37)
+57. CombatEvent.rolls field populates on every event with damage/d20/heal outcome. Pure data extension: `{ d20, d20_modifier, target_dc, damage_die, damage_die_roll, crit_max_damage, str_modifier }`. Defend / phase-separator events omit it. (V8.38)
+58. Inline roll suffix renders subtle parenthetical breakdown via `{primary, rolls}` return shape from templates. CSS `.combat-roll-detail` (10px dim mono, 0.6 opacity). (V8.38)
+59. Floating damage numbers fire on hit/crit/heal events ONLY over the targeted combatant's portrait. 28px regular, 36px crit, "+" prefix on heal. setTimeout(1100ms) cleanup. CombatMode parent maintains floatingByActor state keyed by combatant id. Crit shake fires concurrently per V8.34. (V8.38)
+60. Defeat teleport — `last_settlement_hub_id` is initialized at game spawn in apply-world-bible alongside `current_location_id`. handleDefeat uses 3-tier fallback chain (last_settlement_hub_id → defeat_fallback_node_id from world_bible.starting_region.settlement_id → origin_node_id) with explicit `console.warn` at each fall-through. Cross-region teleport intentional per soulslike model. (V8.38)
+61. Resolution events (defeat / flee_success) carry destination payload `{ node_id, node_name, region_id?, region_name? }`. StoryFeed renders templated info line below LLM prose: "You wake at X in Y" (defeat) / "You break to X" (flee). CSS `.combat-resolution-destination` (12px italic serif, 0.75 opacity). Victory does NOT get destination line. (V8.38)
 
 ---
 
 ## Narrator Prompt Order ✅
 
-DIALOGUE: WCD → HARD RULES → RESPONDING CHARACTER → CLOSED CONTEXT (selected knowledge) → TIER 1 OBJECTS → WORLD ASSETS → SCENE → VERBOSITY
+DIALOGUE: WCD → HARD RULES → RESPONDING CHARACTER → CLOSED CONTEXT → TIER 1 OBJECTS → WORLD ASSETS → SCENE → VERBOSITY
 non-DIALOGUE: WCD → HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → CONNECTED LOCATIONS → WORLD ASSETS → SCENE → VERBOSITY
-COMBAT (V8.34, refined V8.37): GENRE TONE PRIMER → COMBAT EVENT (mechanical truth) → HARD RULES → length hint per event tier (resolutions ≤20 words, crit/kill 2-3 sentences)
-
-Verbosity: terse | standard | rich (combat narration is always 1-2 sentences regardless)
+COMBAT: GENRE TONE PRIMER → COMBAT EVENT (mechanical truth) → HARD RULES → length hint per event tier (resolutions ≤20 words, crit/kill 2-3 sentences)
 
 ---
 
@@ -504,28 +517,27 @@ Location highlights:   #7dd3fc sky blue (--hl-loc)
 Landmark highlights:   #94d8b8 soft mint (--hl-landmark)
 NPC highlights:        var(--accent) orange
 
-COMBAT (V8.34):
-  Routine player action:   #7ab8c8 teal (--combat-player)
-  Routine enemy action:    #e87c6d warm red (--combat-enemy)
+COMBAT:
+  Routine player:          #7ab8c8 teal (--combat-player)
+  Routine enemy:           #e87c6d warm red (--combat-enemy)
   Player crit:             #3b82a8 deeper blue, BOLD (--combat-player-crit)
   Enemy crit:              #c0392b blood red, BOLD (--combat-enemy-crit)
-  Victory color:           #7dbb8e mossy green (--combat-victory)
-  Defeat color:            #a93226 dark red (--combat-defeat)
-  Flee color:              #a8a29c grey-tan (--combat-flee)
-
-COMBAT (V8.35):
+  Victory:                 #7dbb8e mossy green (--combat-victory)
+  Defeat:                  #a93226 dark red (--combat-defeat)
+  Flee:                    #a8a29c grey-tan (--combat-flee)
   Encounter banner:        #f4a07a light coral (--combat-encounter-banner)
-                           15px bold italic, center-aligned
-  Turn separators:         11px italic, 0.55 opacity --ink-2
 
-COMBAT (V8.37):
-  Turn separators (UPGRADED): flex-width, label between flanking rules,
-                              full story-panel width
-  Crit banner line:          mono 13px bold uppercase, 0.08em letter-spacing,
-                             actor-derived color
-  Resolution banner:         mono 18px bold uppercase, 0.12em letter-spacing,
-                             centered block; resolution color
-  Resolution prose:          serif italic 13px, centered, resolution color
+V8.37 elements:
+  Turn separators:         flex-width, label between flanking rules
+  Crit banner line:        mono 13px bold uppercase, actor-derived color
+  Resolution banner:       mono 18px bold uppercase, centered
+  Resolution prose:        serif italic 13px, centered
+
+V8.38 elements:
+  Roll detail suffix:      10px dim mono, 0.6 opacity (--combat-roll-detail)
+  Floating damage:         28px mono bold (36px crit), 1100ms float-fade
+  Resolution destination:  12px italic serif, 0.75 opacity
+                           (--combat-resolution-destination)
 ```
 
 ---
@@ -579,4 +591,4 @@ Claude Code pushes → user reports commit + test results → Claude.ai updates 
 
 ---
 
-*Last updated: V8.37 (docs-only update, second pass) — Added 🎮 Game Vision section capturing the full pickup-D&D-on-phones north-star scenario, what the game IS / IS NOT, competitive positioning ("BG depth without BG overhead"), and 8 design principles derived from vision (pickup-friendly, mobile-first, multi-playstyle, procedural variety, multiplayer-aware, customization-aware, D&D-style narration as soul, death must matter). Strategic Trajectory Notes extended with vision capture entry flagging mobile-first hard requirement, multiplayer architecture awareness, customization layer awareness, world-gen perf concern (2.5min "let's play" → "playable" borderline). Tim confirmed sequencing: Polish Round → Day 21 Loot → Day 22 Leveling → playtest → Day 23 Quest → Day 20.5 Verbal Action deferred. Polish Round scope expanded to include mobile-viewport QA bundle.*
+*Last updated: V8.38 — Day 20.4 Combat Polish 3 (commit fc508f3): roll detail surfaced on CombatEvent (rolls field with full d20/damage/crit/str/heal breakdown), inline roll suffix in templated story-feed events (subtle dim mono parenthetical), floating damage numbers over targeted combatant portraits (28px regular / 36px crit / +prefix on heal, 1100ms float-fade), defeat teleport fix (last_settlement_hub_id init at game spawn + 3-tier fallback chain + cross-region soulslike model + templated "You wake at X in Y" message line). 243/243 tests passing. /game route 106→108 kB. Foundational rules 57-61 added. Three strategic decisions LOCKED in V8.38 Trajectory Notes: (1) Multiplayer = pre-launch active requirement → Day 24 phase added; (2) Customization = pre-launch toward end → Day 25 phase added; (3) Day 22 skills = foundations now (middle path) — define skill domain enum, schema for lifestyle skills, only Combat domain wired with real XP hooks initially. Polish Round (Prompt 4) is next, bundling visible UX debt + mobile-viewport QA pass.*

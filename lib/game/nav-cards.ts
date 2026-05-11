@@ -283,7 +283,15 @@ export function buildCards(
     // player always has a direct path in. Symmetric with settlement → EXIT
     // to region zone (TYPE C). Uses the already-resolved `settlementHub`
     // which scans for zone_id === current.id && is_settlement_node === true.
-    if (settlementHub) {
+    //
+    // Polish 4c Rule 80 — dedup guard: when the BACK card already routes
+    // to this same settlement (same-region inbound, e.g. player walked OUT
+    // from settle_a to region_a so trail[-2] = settle_a), suppress DEEPER
+    // to avoid showing the same destination with two different arrows.
+    // Cross-region arrivals set BACK to the PREVIOUS region's settlement
+    // (a different node), so DEEPER still shows for the current settlement.
+    const backDest = backCards[0]?.targetId;
+    if (settlementHub && backDest !== settlementHub.id) {
       deeperCards.push({
         key:        `deeper-${settlementHub.id}`,
         kind:       "deeper",

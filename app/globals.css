@@ -201,6 +201,10 @@
 .ew-scroll::-webkit-scrollbar-track { background: transparent; }
 .ew-scroll { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
 
+/* Nav columns — hidden scrollbar for mobile horizontal swipe (Polish 4c) */
+.ew-nav-cols::-webkit-scrollbar { display: none; }
+.ew-nav-cols { scrollbar-width: none; -ms-overflow-style: none; }
+
 /* Animations */
 @keyframes ew-pulse {
   0%, 100% { transform: scale(1); opacity: 0.9; }

@@ -281,6 +281,47 @@ describe("buildCards — region-zone BACK card", () => {
   });
 });
 
+// ── buildCards — DEEPER dedup at region zone (rule 80) ─────────────────────
+
+describe("buildCards — DEEPER dedup at region zone (rule 80)", () => {
+  it("suppresses DEEPER when BACK already targets the same settlement (same-region inbound)", () => {
+    // Player at region_a, came from settle_a (trail[-2] = settle_a).
+    // BACK = settle_a. DEEPER would also be settle_a → suppress.
+    const graph = makeWorldGraph("region_a");
+    const state = makeMasterState({ trail: ["settle_a", "region_a"] });
+    const cards = buildCards(graph, state);
+    const back   = cards.find((c) => c.kind === "back");
+    const deeper = cards.find((c) => c.kind === "deeper");
+    expect(back?.targetId).toBe("settle_a");
+    expect(deeper).toBeUndefined(); // suppressed — BACK already covers settlement
+  });
+
+  it("suppresses DEEPER when no trail forces BACK to the region's own settlement", () => {
+    // No trail → BACK defaults to settlementHub (settle_a).
+    // DEEPER would also be settle_a → suppress per rule 80.
+    const graph = makeWorldGraph("region_a");
+    const state = makeMasterState();
+    const cards = buildCards(graph, state);
+    const back   = cards.find((c) => c.kind === "back");
+    const deeper = cards.find((c) => c.kind === "deeper");
+    expect(back?.targetId).toBe("settle_a");
+    expect(deeper).toBeUndefined();
+  });
+
+  it("shows DEEPER when BACK targets a different settlement (cross-region arrival)", () => {
+    // Player at region_b, came from region_a (cross-region).
+    // BACK = settle_a (previous region). DEEPER = settle_b (current region).
+    // Different destinations → no dedup, both cards show.
+    const graph = makeWorldGraph("region_b");
+    const state = makeMasterState({ trail: ["region_a", "region_b"] });
+    const cards = buildCards(graph, state);
+    const back   = cards.find((c) => c.kind === "back");
+    const deeper = cards.find((c) => c.kind === "deeper");
+    expect(back?.targetId).toBe("settle_a");
+    expect(deeper?.targetId).toBe("settle_b");
+  });
+});
+
 // ── isCrossRegionArrival ────────────────────────────────────────────────────
 
 describe("isCrossRegionArrival", () => {

@@ -21,20 +21,24 @@ import type {
  *
  * The map is display-only; the nav bar owns every navigation action.
  *
- * Polish 4a TASK 1 — cards now group into 4 horizontal rows by
- * movement direction (BACK / DEEPER / PEER / UNDISCOVERED), with
- * EXIT folding into BACK. Empty rows do NOT render. Each row gets
- * an optional small italic-serif label on the left.
+ * Polish 4a TASK 1 — cards group into 4 direction buckets (BACK /
+ * DEEPER / PEER / UNDISCOVERED), with EXIT folding into BACK.
  *
  * Polish 4a TASK 2 — each card's border, leading arrow, and title
  * are colored by destination tier (region lavender / settlement
- * sky-blue / sub-location mint / dungeon burnt-copper). Tier comes
- * from the card's `tier` field (set in `buildCards`).
+ * sky-blue / sub-location mint / dungeon burnt-copper).
  *
  * Polish 4a TASK 3a — the region-zone BACK card prefers the
- * previous region's settlement when the player just crossed
- * regions (resolved inside `buildCards` from
- * masterState.navigation_trail).
+ * previous region's settlement on cross-region arrival.
+ *
+ * Polish 4c TASK 3 — layout changed from 4 stacked rows to 4
+ * side-by-side columns. Each column is 156 px wide (fixed), has a
+ * subtle framing border, and stacks cards vertically. The column
+ * container overflows-x on mobile (hidden scrollbar via .ew-nav-cols)
+ * with overflow-y: visible per rule 70 (CSS containment).
+ *
+ * Polish 4c Rule 80 — DEEPER is suppressed when BACK already targets
+ * the same settlement (same-region inbound navigation).
  *
  * Tapping a card calls onNavigate(nodeId), which the parent routes
  * through useGameLoop.navigateTo (the only sanctioned UI nav channel).
@@ -74,11 +78,10 @@ export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
 
   if (cards.length === 0) return null;
 
-  // Render order — back first (where you came from), then deeper /
-  // peer / undiscovered. Empty groups are skipped (no whitespace,
-  // no label, no row).
-  const rowOrder: CardDirection[] = ["back", "deeper", "peer", "undiscovered"];
-  const rowLabels: Record<CardDirection, string> = {
+  // Column order — back first, then deeper / peer / undiscovered.
+  // Empty columns are skipped entirely (no whitespace, no label).
+  const colOrder: CardDirection[] = ["back", "deeper", "peer", "undiscovered"];
+  const colLabels: Record<CardDirection, string> = {
     back:         "back",
     deeper:       "deeper",
     peer:         "peer",
@@ -111,62 +114,61 @@ export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
           {breadcrumb}
         </div>
       )}
+      {/* Polish 4c TASK 3 — 4-column layout. Columns are side-by-side with
+          a fixed 156 px width each. On mobile the container scrolls
+          horizontally (hidden scrollbar via .ew-nav-cols). overflow-y is
+          explicitly "visible" to prevent CSS auto-promotion from clipping
+          absolutely-positioned descendants (rule 70). */}
       <div
+        className="ew-nav-cols"
         style={{
           display:        "flex",
-          flexDirection:  "column",
-          gap:            6,
+          flexDirection:  "row",
+          gap:            8,
           padding:        "10px 16px 12px",
+          overflowX:      "auto",
+          overflowY:      "visible",
         }}
       >
-        {rowOrder.map((dir) => {
-          const rowCards = grouped[dir];
-          if (rowCards.length === 0) return null;
+        {colOrder.map((dir) => {
+          const colCards = grouped[dir];
+          if (colCards.length === 0) return null;
           return (
             <div
               key={dir}
               style={{
-                display:    "flex",
-                alignItems: "center",
-                gap:        10,
+                width:          156,
+                flexShrink:     0,
+                display:        "flex",
+                flexDirection:  "column",
+                gap:            4,
+                padding:        "8px",
+                border:         "1px solid var(--line-2)",
+                borderRadius:   4,
               }}
             >
               <span
                 style={{
                   fontFamily:    "var(--serif)",
                   fontStyle:     "italic",
-                  fontSize:      11,
+                  fontSize:      10,
                   color:         "var(--ink-4)",
                   opacity:       0.7,
                   letterSpacing: "0.04em",
-                  width:         70,
-                  flexShrink:    0,
-                  textAlign:     "right",
-                  paddingRight:  4,
+                  marginBottom:  2,
                 }}
               >
-                {rowLabels[dir]}
+                {colLabels[dir]}
               </span>
-              <div
-                className="ew-scroll"
-                style={{
-                  display:                 "flex",
-                  flexWrap:                "wrap",
-                  gap:                     8,
-                  flex:                    1,
-                  minWidth:                0,
-                  WebkitOverflowScrolling: "touch",
-                }}
-              >
-                {rowCards.map((c) => (
-                  <NavCard
-                    key={c.key}
-                    card={c}
-                    onClick={() => onNavigate(c.targetId)}
-                    generatingRegionId={generatingRegionId}
-                  />
-                ))}
-              </div>
+              {colCards.map((c) => (
+                <NavCard
+                  key={c.key}
+                  card={c}
+                  onClick={() => onNavigate(c.targetId)}
+                  generatingRegionId={generatingRegionId}
+                  fullWidth
+                />
+              ))}
             </div>
           );
         })}
@@ -236,12 +238,16 @@ function NavCard({
   card,
   onClick,
   generatingRegionId,
+  fullWidth = false,
 }: {
   card: Card;
   onClick: () => void;
   /** When non-null, RegionBible expansion is in flight. Every card
    *  disables; the targeted ◇ swaps its badge to "GENERATING...". */
   generatingRegionId: string | null;
+  /** Column layout mode — card fills the column width instead of using
+   *  fixed min/maxWidth. Set by the column container. */
+  fullWidth?: boolean;
 }) {
   const isBack       = card.kind === "back";
   const isExit       = card.kind === "exit";
@@ -312,8 +318,11 @@ function NavCard({
         display:        "flex",
         alignItems:     "center",
         gap:            10,
-        minWidth:       140,
-        maxWidth:       200,
+        // fullWidth (column mode): fill the column; row mode: fixed range.
+        ...(fullWidth
+          ? { width: "100%" }
+          : { minWidth: 140, maxWidth: 200, flexShrink: 0 }
+        ),
         height:         64,
         padding:        "0 14px",
         background,
@@ -322,7 +331,6 @@ function NavCard({
         color:          "var(--ink-2)",
         fontFamily:     "var(--mono)",
         cursor:         isGenerating ? "wait" : "pointer",
-        flexShrink:     0,
         textAlign:      "left",
         whiteSpace:     "nowrap",
         transition:     "all 120ms",

@@ -5,6 +5,7 @@ import { AssetCategory } from "@/types/game";
 import type { MasterState, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
 import { GenreMap, VIEW } from "./map/renderers";
 import type { ExitEdge, MapNode, MapConnection, MapExit, Tier } from "./map/renderers";
+import { chooseTierForNode } from "@/lib/game/map-tier";
 
 /**
  * Map Sidebar — redesign per /design/map-sidebar.jsx.
@@ -52,27 +53,30 @@ export function WorldMap({
   const player = worldGraph.nodes[worldGraph.current_node_id];
 
   // ── Tier + selection state ─────────────────────────────────────────────────
-  const [activeTier, setActiveTier] = useState<Tier>(() => chooseInitialTier(player));
+  const [activeTier, setActiveTier] = useState<Tier>(() => chooseTierForNode(player) as Tier);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(
     () => findRootZoneId(worldGraph.current_node_id, worldGraph.nodes) ?? null
   );
 
-  // Auto-snap selectedRegionId when the player crosses regions and,
-  // per Polish 4a TASK 3b, force the map tier to "region" (2) on
-  // cross-region arrival so the player sees the new region they just
-  // entered. Same-region moves leave the tier alone (the player may
-  // have manually switched to World or Local, and we respect that).
-  // See lib/game/nav-cards.ts → isCrossRegionArrival for the predicate.
+  // Auto-snap selectedRegionId when the player moves, and auto-switch
+  // map tier based on the destination node type (rule 81):
+  //   - Geographic region zone → Region (2): shows all landmarks/sub-locs.
+  //   - Settlement, sub-location, or other → Local (3): shows nearby detail.
+  // This replaces the former "same-region moves leave tier alone" behavior.
+  // The map always shows the most contextually useful view for wherever
+  // the player just arrived, rather than preserving a stale manual choice.
   useEffect(() => {
     if (!masterState?.world_graph) return;
-    const graph        = masterState.world_graph;
-    const currentNode  = graph.current_node_id;
-    const rootZoneId   = findRootZoneId(currentNode, graph.nodes);
+    const graph       = masterState.world_graph;
+    const currentNode = graph.current_node_id;
+    const player      = graph.nodes[currentNode];
+    const rootZoneId  = findRootZoneId(currentNode, graph.nodes);
     if (!rootZoneId) return;
     if (rootZoneId !== selectedRegionId) {
       setSelectedRegionId(rootZoneId);
-      setActiveTier(2);
     }
+    // Polish 4c Rule 81 — always update tier on any node arrival.
+    setActiveTier(chooseTierForNode(player) as Tier);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masterState?.world_graph?.current_node_id]);
 
@@ -1240,21 +1244,6 @@ function countCrossRegionExits(region: WorldNode, worldGraph: WorldGraph): numbe
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function chooseInitialTier(player: WorldNode | undefined): Tier {
-  if (!player) return 2;
-  if (player.type === "sub_location") return 3;
-  // Geographic region zone has no LOCAL view (it IS the region).
-  // Open on Region so the player sees the landmarks they can step into.
-  if (player.is_expandable && player.zone_id === player.id) return 2;
-  if (player.is_expandable) return 3;
-  // FIX 2 — default to LOCAL (3) on mount. Players start at a settlement
-  // hub where Local shows the most actionable info (nearby sub-locations,
-  // NPCs, landmarks). Region/World are wider-scope views the player opts
-  // into manually. The useEffect that snaps selectedRegionId on region
-  // changes preserves any manual tier choice the player has made
-  // (setActiveTier((cur) => (cur === 3 ? 3 : cur))).
-  return 3;
-}
 
 function findRootZoneId(
   nodeId: string,

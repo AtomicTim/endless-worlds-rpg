@@ -457,16 +457,20 @@ describe("buildCards — DEEPER card for settlement at region zone (Day 20.4.4 f
     };
   }
 
-  it("includes settlement as DEEPER card when at region zone (no trail)", () => {
+  it("settlement reachable via BACK when at region zone (no trail) — DEEPER suppressed per rule 80", () => {
+    // No trail → BACK defaults to settlementHub (pale_edge_territory_settlement).
+    // DEEPER would also target the same settlement → dedup suppresses it.
+    // The player still has a card pointing to the settlement (via BACK ←).
     const graph = makeGraphAtRegionZone(makeValidBible());
     const state = makeMasterState();
     const cards = buildCards(graph, state);
+    const back = cards.find((c) => c.kind === "back");
+    expect(back).toBeDefined();
+    expect(back!.targetId).toBe("pale_edge_territory_settlement");
+    expect(back!.tier).toBe("settlement");
+    // DEEPER suppressed — BACK already covers settlement (rule 80).
     const deeper = cards.filter((c) => c.kind === "deeper");
-    expect(deeper.length).toBeGreaterThanOrEqual(1);
-    const settlementCard = deeper.find((c) => c.targetId === "pale_edge_territory_settlement");
-    expect(settlementCard).toBeDefined();
-    expect(settlementCard!.tier).toBe("settlement");
-    expect(settlementCard!.name).toBe("WARDEN'S GATE");
+    expect(deeper.find((c) => c.targetId === "pale_edge_territory_settlement")).toBeUndefined();
   });
 
   it("includes settlement as DEEPER card on cross-region arrival", () => {
@@ -487,23 +491,30 @@ describe("buildCards — DEEPER card for settlement at region zone (Day 20.4.4 f
     expect(settlementCard!.tier).toBe("settlement");
   });
 
-  it("includes settlement DEEPER card for collapsed-bible after split+build", () => {
+  it("settlement reachable via BACK after split+build (no trail) — DEEPER suppressed per rule 80", () => {
+    // Same dedup behavior as the valid-bible no-trail case.
     const bible = makeCollapsedBible();
     splitConflatedRegionSettlement(bible);  // repair in-place
     const graph = makeGraphAtRegionZone(bible);
     const state = makeMasterState();
     const cards = buildCards(graph, state);
+    const back = cards.find((c) => c.kind === "back");
+    expect(back?.targetId).toBe("pale_edge_territory_settlement");
+    // DEEPER suppressed — BACK already covers the settlement (rule 80).
     const deeper = cards.filter((c) => c.kind === "deeper");
-    const settlementCard = deeper.find((c) => c.targetId === "pale_edge_territory_settlement");
-    expect(settlementCard).toBeDefined();
+    expect(deeper.find((c) => c.targetId === "pale_edge_territory_settlement")).toBeUndefined();
   });
 
-  it("DEEPER card tier is 'settlement' (sky-blue color per rule 73)", () => {
+  it("DEEPER card tier is 'settlement' on cross-region arrival (sky-blue per rule 73)", () => {
+    // Use a cross-region trail so BACK targets thornbridge_settlement and
+    // DEEPER targets pale_edge_territory_settlement — no dedup suppression.
     const graph = makeGraphAtRegionZone(makeValidBible());
-    const cards = buildCards(graph, makeMasterState());
+    const state = makeMasterState(["thornbridge_settlement", "pale_edge_territory"]);
+    const cards = buildCards(graph, state);
     const settlementCard = cards.find(
       (c) => c.kind === "deeper" && c.targetId === "pale_edge_territory_settlement"
     );
+    expect(settlementCard).toBeDefined();
     expect(settlementCard!.tier).toBe("settlement");
   });
 

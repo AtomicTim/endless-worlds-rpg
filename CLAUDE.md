@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.38
-**Status:** Day 20 Combat COMPLETE through 20.4 — Polish Round (Prompt 4) Next
+**Version:** 8.39
+**Status:** Day 20 Combat COMPLETE through 20.4.1 hotfix — Polish Round (Prompt 4) Next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — The definitive source for all Domain 1 vs Domain 2 decisions. /docs/combat-spec.md — The authoritative source for combat system design.
@@ -84,6 +84,14 @@ Defers to creative-director call on vision questions. Creative input from Claude
 
 Living section. Captures meta-discussions about project direction, sequencing, recommended pivots, architectural debates. New Claude sessions read this for current strategic context before proposing prompts.
 
+### V8.39 — Lesson learned: defensive overcheck caused the V8.38 bug
+
+The Day 20.4 defeat respawn bug ("You wake at <region>" instead of "<settlement>") was attributed to spawn-init writing the wrong field. The actual root cause, found in Day 20.4.1, was a **defensive overcheck** added in Day 20.1: step 7c-2's settlement-hub detection had a `category === "settlement_hub"` fallback alongside the canonical `is_settlement_node === true` check. WorldBible's `starting_region.type` is hard-coded to `"settlement_hub"`, which apply-world-bible step 4c copies onto the geographic region zone's `category`. Every region-zone arrival was therefore being identified as a settlement hub and overwriting `last_settlement_hub_id` with the region id.
+
+**Foundational lesson:** Defensive overchecks ("set this AND that") can become positive bugs when the "and that" clause matches things it shouldn't. The canonical field (`is_settlement_node`) is the single source of truth; fallbacks need stronger justification than "just in case."
+
+Codified in foundational rule 65.
+
 ### V8.38 — Three strategic decisions LOCKED
 
 **Decision 1: Multiplayer = PRE-LAUNCH (NOT post-launch v2).**
@@ -107,30 +115,14 @@ Concrete impacts on upcoming phases:
 **Decision 2: Customization layer = PRE-LAUNCH but towards end.**
 User-supplied theme prompts ("haunted Victorian England", etc.) plumbed into world generation. **Day 25 — Customization Layer** post-Day-24, pre-launch.
 
-Difficulty assessment (Tim asked "is this too hard?" — answer: not too hard, but not trivial):
-- **Easy parts (~3-4 hours):** WCD field, UI textbox + presets, plumb theme through generation prompts
-- **Medium parts (~3-4 hours):** Genre+theme interaction rules, validation, presets vs freeform UX
-- **Hard parts (~1 day):** Quality-tuning prompts so theme actually shows up coherently in WorldBible/RegionBible/NPCs/locations, edge cases, playtesting across 5 genres × theme types
-- **Real risk:** content coherence. If user types theme and only WCD honors it but content is generic, feels broken. Sonnet handles thematic guidance well; needs playtest iterations.
-
-Total: 1-2 day session. Manageable.
+Difficulty assessment: 1-2 day session. Manageable but not trivial. Real risk is content coherence across all generation phases — Sonnet handles thematic guidance well but needs playtest iterations.
 
 **Decision 3: Day 22 skills = FOUNDATIONS NOW (middle path).**
-Lay groundwork for lifestyle skill system without full depth.
-
-Day 22 scope (preliminary):
-- Skill domain enum (Combat / Crafting / Social / Exploration — final list TBD at design time)
-- Each skill has level / XP / max_level
-- Combat skill domain fully wired with real XP hooks (kill XP, damage XP, etc.)
-- Other domains: schema exists, hooks stubbed but inactive
-- Skill checks usable against any domain level (so quest design can use them)
-- Skill points awarded on level-up, spendable in any domain
-
-Means: Day 22 ships with combat-stat-only growth from player perspective, but data model supports lifestyle skills cleanly when Day 24+ adds them. No retrofit needed.
+Lay groundwork for lifestyle skill system without full depth. Skill domain enum (Combat / Crafting / Social / Exploration), each skill has level / XP / max_level, Combat domain fully wired with real XP hooks, other domains schema exists but hooks stubbed. Data model supports lifestyle skills cleanly when Day 24+ adds them.
 
 ### V8.37 — Combat scope drift assessment + recommended sequencing
 
-Day 20 expanded from one prompt to eight commits (1, 2, 2.5, 3, 20.1, 20.2, 20.3, 20.4). Each justified individually but cumulatively heavy combat investment ahead of dependent systems.
+Day 20 expanded from one prompt to nine commits (1, 2, 2.5, 3, 20.1, 20.2, 20.3, 20.4, 20.4.1). Each justified individually but cumulatively heavy combat investment ahead of dependent systems.
 
 **Confirmed sequence (V8.37 + V8.38 amendments):**
 1. **Polish Round (Prompt 4)** — clear UX debt + mobile-viewport QA bundle
@@ -159,12 +151,13 @@ Day 20 expanded from one prompt to eight commits (1, 2, 2.5, 3, 20.1, 20.2, 20.3
 - **Verbal action redundancy risk.** If Day 22 adds Charisma skill tree, verbal action types may need reconciling.
 - **NPC behavior dispatch** (combat-spec §6.3 deferral). Future combat-depth pass.
 - **Map visual rework.** Pure visual debt; deferred dedicated session.
+- **Other defensive overchecks worth auditing.** Per V8.39 lesson, look for similar `category === X` or `type === X` fallbacks alongside canonical boolean fields. Candidates: combat-state classification, region-zone vs sub-location distinction, NPC home-location resolution.
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Day 20 Combat fully complete through Polish 3. Combat input is button-only during fights (V8.37 interim, replaced by Day 20.5 verbal action much later). Polish Round (Prompt 4) is next, bundling visible UX debt + mobile-viewport QA.
+**Current Phase:** Day 20 Combat fully complete through Polish 3 + 20.4.1 hotfix. Combat input is button-only during fights (V8.37 interim, replaced by Day 20.5 verbal action much later). Polish Round (Prompt 4) is next, bundling visible UX debt + mobile-viewport QA.
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -182,7 +175,8 @@ Day 20 expanded from one prompt to eight commits (1, 2, 2.5, 3, 20.1, 20.2, 20.3
 | 20.1 — Combat Polish (1215bb6) | Starting equipment + encounter banner + turn separators + pacing | ✅ Complete |
 | 20.2 — Combat Hotfix (bf3871e) | Initiative kickoff fix + inventory stats | ✅ Complete |
 | 20.3 — Combat Polish 2 (732e944) | Full-width separators + button-only combat input + CRITICAL HIT banner + resolution two-line render + planEventSuppression | ✅ Complete |
-| **20.4 — Combat Polish 3 (fc508f3)** | **Floating damage numbers + inline roll details + defeat teleport fix (3-tier fallback + spawn init + cross-region soulslike model + "You wake at X in Y" templated message)** | ✅ **Complete** |
+| 20.4 — Combat Polish 3 (fc508f3) | Floating damage numbers + inline roll details + defeat teleport fix | ✅ Complete |
+| **20.4.1 — Combat Hotfix (c67f2c0)** | **Floating damage target routing fix + inventory Use during combat + flee DC format/raw d20 + defeat respawn settlement-detection fix (category fallback removal — the REAL root cause of V8.38 defeat bug)** | ✅ **Complete** |
 | Polish Round (Prompt 4) | Movement-direction grouped nav cards + tier color-coding + settlement card label + tier auto-switch + NPC dialogue contrast + mobile-viewport QA bundle | ⏳ NEXT |
 | Day 21 | Container + Loot — registry, loot tables, dungeon containers, per-character inventory rules (multiplayer-aware) | ⏳ After Polish Round |
 | Day 22 | Skills + Leveling — XP, stat points, level gates + skill domain foundations (Combat wired, others stubbed) per V8.38 | ⏳ After Day 21 |
@@ -196,72 +190,66 @@ Day 20 expanded from one prompt to eight commits (1, 2, 2.5, 3, 20.1, 20.2, 20.3
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic
 **⚠️ Noir removed. Genre renderers restored (pickModule re-enabled).**
 
-### Day 20.4 — Combat Polish 3 (commit fc508f3 — 243/243 tests, /game 106→108 kB)
+### Day 20.4.1 — Combat Hotfix (commit c67f2c0 — 261/261 tests, /game 108 kB unchanged)
 
-Five-task polish round resolving V8.37 playtest issues + closing the defeat-teleport bug at the root cause.
+Five-bug hotfix round resolving Day 20.4 playtest issues. All bugs were wiring/data issues, not new features. Notable: the defeat respawn bug had a deeper root cause than V8.38 hypothesized.
 
-**Task 1 — Roll details on CombatEvent:**
-- New `CombatEventRolls` interface in types/game.ts: `{ d20?, d20_modifier?, target_dc?, damage_die?, damage_die_roll?, crit_max_damage?, str_modifier? }`. Pure data extension; existing consumers ignore unknown fields.
-- `combat-resolver.ts`: `AttackResult.rolls` populated on every outcome (hit/miss/crit/fumble); `FleeResult.rolls` populated with d20 + DC; `UseItemResult.rolls` populated on heal with `damage_die: "1d8"` + raw die roll. Crits return the bonus die roll plus `crit_max_damage`.
-- `combat-engine.ts`: every `player_attack`, `enemy_attack`, `kill`, `use_item`, `flee_attempt` event passes `rolls: result.rolls` into `makeEvent`. Defend / phase-separator events omit it.
+**Task 1 — Floating damage routing (CombatMode.tsx):**
+- Rewrote `makeFloatingEntry` as explicit `switch (event.type)` with one branch per type. No more conditional fallback that could misroute when actor/target shows up empty.
+- `player_attack` hit/crit → host = `event.target` (the targeted enemy's instance_id), color combat-player(-crit). Hit shows damage_die_roll; crit shows TOTAL damage.
+- `enemy_attack` hit/crit → host = `PLAYER_ID`, color combat-enemy(-crit).
+- `use_item` heal → host = `PLAYER_ID`, color hl-pass green, CSS `+` prefix.
+- Everything else (defend, miss, fumble, flee_attempt, kill, victory, defeat, phase events, combat_start) → null.
+- Defensive guard: a `player_attack` whose `target === PLAYER_ID` (corrupted event) returns null instead of putting an attack float on the player's own portrait.
+- Exported the function so the new test suite can hit it directly.
 
-**Task 2 — Inline roll-detail in templated events:**
-- `templates.ts` return shape changed from `string | null` to `{ primary: string; rolls: string | null } | null`. New `RoutineEventResult` interface.
-- New `buildRollsSuffix(event)` helper renders subtle parenthetical breakdowns:
-  - Hit: `(d20: 17 vs 12 | 1d6+2)`
-  - Crit: `(d20: 20 | 6 (max) + 3 (1d6) + 0)`
-  - Miss: `(d20: 4 vs 12)`
-  - Fumble: `(d20: 1)`
-  - Heal: `(1d8: 4 +4)`
-  - Flee fail: `(d20: 6 vs 11)`
-- `renderCritBanner` returns same `{primary, rolls}` shape. `renderRoutineCombatEvent` wraps every templated path through `wrap()` helper.
-- `useCombat.projectCombatEventsToFeed` passes rolls suffix through metadata as `rolls_suffix`.
-- New CSS class `.combat-roll-detail` (10px dim mono, 0.6 opacity). StoryFeed renders suffix as a `<span>` sibling on routine events + crit banner.
+**Task 2 — Inventory Use button during combat (InventoryPanel.tsx):**
+- Imports `useCombat`, reads `state.combat?.active === true` from the store.
+- CONSUMABLE Use button now branches:
+  - In combat → `submitCombatAction({ action: "use_item", item_id: selectedItem.id })`. Combat-engine consumes a turn properly, drains events through projection pipeline, heal floating-number animates over player portrait.
+  - Out of combat → existing `onSubmit("use ...")` path.
+- Disable state extended to honor `combatResolving` so player can't double-tap mid-drain.
+- Equip / Unequip / Read / Search / Drop buttons HIDDEN during combat (would all hit the V8.37 input gate and fail; combat resolution doesn't expose mid-fight gear swap or container search anyway).
+- Selection clears on submit either way.
 
-**Task 3 — Floating damage number over portrait:**
-- New `@keyframes combat-float-damage` (1100ms, scale 0.6→1.2→1.0→0.9, opacity fade-in/fade-out, translate-Y -56px). New `.combat-float-damage` (28px mono bold + text-shadow, absolutely positioned) + `.combat-float-damage--crit` (36px) + `.combat-float-damage--heal::before { content: "+" }`.
-- New `components/game/CombatMode/FloatingDamage.tsx` — stateless single-number renderer.
-- `CombatantRow` wraps `PortraitSlot` in `position: relative` div (overflow allowed) so floating numbers extend above. Accepts `floatingDamage: FloatingDamageEntry[]` prop.
-- `CombatMode` parent maintains `floatingByActor: Record<string, FloatingDamageEntry[]>` keyed by combatant id (PLAYER for player, instance_id for enemies). The same useEffect driving the crit shake feeds floating numbers via `makeFloatingEntry(event)`:
-  - `player_attack` hit/crit → enemy instance_id, hit color or crit color. Hits show rolled damage die value; crits show TOTAL damage.
-  - `enemy_attack` hit/crit → "PLAYER", combat-enemy / combat-enemy-crit color.
-  - `use_item` heal → "PLAYER", `--hl-pass` green, kind="heal" (CSS + prefix).
-  - miss / fumble / defend / flee / phase events → null.
-- Each entry removed via setTimeout(1100ms). Crit shake fires concurrently per V8.34.
+**Task 3 — Flee DC formatting + raw d20 display (templates.ts):**
+- `buildRollsSuffix` now displays the RAW `r.d20` value (1-20), not `r.d20 + r.d20_modifier` (which produced `d20: 0` when low rolls hit negative AGI mods).
+- `target_dc` wrapped in `Math.round()` for display. Flee DC averages enemy AGI mods and can land on `10.666...`; the raw float still drives the engine's pass/fail check, but the player sees a clean integer.
+- Verified `resolveFlee` and `resolveAttack` both store RAW d20 in `rolls.d20` (already correct from Day 20.4 — no change needed).
 
-**Task 4 — Defeat teleport: spawn init + 3-tier fallback + destination messaging:**
-- `apply-world-bible/route.ts`: at game spawn, write `last_settlement_hub_id: startingNodeId` alongside `current_location_id` (root cause fix for V8.37 fall-through bug — field is now always populated from game start).
-- `handleDefeat` accepts new optional inputs: `defeat_fallback_node_id` (typically `world_bible.starting_region.settlement_id`) and `world_graph_nodes` (for resolving display names). 3-tier fallback chain with explicit `console.warn` at each fall-through:
-  1. `last_settlement_hub_id` (preferred — soulslike model, cross-region OK)
-  2. `defeat_fallback_node_id` (warns)
-  3. `state.origin_node_id` (warns)
-- New `resolveDefeatDestination` walks the `zone_id` chain to find the parent geographic region. Returns `{ node_id, node_name, region_id?, region_name? }` on the defeat event's `destination` field.
-- `handleFleeSuccess` accepts `world_graph_nodes` and populates `destination: { node_id, node_name }` (no region — short hop).
-- New `defeatFallbackFor(state)` helper in useCombat reads `state.metadata.world_bible?.starting_region.settlement_id ?? id`. Both `submitCombatAction` and `kickoffCombat` thread it + `world_graph.nodes` into the engine.
-- `CombatEvent` extended with optional `destination: CombatEventDestination`.
-- StoryFeed renders templated info line below resolution prose:
-  - Defeat with region: `"You wake at <Settlement> in <Region>."`
-  - Defeat without region: `"You wake at <Settlement>."`
-  - Flee_success: `"You break to <Node>."`
-- New CSS class `.combat-resolution-destination` (12px italic serif, 0.75 opacity — reads as info, not drama).
-- Victory does NOT get a destination line (player stays put).
+**Task 4 — Defeat respawn at settlement (REAL root cause found):**
+- ROOT CAUSE: step 7c-2's predicate matched `arrivedNode?.category === "settlement_hub"` as a fallback for `is_settlement_node`. The WorldBible prompt template hard-codes `starting_region.type` to `"settlement_hub"`, which apply-world-bible step 4c copies onto the geographic region zone's category. So every region-zone arrival was setting `last_settlement_hub_id` to the region id. When defeat fired, handleDefeat returned the region zone — which is exactly the V8.37+V8.38 bug ("You wake at <region>" instead of "<settlement> in <region>").
+- FIX: dropped the category fallback. `is_settlement_node === true` is reliably set by both apply-world-bible and apply-regional-bible on settlement nodes; the category fallback was a Day 20.1 defensive overcheck that ended up causing this bug.
+- Added the diagnostic log line in apply-world-bible (deferred from V8.38 prompt):
+  ```
+  [apply-world-bible] Set current_location_id: oathwatch_crossing
+  [apply-world-bible] Set last_settlement_hub_id: oathwatch_crossing
+  ```
+- Both lines fire on every fresh game; mismatch surfaces the bug. Spawn-init already wrote `startingNodeId` (the settlement id) correctly from V8.38 — no change to that value.
 
-**Task 5 — Tests (10 new, 243 total):**
-- `combat-resolver.test.ts` (+5): rolls.d20/d20_modifier/target_dc on every outcome; damage_die/damage_die_roll/str_modifier on hit; crit_max_damage + bonus die + str_modifier on crit; flee rolls; heal rolls + no_op skip.
-- `combat-flow.test.ts` (+3): defeat path falls back to `defeat_fallback_node_id` with correct warn line when `last_settlement_hub_id` missing; falls back to encounter origin when both missing (with second warn line); destination metadata populates correctly with world_graph_nodes (settlement + region resolution).
-- `templates.test.ts` (+2 + many shape migrations): renderCritBanner returns new `{primary, rolls}` shape; rolls suffix populates with full crit math breakdown; rolls null when event.rolls absent.
+**Task 5 — Tests (18 new, 261 total):**
+- `floating-damage.test.ts` (+13): per-event-type routing — `player_attack` hit/crit hosts on enemy id (with explicit `not.toBe(PLAYER_ID)` assertion); `enemy_attack` hit/crit hosts on PLAYER; `use_item` heal hosts on PLAYER with hl-pass green; null for miss/fumble/defend/flee/phase/victory/defeat/kill/combat_start; null for empty target; null for self-targeted `player_attack` (defensive).
+- `templates.test.ts` (+5): raw d20 display on hit (14 not 16), miss (5 not 7), fumble (1 not 0 even with negative mod); flee DC 10.666... rounds to 11; flee DC 10.4 rounds down to 10.
+
+### Day 20.4 — Combat Polish 3 (commit fc508f3 — 243/243 tests)
+
+Five-task polish round resolving V8.37 playtest issues + closing the defeat-teleport bug at the (hypothesized at the time) root cause:
+- **Roll details on CombatEvent:** New `CombatEventRolls` interface populated on every event with damage/d20/heal outcome.
+- **Inline roll suffix in templated events:** Return shape `{primary, rolls}` from templates. CSS `.combat-roll-detail` (10px dim mono, 0.6 opacity).
+- **Floating damage numbers over portraits:** 28px regular, 36px crit, +prefix on heal, 1100ms float-fade animation. (Targeting bug introduced here — fixed in 20.4.1.)
+- **Defeat teleport spawn-init + 3-tier fallback + destination messaging:** `last_settlement_hub_id` initialized at game spawn; handleDefeat 3-tier fallback chain (settlement → world_bible.starting_region.settlement_id → origin_node_id); templated "You wake at X in Y" line. (Settlement-detection bug found later — fixed in 20.4.1.)
 
 ### Day 20.3 — Combat Polish 2 (commit 732e944 — 233/233 tests)
-Six-task round: full-width flex turn separators, item use locked to buttons (templated heal amount + chat input system message), CRITICAL HIT two-line banner (templated banner + LLM prose), `planEventSuppression` saves crit/kill prose on victory-killing-blow (3 LLM calls → 1), Victory/Defeat/Escaped two-line centered banner with ≤20-word LLM prose. /game 106 kB unchanged.
+Six-task round: full-width flex turn separators, item use locked to buttons, CRITICAL HIT two-line banner, planEventSuppression saves crit/kill prose on victory-killing-blow, Victory/Defeat/Escaped two-line centered banner with ≤20-word LLM prose. /game 106 kB.
 
 ### Day 20.2 — Combat Hotfix + Inventory Stats (commit bf3871e — 216/216 tests)
-Initiative kickoff fix via shared `advanceUntilPlayerTurnOrEnd` + `kickoffCombatIfEnemyFirst` + useEffect-driven kickoff trigger with double-fire guard. Inventory cards now show Damage/Armor/Heal stats + EQUIPPED pill. /game 105→106 kB.
+Initiative kickoff fix via shared `advanceUntilPlayerTurnOrEnd` + `kickoffCombatIfEnemyFirst` + useEffect-driven kickoff trigger with double-fire guard. Inventory cards show Damage/Armor/Heal stats + EQUIPPED pill. /game 105→106 kB.
 
 ### Day 20.1 — Combat Polish (commit 1215bb6 — 209/209 tests)
-Starting equipment auto-equipped via new `lib/game/starting-equipment.ts` module (15 backgrounds × full equip + 2× potion); encounter banner templated (no LLM call); turn boundary separators emitted by combat-engine; pacing delays 800/500/800ms; header pill displayPhase decoupled from current_turn_index. /game 104→105 kB.
+Starting equipment auto-equipped via new `lib/game/starting-equipment.ts` module; encounter banner templated; turn boundary separators emitted by combat-engine; pacing delays 800/500/800ms; header pill displayPhase decoupled from current_turn_index. /game 104→105 kB. **Also: introduced the `category === "settlement_hub"` fallback in step 7c-2 that caused the V8.38 defeat bug, found and removed in 20.4.1.**
 
 ### Combat Day 20 — Prompt 3/3 (commit abf73e6 — 173/173 tests)
-Combat mode UI (CombatMode + 6 child components, side-by-side layout, ~128px portrait slots); templated routine + LLM dramatic narration via `/api/game/narrate-combat`; bestiary codex on combat_start; new-game preamble; HP bar 300ms transition + crit portrait shake 400ms. /game 96→104 kB.
+Combat mode UI (CombatMode + 6 child components, side-by-side layout); templated routine + LLM dramatic narration via `/api/game/narrate-combat`; bestiary codex on combat_start; new-game preamble; HP bar 300ms transition + crit portrait shake 400ms. /game 96→104 kB.
 
 ### Combat Day 20 — Earlier rounds (foundation)
 - **Prompt 2.5 Nav Fix (25ff111):** idempotent apply-regional-bible + region-expansion-guard helpers. 16 new tests, 149 total.
@@ -282,9 +270,11 @@ Domain 1 (Engine):     World graph, navigation, stat checks, dialogue option
                        inventory stats (V8.36), full-width separators +
                        crit banner + suppression + resolution banner
                        (V8.37), roll detail surfacing + inline roll
-                       suffix + floating damage numbers + defeat
-                       resilience (3-tier fallback + cross-region
-                       teleport) + destination messaging (V8.38), loot
+                       suffix + floating damage numbers (target routing
+                       hardened V8.39) + defeat resilience (3-tier
+                       fallback + cross-region teleport, settlement
+                       detection hardened V8.39) + destination messaging
+                       (V8.38) + inventory Use combat path (V8.39), loot
                        resolver (pending Day 21) — pure code
 Domain 2 (Content):    WCD, WorldBible (with enemies + encounter tagging),
                        RegionBible (same), NPCs, items, bestiary,
@@ -304,65 +294,65 @@ AI during gameplay:
   ⏳ Verbal action      — DEFERRED to Day 20.5 (post-Day-25)
 ```
 
-### Combat System ✅ COMPLETE (V8.31 → V8.38)
+### Combat System ✅ COMPLETE (V8.31 → V8.39)
 ```
 DATA LAYER (V8.31):     Enemy interface, two-tier bestiary, encounter
                         tagging, stub loot drops.
 
-RESOLVER LAYER (V8.32 + V8.38 rolls):
+RESOLVER LAYER (V8.32 + V8.38 rolls + V8.39 raw d20 storage):
                         /lib/game/combat-resolver.ts — pure math, RNG
-                        injected. d20 hit/dmg/init/flee/use_item.
-                        Result.rolls populated on every outcome (V8.38).
+                        injected. Result.rolls populated on every outcome.
+                        rolls.d20 stores RAW d20 (1-20), not total.
 
 TRIGGER LAYER (V8.32):  shouldRollEncounter / resolveEnemyLookup /
                         rollEncounter.
 
 TURN LOOP (V8.32, separators V8.35, kickoff V8.36):
                         /lib/game/combat-engine.ts — full action
-                        resolution + auto-advance. Shared
-                        advanceUntilPlayerTurnOrEnd helper (V8.36).
+                        resolution + auto-advance.
 
 INITIATIVE KICKOFF (V8.36):
                         kickoffCombatIfEnemyFirst when turn_order[0] !==
-                        PLAYER. useCombat fires from useEffect with
-                        double-fire guard.
+                        PLAYER.
 
-UI LAYER (V8.34, refined V8.37 + V8.38):
+UI LAYER (V8.34, refined V8.37/V8.38/V8.39):
                         Side-by-side layout. Per-event styling.
                         Full-width turn separators (V8.37).
                         CRITICAL HIT two-line render (V8.37).
                         Victory/Defeat/Escaped two-line centered (V8.37).
                         Inline roll detail suffix on every event (V8.38).
-                        Floating damage numbers over portraits (V8.38).
+                        Floating damage numbers over TARGET portraits
+                        (V8.38, target routing hardened V8.39).
                         Destination message line on defeat/flee (V8.38).
+                        Inventory Use button routes through combat path
+                        when combat active (V8.39).
 
-INPUT GATING (V8.37):   ActionBar buttons are ONLY input path.
-                        useGameLoop.submitAction early-bails on
-                        combat.active. INTERIM until Day 20.5.
+INPUT GATING (V8.37):   ActionBar buttons + Inventory Use button (V8.39)
+                        are the input paths. useGameLoop.submitAction
+                        early-bails on combat.active. Inventory Use during
+                        combat routes through submitCombatAction (V8.39).
+                        INTERIM until Day 20.5.
 
-NARRATION LAYER (V8.34, refined V8.35 + V8.37):
+NARRATION LAYER (V8.34, refined V8.35/V8.37):
                         Templated: combat_start, use_item, separators,
                         CRITICAL HIT banner, resolution banners, all
                         routine events. LLM dramatic: crit / kill /
-                        victory / defeat / flee_success. Crit prose
-                        suppressed when victory follows (V8.37).
-                        max_tokens: 250 crit/kill, 120 resolutions.
+                        victory / defeat / flee_success.
 
 EVENT SUPPRESSION (V8.37):
                         planEventSuppression(events) pre-scans batches.
 
-DEFEAT RESILIENCE (V8.38):
+DEFEAT RESILIENCE (V8.38 + V8.39):
                         last_settlement_hub_id initialized at game
-                        spawn in apply-world-bible. handleDefeat 3-tier
-                        fallback chain (last_settlement_hub_id →
-                        defeat_fallback_node_id from
-                        world_bible.starting_region.settlement_id →
-                        origin_node_id) with explicit warn at each
-                        fall-through. Cross-region teleport intentional
-                        per soulslike model. resolveDefeatDestination
-                        walks zone_id chain to find parent geographic
-                        region. Templated "You wake at X in Y" line
-                        rendered below LLM prose.
+                        spawn. handleDefeat 3-tier fallback chain.
+                        Cross-region teleport intentional per soulslike
+                        model. Step 7c-2 settlement detection uses
+                        is_settlement_node === true ONLY (V8.39 — category
+                        fallback caused V8.38 bug, removed).
+
+ROLL DETAIL DISPLAY (V8.38 + V8.39):
+                        buildRollsSuffix displays RAW d20 (V8.39).
+                        target_dc wrapped in Math.round() (V8.39).
 
 PACING (V8.35):         800/800/500ms transition delays.
 
@@ -376,6 +366,8 @@ STARTING EQUIPMENT (V8.35):
 
 INVENTORY DISPLAY (V8.36):
                         Damage/Armor/Heal lines + EQUIPPED pill.
+                        Use button routes through combat path during
+                        combat (V8.39).
 
 DEV TOOLS (V8.32):      window.__forceEncounter("enemy_id", ...).
 ```
@@ -384,7 +376,7 @@ DEV TOOLS (V8.32):      window.__forceEncounter("enemy_id", ...).
 `/lib/game/region-expansion-guard.ts` — pure helpers. ROOT CAUSE: toSlug() strips hyphens. Guard works AROUND.
 
 ### Navigation Rules ✅ (Complete)
-Map = visual only. Card grammar: BACK / DEEPER / EXIT / PEER / UNDISCOVERED. Region trigger reclassification (V8.33). Combat trigger step 7c-3. last_settlement_hub_id + navigation_trail update on every arrival, initialized at spawn (V8.38).
+Map = visual only. Card grammar: BACK / DEEPER / EXIT / PEER / UNDISCOVERED. Region trigger reclassification (V8.33). Combat trigger step 7c-3. last_settlement_hub_id + navigation_trail update on every arrival via `is_settlement_node === true` predicate ONLY (V8.39), initialized at spawn (V8.38).
 
 ### Map Description Sourcing ✅
 World→wcd.world_description / Region→currentRegion.atmosphere (parent walk) / Local→currentLocation.atmosphere.
@@ -411,6 +403,8 @@ claude-sonnet-4-5, max_tokens 10000. validateEnemy/validateEnemies/scrubEncounte
 **Day 20.5 — Verbal Action (deferred to last):**
 Replaces "Combat input is disabled" interim. Player types verbal action → LLM judges quality → 1d20 + charisma_mod + quality_mod vs 10 + target.agi_mod → status_effect (taunt/distract/intimidate, 1-round duration).
 
+**Floating number stagger (deferred polish):** Overlapping numbers from rapid-fire enemy phases stack on top of each other. Future polish: horizontal offset stagger or vertical queue.
+
 **Other deferred:** Map visual rework, RTL component test infra, pacing tuning watchpoint, world-gen perf, NPC color overlap, hub codex, grid_position, behavior dispatch, toSlug bug, combat balance pre-Day-21/22.
 
 ---
@@ -418,7 +412,7 @@ Replaces "Combat input is disabled" interim. Player types verbal action → LLM 
 ## 🏗️ Architecture
 
 ### The Two Domains ✅
-**Domain 1 (Engine — pure code):** Navigation, stat checks, dialogue option generation, combat resolver + turn loop + triggers (V8.32), region expansion guard (V8.33), combat UI + narrator + bestiary (V8.34), separators + pacing + starting equipment module (V8.35), initiative kickoff + inventory stats (V8.36), full-width separators + crit banner + suppression + resolution banner (V8.37), roll detail surfacing + inline roll suffix + floating damage numbers + defeat resilience + destination messaging (V8.38), loot resolver (Day 21).
+**Domain 1 (Engine — pure code):** Navigation, stat checks, dialogue option generation, combat resolver + turn loop + triggers (V8.32), region expansion guard (V8.33), combat UI + narrator + bestiary (V8.34), separators + pacing + starting equipment module (V8.35), initiative kickoff + inventory stats (V8.36), full-width separators + crit banner + suppression + resolution banner (V8.37), roll detail surfacing + inline roll suffix + floating damage numbers + defeat resilience + destination messaging (V8.38), floating-damage target routing + inventory Use combat path + raw d20 display + settlement-detection canonical-only (V8.39), loot resolver (Day 21).
 **Domain 2 (Content Library — frozen):** WCD, locations, NPCs, items, loot tables, main quest, bestiary, region enemies, starting equipment loadouts (V8.35).
 
 ### Generation Model ✅
@@ -478,23 +472,27 @@ Genre renderers active (pickModule enabled). PAD=76. Tier switcher. Initial tier
 42. New game preamble: `recent_messages.length === 0` triggers "Your adventure begins. What will you do first?" (V8.34)
 43. Starting equipment lives in `lib/game/starting-equipment.ts` as separate module. (V8.35)
 44. Every starting weapon ships with `equipped: true` AND `effect.damage_die`. Every starting armor ships with `equipped: true` AND `effect.armor_bonus`. (V8.35)
-45. `combat_start` is templated, not LLM-narrated. Renders directly from useGameLoop step 7c-3. (V8.35)
+45. `combat_start` is templated, not LLM-narrated. (V8.35)
 46. `player_turn_start` and `enemy_phase_start` events emitted by combat-engine at phase transitions. They do NOT emit when combat ends. (V8.35)
 47. Pacing delays at turn transitions: 800ms before enemy_phase_start, 800ms before player_turn_start, 500ms between successive distinct enemy actors. (V8.35)
 48. CombatMode header pill `displayPhase` is decoupled from `combat.current_turn_index` and flips ahead of feed. (V8.35)
 49. Enemy-turn loop is shared via `advanceUntilPlayerTurnOrEnd`. Single source of truth. (V8.36)
 50. When combat starts with `turn_order[0] !== PLAYER`, the initial enemy phase MUST fire before UI hands control to the player via `kickoffCombat` from useEffect. Tracked via useRef Set. (V8.36)
 51. Inventory detail panel surfaces combat stats: WEAPON Damage, ARMOR Armor (always renders, including +0), CONSUMABLE Heal. EQUIPPED pill on detail panel. (V8.36)
-52. Combat input is button-only when combat is active. submitAction early-bails on combat.active with system message. INTERIM until Day 20.5 (post-Day-25). (V8.37)
+52. Combat input is button-only when combat is active. submitAction early-bails on combat.active with system message. INTERIM until Day 20.5. (V8.37)
 53. Use Item is templated only. Format: `"You use <item>. Restored N HP."` (V8.37)
-54. Crit events render as TWO lines: templated banner first (instant), then LLM crit prose. Both styled with same actor-derived color. (V8.37)
-55. `planEventSuppression(events)` pre-scans event batches before story-feed projection. When victory present: kill events dropped, last crit before victory has prose suppressed. (V8.37)
+54. Crit events render as TWO lines: templated banner first (instant), then LLM crit prose. (V8.37)
+55. `planEventSuppression(events)` pre-scans event batches. When victory present: kill events dropped, last crit before victory has prose suppressed. (V8.37)
 56. Resolution events render as two-line centered block: banner + ≤20-word LLM prose. max_tokens 120 for resolutions. (V8.37)
-57. CombatEvent.rolls field populates on every event with damage/d20/heal outcome. Pure data extension: `{ d20, d20_modifier, target_dc, damage_die, damage_die_roll, crit_max_damage, str_modifier }`. Defend / phase-separator events omit it. (V8.38)
+57. CombatEvent.rolls field populates on every event with damage/d20/heal outcome. Pure data extension. (V8.38)
 58. Inline roll suffix renders subtle parenthetical breakdown via `{primary, rolls}` return shape from templates. CSS `.combat-roll-detail` (10px dim mono, 0.6 opacity). (V8.38)
-59. Floating damage numbers fire on hit/crit/heal events ONLY over the targeted combatant's portrait. 28px regular, 36px crit, "+" prefix on heal. setTimeout(1100ms) cleanup. CombatMode parent maintains floatingByActor state keyed by combatant id. Crit shake fires concurrently per V8.34. (V8.38)
-60. Defeat teleport — `last_settlement_hub_id` is initialized at game spawn in apply-world-bible alongside `current_location_id`. handleDefeat uses 3-tier fallback chain (last_settlement_hub_id → defeat_fallback_node_id from world_bible.starting_region.settlement_id → origin_node_id) with explicit `console.warn` at each fall-through. Cross-region teleport intentional per soulslike model. (V8.38)
-61. Resolution events (defeat / flee_success) carry destination payload `{ node_id, node_name, region_id?, region_name? }`. StoryFeed renders templated info line below LLM prose: "You wake at X in Y" (defeat) / "You break to X" (flee). CSS `.combat-resolution-destination` (12px italic serif, 0.75 opacity). Victory does NOT get destination line. (V8.38)
+59. Floating damage numbers fire on hit/crit/heal events ONLY. Routing via explicit `switch(event.type)`: player_attack hosts on `event.target` (enemy), enemy_attack/use_item host on `PLAYER_ID`. Self-targeted player_attack returns null defensively. setTimeout(1100ms) cleanup. (V8.38 + V8.39 target routing hardened)
+60. Defeat teleport — `last_settlement_hub_id` is initialized at game spawn in apply-world-bible. handleDefeat uses 3-tier fallback chain. Cross-region teleport intentional per soulslike model. (V8.38)
+61. Resolution events (defeat / flee_success) carry destination payload. StoryFeed renders templated info line below LLM prose. Victory does NOT get destination line. (V8.38)
+62. `rolls.d20` stores RAW d20 value (1-20), not total post-modifier. `buildRollsSuffix` displays raw d20 + integer DC. `target_dc` wrapped in `Math.round()` for display since flee DC averages can be fractional. Pass/fail logic still uses internal total — display-only formatting. (V8.39)
+63. Inventory Use button during combat routes through `submitCombatAction({ action: "use_item", ... })`, NOT `submitAction`. Equip / Unequip / Read / Search / Drop buttons are HIDDEN during combat (combat resolver doesn't expose mid-fight gear swap). Disable state honors `combatResolving` to prevent double-tap mid-drain. (V8.39)
+64. Floating damage entry routing uses explicit `switch(event.type)` not conditional fallback. Misroute prevented by defensive `player_attack target === PLAYER_ID` guard returning null. (V8.39 — codifies the V8.38 bug fix)
+65. **Settlement-hub detection in step 7c-2 uses `is_settlement_node === true` predicate ONLY.** The `category === "settlement_hub"` fallback was a Day 20.1 defensive overcheck that misrouted region zones (WorldBible hard-codes `starting_region.type = "settlement_hub"`, copied to region zone's `category`). Removed in V8.39. **Foundational lesson: defensive overchecks alongside canonical fields can become positive bugs. Audit similar fallback patterns elsewhere.** (V8.39)
 
 ---
 
@@ -591,4 +589,4 @@ Claude Code pushes → user reports commit + test results → Claude.ai updates 
 
 ---
 
-*Last updated: V8.38 — Day 20.4 Combat Polish 3 (commit fc508f3): roll detail surfaced on CombatEvent (rolls field with full d20/damage/crit/str/heal breakdown), inline roll suffix in templated story-feed events (subtle dim mono parenthetical), floating damage numbers over targeted combatant portraits (28px regular / 36px crit / +prefix on heal, 1100ms float-fade), defeat teleport fix (last_settlement_hub_id init at game spawn + 3-tier fallback chain + cross-region soulslike model + templated "You wake at X in Y" message line). 243/243 tests passing. /game route 106→108 kB. Foundational rules 57-61 added. Three strategic decisions LOCKED in V8.38 Trajectory Notes: (1) Multiplayer = pre-launch active requirement → Day 24 phase added; (2) Customization = pre-launch toward end → Day 25 phase added; (3) Day 22 skills = foundations now (middle path) — define skill domain enum, schema for lifestyle skills, only Combat domain wired with real XP hooks initially. Polish Round (Prompt 4) is next, bundling visible UX debt + mobile-viewport QA pass.*
+*Last updated: V8.39 — Day 20.4.1 Combat Hotfix (commit c67f2c0): floating damage target routing fix (switch-based, defensive self-target guard), inventory Use button during combat routes through submitCombatAction (Equip/Unequip/Read/Search/Drop hidden), flee DC formatting (Math.round) + raw d20 display, defeat respawn settlement-detection bug found and fixed at REAL root cause (step 7c-2 category fallback removed — the V8.38 spawn-init was already correct, but the category fallback in step 7c-2 was overwriting last_settlement_hub_id with region id on every region-zone arrival). Foundational rules 62-65 added including the lesson on defensive overchecks. 261/261 tests passing. /game route 108 kB unchanged. Polish Round (Prompt 4) is next.*

@@ -287,7 +287,14 @@ export default function GamePage() {
           {masterState && (
             <SceneArt
               locationId={masterState.world_state.current_location_id}
-              locationName={masterState.world_state.current_location_id.replace(/_/g, " ")}
+              locationName={  /* Day 20.4.4 FIX: use WorldGraphNode.name (display name, e.g.
+                               * "Warden's Armory and Hall") instead of the raw
+                               * current_location_id slug ("pale edge territory settlement
+                               * armory"). Falls back to slug replacement when node not yet
+                               * in graph (initial load before graph is hydrated). */
+                masterState.world_graph?.nodes?.[masterState.world_state.current_location_id]?.name ??
+                masterState.world_state.current_location_id.replace(/_/g, " ")
+              }
               genre={String(masterState.metadata.genre)}
               description={masterState.player_state.background}
               sessionId={masterState.metadata.session_id}

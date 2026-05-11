@@ -599,9 +599,16 @@ export async function POST(request: NextRequest) {
     // Day 20.4.3 — diagnostic log on settlement creation. Matches
     // apply-world-bible's region-zone log so cross-region apply
     // failures are diff-able against the working starting region.
+    // Day 20.4.4 — also log sub-location names so the story-panel
+    // header fix (page.tsx now reads WorldGraphNode.name) is verifiable
+    // via server log when the player enters a sub-location.
     if (loc.is_settlement_node) {
       console.log(
         `[apply-regional-bible] Created settlement ${loc.id} name: "${loc.name}" parent: ${bibleNarrowed.id}`
+      );
+    } else if (loc.is_interior) {
+      console.log(
+        `[apply-regional-bible] Node ${loc.id} name set to: "${loc.name}"`
       );
     }
   }
@@ -862,14 +869,30 @@ export async function POST(request: NextRequest) {
     console.log(
       `[apply-regional-bible] Created region zone ${bibleNarrowed.id} name: "${bibleNarrowed.name}"`
     );
-    // Wire the settlement back to the region zone so the player can
-    // step onto the open-world layer from town.
-    const settlement = mergedNodes[startingNodeId];
-    if (settlement && !settlement.connections.includes(bibleNarrowed.id)) {
-      mergedNodes[startingNodeId] = {
-        ...settlement,
-        connections: [...settlement.connections, bibleNarrowed.id],
-      };
+    // Day 20.4.4 — explicit bidirectional stitch guarantee.
+    // The region zone includes startingNodeId in regionConnections (above),
+    // and the settlement is wired back here. Making both directions explicit
+    // guards against edge cases where the region zone was already in
+    // mergedNodes via a different code path. One diagnostic log confirms
+    // both edges were present or have been ensured.
+    {
+      const rzNode = mergedNodes[bibleNarrowed.id];
+      if (rzNode && !rzNode.connections.includes(startingNodeId)) {
+        mergedNodes[bibleNarrowed.id] = {
+          ...rzNode,
+          connections: [...rzNode.connections, startingNodeId],
+        };
+      }
+      const stlNode = mergedNodes[startingNodeId];
+      if (stlNode && !stlNode.connections.includes(bibleNarrowed.id)) {
+        mergedNodes[startingNodeId] = {
+          ...stlNode,
+          connections: [...stlNode.connections, bibleNarrowed.id],
+        };
+      }
+      console.log(
+        `[apply-regional-bible] Stitched region zone ↔ settlement: ${bibleNarrowed.id} ↔ ${startingNodeId}`
+      );
     }
 
     // World_asset for the region zone — the narrator needs a Tier 1

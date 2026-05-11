@@ -11,8 +11,15 @@
  * Routing rules:
  *   Sub-location  → ← back to hub ONLY
  *   Settlement hub → → deeper + ↑ exit to region zone
- *   Region zone   → ← back + ◆ known + ◇ undiscovered
+ *   Region zone   → → deeper (settlement hub) + ← back + ◆ known + ◇ undiscovered
  *   Dungeon       → ← back to region zone ONLY
+ *
+ * Day 20.4.4 — region zone DEEPER rule: the settlement hub is always
+ * present as a DEEPER card at the region zone so the player has a direct
+ * path into the settlement without needing to visit a sub-location first.
+ * Symmetric with settlement → EXIT to region zone (TYPE C). Previously
+ * the settlement was absent from all four card types when the player
+ * landed at a freshly-expanded region zone via cross-region navigation.
  *
  * Polish 4a TASK 3a — at a region zone, the ← BACK card prefers the
  * PREVIOUS region's settlement when the player just arrived from a
@@ -270,7 +277,24 @@ export function buildCards(
 
   // ── TYPE B — deeper ──────────────────────────────────────────────────────
   const deeperCards: Card[] = [];
-  if (isAtSettlementHub) {
+  if (isAtRegionZone) {
+    // Day 20.4.4 — at a geographic region zone the settlement hub is the
+    // gateway into the populated area. Show it as a DEEPER card so the
+    // player always has a direct path in. Symmetric with settlement → EXIT
+    // to region zone (TYPE C). Uses the already-resolved `settlementHub`
+    // which scans for zone_id === current.id && is_settlement_node === true.
+    if (settlementHub) {
+      deeperCards.push({
+        key:        `deeper-${settlementHub.id}`,
+        kind:       "deeper",
+        targetId:   settlementHub.id,
+        name:       settlementHub.name.toUpperCase(),
+        sublabel:   typeLabel(settlementHub),
+        discovered: settlementHub.discovered,
+        tier:       tierOfNode(settlementHub),
+      });
+    }
+  } else if (isAtSettlementHub) {
     for (const id of current.connections) {
       const node = worldGraph.nodes[id];
       if (!node) continue;

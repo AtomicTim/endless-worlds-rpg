@@ -71,12 +71,23 @@ function buildUserPrompt(
   void existingNames;
   void genre;
 
-  // Audit Issue E follow-up: shrunk to the bare minimum that still
-  // produces a playable region. Day 20 expansion: the geographic
-  // region also gets ONE standalone region_location (a dungeon /
-  // wilderness point) alongside the settlement.
+  // Day 20.4.3 Region Expansion Hotfix — the LLM template previously
+  // hardcoded `locations[0].id = outline.id`, which forced the bible
+  // to collapse region.id and settlement.id into the same string.
+  // apply-regional-bible then treated the collapsed node as if it
+  // were a legacy single-tier "region == settlement" bible, producing
+  // a single graph node with the SETTLEMENT's name being shown as
+  // the region. This mirrors the V8.39 lesson (rule 65): prompt
+  // template hardcoding forces a structural misalignment that
+  // downstream "defensive" code accommodates instead of rejecting.
+  //
+  // Fix: generate a distinct settlement_slug so the bible carries
+  // separate region_id (outline.id) and settlement_id. The
+  // apply-regional-bible route also splits any legacy/cached bibles
+  // that still arrive with the collapsed shape (in-place repair).
   const originRegionId = originRegionName.toLowerCase().replace(/[^a-z0-9]+/g, "_");
-  const subSlug        = `${outline.id}_inn`;
+  const settlementSlug = `${outline.id}_settlement`;
+  const subSlug        = `${settlementSlug}_inn`;
   const regionLocSlug  = `${outline.id}_point`;
   const npc1Slug       = `${outline.id}_npc1`;
   const npc2Slug       = `${outline.id}_npc2`;
@@ -106,19 +117,34 @@ to visit. Requirements:
 - The NPC at a standalone location should have a reason for
   being there (explorer, guard, cultist, hermit, etc.)
 
+REGION vs SETTLEMENT IDS — read carefully (Day 20.4.3):
+- The "id" field is the GEOGRAPHIC REGION slug. It MUST equal "${outline.id}".
+- The "settlement_id" field is the SETTLEMENT slug. It MUST equal
+  "${settlementSlug}" and MUST be DIFFERENT from the region id.
+- locations[0].id (the settlement location) MUST equal
+  "${settlementSlug}", NOT "${outline.id}".
+- The "name" field is the REGION's landscape name (already chosen — use
+  "${outline.name}").
+- locations[0].name is the SETTLEMENT/HUB display name (you
+  choose this — a public gathering space inside the region).
+- The region and the settlement are TWO DIFFERENT things in TWO
+  DIFFERENT graph nodes. Do not collapse them.
+
 Return EXACTLY this structure (fill with creative content
 consistent with the WCD):
 {
   "id": "${outline.id}",
   "name": "${outline.name}",
   "type": "${outline.type}",
+  "settlement_id": "${settlementSlug}",
+  "settlement_name": "[Hub Name — also the value of locations[0].name]",
   "grid_centre": ${JSON.stringify(outline.grid_centre)},
   "grid_radius": 3,
   "atmosphere": "[2 sentences, consistent with WCD]",
   "controlling_faction": ${outline.controlling_faction ? `"${outline.controlling_faction}"` : "null"},
   "locations": [
     {
-      "id": "${outline.id}",
+      "id": "${settlementSlug}",
       "name": "[Hub Name — a public gathering space, NOT a building]",
       "type": "settlement",
       "is_settlement_node": true,
@@ -149,10 +175,10 @@ consistent with the WCD):
       "type": "tavern",
       "is_settlement_node": false,
       "is_interior": true,
-      "parent_location_id": "${outline.id}",
+      "parent_location_id": "${settlementSlug}",
       "atmosphere": "[2 sentences]",
       "grid_position": {"x": ${outline.grid_centre.x - 1}, "y": ${outline.grid_centre.y}},
-      "connections": ["${outline.id}"],
+      "connections": ["${settlementSlug}"],
       "npc_ids": ["character_${npc1Slug}", "character_${npc2Slug}"],
       "objects": [
         {
@@ -215,7 +241,7 @@ consistent with the WCD):
       "is_interior": false,
       "atmosphere": "[1 sentence]",
       "grid_position": {"x": ${outline.grid_centre.x + 1}, "y": ${outline.grid_centre.y}},
-      "connections": ["${outline.id}"],
+      "connections": ["${settlementSlug}"],
       "npc_ids": ["character_${npc3Slug}"],
       "objects": [
         {
@@ -241,7 +267,7 @@ consistent with the WCD):
     {
       "direction": "${opposite}",
       "target_region_id": "${originRegionId}",
-      "from_location_id": "${outline.id}",
+      "from_location_id": "${settlementSlug}",
       "description": "[1 sentence]"
     }
   ],

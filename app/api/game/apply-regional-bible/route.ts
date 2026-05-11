@@ -16,6 +16,7 @@ import { getGenreBestiary } from "@/lib/game/bestiary";
 import {
   isApplyRegionalBibleRedundant,
   mergeNodePreservingDiscovered,
+  splitConflatedRegionSettlement,
 } from "@/lib/game/region-expansion-guard";
 
 /**
@@ -419,6 +420,38 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── 0d. Day 20.4.3 Region Expansion Hotfix — split conflated region+settlement ──
+  // generate-regional-bible's prompt template historically hardcoded
+  // `locations[0].id = outline.id`, which forced every freshly-generated
+  // bible to collapse the region id and the settlement id into the same
+  // string. apply-regional-bible's `isSameAsSettlement` branch then
+  // treated the collapsed node as a legacy single-tier bible and skipped
+  // creating a separate region zone. The result was a single graph node
+  // that:
+  //   - carried the SETTLEMENT's display name (e.g. "Ringstone Market")
+  //   - was tagged is_settlement_node=true AND is_expandable=true
+  //     (region-zone-like)
+  //   - made the "EXIT TO REGION" nav card a no-op because the player
+  //     was already AT the only node in the region
+  //
+  // V8.39 lesson (rule 65) again: prompt-template hardcoding produces a
+  // structural collapse that downstream "defensive" code accommodates
+  // instead of rejecting. The LLM prompt is now fixed
+  // (generate-regional-bible uses a distinct `<region>_settlement` slug
+  // for the settlement location), but cached bibles + in-flight bibles
+  // from older prompt versions still arrive collapsed. The repair lives
+  // in a pure helper so jest can verify the mutation contract.
+  {
+    const splitResult = splitConflatedRegionSettlement(bibleNarrowed);
+    if (splitResult.collapsed) {
+      console.warn(
+        "[apply-regional-bible] WARN: settlement_id matches region_id — bible payload is malformed (collapsed shape). " +
+        `Splitting in-place: settlement.id "${splitResult.oldSettlementId}" → "${splitResult.newSettlementId}". ` +
+        `Region zone retains id="${bibleNarrowed.id}" for the geographic region.`
+      );
+    }
+  }
+
   // ── 1. Build all world_asset rows ──────────────────────────────────────────
   // Day 20 — geographic restructure: region_locations are standalone
   // landmarks in the geographic region (dungeons, wilderness points)
@@ -563,6 +596,14 @@ export async function POST(request: NextRequest) {
                             ? [...loc.encounter_roster] : undefined,
       is_boss_room:       loc.is_boss_room === true ? true : undefined,
     };
+    // Day 20.4.3 — diagnostic log on settlement creation. Matches
+    // apply-world-bible's region-zone log so cross-region apply
+    // failures are diff-able against the working starting region.
+    if (loc.is_settlement_node) {
+      console.log(
+        `[apply-regional-bible] Created settlement ${loc.id} name: "${loc.name}" parent: ${bibleNarrowed.id}`
+      );
+    }
   }
 
   // 4b. Day 20 — standalone region_locations.
@@ -815,6 +856,12 @@ export async function POST(request: NextRequest) {
       discovered:    true,
       map_position:  adjustedPos,
     };
+    // Day 20.4.3 — diagnostic log on region zone creation. Pairs with
+    // the per-settlement log above so the V8.39-style apply log line
+    // tells the full structure for the new region.
+    console.log(
+      `[apply-regional-bible] Created region zone ${bibleNarrowed.id} name: "${bibleNarrowed.name}"`
+    );
     // Wire the settlement back to the region zone so the player can
     // step onto the open-world layer from town.
     const settlement = mergedNodes[startingNodeId];

@@ -8,6 +8,7 @@ import {
   isRegionAlreadyExpanded,
   isApplyRegionalBibleRedundant,
   mergeNodePreservingDiscovered,
+  splitConflatedRegionSettlement,
 } from "../region-expansion-guard";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -293,5 +294,241 @@ describe("mergeNodePreservingDiscovered", () => {
     const fresh    = makeNode({ discovered: false });
     const merged   = mergeNodePreservingDiscovered(existing, fresh);
     expect(merged.discovered).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Day 20.4.3 Region Expansion Hotfix — splitConflatedRegionSettlement
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Integration coverage per V8.40 rule 71: this helper IS the structural
+// repair that apply-regional-bible runs to recover legacy bibles whose
+// region.id and settlement.id collapsed (the V8.41 playtest "Ringstone
+// Market" scenario). Tests exercise:
+//   - distinct region/settlement ids in the OUTPUT bible
+//   - region name preserved on the region zone, settlement name on the
+//     settlement location
+//   - sub-locations re-pointed to settlement (parent_location_id +
+//     connections)
+//   - region_locations re-pointed to settlement (connections)
+//   - NPC home_location_id re-pointed
+//   - exit from_location_id re-pointed
+//   - no-op on already-correct bibles
+
+describe("splitConflatedRegionSettlement", () => {
+  /**
+   * Build the V8.41-playtest-shape bible: region.id === settlement.id.
+   * The settlement location carries the SETTLEMENT's name (e.g.
+   * "Ringstone Market"). One sub-location, one region_location, two
+   * NPCs (one homed at settlement, one homed at sub), one exit.
+   */
+  function makeCollapsedBible(): RegionBible {
+    const id = "the_ceramic_spine_foothills";
+    return {
+      id,
+      name: "The Ceramic Spine Foothills",
+      type: "wilderness",
+      grid_centre: { x: 22, y: 8 },
+      grid_radius: 3,
+      atmosphere: "Pale clay slopes rise toward a pottery-shard horizon.",
+      locations: [
+        {
+          id:                 id, // ← COLLAPSED: settlement uses region id
+          name:               "Ringstone Market",
+          type:               "settlement",
+          grid_position:      { x: 22, y: 8 },
+          region_id:          id,
+          is_settlement_node: true,
+          is_interior:        false,
+          atmosphere:         "Open plaza ringed by chipped kilns.",
+          connections:        [`${id}_inn`],
+          npc_ids:            ["character_kiln_warden"],
+          objects:            [],
+          ambient_type:       "town_square",
+        },
+        {
+          id:                 `${id}_inn`,
+          name:               "The Cracked Kiln",
+          type:               "tavern",
+          grid_position:      { x: 21, y: 8 },
+          region_id:          id,
+          is_settlement_node: false,
+          is_interior:        true,
+          parent_location_id: id, // ← points at collapsed settlement
+          atmosphere:         "Smoke-stained common room.",
+          connections:        [id], // ← points at collapsed settlement
+          npc_ids:            ["character_innkeep"],
+          objects:            [],
+          ambient_type:       "tavern_common_room",
+        },
+      ],
+      region_locations: [
+        {
+          id:                 `${id}_point`,
+          name:               "Ringstone Vault",
+          type:               "dungeon",
+          grid_position:      { x: 23, y: 8 },
+          region_id:          id,
+          is_settlement_node: false,
+          is_interior:        false,
+          atmosphere:         "Cracked vault yawning open below the ridge.",
+          connections:        [id], // ← points at collapsed settlement
+          npc_ids:            [],
+          objects:            [],
+          ambient_type:       "dungeon_corridor",
+        },
+      ],
+      npcs: [
+        {
+          id:               "character_kiln_warden",
+          name:             "Hesta Vellor",
+          home_location_id: id, // ← collapsed reference
+          role:             "warden",
+          archetype:        "warden",
+          appearance:       "",
+          personality:      "",
+          speech_style:     "",
+          knowledge:        [],
+          default_trust:    50,
+        },
+        {
+          id:               "character_innkeep",
+          name:             "Mott Carrowin",
+          home_location_id: `${id}_inn`, // already correct
+          role:             "innkeeper",
+          archetype:        "innkeeper",
+          appearance:       "",
+          personality:      "",
+          speech_style:     "",
+          knowledge:        [],
+          default_trust:    50,
+        },
+      ],
+      exits: [
+        {
+          direction:        "south",
+          target_region_id: "iron_march_lowlands",
+          from_location_id: id, // ← collapsed reference
+          description:      "Road south.",
+        },
+      ],
+    };
+  }
+
+  it("does nothing when the bible is already correctly split", () => {
+    const bible = makeCollapsedBible();
+    // Pre-correct the bible: settlement gets a distinct id.
+    const settlementId = `${bible.id}_settlement`;
+    bible.locations[0].id            = settlementId;
+    bible.locations[1].parent_location_id = settlementId;
+    bible.locations[1].connections   = [settlementId];
+    (bible.region_locations ?? []).forEach((rl) => {
+      rl.connections = [settlementId];
+    });
+    bible.npcs[0].home_location_id   = settlementId;
+    bible.exits[0].from_location_id  = settlementId;
+
+    const result = splitConflatedRegionSettlement(bible);
+    expect(result.collapsed).toBe(false);
+    // No mutations applied to the already-correct bible.
+    expect(bible.locations[0].id).toBe(settlementId);
+    expect(bible.id).toBe("the_ceramic_spine_foothills"); // region id unchanged
+  });
+
+  it("produces distinct region and settlement ids when collapsed", () => {
+    const bible = makeCollapsedBible();
+    const regionId = bible.id;
+    const result   = splitConflatedRegionSettlement(bible);
+
+    expect(result.collapsed).toBe(true);
+    if (!result.collapsed) return; // type guard
+    expect(result.oldSettlementId).toBe(regionId);
+    expect(result.newSettlementId).toBe(`${regionId}_settlement`);
+    expect(result.newSettlementId).not.toBe(regionId);
+
+    // Region id on the bible payload is UNCHANGED (still the region).
+    expect(bible.id).toBe(regionId);
+    // Settlement location now carries the new id.
+    expect(bible.locations[0].id).toBe(`${regionId}_settlement`);
+    // bible.settlement_id is stamped.
+    expect(bible.settlement_id).toBe(`${regionId}_settlement`);
+  });
+
+  it("preserves the region's display name on the bible and the settlement's display name on the location", () => {
+    const bible = makeCollapsedBible();
+    splitConflatedRegionSettlement(bible);
+
+    expect(bible.name).toBe("The Ceramic Spine Foothills");
+    expect(bible.locations[0].name).toBe("Ringstone Market");
+    // settlement_name defaulted from the settlement location's name.
+    expect(bible.settlement_name).toBe("Ringstone Market");
+  });
+
+  it("re-points sub-locations parent_location_id and connections to the new settlement id", () => {
+    const bible = makeCollapsedBible();
+    const regionId = bible.id;
+    const result   = splitConflatedRegionSettlement(bible);
+    if (!result.collapsed) throw new Error("expected collapse");
+    const newId    = result.newSettlementId;
+
+    const sub = bible.locations.find((l) => l.id === `${regionId}_inn`);
+    expect(sub).toBeDefined();
+    expect(sub!.parent_location_id).toBe(newId);
+    expect(sub!.connections).toEqual([newId]);
+    expect(sub!.connections).not.toContain(regionId);
+  });
+
+  it("re-points region_locations connections to the new settlement id", () => {
+    const bible = makeCollapsedBible();
+    const regionId = bible.id;
+    const result   = splitConflatedRegionSettlement(bible);
+    if (!result.collapsed) throw new Error("expected collapse");
+    const newId    = result.newSettlementId;
+
+    const dungeon = (bible.region_locations ?? [])[0];
+    expect(dungeon).toBeDefined();
+    expect(dungeon.connections).toEqual([newId]);
+    expect(dungeon.connections).not.toContain(regionId);
+  });
+
+  it("re-points NPC home_location_id when it pointed at the collapsed settlement", () => {
+    const bible = makeCollapsedBible();
+    const regionId = bible.id;
+    const result   = splitConflatedRegionSettlement(bible);
+    if (!result.collapsed) throw new Error("expected collapse");
+    const newId    = result.newSettlementId;
+
+    const warden  = bible.npcs.find((n) => n.id === "character_kiln_warden");
+    const innkeep = bible.npcs.find((n) => n.id === "character_innkeep");
+    expect(warden!.home_location_id).toBe(newId);
+    // Unrelated home_location_id stays untouched.
+    expect(innkeep!.home_location_id).toBe(`${regionId}_inn`);
+  });
+
+  it("re-points exits.from_location_id when it pointed at the collapsed settlement", () => {
+    const bible  = makeCollapsedBible();
+    const result = splitConflatedRegionSettlement(bible);
+    if (!result.collapsed) throw new Error("expected collapse");
+
+    expect(bible.exits[0].from_location_id).toBe(result.newSettlementId);
+  });
+
+  it("honors an existing bible.settlement_id when it differs from region.id", () => {
+    const bible = makeCollapsedBible();
+    bible.settlement_id = "ringstone_market_hub"; // explicit override
+    const result = splitConflatedRegionSettlement(bible);
+    expect(result.collapsed).toBe(true);
+    if (!result.collapsed) return;
+    expect(result.newSettlementId).toBe("ringstone_market_hub");
+    expect(bible.locations[0].id).toBe("ringstone_market_hub");
+  });
+
+  it("falls back to synthesized id when bible.settlement_id equals region.id", () => {
+    const bible = makeCollapsedBible();
+    bible.settlement_id = bible.id; // explicitly collapsed via settlement_id too
+    const result = splitConflatedRegionSettlement(bible);
+    expect(result.collapsed).toBe(true);
+    if (!result.collapsed) return;
+    expect(result.newSettlementId).toBe(`${bible.id}_settlement`);
   });
 });

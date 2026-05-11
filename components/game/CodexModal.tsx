@@ -82,7 +82,14 @@ export function CodexModal() {
             type="button"
             onClick={() => close(false)}
             className="text-xl font-mono"
-            style={{ color: "var(--color-muted)" }}
+            style={{
+              color:           "var(--color-muted)",
+              minHeight:       44,
+              minWidth:        44,
+              display:         "flex",
+              alignItems:      "center",
+              justifyContent:  "center",
+            }}
             aria-label="Close codex"
           >
             ✕

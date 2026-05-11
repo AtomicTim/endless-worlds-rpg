@@ -35,7 +35,7 @@ function ActionBtn({ label, disabled, active, onClick }: BtnProps) {
       disabled={disabled}
       style={{
         flex:           1,
-        padding:        "10px 12px",
+        padding:        "14px 12px",
         background:     active ? "var(--accent-faint)" : "var(--bg-2)",
         border:         active ? "1px solid var(--accent)" : "1px solid var(--line-2)",
         borderRadius:   3,

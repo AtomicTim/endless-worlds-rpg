@@ -102,46 +102,46 @@ export function renderRoutineCombatEvent(
  * d20 / damage breakdown for a CombatEvent. Returns null for events
  * with no rolls payload (turn separators, defend, combat_start).
  *
- * Day 20.4.1 TASK 3 — display rules:
- *   • Show the RAW d20 value (1-20), not the modifier-applied total.
- *     Modifiers are visible via the damage breakdown ("|1d6+2") for
- *     attacks; flee shows raw vs DC because the AGI mod isn't
- *     interesting to surface.
- *   • Always Math.round(target_dc). Flee DC averages enemy AGI mods
- *     and can land on a fractional value (10.666...); we round for
- *     display while the raw float drives the actual pass/fail check.
+ * Day 20.4.2 TASK 5 — D&D-style display:
+ *   • Show raw d20 + explicit modifier + total + DC, so the player
+ *     can see WHY a "high-looking" raw roll might have failed.
+ *   • Modifier sign: positive → `+N`, negative → `+(-N)`, zero → `+0`.
+ *     The explicit "+(N)" wrapper for negatives makes them parse
+ *     unambiguously next to the `+` prefix character.
+ *   • Nat-1 (fumble) and Nat-20 (crit) skip the modifier/total — the
+ *     outcome is locked by the raw die so the math doesn't matter.
+ *   • Math.round(target_dc) for display; raw float still drives the
+ *     engine's pass/fail check (flee DC can land on 10.666...).
  *
- * Formats by outcome:
- *   hit:    "(d20: 17 vs 12 | 1d6+2)"
- *   crit:   "(d20: 20 | 6 (max) + 3 (1d6) + 0)"
- *   miss:   "(d20: 4 vs 12)"
- *   fumble: "(d20: 1)"
- *   heal:   "(1d8: 4 +4)"
- *   flee:   "(d20: 6 vs 11)"
+ * Formats by outcome (Day 20.4.2):
+ *   hit:    "(d20: 17, +2 → 19 vs 12 | 1d6+2)"
+ *   miss:   "(d20: 4, +2 → 6 vs 12)"
+ *   fumble: "(d20: 1)"                              [nat-1, auto-miss]
+ *   crit:   "(d20: 20 | 6 (max) + 3 (1d6) + 2)"     [nat-20, auto-hit]
+ *   heal:   "(1d8: 4 +4 = 8)"
+ *   flee:   "(d20: 12, +(-2) → 10 vs 10)"
  */
 function buildRollsSuffix(event: CombatEvent): string | null {
   const r: CombatEventRolls | undefined = event.rolls;
   if (!r) return null;
 
-  // Use-item heal: no d20, just the heal die roll + flat +4.
+  // Use-item heal: no d20, just the heal die roll + flat +4 + sum.
   if (event.type === "use_item") {
     if (typeof r.damage_die_roll === "number" && r.damage_die) {
-      // The +4 is the basic-potion flat bonus (resolveUseItem adds
-      // it directly, not via str_modifier). Surfacing it as a
-      // hardcoded "+4" matches the user-visible math for Day 20.
-      return `(${r.damage_die}: ${r.damage_die_roll} +4)`;
+      const total = r.damage_die_roll + 4;
+      return `(${r.damage_die}: ${r.damage_die_roll} +4 = ${total})`;
     }
     return null;
   }
 
   if (typeof r.d20 !== "number") return null;
 
-  // Fumble: nat 1, no DC comparison needed (always misses).
+  // Fumble: nat 1 — auto-miss. Modifier irrelevant.
   if (event.outcome === "fumble") {
     return `(d20: ${r.d20})`;
   }
 
-  // Crit: d20 = 20, breakdown of (max + bonus die + str_mod).
+  // Crit: d20 = 20 — auto-hit. Show damage breakdown.
   if (event.outcome === "crit") {
     const parts: string[] = [`d20: ${r.d20}`];
     if (
@@ -157,10 +157,15 @@ function buildRollsSuffix(event: CombatEvent): string | null {
     return `(${parts.join(" | ")})`;
   }
 
-  // Hit: raw d20 vs DC, plus damage breakdown "<die>+<str_mod>".
+  // Hit / miss / fled / fled_failed — show full d20 math.
+  const mod   = typeof r.d20_modifier === "number" ? r.d20_modifier : 0;
+  const total = r.d20 + mod;
+  const dc    = typeof r.target_dc === "number" ? Math.round(r.target_dc) : null;
+  const modStr = formatModifier(mod);
+
   if (event.outcome === "hit") {
-    const dc = typeof r.target_dc === "number" ? Math.round(r.target_dc) : 0;
-    const parts: string[] = [`d20: ${r.d20} vs ${dc}`];
+    const parts: string[] = [`d20: ${r.d20}, ${modStr} → ${total}`];
+    if (dc !== null) parts[0] += ` vs ${dc}`;
     if (r.damage_die && typeof r.str_modifier === "number") {
       const sign = r.str_modifier >= 0 ? "+" : "";
       parts.push(`${r.damage_die}${sign}${r.str_modifier}`);
@@ -170,11 +175,24 @@ function buildRollsSuffix(event: CombatEvent): string | null {
     return `(${parts.join(" | ")})`;
   }
 
-  // Miss / fled / fled_failed — raw d20 vs DC.
-  if (typeof r.target_dc === "number") {
-    return `(d20: ${r.d20} vs ${Math.round(r.target_dc)})`;
+  // Miss / fled / fled_failed — d20 math against DC.
+  if (dc !== null) {
+    return `(d20: ${r.d20}, ${modStr} → ${total} vs ${dc})`;
   }
   return `(d20: ${r.d20})`;
+}
+
+/**
+ * Format a d20 modifier for the display suffix.
+ *   positive: "+2"
+ *   negative: "+(-2)" — wrap the negative so it parses next to the
+ *             always-leading "+" character ("d20: 12, +(-2) → 10")
+ *   zero:     "+0"
+ */
+function formatModifier(mod: number): string {
+  if (mod > 0) return `+${mod}`;
+  if (mod < 0) return `+(${mod})`;
+  return "+0";
 }
 
 // ── combat_start banner (Day 20.1 TASK 2) ──────────────────────────────────

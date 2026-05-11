@@ -1,5 +1,35 @@
 "use client";
 
+/**
+ * CombatMode — combat panel + floating-number host.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Day 20.4.2 field-name reference (CombatEvent — see types/game.ts:763)
+ * ─────────────────────────────────────────────────────────────────────────────
+ *   actor:       "PLAYER" | enemy.instance_id   — who acted
+ *   target:      "PLAYER" | enemy.instance_id | null — who got acted upon
+ *
+ * The float-host lookup uses `event.target` for attacks (which enemy got
+ * hit) and forces "PLAYER" for use_item heals. There is no `target_id`
+ * or `targetId` field — `target` is the canonical name.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Day 20.4.2 CSS containing-block reference for floats
+ * ─────────────────────────────────────────────────────────────────────────────
+ * FloatingDamage is `position: absolute; bottom: 100%` — anchored to the
+ * top edge of CombatantRow's portrait wrapper, animating upward ~56px.
+ * The wrapper has `position: relative` (containing block) but inherits
+ * overflow: visible. Floats extending above it must NOT pass through any
+ * ancestor with overflow != visible.
+ *
+ * CSS spec: when overflow-x or overflow-y is auto/scroll/hidden and the
+ * other is `visible`, the visible axis is promoted to `auto`. So setting
+ * `overflow-x: auto` on a parent container ALSO clips overflow-y. The
+ * V8.38 enemy-side container set overflow-x: auto for 5+ enemy support
+ * we don't actually have — and that silently clipped every player-attack
+ * float. Keep overflow: visible (or omit it) on all float ancestors.
+ */
+
 import React, { useEffect, useMemo, useState } from "react";
 import { ItemType } from "@/types/game";
 import type { CombatEvent, CombatState, PlayerState } from "@/types/game";
@@ -32,10 +62,18 @@ interface Props {
    *  canonical turn indicator. Falls back to the engine's authoritative
    *  index when omitted (e.g. an old caller). */
   displayPhase?: "player" | "enemy";
+  /** Day 20.4.2 TASK 3 — floating damage / heal numbers keyed by host
+   *  id ("PLAYER" or enemy.instance_id). Owned by useCombat (which
+   *  emits them inside the projection pipeline so they pop in sync
+   *  with the matching story-feed line). CombatMode is now a pure
+   *  renderer for this map. */
+  floatingByActor?: Record<string, FloatingDamageEntry[]>;
   onAction:     (action: PlayerActionInput) => void;
 }
 
-export function CombatMode({ combat, player, isResolving, displayPhase, onAction }: Props) {
+export function CombatMode({
+  combat, player, isResolving, displayPhase, floatingByActor, onAction,
+}: Props) {
   const [attackTargeting, setAttackTargeting] = useState(false);
   const [showItemPicker,  setShowItemPicker]  = useState(false);
 
@@ -45,18 +83,18 @@ export function CombatMode({ combat, player, isResolving, displayPhase, onAction
   // for ~400ms. Trigger detection lives here in the parent so
   // CombatantRow stays a stateless renderer.
   const [shakeMap, setShakeMap] = useState<Record<string, number>>({});
-  // Day 20.4 TASK 3 — floating damage / heal numbers, keyed by
-  // combatant id ("PLAYER" for the player, instance_id for enemies).
-  // Pushed when a damage event arrives, removed after 1100ms.
-  const [floatingByActor, setFloatingByActor] =
-    useState<Record<string, FloatingDamageEntry[]>>({});
   const [lastSeenLogLength, setLastSeenLogLength] = useState(0);
 
   useEffect(() => {
     if (combat.combat_log.length <= lastSeenLogLength) return;
     const newEvents = combat.combat_log.slice(lastSeenLogLength);
 
-    // Crit shake.
+    // Crit shake. (Floating damage emission was moved into
+    // useCombat's projection pipeline in Day 20.4.2 TASK 3 — see
+    // hooks/useCombat.ts emitFloat. CombatMode now only owns the
+    // crit-shake side effect, which is fine to fire on store commit
+    // because the shake is just a portrait jitter, not a number that
+    // needs to land in sync with the story-feed line.)
     const shakeAdds: Record<string, number> = {};
     for (const ev of newEvents) {
       if (ev.outcome === "crit" && ev.target) {
@@ -73,38 +111,6 @@ export function CombatMode({ combat, player, isResolving, displayPhase, onAction
             return next;
           });
         }, 400);
-      }
-    }
-
-    // Day 20.4 TASK 3 — floating damage / heal numbers.
-    const floatAdds: Record<string, FloatingDamageEntry[]> = {};
-    for (const ev of newEvents) {
-      const entry = makeFloatingEntry(ev);
-      if (!entry) continue;
-      const id = entry.targetId;
-      if (!floatAdds[id]) floatAdds[id] = [];
-      floatAdds[id].push(entry.payload);
-    }
-    if (Object.keys(floatAdds).length > 0) {
-      setFloatingByActor((prev) => {
-        const next = { ...prev };
-        for (const [id, entries] of Object.entries(floatAdds)) {
-          next[id] = [...(next[id] ?? []), ...entries];
-        }
-        return next;
-      });
-      // Schedule removal of each entry after 1100ms.
-      for (const [id, entries] of Object.entries(floatAdds)) {
-        for (const e of entries) {
-          setTimeout(() => {
-            setFloatingByActor((prev) => {
-              const list = (prev[id] ?? []).filter((x) => x.key !== e.key);
-              const next = { ...prev };
-              if (list.length === 0) delete next[id]; else next[id] = list;
-              return next;
-            });
-          }, 1100);
-        }
       }
     }
 
@@ -249,7 +255,7 @@ export function CombatMode({ combat, player, isResolving, displayPhase, onAction
           <CombatantRow
             combatant={player}
             isPlayer
-            floatingDamage={floatingByActor[PLAYER_ID]}
+            floatingDamage={floatingByActor?.[PLAYER_ID]}
           />
         </div>
 
@@ -264,7 +270,13 @@ export function CombatMode({ combat, player, isResolving, displayPhase, onAction
           }}
         />
 
-        {/* Enemy side (right half) — tiles 1-4 horizontally */}
+        {/* Enemy side (right half) — tiles 1-4 horizontally.
+            Day 20.4.2 TASK 1 — overflow MUST stay visible. The V8.38
+            `overflowX: "auto"` here was the root cause of player-attack
+            floats never appearing: per CSS spec it promoted overflow-y
+            to auto, which clipped the floats anchored ABOVE the enemy
+            portraits. We don't actually need horizontal scrolling
+            (max 4 enemies per encounter), so visible is correct. */}
         <div
           style={{
             flex:           1,
@@ -273,7 +285,7 @@ export function CombatMode({ combat, player, isResolving, displayPhase, onAction
             justifyContent: combat.enemies.length <= 2 ? "center" : "space-between",
             alignItems:     "stretch",
             paddingLeft:    8,
-            overflowX:      "auto",
+            overflow:       "visible",
           }}
         >
           {combat.enemies.map((e) => (
@@ -281,7 +293,7 @@ export function CombatMode({ combat, player, isResolving, displayPhase, onAction
               key={e.instance_id}
               combatant={e}
               isPlayer={false}
-              floatingDamage={floatingByActor[e.instance_id]}
+              floatingDamage={floatingByActor?.[e.instance_id]}
               isTargetable={attackTargeting}
               onTargetClick={() => handleTargetSelected(e.instance_id)}
               shake={!!shakeMap[e.instance_id]}

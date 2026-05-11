@@ -74,6 +74,14 @@ interface GameStore {
   /** Whether the three-tier WorldMap sidebar panel is currently open. */
   mapPanelOpen:           boolean;
 
+  // ── Day 20.4.2 TASK 4 — Codex modal ────────────────────────────────────────
+  /** Whether the Codex modal overlay is currently open. Before 20.4.2 the
+   *  codex button navigated to /game/codex (a separate route), which
+   *  unmounted CombatMode mid-combat and dropped the encounter state.
+   *  The modal opens on top of /game so combat keeps running underneath.
+   *  The /game/codex route still exists for direct URL access. */
+  codexModalOpen:         boolean;
+
   // ── FIX (UX Round 4) — Trade panel ─────────────────────────────────────────
   /** True when the player has explicitly requested the trade panel via
    *  the merchant trade button. Independent of currentTradeItems so the
@@ -129,6 +137,10 @@ interface GameStore {
   /** Imperatively set the map panel state — used by the layout's mobile
    *  backdrop and ESC handler. */
   setMapPanelOpen:         (open: boolean) => void;
+  /** Day 20.4.2 TASK 4 — toggle the Codex modal. */
+  toggleCodexModal:        () => void;
+  /** Day 20.4.2 TASK 4 — imperative open/close for the Codex modal. */
+  setCodexModalOpen:       (open: boolean) => void;
   /** FIX 7 — record that the player examined a Tier 1 object so the
    *  next EXAMINE on the same target short-circuits to a canned
    *  response. Key should be the canonical landmark name (lowercased). */
@@ -185,6 +197,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   currentTradeItems:      [],
   verbosity:              loadVerbosity(),
   mapPanelOpen:           false,
+  codexModalOpen:         false,
   tradeOpen:              false,
   examinedObjects:        [],
   generatingRegionId:     null,
@@ -293,6 +306,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
   toggleMapPanel:  () => set((s) => ({ mapPanelOpen: !s.mapPanelOpen })),
   setMapPanelOpen: (open) => set({ mapPanelOpen: open }),
+  toggleCodexModal:  () => set((s) => ({ codexModalOpen: !s.codexModalOpen })),
+  setCodexModalOpen: (open) => set({ codexModalOpen: open }),
   markObjectExamined: (objectKey) =>
     set((s) => {
       const key = objectKey.trim().toLowerCase();
@@ -325,6 +340,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       locationAssets:         [],
       lastNarrativeText:      null,
       mapPanelOpen:           false,
+      codexModalOpen:         false,
       examinedObjects:        [],
       generatingRegionId:     null,
     });

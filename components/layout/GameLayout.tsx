@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Menu, X, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -53,6 +52,9 @@ export function GameLayout({
   const mapPanelOpen   = useGameStore((s) => s.mapPanelOpen);
   const toggleMapPanel = useGameStore((s) => s.toggleMapPanel);
   const setMapPanelOpen = useGameStore((s) => s.setMapPanelOpen);
+  // Day 20.4.2 TASK 4 — codex modal toggle (replaces Link navigation).
+  const codexModalOpen   = useGameStore((s) => s.codexModalOpen);
+  const toggleCodexModal = useGameStore((s) => s.toggleCodexModal);
 
   // The CSS tokens key off short slugs (fantasy / cyber / horror /
   // space / apoc); genre is the full enum value. genreSlug maps both.
@@ -178,16 +180,25 @@ export function GameLayout({
           </button>
         )}
 
-        {/* CODEX */}
-        <Link href="/game/codex" aria-label="Open codex" title="Codex">
-          <button type="button" style={chromeBtn(false)} className="min-h-[44px] sm:min-h-0">
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-              <path d="M 2 2 L 7 1 L 12 2 L 12 12 L 7 11 L 2 12 Z M 7 1 L 7 11"
-                stroke="currentColor" strokeWidth="1.1" fill="none" />
-            </svg>
-            <span className="hidden sm:inline">CODEX</span>
-          </button>
-        </Link>
+        {/* CODEX — Day 20.4.2 TASK 4: opens as a MODAL overlay on top of
+            /game rather than navigating to /game/codex. Previous Link-based
+            approach unmounted CombatMode mid-encounter (dropping in-flight
+            floating numbers + drain pacing). The /game/codex route remains
+            for direct URL access; the modal is the primary path. */}
+        <button
+          type="button"
+          onClick={() => toggleCodexModal()}
+          aria-label="Open codex"
+          title="Codex"
+          style={chromeBtn(codexModalOpen)}
+          className="min-h-[44px] sm:min-h-0"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+            <path d="M 2 2 L 7 1 L 12 2 L 12 12 L 7 11 L 2 12 Z M 7 1 L 7 11"
+              stroke="currentColor" strokeWidth="1.1" fill="none" />
+          </svg>
+          <span className="hidden sm:inline">CODEX</span>
+        </button>
 
         {/* Save & Exit — desktop only */}
         <button

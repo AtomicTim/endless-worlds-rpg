@@ -361,16 +361,26 @@ describe("renderCritBanner (Day 20.3 TASK 3 / Day 20.4 TASK 2 shape)", () => {
   });
 });
 
-// Day 20.4.1 TASK 3 — buildRollsSuffix display rules.
+// Day 20.4.2 TASK 5 — D&D-style rolls suffix display.
+//
+// Pre-20.4.2: showed only the raw d20 against the DC ("d20: 14 vs 12").
+// 20.4.2 surfaces the full math the engine uses so the player can see
+// WHY a high-looking raw roll still failed:
+//   hit:    "(d20: 17, +2 → 19 vs 12 | 1d6+2)"
+//   miss:   "(d20: 4, +2 → 6 vs 12)"
+//   fumble: "(d20: 1)"                          [nat-1, auto-miss]
+//   crit:   "(d20: 20 | 6 (max) + 3 (1d6) + 2)" [nat-20, auto-hit]
+//   heal:   "(1d8: 4 +4 = 8)"
+// Modifier sign: positive→"+N", negative→"+(-N)", zero→"+0".
 
-describe("rolls suffix — Day 20.4.1 TASK 3 display rules", () => {
-  it("shows RAW d20 (not d20+modifier) on hit", () => {
+describe("rolls suffix — Day 20.4.2 TASK 5 D&D-style display", () => {
+  it("hit shows d20 + modifier → total vs DC, plus damage formula", () => {
     const ev = makeEvent({
       type:         "player_attack",
       outcome:      "hit",
       damage_dealt: 5,
       rolls: {
-        d20:             14,    // raw
+        d20:             14,
         d20_modifier:    2,
         target_dc:       12,
         damage_die:      "1d6",
@@ -379,34 +389,72 @@ describe("rolls suffix — Day 20.4.1 TASK 3 display rules", () => {
       },
     });
     const out = renderRoutineCombatEvent(ev);
-    // Should show raw 14, NOT 16 (=14+2).
-    expect(out?.rolls).toBe("(d20: 14 vs 12 | 1d6+1)");
+    // Full math: 14 + 2 → 16 (passes DC 12) | damage = 1d6+1
+    expect(out?.rolls).toBe("(d20: 14, +2 → 16 vs 12 | 1d6+1)");
   });
 
-  it("shows RAW d20 on miss", () => {
+  it("miss shows d20 + modifier → total vs DC", () => {
     const ev = makeEvent({
       type:    "player_attack",
       outcome: "miss",
       rolls:   { d20: 5, d20_modifier: 2, target_dc: 12 },
     });
     const out = renderRoutineCombatEvent(ev);
-    // Raw 5, not total 7.
-    expect(out?.rolls).toBe("(d20: 5 vs 12)");
+    // Player sees 5+2=7, lower than DC 12 — clear why this missed.
+    expect(out?.rolls).toBe("(d20: 5, +2 → 7 vs 12)");
   });
 
-  it("shows RAW d20 = 1 on fumble (never 0 even with negative modifier)", () => {
+  it("fumble (nat-1) skips mod/total (auto-miss, modifier is irrelevant)", () => {
     const ev = makeEvent({
       type:    "player_attack",
       outcome: "fumble",
       rolls:   { d20: 1, d20_modifier: -1, target_dc: 12 },
     });
     const out = renderRoutineCombatEvent(ev);
-    // Pre-Day 20.4.1: rendered as "d20: 0" because total = 1 + (-1).
-    // Post-fix: must show raw 1.
     expect(out?.rolls).toBe("(d20: 1)");
   });
 
-  it("rounds fractional flee DC to integer (Day 20.4.1 TASK 3a)", () => {
+  it("negative modifier formats as +(-N)", () => {
+    // Visible-modifier disambiguation: the suffix always uses a leading
+    // "+" connector, so a negative mod gets wrapped to read clearly:
+    //    "d20: 12, +(-2) → 10 vs 10"
+    const ev = makeEvent({
+      type:    "flee_attempt",
+      outcome: "fled_failed",
+      rolls:   {
+        d20:          12,
+        d20_modifier: -2,
+        target_dc:    10,
+      },
+    });
+    const out = renderRoutineCombatEvent(ev);
+    expect(out?.rolls).toBe("(d20: 12, +(-2) → 10 vs 10)");
+  });
+
+  it("zero modifier formats as +0 (not blank, not '+')", () => {
+    const ev = makeEvent({
+      type:    "flee_attempt",
+      outcome: "fled_failed",
+      rolls:   { d20: 6, d20_modifier: 0, target_dc: 10 },
+    });
+    const out = renderRoutineCombatEvent(ev);
+    expect(out?.rolls).toBe("(d20: 6, +0 → 6 vs 10)");
+  });
+
+  it("flee fail with negative AGI mod shows the full math", () => {
+    // Reproduces the original Day 20.4.2 TASK 5 bug case — player rolls
+    // a d20 that looks high enough but with a negative modifier still
+    // misses the DC. The display now makes that obvious.
+    const ev = makeEvent({
+      type:    "flee_attempt",
+      outcome: "fled_failed",
+      rolls:   { d20: 9, d20_modifier: -1, target_dc: 10 },
+    });
+    const out = renderRoutineCombatEvent(ev);
+    expect(out?.rolls).toBe("(d20: 9, +(-1) → 8 vs 10)");
+  });
+
+  it("rounds fractional flee DC to integer for display (Day 20.4.1 TASK 3a, preserved)", () => {
     // Fractional DC (10.666...) comes from averaging an odd number
     // of enemy AGI mods. Display rounds; the raw float still drives
     // the engine's pass/fail check.
@@ -420,7 +468,7 @@ describe("rolls suffix — Day 20.4.1 TASK 3 display rules", () => {
       },
     });
     const out = renderRoutineCombatEvent(ev);
-    expect(out?.rolls).toBe("(d20: 6 vs 11)");
+    expect(out?.rolls).toBe("(d20: 6, +(-1) → 5 vs 11)");
   });
 
   it("rounds fractional flee DC down on .4 (banker's rounding not used)", () => {
@@ -430,7 +478,42 @@ describe("rolls suffix — Day 20.4.1 TASK 3 display rules", () => {
       rolls:   { d20: 6, d20_modifier: 0, target_dc: 10.4 },
     });
     const out = renderRoutineCombatEvent(ev);
-    expect(out?.rolls).toBe("(d20: 6 vs 10)");
+    expect(out?.rolls).toBe("(d20: 6, +0 → 6 vs 10)");
+  });
+
+  it("heal shows die roll + flat +4 + total sum", () => {
+    const ev = makeEvent({
+      type:           "use_item",
+      target:         "PLAYER",
+      outcome:        "item_used",
+      damage_dealt:   -8,
+      weapon_or_item: "Basic Health Potion",
+      rolls:          { damage_die: "1d8", damage_die_roll: 4 },
+    });
+    const out = renderRoutineCombatEvent(ev);
+    // 1d8 rolled 4, plus the flat +4 bonus = 8 total restored.
+    expect(out?.rolls).toBe("(1d8: 4 +4 = 8)");
+  });
+
+  it("hit with negative str_modifier still shows the damage formula sign correctly", () => {
+    // Negative str mods are rare but possible (weak class / curse).
+    // The damage formula uses "1d6-1" (no "+" prefix) when the bonus
+    // is negative.
+    const ev = makeEvent({
+      type:         "player_attack",
+      outcome:      "hit",
+      damage_dealt: 3,
+      rolls: {
+        d20:             14,
+        d20_modifier:    2,
+        target_dc:       12,
+        damage_die:      "1d6",
+        damage_die_roll: 4,
+        str_modifier:    -1,
+      },
+    });
+    const out = renderRoutineCombatEvent(ev);
+    expect(out?.rolls).toBe("(d20: 14, +2 → 16 vs 12 | 1d6-1)");
   });
 });
 

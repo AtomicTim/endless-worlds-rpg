@@ -11,12 +11,20 @@ import { FloatingDamage } from "./FloatingDamage";
  * portrait wrapper from the CombatMode parent. Each entry has a
  * unique key so React can track multiple in flight at once. Parent
  * removes entries after the 1100ms animation completes.
+ *
+ * Day 20.4.2 TASK 2 — `start_delay` (ms) lets the emitter stagger
+ * back-to-back floats on the same host so they don't stack pixel-
+ * on-pixel. The hook layer sets it; the FloatingDamage component
+ * forwards it to the CSS `animation-delay` so the keyframes idle
+ * (invisible) for that many ms before running. 0 means "fire now",
+ * which is the common case.
  */
 export interface FloatingDamageEntry {
-  key:   string;
-  value: number;
-  kind:  "hit" | "crit" | "heal";
-  color: string;
+  key:         string;
+  value:       number;
+  kind:        "hit" | "crit" | "heal";
+  color:       string;
+  start_delay?: number;
 }
 
 /**
@@ -117,6 +125,7 @@ export function CombatantRow(props: Props) {
             value={f.value}
             kind={f.kind}
             color={f.color}
+            startDelay={f.start_delay}
           />
         ))}
       </div>

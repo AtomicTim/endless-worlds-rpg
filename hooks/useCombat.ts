@@ -16,6 +16,8 @@ import {
   renderResolutionBanner,
   renderRoutineCombatEvent,
 } from "@/lib/game/combat-narration/templates";
+import type { FloatingDamageEntry } from "@/components/game/CombatMode/CombatantRow";
+import { makeFloatingEntry } from "@/components/game/CombatMode/CombatMode";
 
 /**
  * Day 20 Combat — React hook layer.
@@ -92,8 +94,48 @@ const PLAYER_TURN_DELAY_MS = 800;
  *  pause, next enemy resolves). */
 const ENEMY_TURN_GAP_MS    = 500;
 
+/** Day 20.4.2 TASK 2 — minimum spacing (ms) between successive floats
+ *  on the same host. If a new float arrives sooner, we stagger it so
+ *  the visible animation start is at least this far past the prior. */
+const FLOAT_MIN_SPACING_MS = 300;
+/** Day 20.4.2 TASK 2 — visible animation length (mirrors the CSS).
+ *  Used to schedule entry removal; the cleanup timeout adds any
+ *  start_delay so the entry persists for the full animation. */
+const FLOAT_ANIMATION_MS   = 1100;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Day 20.4.2 TASK 2 — sequential stagger for floating numbers.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Per-host bookkeeping for the float stagger. The hook keeps refs of
+ * these maps; each emission updates lastEmittedAt and lastStartDelay
+ * so the NEXT emission on the same host can compute its required
+ * delay.
+ *
+ * Pure / exported for jest. Returns the start_delay (ms) the new
+ * float should use:
+ *   - If `lastAt` is undefined or the gap (now - lastAt) is at least
+ *     FLOAT_MIN_SPACING_MS, no stagger is needed (delay = 0).
+ *   - Otherwise, delay = (FLOAT_MIN_SPACING_MS - gap) + lastStartDelay.
+ *     Adding the prior delay matters: when emissions arrive every
+ *     ~100ms, each one must clear the prior animation start, not just
+ *     the prior emission time.
+ */
+export function computeFloatStartDelay(
+  now:            number,
+  lastAt:         number | undefined,
+  lastStartDelay: number | undefined
+): number {
+  if (typeof lastAt !== "number") return 0;
+  const gap = now - lastAt;
+  if (gap >= FLOAT_MIN_SPACING_MS) return 0;
+  const prevDelay = typeof lastStartDelay === "number" ? lastStartDelay : 0;
+  return (FLOAT_MIN_SPACING_MS - gap) + prevDelay;
 }
 
 export function useCombat() {
@@ -114,6 +156,65 @@ export function useCombat() {
   // delay so the header pill flips immediately at phase transitions
   // — the pill is the canonical turn indicator, the feed catches up.
   const [displayPhase, setDisplayPhase] = useState<"player" | "enemy">("player");
+
+  // Day 20.4.2 TASK 3 — floating damage / heal numbers, keyed by host
+  // id ("PLAYER" for the player, instance_id for enemies). Lifted up
+  // from CombatMode into the hook so emission happens INSIDE the
+  // projection pipeline, right next to the story-feed line for the
+  // same event. Previously CombatMode watched combat.combat_log via
+  // useEffect, which fired immediately on store commit — ahead of the
+  // pacing delays in projectCombatEventsToFeed.
+  const [floatingByActor, setFloatingByActor] =
+    useState<Record<string, FloatingDamageEntry[]>>({});
+  // Day 20.4.2 TASK 2 — per-host stagger bookkeeping. Refs (not state)
+  // because we only read them inside the emit callback; they don't
+  // drive any render directly.
+  const lastEmittedAtRef  = useRef<Record<string, number>>({});
+  const lastStartDelayRef = useRef<Record<string, number>>({});
+
+  /**
+   * Day 20.4.2 TASK 3 — push a float entry for one CombatEvent.
+   * Routes through makeFloatingEntry (same helper CombatMode used to
+   * call directly), computes the stagger start_delay, and schedules
+   * removal at (animation duration + start_delay).
+   *
+   * Called from projectCombatEventsToFeed AFTER its pacing sleeps so
+   * the visible float pops at the same moment the matching story-
+   * feed line lands.
+   */
+  const emitFloat = useCallback((event: CombatEvent): void => {
+    const entry = makeFloatingEntry(event);
+    if (!entry) return;
+    const hostId = entry.targetId;
+    const now    = Date.now();
+    const lastAt = lastEmittedAtRef.current[hostId];
+    const lastDl = lastStartDelayRef.current[hostId];
+    const start_delay = computeFloatStartDelay(now, lastAt, lastDl);
+    // lastEmittedAt tracks EMISSION timestamps (now), not animation
+    // start times (now + delay). Per the locked decision: even when
+    // we delay the visible animation, the next emission's stagger
+    // math measures against when *we pushed*, not when the prior
+    // animation actually played. This keeps the math stable across
+    // rapid bursts and aligns with the test seam in this file.
+    lastEmittedAtRef.current[hostId]  = now;
+    lastStartDelayRef.current[hostId] = start_delay;
+
+    const payload: FloatingDamageEntry = { ...entry.payload, start_delay };
+    setFloatingByActor((prev) => ({
+      ...prev,
+      [hostId]: [...(prev[hostId] ?? []), payload],
+    }));
+    // Cleanup: animation length + the delay it waited.
+    setTimeout(() => {
+      setFloatingByActor((prev) => {
+        const list = (prev[hostId] ?? []).filter((x) => x.key !== payload.key);
+        const next = { ...prev };
+        if (list.length === 0) delete next[hostId];
+        else next[hostId] = list;
+        return next;
+      });
+    }, FLOAT_ANIMATION_MS + start_delay);
+  }, []);
 
   /**
    * Submit a player combat action. Resolves through the engine,
@@ -164,6 +265,7 @@ export function useCombat() {
           locationName:     resolveLocationName(state, state.combat.origin_node_id),
           addMessage,
           setDisplayPhase,
+          emitFloat,
         });
 
         // After drain ends — if combat is still active, sync the pill
@@ -178,7 +280,7 @@ export function useCombat() {
         setIsResolving(false);
       }
     },
-    [setMasterState, addMessage]
+    [setMasterState, addMessage, emitFloat]
   );
 
   /**
@@ -227,6 +329,7 @@ export function useCombat() {
           locationName:     resolveLocationName(state, state.combat.origin_node_id),
           addMessage,
           setDisplayPhase,
+          emitFloat,
         });
 
         // After drain — sync display pill to authoritative state.
@@ -238,7 +341,7 @@ export function useCombat() {
         setIsResolving(false);
       }
     },
-    [setMasterState, addMessage]
+    [setMasterState, addMessage, emitFloat]
   );
 
   // Day 20.2 TASK 1 — auto-fire the kickoff when a fresh combat
@@ -280,6 +383,13 @@ export function useCombat() {
      *  turn pointer during the drain so the header pill matches the
      *  feed's pacing instead of jumping ahead. */
     displayPhase,
+    /** Day 20.4.2 TASK 3 — floating damage / heal numbers, keyed by
+     *  host id ("PLAYER" or enemy.instance_id). CombatMode reads this
+     *  to render the FloatingDamage components above each portrait.
+     *  Lifted up from CombatMode so emission happens INSIDE the
+     *  projection pipeline (same moment as the story-feed line) and
+     *  the multi-enemy stagger (TASK 2) can reach across events. */
+    floatingByActor,
     submitCombatAction,
     /** Day 20.2 TASK 1 — exposed for the auto-fire useEffect.
      *  External callers shouldn't need to invoke directly; the
@@ -306,6 +416,10 @@ interface ProjectArgs {
   /** Day 20.1 TASK 5 — flips the header pill at phase transitions
    *  before the feed catches up. */
   setDisplayPhase:  (phase: "player" | "enemy") => void;
+  /** Day 20.4.2 TASK 3 — push a floating damage/heal number for this
+   *  event. Called AFTER pacing sleeps so the float pops at the same
+   *  moment as the matching story-feed line lands. */
+  emitFloat:        (event: CombatEvent) => void;
 }
 
 /**
@@ -387,6 +501,15 @@ async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void> {
       // a kill / round_start doesn't bleed actor identity across phases.
       prevEnemyActor = null;
     }
+
+    // Day 20.4.2 TASK 3 — emit the floating number HERE, right after
+    // pacing sleeps and before any addMessage for this event. This
+    // syncs the visible float with the story-feed line for the same
+    // event (V8.38 fired floats on store commit, way ahead of the
+    // pacing-delayed feed lines — they appeared "out of order"). The
+    // helper returns null for non-damage events so this is safe to
+    // call on every iteration.
+    args.emitFloat(event);
 
     // ── Day 20.3 TASK 3 — CRITICAL HIT two-line render ───────────────
     // For player_attack / enemy_attack with outcome === "crit", push

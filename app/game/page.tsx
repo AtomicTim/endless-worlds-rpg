@@ -14,6 +14,7 @@ import { LogBook } from "@/components/game/sidebar/LogBook";
 import { WorldMap } from "@/components/game/WorldMap";
 import { NavigationBar } from "@/components/game/NavigationBar";
 import { CombatMode } from "@/components/game/CombatMode";
+import { CodexModal } from "@/components/game/CodexModal";
 import { AssetCategory, Genre } from "@/types/game";
 import type { MasterState } from "@/types/game";
 import { createClient } from "@/lib/supabase/client";
@@ -52,6 +53,7 @@ export default function GamePage() {
     combat:           activeCombat,
     isResolving:      combatResolving,
     displayPhase:     combatDisplayPhase,
+    floatingByActor:  combatFloatingByActor,
     submitCombatAction,
   } = useCombat();
   const inCombat = activeCombat?.active === true;
@@ -314,6 +316,10 @@ export default function GamePage() {
             }
           />
           <TradeModal onBuy={buyItem} onSell={sellItem} />
+          {/* Day 20.4.2 TASK 4 — Codex modal overlay. Opens on top of
+              /game without changing routes, so combat / dialogue stay
+              mounted while the player consults the codex. */}
+          <CodexModal />
           {/* V8.34 (Prompt 3 Task 3) — when combat is active, swap the
               navigation strip + input bar for the CombatMode panel.
               CombatMode covers more vertical space so the player has
@@ -325,6 +331,7 @@ export default function GamePage() {
               player={masterState.player_state}
               isResolving={combatResolving}
               displayPhase={combatDisplayPhase}
+              floatingByActor={combatFloatingByActor}
               onAction={(a) => { void submitCombatAction(a); }}
             />
           ) : (

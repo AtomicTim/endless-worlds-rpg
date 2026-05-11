@@ -8,6 +8,7 @@ import type { CombatEvent } from "@/types/game";
 
 import { makeFloatingEntry } from "@/components/game/CombatMode/CombatMode";
 import { PLAYER_ID } from "@/lib/game/combat-engine";
+import { computeFloatStartDelay } from "@/hooks/useCombat";
 
 function evt(p: Partial<CombatEvent> & { type: CombatEvent["type"] }): CombatEvent {
   return {
@@ -167,5 +168,62 @@ describe("makeFloatingEntry — Day 20.4.1 TASK 1 routing", () => {
       outcome: "hit",
       damage_dealt: 4,
     }))).toBeNull();
+  });
+});
+
+// Day 20.4.2 TASK 2 — multi-enemy stagger via sequential start_delay.
+//
+// computeFloatStartDelay is a pure helper exported from useCombat so
+// the stagger math can be tested without a React renderer. The hook
+// uses it to figure out how long each new float on a given host
+// should wait before its visible animation begins — back-to-back
+// emissions on the same host are spaced at least 300ms apart so the
+// numbers don't stack pixel-on-pixel.
+describe("computeFloatStartDelay — Day 20.4.2 TASK 2", () => {
+  it("first emission on a host returns 0 (no prior timestamp)", () => {
+    expect(computeFloatStartDelay(/* now */ 1000, /* lastAt */ undefined, undefined)).toBe(0);
+  });
+
+  it("emission well past the 300ms spacing returns 0", () => {
+    // 500ms apart → no stagger needed.
+    expect(computeFloatStartDelay(1500, 1000, 0)).toBe(0);
+  });
+
+  it("emission exactly at the 300ms boundary returns 0", () => {
+    // Boundary is INclusive — 300ms gap is enough, no delay.
+    expect(computeFloatStartDelay(1300, 1000, 0)).toBe(0);
+  });
+
+  it("emission 100ms after the prior on the same host returns 200ms", () => {
+    // 300 - 100 = 200; no prior delay carried.
+    expect(computeFloatStartDelay(1100, 1000, 0)).toBe(200);
+  });
+
+  it("emission 0ms after the prior returns 300ms (worst case stagger)", () => {
+    expect(computeFloatStartDelay(1000, 1000, 0)).toBe(300);
+  });
+
+  it("compounding: third emission stacks on the prior delay", () => {
+    // Scenario: three emissions arrive at t=0, t=100, t=200 (all
+    // within the 300ms window). Math:
+    //   t=0   → delay=0  (lastAt undefined)
+    //   t=100 → (300-100) + 0 = 200
+    //   t=200 → (300-(200-100)) + 200 = (300-100)+200 = 400
+    // Hook updates lastEmittedAt to 200 (NOT 200+400=600), so the
+    // measurement is always "since the prior emission timestamp",
+    // and the prior delay carries forward via the second arg.
+    const d1 = computeFloatStartDelay(0,   undefined, undefined);
+    expect(d1).toBe(0);
+    const d2 = computeFloatStartDelay(100, 0,         d1);
+    expect(d2).toBe(200);
+    const d3 = computeFloatStartDelay(200, 100,       d2);
+    expect(d3).toBe(400);
+  });
+
+  it("clearing the gap resets compounding (lastStartDelay irrelevant when gap >= 300ms)", () => {
+    // Prior emission had a stagger of 500ms, but the new emission
+    // lands more than 300ms after the prior timestamp — so no
+    // staircase, just return 0.
+    expect(computeFloatStartDelay(2000, 1500, 500)).toBe(0);
   });
 });

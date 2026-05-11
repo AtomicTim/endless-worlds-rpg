@@ -373,7 +373,11 @@
   text-shadow:     0 1px 2px rgba(0,0,0,0.5),
                    0 0 4px rgba(0,0,0,0.4);
   white-space:     nowrap;
-  animation:       combat-float-damage 1100ms ease-out forwards;
+  /* Day 20.4.2 TASK 2 — fill-mode is `both` (not `forwards`) so the
+     0% keyframe (opacity 0, scale 0.6) applies DURING the
+     `animation-delay` window. Without this the number flashes at its
+     default style for one frame before the animation starts. */
+  animation:       combat-float-damage 1100ms ease-out both;
 }
 
 .combat-float-damage--crit {

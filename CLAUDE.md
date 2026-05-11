@@ -1,10 +1,10 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.41
-**Status:** Polish Round 4a COMPLETE — Day 20.4.3 (Region Expansion Hotfix) IN FLIGHT
+**Version:** 8.42
+**Status:** Day 20.4.3 Region Expansion Hotfix COMPLETE (commit 60501c8) — Polish Round 4c (nav columns) NEXT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
-**Reference:** /docs/architecture-spec.md — Domain 1 vs Domain 2 decisions. /docs/combat-spec.md — Combat system design. /docs/css-containment-audit.md — V8.40 audit of overflow + absolutely-positioned descendants.
+**References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/css-containment-audit.md (V8.41, 0 active risks, 5 future candidates)
 
 ---
 
@@ -22,24 +22,24 @@ This scenario drives every design decision. If a feature makes that scenario *be
 - **Procedurally generated every game.** No two playthroughs share a world.
 - **AI-narrated with D&D-style prose.** Descriptions that hit home like a good DM.
 - **CRPG-depth mechanics.** Real stat checks, inventory, leveling, gear, combat math.
-- **Multiple play styles supported simultaneously.** The game does not railroad. Long quest, speedrun-the-end, pure exploration, settlement-focused grind, lifestyle/job grind (eventual), mixed.
+- **Multiple play styles supported simultaneously.** Long quest, speedrun, exploration, settlement-grind, lifestyle/job-grind (eventual), mixed.
 - **Mobile-first accessible.** The phone in your pocket IS the game console.
-- **Multiplayer (PRE-LAUNCH per V8.38).** Two phones, one shared world. Active requirement, not future-proofing.
-- **User-customizable worlds (PRE-LAUNCH per V8.38).** Player can guide AI on world themes beyond fixed genre presets. Slot near end of pre-launch sequence.
+- **Multiplayer (PRE-LAUNCH per V8.38).** Two phones, one shared world. Active requirement.
+- **User-customizable worlds (PRE-LAUNCH per V8.38).** User-supplied theme prompts beyond fixed genre presets.
 
 ### What this game IS NOT
 
 - **Not Baldur's Gate.** Complexity in narrative and growth, not interface.
-- **Not a CYOA / interactive fiction tool.** Real mechanics matter.
-- **Not a long-term commitment to a single character.** Replayability is from NEW playthroughs, not maxing one character.
+- **Not a CYOA tool.** Real mechanics matter.
+- **Not a long-term single-character commitment.** Replayability comes from NEW playthroughs.
 - **Not a tabletop replacement.** Complements physical D&D for when you don't have DM/time/table.
-- **Not a hardcore strategy game.** Impactful combat, but goal is dramatic narrative beats with mechanical weight, not min-maxing.
+- **Not a hardcore strategy game.** Dramatic narrative beats with mechanical weight, not min-maxing.
 
 ### Competitive positioning
 
 > **"Baldur's Gate depth without Baldur's Gate overhead. D&D feel without needing a DM."**
 
-The market gap: there is no easy, fast, accessible way to have a D&D-style adventure on a phone with a friend. Existing options force a tradeoff (real D&D needs DM/prep/table; CRPGs are desktop and long; CYOA apps lack mechanics; AI Dungeon clones lack structure). This game wins by being structured-but-light, AI-narrated-but-mechanically-grounded, mobile-first, multiplayer-aware, replayable by design.
+The market gap: there is no easy, fast, accessible way to have a D&D-style adventure on a phone with a friend. Existing options force tradeoffs (real D&D needs DM/prep/table; CRPGs are desktop and long; CYOA apps lack mechanics; AI Dungeon clones lack structure). This game wins by being structured-but-light, AI-narrated-but-mechanically-grounded, mobile-first, multiplayer-aware, replayable by design.
 
 ### Design principles
 
@@ -48,33 +48,25 @@ The market gap: there is no easy, fast, accessible way to have a D&D-style adven
 3. **Multiple play styles supported.** No system forces one playstyle.
 4. **Procedural variety > authored depth.** Lean on AI for breadth, code for reliability.
 5. **Multiplayer-aware architecture (PRE-LAUNCH).** Day 21-23 actively support party-of-N. Day 24 wires the multiplayer layer.
-6. **Customization-aware architecture (PRE-LAUNCH).** World gen prompts designed so user-supplied themes plug in. Day 25 wires the customization layer.
-7. **D&D-style narration is the soul.** Tone, weight, specificity matter.
-8. **Death must matter.** Defeat costs HP, currency, XP rollback. Settlements are deliberate checkpoints.
+6. **Customization-aware architecture (PRE-LAUNCH).** Day 25 wires the customization layer.
+7. **D&D-style narration is the soul.**
+8. **Death must matter.** HP, currency, XP rollback. Settlements are deliberate checkpoints.
 
 ---
 
 ## 🎯 Project Roles & Working Mode
 
-**Vision & Creative Direction:** Tim (the user). First-time game developer, building a game that doesn't currently exist.
+**Vision & Creative Direction:** Tim (the user). First-time game developer.
 
-**Senior Engineering / Tech Direction:** Claude.ai (this assistant). Translates vision into architecture, flags scope/risk/feasibility, suggests alternatives, recommends sequencing. Has explicit license to push back when:
-- Something is premature given current foundations
-- A cleaner approach exists Tim hasn't considered
-- Scope is drifting in a way that risks future-proofing
-- Critical-path systems are being skipped for polish features
+**Senior Engineering / Tech Direction:** Claude.ai. Translates vision into architecture, flags scope/risk/feasibility, suggests alternatives, recommends sequencing. Has explicit license to push back on premature/risky/scope-drifting/critical-path-skipping decisions. Defers to creative-director call on vision.
 
-Defers to creative-director call on vision. Creative input from Claude.ai is welcome.
+**Implementation:** Claude Code (local Sonnet agent).
 
-**Implementation:** Claude Code (local Sonnet agent). Executes round-by-round prompts.
+**Decision flow:** Tim describes → Claude.ai assesses → Tim decides → Claude.ai writes prompt → Claude Code implements → Tim verifies → Claude.ai updates CLAUDE.md.
 
-**Decision flow:** Tim describes → Claude.ai assesses → Tim decides → Claude.ai writes prompt with locked decisions → Claude Code implements → Tim verifies → Claude.ai updates CLAUDE.md.
-
-**This means:** Tim's instinct is an opening position until Claude.ai has weighed in. Tim retains full override authority but expects pushback when warranted.
-
-**Investigation-before-patching protocol (V8.40):** When Claude.ai writes a prompt with a root-cause hypothesis, Claude Code investigates and validates/invalidates the hypothesis BEFORE writing the patch. V8.40 demonstrated value (CSS containment vs hypothesized field-name drift).
-
-**Origin/main baseline check (V8.41):** As the first step of every prompt, Claude Code runs `git fetch origin && git log origin/main --oneline -5` to verify the working state matches origin HEAD. Polish Round 4a surfaced a 28-commit drift where Claude Code was patching against V8.28 while origin was V8.40 — caught mid-round and re-baselined cleanly, but the cost is non-trivial. Adding this 2-second check at prompt-start prevents the issue.
+**Per-prompt protocols (cumulative):**
+- **V8.40 — Investigation-before-patching.** When prompt has a root-cause hypothesis, Claude Code validates/invalidates BEFORE patching. (V8.40 proved value: CSS containment vs hypothesized field-name drift. V8.42 proved value: prompt-template hardcoded id vs hypothesized apply-step bug.)
+- **V8.41 — Origin/main baseline check.** Step 1 of every prompt: `git fetch origin && git log origin/main --oneline -5`. Verify local matches origin HEAD.
 
 ---
 
@@ -84,109 +76,101 @@ Living section. Captures meta-discussions about project direction, sequencing, r
 
 ### Future Feature Ideas (captured, not yet slotted)
 
-This subsection collects design ideas captured during development that don't fit the current sequence but should be preserved for future planning rounds. Items here are NOT in the locked sequence yet — they need slot assignment when their dependencies land.
+Design ideas captured during development that don't fit the current sequence. Items here are NOT in the locked sequence — they need slot assignment when their dependencies land.
 
-**Encounter Avoidance / Stealth System (captured V8.41 playtest):**
+**Encounter Avoidance / Stealth System (V8.41 capture):**
 
-Instead of random encounters always triggering combat, the engine could roll player PER (and/or AGI, and/or future stealth skill from Day 22) against an enemy detection DC. On detection-roll SUCCESS (player undetected), the player gets a pre-combat options menu:
-- **Avoid** — continue past the enemy without combat
-- **Pre-emptive ability** — cast spell, throw item, deploy environmental trick before combat begins
-- **Sneak attack** — combat triggers but with first-strike advantage / surprise damage
-- **Environmental interaction** — collapse rubble, light a fire, alter terrain to change the encounter
-- **Engage normally** — player chooses to fight from a position of awareness
+When a random encounter would trigger, the engine could roll player PER (and/or AGI, and/or future stealth skill from Day 22) against an enemy detection DC. On SUCCESS, pre-combat options menu:
+- Avoid — continue past the enemy without combat
+- Pre-emptive ability — cast spell, throw item, environmental trick before combat begins
+- Sneak attack — combat triggers with first-strike advantage / surprise damage
+- Environmental interaction — collapse rubble, light a fire, alter terrain
+- Engage normally — player chooses to fight from awareness
 
-On detection-roll FAIL, combat triggers normally per V8.32 pipeline (unchanged from current behavior).
+On FAIL, combat triggers normally per V8.32 pipeline.
 
-*Dependencies:* Day 22 skills foundation (stealth skill domain). Combat-spec §3 random encounter pipeline. PER/AGI stat surfacing (already exists).
+*Dependencies:* Day 22 skills (stealth domain), combat-spec §3 random-encounter pipeline, PER/AGI (exists).
+*Strategic fit:* Sits alongside Day 20.5 Verbal Action as "Combat Alternatives." Different pipeline stages — verbal affects combat-in-progress; stealth affects combat-pre-trigger.
+*Vision alignment:* Supports exploration + speedrun playstyles. Multi-style is design principle #3.
+*Tentative slot:* Day 20.6, post-Day-25. Or fold into combat-spec §3 refinement.
+*Open questions:* DC scaling (per-enemy/region/tier?). Boss/ambush immunity? XP for avoidance? Surprise round on fail?
+*Design risk to address at slot time:* Must not punish combat-built characters — even low-PER should sometimes succeed (Skyrim-Sneak model: anyone can use it, specialists do it better).
 
-*Strategic fit:* Sits alongside Day 20.5 Verbal Action as a "combat alternatives" feature. Both use stat checks to alter combat resolution, but at different pipeline stages — verbal action affects combat-in-progress; stealth affects combat-pre-trigger. Complementary mechanics, not redundant.
+### V8.42 — The bug pattern recurred a THIRD time: prompt-template hardcoded IDs
 
-*Vision alignment:* Direct support for "exploration playstyle" and "speedrun playstyle" — players who want to traverse the world without dying to every encounter can build stealth-focused characters. Multi-style support is design principle #3. Adds meaningful build differentiation (stealth char vs combat char vs charisma char) without requiring new combat math.
+Day 20.4.3 found the third instance of the same root-cause pattern:
+- V8.39: WorldBible prompt hardcoded `starting_region.type = "settlement_hub"` → category-fallback bug in step 7c-2.
+- V8.40: enemy-row container had `overflowX: auto` → silent clip of floating numbers.
+- V8.42: RegionBible prompt hardcoded `locations[0].id = "${outline.id}"` → region/settlement ID collision in apply-regional-bible.
 
-*Tentative slot:* Day 20.6 alongside Day 20.5 in a "Combat Alternatives" bucket, post-Day-25. Could also fold into a refined version of combat-spec §3 (random travel encounters) since they share the pre-trigger pipeline.
+**The pattern:** Hardcoded values in generation prompts or non-canonical CSS / data fields create structural collisions that surface much later as cascade UI bugs.
 
-*Open questions for design time:* Detection DC scaling (per-enemy, per-region, per-tier?). Are some enemies immune to avoidance (boss, ambush)? Does avoidance grant XP? Does failed avoidance trigger "surprise round" where enemies act first with bonus?
+**Why the V8.39 audit missed V8.42:** That audit was scoped to defensive overchecks in application code (`category === X` fallbacks alongside boolean fields). The V8.42 bug was in the GENERATION prompt itself — a different surface. The audit needs broader scope.
 
-### V8.41 — Workflow: baseline drift + audit results + Combat UX queue
+**Expanded audit scope (for whenever this gets prioritized):**
+1. Application-code defensive overchecks (V8.39 original) — `category === X` / `type === X` fallbacks alongside canonical fields.
+2. Prompt-template hardcoded structural IDs (V8.42 NEW) — any place a generation prompt hardcodes an id/type/category that should be distinct. Sweep all `app/api/game/generate-*/route.ts` for template literals embedding `${outline.id}`, `${region.id}`, etc. in id positions where collision is possible.
+3. CSS containment chain (V8.40) — `/docs/css-containment-audit.md` covers this, 0 active risks, 5 future candidates.
 
-**Baseline drift incident.** During Polish Round 4a, Claude Code started implementing against V8.28 (local branch state). Origin/main was at V8.40 — 28 commits ahead. Caught mid-round during a code reference check, reset to V8.40, rewrote the round against current infrastructure cleanly. Cost: ~half a round of throwaway work, plus extra cognitive load for re-baselining.
+**Mitigation in place (V8.42):** Claude Code's fix added TWO layers — corrected the prompt template AND added `splitConflatedRegionSettlement` heal-on-apply guard for cached/legacy bibles. This pattern (template fix + apply-step safety net) is now the model for prompt-template bugs: fix forward AND heal legacy data. Codified in rules 77-78.
 
-**Test count note:** Claude Code reported "275 V8.40 baseline" while V8.40 had actually shipped 321 tests per the Day 20.4.2 summary. Likely an artifact of the re-baseline (intermediate state during reset). The actual landing state (297 = 275 + 22 new) is what `jest pass` validates, but the doc's running test count may be slightly off from origin/main. Test counts in this doc are reference values, not authoritative. Source of truth = jest output at last commit.
+### V8.41 — Workflow lessons + Combat UX Polish Queue
 
-**Mitigation in place:** Prompt preamble now mandates `git fetch origin && git log origin/main --oneline -5` as step 1 before any read/patch work. Documented in Working Mode section.
+**Baseline drift:** Polish Round 4a hit a 28-commit drift between Claude Code's local branch (V8.28) and origin/main (V8.40). Caught mid-round, rebased clean. Mitigation: origin baseline check as step 1 of every prompt (rule 76).
 
-**CSS containment audit result (V8.41 / Polish 4a).** `/docs/css-containment-audit.md` produced. **Zero active clipping risks** beyond the V8.40 enemy-row fix that's already landed. 5 future candidates flagged for when those features get touched: PortraitSlot status badges, StoryFeed inline tooltips, TradeModal +/- gold floats, GameLayout mobile rail tooltips, WorldMap edge tooltips. These are tracking items, not bugs.
+**Test counts in this doc are reference values, not authoritative.** Source of truth = jest output at last commit. Re-baselines can produce intermediate states that throw off the running count.
 
-**Combat UX & Flow Polish Queue (NEW deferred bucket).** Tim flagged three "feel" issues from V8.40 playtest that don't fit cleanly into any current round. Captured as a dedicated polish bucket to address after Day 23 (once core systems land):
-1. **Hit vs miss visual differentiation in story feed.** Currently same ⚔ prefix, same color. Need at-a-glance distinguishability. Likely: hits keep ⚔, misses get a different glyph (∅, ✗) + slightly dimmer color.
-2. **Miss feedback over portrait.** Small white "0" or "—" floating number on miss so something visually registers per action, not just on hits/heals. Reuses existing float system.
-3. **Combat flow pacing — flee-fail → death sequence.** Too abrupt. Player clicks flee, takes a beat, then defeat screen with no clear "your flee failed" moment to absorb. Needs explicit pause + visual marker between flee fail and enemy phase resolving.
+**Combat UX & Flow Polish Queue (post-Day-23):**
+1. Hit vs miss visual differentiation in story feed (different glyph + dimmer color for misses).
+2. Miss feedback over portrait (small white "0" or "—" floating number).
+3. Combat flow pacing for flee-fail → death (explicit pause + visual marker).
 
-Scope: probably one focused round, post-Day-23. Not critical-path.
+### V8.40 + V8.39 — Bug lessons (now generalized into V8.42 pattern note above)
 
-### V8.40 — Lesson learned: CSS / non-canonical fields with implicit side effects
-
-The Day 20.4.1 floating-damage targeting fix appeared to land cleanly, but Day 20.4.2 playtest revealed player-attack numbers were STILL not appearing. Claude.ai hypothesized field-name drift (`event.target` vs `event.target_id`). Claude Code investigated first, confirmed `target` was canonical everywhere, then found the real bug: the enemy-side row container had `overflowX: "auto"` set, which **per W3C spec automatically promotes `overflow-y` to `auto`**, which silently clipped absolutely-positioned floating numbers extending above the portrait's top edge.
-
-**This is the V8.39 lesson in a different flavor:**
-- V8.39: defensive overcheck (`category === "settlement_hub"`) caused the bug it was preventing.
-- V8.40: unrelated CSS property (`overflowX: auto`) silently sabotaged a feature it had no business touching.
-
-**Shared pattern:** CSS / non-canonical fields with **implicit side effects** that surface only under specific conditions. Unit tests can't catch these. **Mitigation:** integration tests at the boundary where real components meet real data. Codified in rules 70-71.
-
-### V8.39 — Lesson: defensive overcheck caused the V8.38 bug
-
-The Day 20.4 defeat respawn bug was attributed to spawn-init writing the wrong field. Real root cause was a `category === "settlement_hub"` fallback alongside the canonical `is_settlement_node === true` check, added in Day 20.1 as defensive code. WorldBible's hard-coded `starting_region.type = "settlement_hub"` gets copied to region zones' `category`, so every region-zone arrival was being mis-classified as a settlement hub.
-
-**Foundational lesson:** Defensive overchecks ("set this AND that") can become positive bugs when "and that" matches things it shouldn't. Canonical field = single source of truth; fallbacks need stronger justification than "just in case." Codified in rule 65.
+Original details preserved in foundational rules 65 (V8.39 defensive overcheck), 70 (V8.40 CSS containment), 71 (V8.40 integration testing). The V8.42 trajectory note above generalizes both into the shared pattern.
 
 ### V8.38 — Three strategic decisions LOCKED
 
-**Decision 1: Multiplayer = PRE-LAUNCH** (active requirement, not passive constraint). Dedicated Day 24 phase. Day 21/22/23 design must actively support party-of-N.
+**Multiplayer = PRE-LAUNCH** (active requirement). Day 24 phase. Day 21-23 must actively support party-of-N.
+**Customization layer = PRE-LAUNCH** but toward end. Day 25 phase. User-supplied theme prompts.
+**Day 22 skills = FOUNDATIONS NOW** (middle path). Skill domain enum (Combat / Crafting / Social / Exploration). Combat domain wired; others stubbed.
 
-**Decision 2: Customization layer = PRE-LAUNCH but towards end.** Day 25 phase. User-supplied theme prompts plumbed into world gen. 1-2 day session estimate.
+### Sequence (latest revision)
 
-**Decision 3: Day 22 skills = FOUNDATIONS NOW** (middle path). Skill domain enum (Combat / Crafting / Social / Exploration). Combat domain wired, others stubbed. Schema supports lifestyle skills for Day 24+ addition.
-
-### V8.37 — Combat scope drift assessment + recommended sequencing
-
-Day 20 expanded from one prompt to ten commits. Heavy combat investment but combat is the foundation.
-
-**Confirmed sequence (V8.37 + V8.38 + V8.41 amendments):**
-1. **Polish Round 4a** ✅ (24ac19c) — UX debt landed
-2. **Day 20.4.3 Region Expansion Hotfix** ⏳ IN FLIGHT (V8.41 playtest surfaced cross-region nav/data bug)
-3. **Polish Round 4c** — nav cards relaid into 4 horizontal columns with grouped containers (prompt staged)
-4. **Polish Round 4b** — mobile-viewport QA pass
-5. **Day 21 — Container + Loot** (multiplayer-aware)
-6. **Day 22 — Skills + Leveling** (multiplayer-aware + lifestyle skill foundations)
-7. **Vertical slice playtest**
-8. **Day 23 — Main Quest Thread** (multiplayer-aware)
-9. **Combat UX & Flow Polish round** (V8.41 queue: hit/miss differentiation, miss float, flee-fail pacing)
-10. **Day 24 — Multiplayer Foundation**
-11. **Day 25 — Customization Layer**
-12. **Day 20.5 — Verbal Action / Taunt** — DEFERRED to last
-13. **Day 20.6 — Encounter Avoidance / Stealth System** — captured V8.41, sits alongside Day 20.5 in "Combat Alternatives" bucket
+1. ~~Polish Round 4a (24ac19c)~~ ✅
+2. ~~Day 20.4.3 Region Expansion Hotfix (60501c8)~~ ✅
+3. **Polish Round 4c** ⏳ NEXT — nav cards into 4 horizontal column blocks (prompt staged)
+4. Polish Round 4b — mobile-viewport QA pass
+5. Day 21 — Container + Loot (multiplayer-aware)
+6. Day 22 — Skills + Leveling (multiplayer-aware + lifestyle skill foundations)
+7. Vertical slice playtest
+8. Day 23 — Main Quest Thread
+9. Combat UX & Flow Polish round (V8.41 queue)
+10. Day 24 — Multiplayer Foundation
+11. Day 25 — Customization Layer
+12. Day 20.5 — Verbal Action — deferred to last
+13. Day 20.6 — Encounter Avoidance / Stealth — Combat Alternatives bucket with 20.5
 
 ### Open strategic questions
 
-- **External playtest timing.** Likely best post-Day-22 or post-Day-23.
-- **Difficulty tuning model.** Toggle vs implicit world-tier scaling?
-- **Random travel encounters** (combat-spec §3 deferral). Slate post-Day-21? Or fold into Day 22/23? Note: Day 20.6 stealth/avoidance idea (V8.41) intersects here — the random-encounter pipeline is where the detection roll would slot in.
-- **Verbal action redundancy risk.** If Day 22 adds Charisma skill tree, verbal action types may need reconciling. Day 20.6 stealth has the parallel question with PER/AGI/stealth skill.
-- **NPC behavior dispatch** (combat-spec §6.3 deferral). Future combat-depth pass.
-- **Map visual rework.** Pure visual debt; deferred dedicated session.
-- **Defensive overcheck audit (V8.39 lesson).** Look for similar `category === X` / `type === X` fallbacks alongside canonical boolean fields.
-- **CSS containment audit results (V8.40 + V8.41).** Active audit doc at `/docs/css-containment-audit.md`. 0 active risks, 5 future candidates flagged for when those features get touched.
-- **Integration test coverage audit (V8.40 lesson).** Routing helpers, lookup keys, and similar wiring points should have integration tests against real data.
+- External playtest timing (post-Day-22 or post-Day-23 likely).
+- Difficulty tuning model — toggle vs implicit world-tier scaling.
+- Random travel encounters (combat-spec §3 deferral) — slate post-Day-21 or fold into Day 22/23. Intersects with Day 20.6 stealth idea.
+- Verbal action redundancy risk (Day 20.5 vs Day 22 Charisma skill tree). Same question for Day 20.6 stealth vs PER/AGI/stealth skill.
+- NPC behavior dispatch (combat-spec §6.3 deferral).
+- Map visual rework — dedicated session, deferred.
+- **Audit queue (V8.42 expanded):** defensive overchecks in app code (V8.39), prompt-template hardcoded structural IDs (V8.42 NEW), integration test coverage gaps (V8.40).
+
+### Doc efficiency strategy (V8.42)
+
+CLAUDE.md is reaching the size where full-doc rewrites per round are slow. **Step 1 applied this round:** compressed historical Day 20.X sections from multi-line summaries to one-liner round-history table. The foundational rules carry the technical content; round summaries were redundant scaffolding. **Step 2 (proposed, when a quiet round allows):** externalize Foundational Rules to `/docs/foundational-rules.md` as append-only. CLAUDE.md becomes active index + status + trajectory only. Diminishing returns past that.
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Polish Round 4a complete (commit 24ac19c). Day 20.4.3 Region Expansion Hotfix IN FLIGHT — addressing cross-region data bug surfaced during V8.41 playtest where apply-regional-bible conflated region-zone and settlement nodes.
-**Local Dev Port:** 3000
-**Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
-**GitHub Repo:** atomictim/endless-worlds-rpg
+**Current Phase:** Day 20.4.3 Region Expansion Hotfix landed (commit 60501c8). Polish Round 4c (nav cards into 4 horizontal column blocks) is next, prompt staged.
+**Local Dev Port:** 3000 · **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **GitHub Repo:** atomictim/endless-worlds-rpg
 
 | Phase | Title | Status |
 | --- | --- | --- |
@@ -194,190 +178,90 @@ Day 20 expanded from one prompt to ten commits. Heavy combat investment but comb
 | 19A–19F | World Generation Architecture | ✅ Complete |
 | Movement Track | Verified end-to-end | ✅ FROZEN |
 | Combat Spec | /docs/combat-spec.md design doc | ✅ Frozen |
-| 20 — Combat Prompts 1-3 + 2.5 | Data foundation + resolver + UI + nav fix | ✅ Complete |
-| 20.1 — Combat Polish (1215bb6) | Starting equipment + encounter banner + separators + pacing | ✅ Complete |
-| 20.2 — Combat Hotfix (bf3871e) | Initiative kickoff fix + inventory stats | ✅ Complete |
-| 20.3 — Combat Polish 2 (732e944) | Full-width separators + CRITICAL HIT banner + resolution two-line + planEventSuppression | ✅ Complete |
-| 20.4 — Combat Polish 3 (fc508f3) | Floating damage numbers + inline roll details + defeat teleport groundwork | ✅ Complete |
-| 20.4.1 — Combat Hotfix (c67f2c0) | Floating damage routing switch + inventory Use during combat + flee DC format + defeat respawn settlement-detection fix | ✅ Complete |
-| 20.4.2 — Combat Hotfix 2 (f17c221) | Floating damage CSS clip fix + stagger + emission synced to feed pacing + codex modal + D&D-style roll display | ✅ Complete |
-| Polish Round 4a (24ac19c) | Movement-direction grouped nav cards + tier color-coding + cross-region BACK card fix + map tier auto-switch + .ew-said contrast bump + CSS containment audit doc | ✅ Complete |
-| **20.4.3 — Region Expansion Hotfix** | **apply-regional-bible structural fix: distinct region-zone vs settlement nodes for adjacent regions (V8.41 playtest bug)** | ⏳ **IN FLIGHT** |
-| Polish Round 4c | Nav cards into 4 horizontal column blocks (vs current 4 rows) with mobile horizontal scroll | ⏳ Staged (after 20.4.3) |
-| Polish Round 4b | Mobile-viewport QA pass — combat panel, nav, story feed, modals, inventory, codex, map all phone-readable | ⏳ After 4c |
-| Day 21 | Container + Loot — registry, loot tables, dungeon containers, per-character inventory rules | ⏳ After 4b |
-| Day 22 | Skills + Leveling — XP, stat points, level gates + skill domain foundations | ⏳ After Day 21 |
-| Vertical slice playtest | Full game start → win condition with placeholder content | ⏳ Before Day 23 |
-| Day 23 | Main Quest Thread — breadcrumb injection, quest tracking | ⏳ Post-playtest |
-| Combat UX & Flow Polish | Hit/miss differentiation + miss float + flee-fail pacing (V8.41 queue) | ⏳ Post-Day-23 |
-| Day 24 | Multiplayer Foundation — party schema, Supabase realtime, turn-sync, shared feed, loot/quest decision rules | ⏳ Pre-launch |
-| Day 25 | Customization Layer — user-supplied theme prompts, presets, genre-theme interaction | ⏳ Pre-launch toward end |
-| Day 20.5 | Verbal Action System — chat input hijack: taunt/distract/intimidate | ⏳ Deferred to last (post-Day-25) |
-| Day 20.6 | Encounter Avoidance / Stealth System — PER/AGI/stealth detection roll + pre-combat options menu (V8.41 capture) | ⏳ Alongside Day 20.5 in Combat Alternatives bucket |
+| Combat era (Days 20 through 20.4.2) | Data + resolver + UI + narration + polish + hotfixes | ✅ Complete (see round history below + rules 24-71) |
+| Polish 4a (24ac19c) | Nav grouping + tier colors + cross-region BACK + map auto-switch + .ew-said + CSS audit | ✅ Complete |
+| **20.4.3 (60501c8)** | **Region Expansion Hotfix — prompt template + splitConflatedRegionSettlement heal-on-apply** | ✅ **Complete** |
+| **Polish 4c** | **Nav cards into 4 horizontal column blocks with mobile horizontal scroll** | ⏳ **NEXT** |
+| Polish 4b | Mobile-viewport QA pass (audit doc + inline fixes + deferred-rework list) | ⏳ After 4c |
+| Day 21 | Container + Loot — multiplayer-aware | ⏳ After 4b |
+| Day 22 | Skills + Leveling — multiplayer-aware + lifestyle skill foundations | ⏳ After Day 21 |
+| Vertical slice playtest | Full game start → win condition with placeholders | ⏳ Before Day 23 |
+| Day 23 | Main Quest Thread — multiplayer-aware shared quest state | ⏳ Post-playtest |
+| Combat UX & Flow Polish | Hit/miss differentiation + miss float + flee-fail pacing | ⏳ Post-Day-23 |
+| Day 24 | Multiplayer Foundation | ⏳ Pre-launch |
+| Day 25 | Customization Layer | ⏳ Pre-launch toward end |
+| Day 20.5 | Verbal Action System | ⏳ Deferred (Combat Alternatives) |
+| Day 20.6 | Encounter Avoidance / Stealth | ⏳ Deferred (Combat Alternatives) |
 | Map Visual Rework | Dedicated session | ⏳ Deferred |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic. Noir removed.
 
-### Polish Round 4a (commit 24ac19c — 297/297 tests, /game stable)
+### Day 20.4.3 — Region Expansion Hotfix (commit 60501c8 — 306/306 tests, /game 109 kB unchanged)
 
-Six-task UX debt round. Heads-up: Claude Code re-baselined mid-round after detecting local branch was 28 commits behind origin/main. Re-baselined to V8.40 cleanly, rewrote against current infrastructure. Mitigation in place for V8.41+ (origin baseline check in prompt preamble).
+**Root cause (3rd recurrence of V8.39 rule 65's pattern, this time in a different surface):** `generate-regional-bible`'s prompt template hardcoded `locations[0].id = "${outline.id}"`, producing bibles where `region.id === settlement.id`. `apply-regional-bible`'s `isSameAsSettlement` branch then collapsed them into a single graph node carrying the SETTLEMENT's name. UI cascade: top header showed region name (region scope), map title + sidebar + nav card showed settlement name (settlement scope) — same node, conflicting display contexts.
 
-**Task 1 — Movement-direction grouped nav cards:**
-- Extracted `buildCards` + `groupCardsByDirection` from NavigationBar into pure-function `lib/game/nav-cards.ts`. Unit-testable.
-- NavigationBar renders 4 rows: BACK / DEEPER / PEER / UNDISCOVERED. Italic-serif labels. EXIT cards fold into BACK group at the grouping step. Empty groups omitted.
+**Fix architecture — two layers so cached + fresh bibles both heal:**
+1. **Prompt template** — distinct `settlementSlug = ${outline.id}_settlement`. Explicit "REGION vs SETTLEMENT IDS" guidance block. Every cross-reference (`parent_location_id`, `connections`, `region_locations.connections`, `exits.from_location_id`) points at `settlementSlug`.
+2. **`splitConflatedRegionSettlement(bible)` pure helper** in `lib/game/region-expansion-guard.ts` — detects collapse, renames settlement location id, stamps `bible.settlement_id`/`settlement_name`, re-points sub-locations + region_locations + NPCs (`home_location_id`) + exits (`from_location_id`) in place. Wired into `apply-regional-bible` step 0d so cached/legacy bibles heal on apply.
+3. **Diagnostic logs** (V8.39 style) — `Created region zone <id> name:`, `Created settlement <id> name: parent:`, plus split-applied / no-op WARNs.
 
-**Task 2 — Tier color-coding:**
-- Added `--hl-sublocation` and `--hl-dungeon` design tokens.
-- Each `Card` carries a `tier` field set by `tierOfNode` predicate. Card border, leading arrow, title, and badge border pick up tier color. Background stays neutral.
-- Region lavender (--hl-region), Settlement sky-blue (--hl-loc), Sub-location mint (--hl-sublocation NEW), Dungeon burnt-copper (--hl-dungeon NEW).
+**Tests:** 9 new jest cases in region-expansion-guard tests covering idempotence, name preservation, sub-location/region_locations/NPC/exit re-pointing, `bible.settlement_id` honor + synthesized-fallback paths. Pure-helper module per V8.40 rule 71.
 
-**Task 3a — Cross-region BACK card label:**
-- INVESTIGATION-FIRST per V8.40 protocol: V8.32 already tracks `masterState.navigation_trail` (last 5 visited node ids).
-- `buildCards` now consults `trail[-2]`: if it resolves to a node in a different region, the BACK card targets that previous region's settlement hub instead of the new region's unvisited settlement.
-- No useGameLoop or game-store changes needed — leveraged existing infrastructure.
+**Save-migration:** existing already-applied collapsed regions stay broken — apply-step idempotence guard short-circuits before split runs. Recovery: fresh game, OR manually delete `master_state.metadata.region_bibles[<region_id>]` + the affected graph node and re-navigate.
 
-**Task 3b — Map tier auto-switch on cross-region arrival:**
-- `components/game/WorldMap.tsx` cross-region useEffect now forces tier=2 (Region) on cross-region arrival.
-- Same-region moves leave tier alone (preserves manual tier choice).
+### Round history (compressed; details in foundational rules + git log)
 
-**Task 4 — .ew-said contrast bump:**
-- `--hl-said: #e8d5b0 → #f4e8c8`. Weight 600 italic stays.
-- Brighter cream reads more distinctly against `--bg-0` without needing optional border-left.
+| Commit | Round | Foundational rules |
+| --- | --- | --- |
+| 24ac19c | Polish 4a — nav grouping/tiers/cross-region BACK/map auto-switch/.ew-said/CSS audit | 72-76 |
+| f17c221 | 20.4.2 — float CSS clip + stagger + sync to feed + codex modal + D&D roll format | 66-71 |
+| c67f2c0 | 20.4.1 — float routing + inventory-Use during combat + flee DC + defeat respawn (category fallback removal) | 62-65 |
+| fc508f3 | 20.4 — rolls field + inline suffix + floats introduced + defeat teleport groundwork | 57-61 |
+| 732e944 | 20.3 — flex separators + button-only input + crit banner + suppression + resolution 2-line | 52-56 |
+| bf3871e | 20.2 — initiative kickoff + inventory stats | 49-51 |
+| 1215bb6 | 20.1 — starting equipment + encounter banner + pacing (also introduced the V8.39-fixed category bug) | 43-48 |
+| abf73e6 | 20 Prompt 3/3 — combat mode UI + narrator + bestiary | 38-42 |
+| 25ff111 | 20 Prompt 2.5 — nav fix + region trigger reclassification | 34-37 |
+| a4e5975 | 20 Prompt 2/3 — combat-resolver + turn loop + encounter trigger | 28-33 |
+| 1024287 | 20 Prompt 1/3 — Enemy interface + bestiary + WorldBible/RegionBible extensions | 24-27 |
+| 87c89a3 + earlier | Pre-combat (region/resilience, polish, targeted/regression/bug fixes, architecture hardening, 19A-19F gen phases) | 1-23 |
 
-**Task 5 — CSS containment audit:**
-- `/docs/css-containment-audit.md` audits every overflow declaration + absolutely-positioned descendant.
-- **0 active risks.** Flags 5 future candidates: PortraitSlot status badges, StoryFeed inline tooltips, TradeModal +/- gold floats, GameLayout mobile rail tooltips, WorldMap edge tooltips. Doc-only — no fixes applied.
+### Architecture & system status
 
-**Task 6 — Tests (22 new):**
-- `lib/game/__tests__/nav-cards.test.ts` covers `groupCardsByDirection`, `directionOfCard`, `tierOfNode`, `previousNodeIdFromTrail`, `isCrossRegionArrival`, and the cross-region BACK card assertion from Task 3a.
+**Domain 1 (Engine — pure code):** Navigation + nav-cards module (V8.41) + cross-region BACK trail awareness + map tier auto-switch · combat-resolver + engine + triggers (V8.32-V8.40) · CSS containment fix + float stagger + emission synced to feed + codex modal + D&D roll display (V8.40) · region expansion guard + `splitConflatedRegionSettlement` heal-on-apply (V8.42) · loot resolver (Day 21).
 
-### Day 20.4.2 — Combat Hotfix 2 (commit f17c221)
+**Domain 2 (Content Library — frozen):** WCD, WorldBible, RegionBible, NPCs, items, loot tables, bestiary, region enemies, starting equipment loadouts.
 
-Five-bug round. CSS containment clip fix (overflow:visible on enemy row, real bug — hypothesized field-name drift was wrong). Multi-host stagger via `computeFloatStartDelay`. Emission lifted into `useCombat::projectCombatEventsToFeed` synced with feed pacing. Codex modal overlay preserves combat panel. D&D-style roll display with explicit modifier math. Integration test suite wiring real combat-resolver → engine → makeFloatingEntry. Foundational rules 66-71.
+**AI during gameplay:**
+- ✅ Arrival narration — first visit only, cached permanently
+- ✅ Dialogue options built by code, AI writes response only
+- ✅ Action narration — 1-4 sentences, out-of-combat only
+- ✅ Combat narration — selective dramatic events. Templated routine.
+- ⏳ Container search — pending Day 21
+- ⏳ Verbal action — Day 20.5 deferred
+- ⏳ Stealth/avoidance — Day 20.6 deferred (V8.41 capture)
 
-### Day 20.4.1 — Combat Hotfix (commit c67f2c0)
+**Generation models:** RegionBible: haiku-4-5, max_tokens 7000, stub fallback, idempotent, distinct settlement/region IDs per V8.42 rule 77. WorldBible: sonnet-4-5, max_tokens 10000, validate-don't-500. WCD: includes `world_description`. Combat narrator: sonnet-4-5.
 
-Floating damage routing switch + inventory Use during combat + flee DC format + defeat respawn settlement-detection fix (category fallback removal — real root cause of V8.38 defeat bug). Foundational rules 62-65.
+**Map system:** Genre renderers active. PAD=76. Tier switcher. Initial tier: Local on mount. Cross-region arrival forces tier=2 Region (V8.41). Visual rework still pending dedicated session.
 
-### Day 20.4 — Combat Polish 3 (commit fc508f3)
-Roll details on CombatEvent + inline roll suffix + floating damage numbers + defeat teleport spawn-init + 3-tier fallback + destination messaging. Foundational rules 57-61.
+**Region Expansion Guard (V8.33 + V8.42):** Works around toSlug() stripping hyphens. V8.42 added `splitConflatedRegionSettlement` for heal-on-apply of collapsed region/settlement bibles.
 
-### Day 20.3 — Combat Polish 2 (commit 732e944)
-Full-width flex separators, button-only combat input, CRITICAL HIT two-line banner, planEventSuppression, Victory/Defeat/Escaped resolution two-line centered. Foundational rules 52-56.
-
-### Day 20.2 — Combat Hotfix (commit bf3871e)
-Initiative kickoff fix via shared `advanceUntilPlayerTurnOrEnd`. Inventory stats display + EQUIPPED pill. Foundational rules 49-51.
-
-### Day 20.1 — Combat Polish (commit 1215bb6)
-Starting equipment auto-equipped. Encounter banner templated. Turn separators emitted. Pacing delays. Header pill displayPhase. **Also introduced the `category === "settlement_hub"` fallback in step 7c-2 that caused the V8.38 defeat bug (removed V8.39).** Foundational rules 43-48.
-
-### Combat Day 20 — Prompt 3/3 (abf73e6)
-Combat mode UI. Templated routine + LLM dramatic narration. Bestiary codex. New-game preamble. HP bar transition + crit portrait shake. Foundational rules 38-42.
-
-### Combat Day 20 — Earlier rounds (foundation)
-Prompt 2.5 (region trigger reclassification, rules 34-37), Prompt 2 (resolver + turn loop, rules 28-33), Prompt 1 (data foundation, rules 24-27).
-
-### Pre-Combat (movement track)
-Region/Resilience Round (87c89a3), Polish Round (b7032f9), Targeted Fix (dc5bcd8), Regression Fix (75a7cd4), Bug Fix (57b0300), Architecture Hardening (57d27f3), 19A-19F generation phases. Foundational rules 1-23.
-
-### Architecture Status ✅
-```
-Domain 1 (Engine):     World graph, navigation, stat checks, dialogue option
-                       generation, combat (V8.32-V8.40), nav-cards module
-                       (V8.41) for movement-grouped + tier-colored cards
-                       with cross-region BACK trail awareness, map tier
-                       auto-switch on cross-region arrival (V8.41), loot
-                       resolver (Day 21) — pure code
-Domain 2 (Content):    WCD, WorldBible, RegionBible, NPCs, items, bestiary,
-                       starting-equipment loadouts — frozen
-
-AI during gameplay:
-  ✅ Arrival narration — first visit only, cached permanently
-  ✅ Dialogue options  — built by code, AI writes response only
-  ✅ Action narration  — 1-4 sentences (out-of-combat only)
-  ✅ Combat narration  — selective dramatic events. Templated routine.
-  ⏳ Container search  — pending Day 21
-  ⏳ Verbal action     — DEFERRED to Day 20.5
-  ⏳ Stealth/avoidance — DEFERRED to Day 20.6 (V8.41 capture)
-```
-
-### Combat System ✅ COMPLETE (V8.31 → V8.40)
-All combat layers shipped. See foundational rules 24-71 for full coverage. Day 20.5 verbal action remains deferred to post-Day-25. Day 20.6 encounter avoidance (V8.41 capture) sits alongside in same Combat Alternatives bucket.
-
-### Navigation System ✅ COMPLETE (V8.41)
-```
-NAV CARDS (V8.41):
-  pure-function lib/game/nav-cards.ts owns buildCards + groupCardsByDirection.
-  NavigationBar renders 4 rows: BACK / DEEPER / PEER / UNDISCOVERED.
-  EXIT folds into BACK. Empty groups omitted. Italic-serif row labels.
-  (Polish 4c upcoming: relay rows into 4 horizontal column blocks.)
-  
-TIER COLORS (V8.41):
-  Card border, arrow, title, badge use tierOfNode color.
-  Region lavender / Settlement sky-blue / Sub-location mint (NEW token) /
-  Dungeon burnt-copper (NEW token).
-  
-CROSS-REGION BACK (V8.41):
-  Uses masterState.navigation_trail[-2] (V8.32 infrastructure).
-  Detects different region → targets previous region's settlement hub.
-  
-MAP TIER (V8.30 + V8.41):
-  Initial mount: Local (V8.30).
-  Cross-region arrival: forces tier=2 Region (V8.41).
-  Same-region: leaves tier alone (preserves manual choice).
-```
-
-### Region Expansion Guard ✅ (V8.33)
-`/lib/game/region-expansion-guard.ts` — works around toSlug() stripping hyphens. **Note V8.41 playtest surfaced separate bug in apply-regional-bible — adjacent regions conflate region-zone and settlement nodes. Day 20.4.3 hotfix IN FLIGHT.**
-
-### Map Description Sourcing ✅
-World→wcd.world_description / Region→currentRegion.atmosphere (parent walk) / Local→currentLocation.atmosphere.
-
-### NPC Dialogue System ✅
-Options built by code. AI writes response only. `.ew-said` brightened to `#f4e8c8` (V8.41) for distinct contrast vs narrator prose.
-
-### RegionBible / WorldBible Resilience ✅
-RegionBible: haiku-4-5, max_tokens 7000, stub fallback, idempotent. WorldBible: sonnet-4-5, max_tokens 10000, validate-don't-500.
+**NPC Dialogue:** Options built by code. AI writes response only. `.ew-said` brightened to `#f4e8c8` (V8.41) for distinct contrast.
 
 ### Known issues
 
-**Day 20.4.3 Region Expansion Hotfix — IN FLIGHT:**
-V8.41 playtest revealed apply-regional-bible conflates region-zone and settlement nodes for adjacent regions. Symptoms: cross-region UI shows region name in header but settlement name on map title/sidebar, "no-op already at region" when clicking "exit to region" nav card, settlement_id field pointing to region zone's own id in console logs. Investigation-first per V8.40 protocol — Claude Code validates before patching. Fix should produce distinct region-zone and settlement nodes matching apply-world-bible's structure for starting region.
+**Polish Round 4c — NEXT:** Nav cards relaid into 4 horizontal column blocks (BACK | DEEPER | PEER | UNDISCOVERED side-by-side, each in visually contained block with column label on top, cards stacked vertically inside). Mobile: horizontal scroll inside nav strip per V8.40 rule 70. Pure functions in nav-cards.ts unchanged — presentation layer only.
 
-**Polish Round 4c — STAGED (after 20.4.3):**
-Nav cards relaid into 4 horizontal column blocks (BACK | DEEPER | PEER | UNDISCOVERED side-by-side, each in visually contained block with column label on top, cards stacked vertically inside). Mobile: horizontal scroll inside nav strip. Per V8.40 rule 70, parent strip uses explicit overflow-x: auto + overflow-y: visible. nav-cards.ts pure functions unchanged — presentation layer only.
+**Polish Round 4b — after 4c:** Mobile-viewport QA pass. Phone-width (~380px) sweep across all major surfaces. Audit doc + inline fixes + deferred-rework list. Combat panel likely needs dedicated mobile-layout round.
 
-**Polish Round 4b — mobile-viewport QA pass, AFTER 4c:**
-- Phone-width (~380px) sweep across game layout, story feed, nav bar (with new column layout from 4c), combat panel, inventory detail, codex modal, world map at all tiers, forms/inputs (touch targets ≥44px).
-- Report broken/clipped/unreadable items; fix obvious things inline; defer significant rework to dedicated rounds.
-- Output: /docs/mobile-viewport-audit.md + inline fixes.
+**Combat UX & Flow Polish (post-Day-23):** Hit/miss differentiation, miss float, flee-fail pacing.
 
-**Combat UX & Flow Polish Queue (V8.41 — post-Day-23):**
-- Hit vs miss visual differentiation in story feed.
-- Miss feedback over portrait (white "0" or "—" floating number).
-- Combat flow pacing for flee-fail → death sequence.
+**Day 20.5 + 20.6 (Combat Alternatives, post-Day-25):** Verbal Action + Encounter Avoidance.
 
-**Day 20.5 — Verbal Action (deferred to last):** Chat input hijack with LLM judging + charisma check + status_effects.
+**CSS containment future candidates (V8.41 audit, address when those features get touched):** PortraitSlot status badges, StoryFeed inline tooltips, TradeModal gold floats, GameLayout mobile rail tooltips, WorldMap edge tooltips. See `/docs/css-containment-audit.md`.
 
-**Day 20.6 — Encounter Avoidance / Stealth (deferred, V8.41 capture):** Pre-combat detection roll + options menu (avoid, pre-emptive, sneak attack, environmental, engage). Depends on Day 22 skills. See Future Feature Ideas in trajectory notes for full spec.
-
-**CSS containment future candidates (V8.40-V8.41 audit, address when those features get touched):** PortraitSlot status badges, StoryFeed inline tooltips, TradeModal +/- gold floats, GameLayout mobile rail tooltips, WorldMap edge tooltips. See `/docs/css-containment-audit.md`.
-
-**Other deferred:** Map visual rework, RTL component test infra, pacing tuning watchpoint, world-gen perf, NPC color overlap, hub codex, grid_position, behavior dispatch, toSlug bug, combat balance pre-Day-21/22.
-
----
-
-## 🏗️ Architecture
-
-### The Two Domains ✅
-**Domain 1 (Engine — pure code):** Navigation, stat checks, dialogue option generation, combat resolver + turn loop + triggers (V8.32), region expansion guard (V8.33), combat UI + narrator + bestiary (V8.34), separators + pacing + starting equipment (V8.35), initiative kickoff + inventory stats (V8.36), resolution banners + suppression (V8.37), roll detail + inline suffix + floating damage + defeat resilience + destination messaging (V8.38), routing hardening + settlement detection canonical-only + inventory Use combat path (V8.39), CSS containment fix + float stagger + emission synced to feed + codex modal + D&D roll display (V8.40), nav-cards module + tier colors + cross-region BACK trail awareness + map tier auto-switch (V8.41), loot resolver (Day 21).
-**Domain 2 (Content Library — frozen):** WCD, locations, NPCs, items, loot tables, main quest, bestiary, region enemies, starting equipment loadouts.
-
-### Generation Model ✅
-RegionBible: haiku-4-5, max_tokens 7000. WorldBible: sonnet-4-5, max_tokens 10000. WCD includes `world_description`. Combat narrator: sonnet-4-5.
-
-### Map System ✅
-Genre renderers active. PAD=76. Tier switcher. Initial tier on mount: Local (V8.30). Cross-region arrival forces tier=2 Region (V8.41). ⚠️ Visual rework still pending dedicated session.
+**Other deferred:** Map visual rework, RTL component test infra, pacing tuning watchpoint, world-gen perf (35s WCD + 120s WorldBible borderline pickup-play), NPC color overlap, hub codex, grid_position, behavior dispatch, toSlug bug, combat balance pre-Day-21/22.
 
 ---
 
@@ -447,22 +331,25 @@ Genre renderers active. PAD=76. Tier switcher. Initial tier on mount: Local (V8.
 62. `rolls.d20` stores RAW d20 value (1-20). `target_dc` wrapped in `Math.round()` for display. Pass/fail logic uses internal total. (V8.39)
 63. Inventory Use button during combat routes through `submitCombatAction`, NOT `submitAction`. Equip/Unequip/Read/Search/Drop buttons HIDDEN during combat. (V8.39)
 64. Floating damage entry routing uses explicit `switch(event.type)`. Defensive `player_attack target === PLAYER_ID` guard returns null. (V8.39)
-65. **Settlement-hub detection in step 7c-2 uses `is_settlement_node === true` predicate ONLY.** Category fallback was a Day 20.1 defensive overcheck that misrouted region zones. **Foundational lesson: defensive overchecks alongside canonical fields can become positive bugs.** (V8.39)
+65. **Settlement-hub detection in step 7c-2 uses `is_settlement_node === true` predicate ONLY.** Category fallback was a Day 20.1 defensive overcheck that misrouted region zones. **Defensive overchecks alongside canonical fields can become positive bugs.** (V8.39)
 66. Floating damage emission lives INSIDE `projectCombatEventsToFeed` (useCombat), called AFTER pacing sleeps so visible float pops at the same instant as its matching feed line. CombatMode is a pure renderer for the `floatingByActor` prop. (V8.40)
 67. Multi-host floating damage uses `computeFloatStartDelay` pure helper. 300ms increments when entries land on same host within window. `animation-fill-mode: both` so 0% keyframe holds during delay. (V8.40)
 68. Roll display format is D&D-style with explicit modifier math: `(d20: 17, +2 → 19 vs 12 | 1d6+2)` for hits, `(d20: 1)` for fumbles (skip mod), `(d20: 20 | 6 (max) + 3 (1d6) + 2)` for crits (skip vs DC), `(1d8: 4 +4 = 8)` for heals. (V8.40)
 69. Codex is rendered as `CodexModal` overlay (z-50, ESC + backdrop + X close) toggled by `codexModalOpen` in game store. Combat panel remains mounted underneath. `/game/codex` route preserved for direct URL access. (V8.40)
 70. **CSS containment lesson: absolutely-positioned children CAN be clipped by ancestor `overflow-x: auto` or `overflow-y: auto`.** Per W3C spec, setting either overflow axis to a non-`visible` value promotes the OTHER axis to `auto`. Any container hosting absolutely-positioned children needs explicit `overflow: visible` if children extend outside the box. (V8.40)
 71. **Integration tests required for routing helpers and lookup keys.** Unit tests against fake events can pass while real-data wiring is broken. Routing points need integration tests against real combat-resolver / engine / data sources. (V8.40)
-72. Nav cards group by movement direction into 4 rows: BACK / DEEPER / PEER / UNDISCOVERED. EXIT folds into BACK at the grouping step. Empty groups omitted. Pure-function `lib/game/nav-cards.ts` owns `buildCards` + `groupCardsByDirection`. Italic-serif row labels render only when row has cards. (V8.41 — Polish 4c will relay rows into columns; rule preserved structurally)
-73. Nav card tier color via `tierOfNode` predicate. Applies to border, leading arrow, title, badge border. Region → `--hl-region` lavender. Settlement → `--hl-loc` sky-blue. Sub-location → `--hl-sublocation` mint (NEW V8.41). Dungeon → `--hl-dungeon` burnt-copper (NEW V8.41). Background stays neutral. (V8.41)
-74. Cross-region BACK card consults `masterState.navigation_trail[-2]` (V8.32 infrastructure). If previous node resolves to a different region, BACK card targets that region's settlement hub instead of the new region's unvisited settlement. Surfaces correctly in NavigationBar via `buildCards` output. (V8.41)
-75. WorldMap forces map tier=2 (Region) on cross-region arrival via useEffect. Same-region moves leave tier alone — preserves manual tier choice. Combines with rule 21 (initial Local tier on mount) for full tier-switching behavior. (V8.41)
-76. **Origin/main baseline check (V8.41):** Claude Code MUST run `git fetch origin && git log origin/main --oneline -5` as the first step of every prompt to verify working state matches origin HEAD. Polish Round 4a surfaced a 28-commit drift between local branch and origin/main. This 2-second check prevents wasted-work re-baselines. (V8.41 workflow rule)
+72. Nav cards group by movement direction into 4 rows/columns: BACK / DEEPER / PEER / UNDISCOVERED. EXIT folds into BACK. Empty groups omitted. Pure-function `lib/game/nav-cards.ts` owns `buildCards` + `groupCardsByDirection`. Italic-serif labels render only when group has cards. (V8.41 — Polish 4c relays rows → columns; structural rule preserved)
+73. Nav card tier color via `tierOfNode` predicate. Applies to border, leading arrow, title, badge border. Region → `--hl-region` lavender · Settlement → `--hl-loc` sky-blue · Sub-location → `--hl-sublocation` mint (NEW V8.41) · Dungeon → `--hl-dungeon` burnt-copper (NEW V8.41). Background stays neutral. (V8.41)
+74. Cross-region BACK card consults `masterState.navigation_trail[-2]` (V8.32 infrastructure). If previous node resolves to a different region, BACK card targets that region's settlement hub instead of the new region's unvisited settlement. (V8.41)
+75. WorldMap forces map tier=2 (Region) on cross-region arrival via useEffect. Same-region moves leave tier alone — preserves manual tier choice. Combines with rule 21 for full tier-switching behavior. (V8.41)
+76. **Origin/main baseline check (V8.41 workflow rule):** Claude Code MUST run `git fetch origin && git log origin/main --oneline -5` as step 1 of every prompt. Prevents wasted-work re-baselines. (V8.41)
+77. **RegionBible prompt template MUST distinguish settlement_id from region_id.** Use `settlementSlug = ${outline.id}_settlement` convention. Every cross-reference field (`parent_location_id`, `connections`, `region_locations.connections`, `exits.from_location_id`) points at `settlementSlug`, not at the region id. Prompt template must include explicit "REGION vs SETTLEMENT IDS" guidance block to ensure LLM doesn't collapse them. (V8.42)
+78. **Apply-regional-bible heal-on-apply layer:** `splitConflatedRegionSettlement(bible)` pure helper in `lib/game/region-expansion-guard.ts` detects collapse where region.id === settlement.id, renames settlement location id, stamps `bible.settlement_id`/`settlement_name`, re-points sub-locations + region_locations + NPCs (`home_location_id`) + exits (`from_location_id`) in place. Runs at apply step 0d before idempotence check. Heals cached/legacy bibles so V8.41 playtest saves don't permanently break. (V8.42)
+79. **Pattern lesson — prompt-template hardcoded structural IDs are a recurring bug class.** Third instance of the same root-cause shape (V8.39 starting_region.type, V8.40 CSS overflow, V8.42 locations[0].id). All three were values hardcoded at generation/spec time that should have been distinct but weren't, causing downstream cascade bugs at apply time. **Audit scope expansion (V8.42):** sweep `app/api/game/generate-*/route.ts` for template literals embedding `${outline.id}`, `${region.id}`, etc. in id positions where collision is possible. Companion to V8.39 audit (defensive overchecks in app code) — these two together cover both surfaces. (V8.42)
 
 ---
 
-## Narrator Prompt Order ✅
+## Narrator Prompt Order
 
 DIALOGUE: WCD → HARD RULES → RESPONDING CHARACTER → CLOSED CONTEXT → TIER 1 OBJECTS → WORLD ASSETS → SCENE → VERBOSITY
 non-DIALOGUE: WCD → HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → CONNECTED LOCATIONS → WORLD ASSETS → SCENE → VERBOSITY
@@ -470,21 +357,30 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT (mechanical truth) → HARD RULES →
 
 ---
 
-## Story Feed Colors ✅
-```
-Narrator prose:        var(--ink-1)
-NPC quoted speech:     #f4e8c8 brighter cream (V8.41), italic, weight 600 (--hl-said)
-Player actions:        #7ab8c8 teal-blue, 12px mono italic (out-of-combat)
-Item highlights:       #e8c547 yellow (--hl-item)
-Region highlights:     #c4b5fd lavender (--hl-region)
-Location highlights:   #7dd3fc sky blue (--hl-loc)
-Sub-location:          #94d8b8 soft mint (--hl-sublocation NEW V8.41)
-Dungeon:               #b45309 burnt copper (--hl-dungeon NEW V8.41)
-Landmark highlights:   #94d8b8 soft mint (--hl-landmark)
-NPC highlights:        var(--accent) orange
+## Story Feed Colors
 
-COMBAT colors and elements unchanged from V8.40 (rules 38-71).
-```
+| Use | Color | Token |
+| --- | --- | --- |
+| Narrator prose | var(--ink-1) | — |
+| NPC quoted speech | #f4e8c8 (V8.41) italic weight 600 | --hl-said |
+| Player actions (out-of-combat) | #7ab8c8 teal-blue 12px mono italic | — |
+| Item highlights | #e8c547 yellow | --hl-item |
+| Region highlights | #c4b5fd lavender | --hl-region |
+| Location highlights | #7dd3fc sky-blue | --hl-loc |
+| Sub-location (V8.41) | #94d8b8 mint | --hl-sublocation |
+| Dungeon (V8.41) | #b45309 burnt-copper | --hl-dungeon |
+| NPC highlights | var(--accent) orange | — |
+| Combat routine player | #7ab8c8 teal | --combat-player |
+| Combat routine enemy | #e87c6d warm red | --combat-enemy |
+| Combat player crit | #3b82a8 deeper blue BOLD | --combat-player-crit |
+| Combat enemy crit | #c0392b blood red BOLD | --combat-enemy-crit |
+| Combat victory | #7dbb8e mossy green | --combat-victory |
+| Combat defeat | #a93226 dark red | --combat-defeat |
+| Combat flee | #a8a29c grey-tan | --combat-flee |
+| Encounter banner | #f4a07a light coral | --combat-encounter-banner |
+| Roll detail suffix (V8.40 D&D format) | 10px dim mono 0.6 opacity | --combat-roll-detail |
+| Floating damage | 28px (36px crit) mono bold, 1100ms fade, staggered via animationDelay (V8.40) | — |
+| Resolution destination | 12px italic serif 0.75 opacity | --combat-resolution-destination |
 
 ---
 
@@ -528,15 +424,16 @@ COMBAT colors and elements unchanged from V8.40 (rules 38-71).
 ---
 
 ## Workflow
-**Claude.ai owns all CLAUDE.md updates.**
-Claude Code pushes → user reports commit + test results → Claude.ai updates CLAUDE.md + provides testing checklist → user verifies → next prompt.
-**Origin/main baseline check (V8.41):** Claude Code runs `git fetch origin && git log origin/main --oneline -5` as step 1 of every prompt.
-**Investigation-before-patching (V8.40):** When Claude.ai writes a prompt with a hypothesized root cause, Claude Code investigates and validates/invalidates the hypothesis BEFORE patching.
-**All architecture decisions defer to /docs/architecture-spec.md.**
-**All combat decisions defer to /docs/combat-spec.md.**
-**All vision/scope decisions defer to 🎮 Game Vision section above.**
-**All strategic / sequencing decisions captured in 📋 Strategic Trajectory Notes section above.**
 
----
+Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim reports commit + tests → Claude.ai updates CLAUDE.md + testing checklist → Tim verifies → next prompt.
 
-*Last updated: V8.41 (+ doc-only addendum during 20.4.3 in flight) — Captured Encounter Avoidance / Stealth System idea (Tim, V8.41 playtest) as Day 20.6 in the Combat Alternatives bucket alongside Day 20.5 Verbal Action. Full spec in new "Future Feature Ideas" trajectory notes subsection. Sequence updated to reflect 20.4.3 (Region Expansion Hotfix) currently in flight, Polish Round 4c (nav columns) staged for after, Polish Round 4b (mobile QA) moved to after 4c. No code changes — design capture only.*
+**Per-prompt protocols (cumulative):**
+- Origin/main baseline check (V8.41 rule 76): `git fetch origin && git log origin/main --oneline -5` as step 1.
+- Investigation-before-patching (V8.40 protocol): validate root-cause hypothesis before patching.
+
+**Authority hierarchy:**
+- Architecture decisions defer to `/docs/architecture-spec.md`.
+- Combat decisions defer to `/docs/combat-spec.md`.
+- Vision/scope decisions defer to 🎮 Game Vision section.
+- Strategic/sequencing decisions captured in 📋 Strategic Trajectory Notes.
+- Round details = git commit messages + this doc's round-history table. No more "Last updated" footer — git is the source of truth for what changed when.

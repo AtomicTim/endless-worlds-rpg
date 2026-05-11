@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
 **Version:** 8.41
-**Status:** Polish Round 4a COMPLETE — Polish Round 4b (Mobile QA) Next
+**Status:** Polish Round 4a COMPLETE — Day 20.4.3 (Region Expansion Hotfix) IN FLIGHT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **Reference:** /docs/architecture-spec.md — Domain 1 vs Domain 2 decisions. /docs/combat-spec.md — Combat system design. /docs/css-containment-audit.md — V8.40 audit of overflow + absolutely-positioned descendants.
@@ -82,6 +82,31 @@ Defers to creative-director call on vision. Creative input from Claude.ai is wel
 
 Living section. Captures meta-discussions about project direction, sequencing, recommended pivots, architectural debates. New Claude sessions read this for current strategic context.
 
+### Future Feature Ideas (captured, not yet slotted)
+
+This subsection collects design ideas captured during development that don't fit the current sequence but should be preserved for future planning rounds. Items here are NOT in the locked sequence yet — they need slot assignment when their dependencies land.
+
+**Encounter Avoidance / Stealth System (captured V8.41 playtest):**
+
+Instead of random encounters always triggering combat, the engine could roll player PER (and/or AGI, and/or future stealth skill from Day 22) against an enemy detection DC. On detection-roll SUCCESS (player undetected), the player gets a pre-combat options menu:
+- **Avoid** — continue past the enemy without combat
+- **Pre-emptive ability** — cast spell, throw item, deploy environmental trick before combat begins
+- **Sneak attack** — combat triggers but with first-strike advantage / surprise damage
+- **Environmental interaction** — collapse rubble, light a fire, alter terrain to change the encounter
+- **Engage normally** — player chooses to fight from a position of awareness
+
+On detection-roll FAIL, combat triggers normally per V8.32 pipeline (unchanged from current behavior).
+
+*Dependencies:* Day 22 skills foundation (stealth skill domain). Combat-spec §3 random encounter pipeline. PER/AGI stat surfacing (already exists).
+
+*Strategic fit:* Sits alongside Day 20.5 Verbal Action as a "combat alternatives" feature. Both use stat checks to alter combat resolution, but at different pipeline stages — verbal action affects combat-in-progress; stealth affects combat-pre-trigger. Complementary mechanics, not redundant.
+
+*Vision alignment:* Direct support for "exploration playstyle" and "speedrun playstyle" — players who want to traverse the world without dying to every encounter can build stealth-focused characters. Multi-style support is design principle #3. Adds meaningful build differentiation (stealth char vs combat char vs charisma char) without requiring new combat math.
+
+*Tentative slot:* Day 20.6 alongside Day 20.5 in a "Combat Alternatives" bucket, post-Day-25. Could also fold into a refined version of combat-spec §3 (random travel encounters) since they share the pre-trigger pipeline.
+
+*Open questions for design time:* Detection DC scaling (per-enemy, per-region, per-tier?). Are some enemies immune to avoidance (boss, ambush)? Does avoidance grant XP? Does failed avoidance trigger "surprise round" where enemies act first with bonus?
+
 ### V8.41 — Workflow: baseline drift + audit results + Combat UX queue
 
 **Baseline drift incident.** During Polish Round 4a, Claude Code started implementing against V8.28 (local branch state). Origin/main was at V8.40 — 28 commits ahead. Caught mid-round during a code reference check, reset to V8.40, rewrote the round against current infrastructure cleanly. Cost: ~half a round of throwaway work, plus extra cognitive load for re-baselining.
@@ -129,22 +154,25 @@ Day 20 expanded from one prompt to ten commits. Heavy combat investment but comb
 
 **Confirmed sequence (V8.37 + V8.38 + V8.41 amendments):**
 1. **Polish Round 4a** ✅ (24ac19c) — UX debt landed
-2. **Polish Round 4b** ⏳ NEXT — mobile-viewport QA pass (split out per V8.41)
-3. **Day 21 — Container + Loot** (multiplayer-aware)
-4. **Day 22 — Skills + Leveling** (multiplayer-aware + lifestyle skill foundations)
-5. **Vertical slice playtest**
-6. **Day 23 — Main Quest Thread** (multiplayer-aware)
-7. **Combat UX & Flow Polish round** (V8.41 queue: hit/miss differentiation, miss float, flee-fail pacing)
-8. **Day 24 — Multiplayer Foundation**
-9. **Day 25 — Customization Layer**
-10. **Day 20.5 — Verbal Action / Taunt** — DEFERRED to last
+2. **Day 20.4.3 Region Expansion Hotfix** ⏳ IN FLIGHT (V8.41 playtest surfaced cross-region nav/data bug)
+3. **Polish Round 4c** — nav cards relaid into 4 horizontal columns with grouped containers (prompt staged)
+4. **Polish Round 4b** — mobile-viewport QA pass
+5. **Day 21 — Container + Loot** (multiplayer-aware)
+6. **Day 22 — Skills + Leveling** (multiplayer-aware + lifestyle skill foundations)
+7. **Vertical slice playtest**
+8. **Day 23 — Main Quest Thread** (multiplayer-aware)
+9. **Combat UX & Flow Polish round** (V8.41 queue: hit/miss differentiation, miss float, flee-fail pacing)
+10. **Day 24 — Multiplayer Foundation**
+11. **Day 25 — Customization Layer**
+12. **Day 20.5 — Verbal Action / Taunt** — DEFERRED to last
+13. **Day 20.6 — Encounter Avoidance / Stealth System** — captured V8.41, sits alongside Day 20.5 in "Combat Alternatives" bucket
 
 ### Open strategic questions
 
 - **External playtest timing.** Likely best post-Day-22 or post-Day-23.
 - **Difficulty tuning model.** Toggle vs implicit world-tier scaling?
-- **Random travel encounters** (combat-spec §3 deferral). Slate post-Day-21? Or fold into Day 22/23?
-- **Verbal action redundancy risk.** If Day 22 adds Charisma skill tree, verbal action types may need reconciling.
+- **Random travel encounters** (combat-spec §3 deferral). Slate post-Day-21? Or fold into Day 22/23? Note: Day 20.6 stealth/avoidance idea (V8.41) intersects here — the random-encounter pipeline is where the detection roll would slot in.
+- **Verbal action redundancy risk.** If Day 22 adds Charisma skill tree, verbal action types may need reconciling. Day 20.6 stealth has the parallel question with PER/AGI/stealth skill.
 - **NPC behavior dispatch** (combat-spec §6.3 deferral). Future combat-depth pass.
 - **Map visual rework.** Pure visual debt; deferred dedicated session.
 - **Defensive overcheck audit (V8.39 lesson).** Look for similar `category === X` / `type === X` fallbacks alongside canonical boolean fields.
@@ -155,7 +183,7 @@ Day 20 expanded from one prompt to ten commits. Heavy combat investment but comb
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Day 20 Combat fully complete through 20.4.2. Polish Round 4a (nav grouping + tier colors + cross-region card fix + map auto-switch + .ew-said contrast + CSS audit) landed in commit 24ac19c. Polish Round 4b (mobile-viewport QA pass) is next.
+**Current Phase:** Polish Round 4a complete (commit 24ac19c). Day 20.4.3 Region Expansion Hotfix IN FLIGHT — addressing cross-region data bug surfaced during V8.41 playtest where apply-regional-bible conflated region-zone and settlement nodes.
 **Local Dev Port:** 3000
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel
 **GitHub Repo:** atomictim/endless-worlds-rpg
@@ -173,8 +201,10 @@ Day 20 expanded from one prompt to ten commits. Heavy combat investment but comb
 | 20.4 — Combat Polish 3 (fc508f3) | Floating damage numbers + inline roll details + defeat teleport groundwork | ✅ Complete |
 | 20.4.1 — Combat Hotfix (c67f2c0) | Floating damage routing switch + inventory Use during combat + flee DC format + defeat respawn settlement-detection fix | ✅ Complete |
 | 20.4.2 — Combat Hotfix 2 (f17c221) | Floating damage CSS clip fix + stagger + emission synced to feed pacing + codex modal + D&D-style roll display | ✅ Complete |
-| **Polish Round 4a (24ac19c)** | **Movement-direction grouped nav cards + tier color-coding + cross-region BACK card fix + map tier auto-switch + .ew-said contrast bump + CSS containment audit doc** | ✅ **Complete** |
-| Polish Round 4b | Mobile-viewport QA pass — combat panel, nav, story feed, modals, inventory, codex, map all phone-readable | ⏳ NEXT |
+| Polish Round 4a (24ac19c) | Movement-direction grouped nav cards + tier color-coding + cross-region BACK card fix + map tier auto-switch + .ew-said contrast bump + CSS containment audit doc | ✅ Complete |
+| **20.4.3 — Region Expansion Hotfix** | **apply-regional-bible structural fix: distinct region-zone vs settlement nodes for adjacent regions (V8.41 playtest bug)** | ⏳ **IN FLIGHT** |
+| Polish Round 4c | Nav cards into 4 horizontal column blocks (vs current 4 rows) with mobile horizontal scroll | ⏳ Staged (after 20.4.3) |
+| Polish Round 4b | Mobile-viewport QA pass — combat panel, nav, story feed, modals, inventory, codex, map all phone-readable | ⏳ After 4c |
 | Day 21 | Container + Loot — registry, loot tables, dungeon containers, per-character inventory rules | ⏳ After 4b |
 | Day 22 | Skills + Leveling — XP, stat points, level gates + skill domain foundations | ⏳ After Day 21 |
 | Vertical slice playtest | Full game start → win condition with placeholder content | ⏳ Before Day 23 |
@@ -183,6 +213,7 @@ Day 20 expanded from one prompt to ten commits. Heavy combat investment but comb
 | Day 24 | Multiplayer Foundation — party schema, Supabase realtime, turn-sync, shared feed, loot/quest decision rules | ⏳ Pre-launch |
 | Day 25 | Customization Layer — user-supplied theme prompts, presets, genre-theme interaction | ⏳ Pre-launch toward end |
 | Day 20.5 | Verbal Action System — chat input hijack: taunt/distract/intimidate | ⏳ Deferred to last (post-Day-25) |
+| Day 20.6 | Encounter Avoidance / Stealth System — PER/AGI/stealth detection roll + pre-combat options menu (V8.41 capture) | ⏳ Alongside Day 20.5 in Combat Alternatives bucket |
 | Map Visual Rework | Dedicated session | ⏳ Deferred |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic. Noir removed.
@@ -267,10 +298,11 @@ AI during gameplay:
   ✅ Combat narration  — selective dramatic events. Templated routine.
   ⏳ Container search  — pending Day 21
   ⏳ Verbal action     — DEFERRED to Day 20.5
+  ⏳ Stealth/avoidance — DEFERRED to Day 20.6 (V8.41 capture)
 ```
 
 ### Combat System ✅ COMPLETE (V8.31 → V8.40)
-All combat layers shipped. See foundational rules 24-71 for full coverage. Day 20.5 verbal action remains deferred to post-Day-25.
+All combat layers shipped. See foundational rules 24-71 for full coverage. Day 20.5 verbal action remains deferred to post-Day-25. Day 20.6 encounter avoidance (V8.41 capture) sits alongside in same Combat Alternatives bucket.
 
 ### Navigation System ✅ COMPLETE (V8.41)
 ```
@@ -278,6 +310,7 @@ NAV CARDS (V8.41):
   pure-function lib/game/nav-cards.ts owns buildCards + groupCardsByDirection.
   NavigationBar renders 4 rows: BACK / DEEPER / PEER / UNDISCOVERED.
   EXIT folds into BACK. Empty groups omitted. Italic-serif row labels.
+  (Polish 4c upcoming: relay rows into 4 horizontal column blocks.)
   
 TIER COLORS (V8.41):
   Card border, arrow, title, badge use tierOfNode color.
@@ -295,7 +328,7 @@ MAP TIER (V8.30 + V8.41):
 ```
 
 ### Region Expansion Guard ✅ (V8.33)
-`/lib/game/region-expansion-guard.ts` — works around toSlug() stripping hyphens.
+`/lib/game/region-expansion-guard.ts` — works around toSlug() stripping hyphens. **Note V8.41 playtest surfaced separate bug in apply-regional-bible — adjacent regions conflate region-zone and settlement nodes. Day 20.4.3 hotfix IN FLIGHT.**
 
 ### Map Description Sourcing ✅
 World→wcd.world_description / Region→currentRegion.atmosphere (parent walk) / Local→currentLocation.atmosphere.
@@ -308,17 +341,25 @@ RegionBible: haiku-4-5, max_tokens 7000, stub fallback, idempotent. WorldBible: 
 
 ### Known issues
 
-**Polish Round 4b — mobile-viewport QA pass, NEXT:**
-- Phone-width (~380px) sweep across game layout, story feed, nav bar (with new 4-row grouping), combat panel, inventory detail, codex modal, world map at all tiers, forms/inputs (touch targets ≥44px).
+**Day 20.4.3 Region Expansion Hotfix — IN FLIGHT:**
+V8.41 playtest revealed apply-regional-bible conflates region-zone and settlement nodes for adjacent regions. Symptoms: cross-region UI shows region name in header but settlement name on map title/sidebar, "no-op already at region" when clicking "exit to region" nav card, settlement_id field pointing to region zone's own id in console logs. Investigation-first per V8.40 protocol — Claude Code validates before patching. Fix should produce distinct region-zone and settlement nodes matching apply-world-bible's structure for starting region.
+
+**Polish Round 4c — STAGED (after 20.4.3):**
+Nav cards relaid into 4 horizontal column blocks (BACK | DEEPER | PEER | UNDISCOVERED side-by-side, each in visually contained block with column label on top, cards stacked vertically inside). Mobile: horizontal scroll inside nav strip. Per V8.40 rule 70, parent strip uses explicit overflow-x: auto + overflow-y: visible. nav-cards.ts pure functions unchanged — presentation layer only.
+
+**Polish Round 4b — mobile-viewport QA pass, AFTER 4c:**
+- Phone-width (~380px) sweep across game layout, story feed, nav bar (with new column layout from 4c), combat panel, inventory detail, codex modal, world map at all tiers, forms/inputs (touch targets ≥44px).
 - Report broken/clipped/unreadable items; fix obvious things inline; defer significant rework to dedicated rounds.
 - Output: /docs/mobile-viewport-audit.md + inline fixes.
 
 **Combat UX & Flow Polish Queue (V8.41 — post-Day-23):**
-- Hit vs miss visual differentiation in story feed (different prefix glyph + dimmer color for misses).
-- Miss feedback over portrait (small white "0" or "—" floating number).
-- Combat flow pacing for flee-fail → death sequence (explicit pause + visual marker).
+- Hit vs miss visual differentiation in story feed.
+- Miss feedback over portrait (white "0" or "—" floating number).
+- Combat flow pacing for flee-fail → death sequence.
 
 **Day 20.5 — Verbal Action (deferred to last):** Chat input hijack with LLM judging + charisma check + status_effects.
+
+**Day 20.6 — Encounter Avoidance / Stealth (deferred, V8.41 capture):** Pre-combat detection roll + options menu (avoid, pre-emptive, sneak attack, environmental, engage). Depends on Day 22 skills. See Future Feature Ideas in trajectory notes for full spec.
 
 **CSS containment future candidates (V8.40-V8.41 audit, address when those features get touched):** PortraitSlot status badges, StoryFeed inline tooltips, TradeModal +/- gold floats, GameLayout mobile rail tooltips, WorldMap edge tooltips. See `/docs/css-containment-audit.md`.
 
@@ -413,7 +454,7 @@ Genre renderers active. PAD=76. Tier switcher. Initial tier on mount: Local (V8.
 69. Codex is rendered as `CodexModal` overlay (z-50, ESC + backdrop + X close) toggled by `codexModalOpen` in game store. Combat panel remains mounted underneath. `/game/codex` route preserved for direct URL access. (V8.40)
 70. **CSS containment lesson: absolutely-positioned children CAN be clipped by ancestor `overflow-x: auto` or `overflow-y: auto`.** Per W3C spec, setting either overflow axis to a non-`visible` value promotes the OTHER axis to `auto`. Any container hosting absolutely-positioned children needs explicit `overflow: visible` if children extend outside the box. (V8.40)
 71. **Integration tests required for routing helpers and lookup keys.** Unit tests against fake events can pass while real-data wiring is broken. Routing points need integration tests against real combat-resolver / engine / data sources. (V8.40)
-72. Nav cards group by movement direction into 4 rows: BACK / DEEPER / PEER / UNDISCOVERED. EXIT folds into BACK at the grouping step. Empty groups omitted. Pure-function `lib/game/nav-cards.ts` owns `buildCards` + `groupCardsByDirection`. Italic-serif row labels render only when row has cards. (V8.41)
+72. Nav cards group by movement direction into 4 rows: BACK / DEEPER / PEER / UNDISCOVERED. EXIT folds into BACK at the grouping step. Empty groups omitted. Pure-function `lib/game/nav-cards.ts` owns `buildCards` + `groupCardsByDirection`. Italic-serif row labels render only when row has cards. (V8.41 — Polish 4c will relay rows into columns; rule preserved structurally)
 73. Nav card tier color via `tierOfNode` predicate. Applies to border, leading arrow, title, badge border. Region → `--hl-region` lavender. Settlement → `--hl-loc` sky-blue. Sub-location → `--hl-sublocation` mint (NEW V8.41). Dungeon → `--hl-dungeon` burnt-copper (NEW V8.41). Background stays neutral. (V8.41)
 74. Cross-region BACK card consults `masterState.navigation_trail[-2]` (V8.32 infrastructure). If previous node resolves to a different region, BACK card targets that region's settlement hub instead of the new region's unvisited settlement. Surfaces correctly in NavigationBar via `buildCards` output. (V8.41)
 75. WorldMap forces map tier=2 (Region) on cross-region arrival via useEffect. Same-region moves leave tier alone — preserves manual tier choice. Combines with rule 21 (initial Local tier on mount) for full tier-switching behavior. (V8.41)
@@ -498,4 +539,4 @@ Claude Code pushes → user reports commit + test results → Claude.ai updates 
 
 ---
 
-*Last updated: V8.41 — Polish Round 4a (commit 24ac19c, 297/297 tests, /game stable): movement-direction grouped nav cards (BACK/DEEPER/PEER/UNDISCOVERED rows via pure-function nav-cards.ts module, EXIT folds into BACK, empty groups omitted) + tier color-coding (--hl-sublocation + --hl-dungeon new tokens, applied to border/arrow/title/badge) + cross-region BACK card uses navigation_trail[-2] from V8.32 infrastructure + WorldMap forces tier=2 Region on cross-region arrival + .ew-said brightened #e8d5b0 → #f4e8c8 + CSS containment audit doc (0 active risks, 5 future candidates flagged). Foundational rules 72-76 added including origin/main baseline check workflow rule (responding to V8.41 baseline-drift incident). Combat UX & Flow Polish queue captured for post-Day-23 (hit/miss differentiation, miss float, flee-fail pacing). Polish Round 4b (mobile-viewport QA pass) is NEXT.*
+*Last updated: V8.41 (+ doc-only addendum during 20.4.3 in flight) — Captured Encounter Avoidance / Stealth System idea (Tim, V8.41 playtest) as Day 20.6 in the Combat Alternatives bucket alongside Day 20.5 Verbal Action. Full spec in new "Future Feature Ideas" trajectory notes subsection. Sequence updated to reflect 20.4.3 (Region Expansion Hotfix) currently in flight, Polish Round 4c (nav columns) staged for after, Polish Round 4b (mobile QA) moved to after 4c. No code changes — design capture only.*

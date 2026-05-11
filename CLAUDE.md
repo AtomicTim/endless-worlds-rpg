@@ -76,31 +76,45 @@ This scenario drives every design decision. If a feature makes that scenario *be
 Roll player PER/AGI/stealth-skill against enemy detection DC. On SUCCESS: Avoid / Pre-emptive ability / Sneak attack / Environmental interaction / Engage normally. On FAIL: combat triggers normally.
 *Dependencies:* Day 22 skills (stealth domain). *Slot:* Day 20.6 alongside Day 20.5. *Design risk:* Skyrim-Sneak model — must not punish combat-built characters.
 
+**EPIC/LEGENDARY Loot Reveal Animation (V8.46 capture):**
+When a RARE or LEGENDARY item is found (from any source), trigger a full-screen or large overlay: item portrait fades in with animated border glow, item name and description appear. Same energy as a Destiny exotic drop. Goal: make rare finds feel genuinely special and rewarding.
+*Dependencies:* Day 21 loot system (needs ItemRarity in play) + item portrait assets (or generated ASCII art). *Slot:* Post-Day-22 polish round, after loot system is live and item pool is known. *Design note:* Only fires for RARE+; COMMON and UNCOMMON get the standard loot strip reveal.
+
+**Genre Expansion + Sub-Genre System (V8.46 capture):**
+The current 5 genres are too broad. Eventually replace with more precise options including sub-genres, each with defined tone, reference works, and distinct AI/visual vocabulary.
+
+Tim's confirmed example — Fantasy splits into three:
+- **Light Fantasy** — bright, playful, quest-driven. Reference: *Legend of Zelda*, *Dragon Quest*.
+- **Classic Fantasy** — grounded, heroic, traditional. Reference: *LOTR*, *D&D*, classic high fantasy.
+- **Dark Fantasy** — brutal, morally grey, oppressive. Reference: *Game of Thrones*, *Warhammer*, *Berserk*.
+
+Each sub-genre needs: distinct WCD/WorldBible tone instructions, adjusted loot tables and enemy aesthetics, appropriate UI color palette, and AI narrator voice calibration. All other current genres (Cyberpunk, Horror, Space Opera, Post-Apocalyptic) will receive the same sub-genre treatment in the dedicated session.
+
+*Slot:* Dedicated **Genre Session** — a full design round to enumerate all genres + sub-genres with reference examples and distinguishing characteristics. Likely post-Day-25 or as part of Day 25 Customization Layer. *Impact at slot time:* `Genre` enum in `types/game.ts` + all genre-keyed tables (loot-tables/, starting-equipment.ts, bestiary/, WCD/WorldBible prompts) will need updating.
+
 ### V8.46 — Polish Round 4b results + Mobile Combat Layout deferred round
 
 **Audit summary (10 surfaces at 380px):**
 - A Layout shell, B Story feed, C Nav bar, E Floating damage, G Codex modal, I Forms/inputs, J Resolution banners — **PASS or inline-fixed**
-- D Combat panel — **MAJOR ISSUE DEFERRED**: 3+ enemies at 380px produces ~60px per combatant (side-by-side layout breaks completely). Dedicated **Mobile Combat Layout** round needed. Recommended approach: stacked portrait layout below `md:` breakpoint, smaller portraits (~64px), CombatMode flex-direction: column on narrow viewport.
-- F Inventory action buttons — minor: ~22px tap zone, iOS drag-touch. Deferred.
+- D Combat panel — **MAJOR ISSUE DEFERRED**: 3+ enemies at 380px produces ~60px per combatant. Dedicated **Mobile Combat Layout** round needed. Recommended: stacked portrait layout below `md:`, smaller portraits (~64px), CombatMode flex-direction: column on narrow viewport.
+- F Inventory action buttons — minor: ~22px. Deferred.
 - H World map NPC/EXAMINE buttons — minor: ~28-32px. Deferred.
 
-**Two inline fixes applied:**
-- `CodexModal.tsx`: close button 24px → 44×44px tap zone
-- `ActionBar.tsx`: combat buttons 34px → 44px padding
+**Two inline fixes applied:** CodexModal close button 24→44×44px · ActionBar combat buttons 34→44px.
 
-**Mobile Combat Layout round** added to deferred queue after Combat UX & Flow Polish. Both minor surface F and H items can be bundled into that round or into a general touch-target cleanup pass.
+**Mobile Combat Layout round** added to deferred queue after Combat UX & Flow Polish. Bundle F/H minor items into it.
 
 ### V8.45 — Test count note
 
-Commit 14252ac reported 762/762 tests. Prior rounds ran partial suites. **`npx jest` (no pattern) = authoritative full-suite baseline.**
+`npx jest` (no pattern) = authoritative full-suite baseline. 762 was the first accurate full-suite count.
 
 ### V8.44 — Polish 4c: pure module extraction applied proactively
 
-`chooseTierForNode()` extracted to `lib/game/map-tier.ts` proactively per rule 71 pattern. Nav dedup via `backCards[0]?.targetId` check before DEEPER settlement emits.
+`chooseTierForNode()` extracted to `lib/game/map-tier.ts` proactively (rule 71 without waiting for a bug). Nav dedup via `backCards[0]?.targetId`.
 
 ### V8.42 — Third recurrence: prompt-template hardcoded ID bug
 
-Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded structural IDs (sweep `generate-*/route.ts`), (3) CSS containment (covered by audit doc).
+Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded structural IDs (sweep `generate-*/route.ts`), (3) CSS containment (covered).
 
 ### V8.41 — Workflow + Combat UX Polish Queue
 
@@ -121,7 +135,7 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 11. Combat UX & Flow Polish round
 12. **Mobile Combat Layout round** (V8.46 new — deferred from 4b)
 13. Day 24 — Multiplayer Foundation
-14. Day 25 — Customization Layer
+14. Day 25 — Customization Layer / Genre Session (TBD if combined)
 15. Day 20.5 — Verbal Action (deferred)
 16. Day 20.6 — Encounter Avoidance / Stealth (deferred)
 
@@ -133,6 +147,7 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 - NPC behavior dispatch (combat-spec §6.3).
 - Map visual rework — dedicated session, deferred.
 - Audit queue: defensive overchecks, prompt-template hardcoded IDs, integration test coverage.
+- Genre Session scope and timing (post-Day-25 standalone vs bundled with Day 25).
 
 ---
 
@@ -157,20 +172,22 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 | Mobile Combat Layout | Stacked portrait layout at narrow viewport (4b deferred) | ⏳ After Combat UX Polish |
 | Day 24 | Multiplayer Foundation | ⏳ Pre-launch |
 | Day 25 | Customization Layer | ⏳ Pre-launch toward end |
+| Genre Session | Sub-genre expansion (Light/Classic/Dark Fantasy + all genres) | ⏳ Post-Day-25 |
 | Day 20.5 | Verbal Action System | ⏳ Deferred (Combat Alternatives) |
 | Day 20.6 | Encounter Avoidance / Stealth | ⏳ Deferred (Combat Alternatives) |
 | Map Visual Rework | Dedicated session | ⏳ Deferred |
 
-**Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic. Noir removed.
+**Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic. Noir removed. Sub-genre expansion deferred to Genre Session.
 
 ### Polish Round 4b (commit 4fe27e3 — 762/762 full suite)
 
-Discovery-and-triage mobile QA. Produced `/docs/mobile-viewport-audit.md`. Two inline fixes (CodexModal close button 44×44px, ActionBar combat buttons 44px). Major deferred: combat panel (D). Minor deferred: inventory button touch targets (F), world map button touch targets (H).
+Discovery-and-triage mobile QA. Produced `/docs/mobile-viewport-audit.md`. Two inline fixes (CodexModal close 44×44px, ActionBar combat buttons 44px). Major deferred: combat panel. Minor deferred: inventory buttons (F), map buttons (H).
 
 ### Round history (compressed)
 
 | Commit | Round | Rules |
 | --- | --- | --- |
+| ad82300 | WorldBible variety fix — remove biased named examples, add uniqueness instruction, neutral placeholder IDs | (rule 79 applied) |
 | 4fe27e3 | Polish 4b — mobile audit + CodexModal close button + ActionBar button sizing | — |
 | 14252ac | Nav mini-cols — 2-row max, overflow wraps right, lone cards bottom-aligned | (rule 72 updated) |
 | 198a757 | Polish 4c — column layout + nav dedup + map tier auto-switch expansion | 80-81 |
@@ -178,7 +195,8 @@ Discovery-and-triage mobile QA. Produced `/docs/mobile-viewport-audit.md`. Two i
 | 60501c8 | 20.4.3 — region expansion prompt template fix + splitConflatedRegionSettlement | 77-79 |
 | 24ac19c | Polish 4a — nav grouping/tiers/cross-region BACK/map auto-switch/.ew-said/CSS audit | 72-76 |
 | f17c221 | 20.4.2 — float CSS clip + stagger + sync to feed + codex modal + D&D roll format | 66-71 |
-| c67f2c0 | 20.4.1 — float routing + inventory-Use + flee DC + defeat respawn fix | 62-65 |\n| fc508f3 | 20.4 — rolls field + inline suffix + floats introduced + defeat teleport groundwork | 57-61 |
+| c67f2c0 | 20.4.1 — float routing + inventory-Use + flee DC + defeat respawn fix | 62-65 |
+| fc508f3 | 20.4 — rolls field + inline suffix + floats introduced + defeat teleport groundwork | 57-61 |
 | 732e944 | 20.3 — flex separators + button-only input + crit banner + suppression + resolution | 52-56 |
 | bf3871e + 1215bb6 | 20.2 + 20.1 — initiative kickoff, inventory stats, starting equipment, encounter banner | 43-51 |
 | abf73e6 + earlier | 20 Prompt 3 + foundation + pre-combat + 19A-19F | 1-42 |
@@ -191,11 +209,11 @@ Discovery-and-triage mobile QA. Produced `/docs/mobile-viewport-audit.md`. Two i
 
 **AI during gameplay:** Arrival narration ✅ · Dialogue ✅ · Action narration ✅ · Combat narration ✅ · Container search ⏳ Day 21 · Verbal action ⏳ Day 20.5 · Stealth/avoidance ⏳ Day 20.6.
 
-**Mobile readiness:** A/B/C/E/G/I/J surfaces PASS at 380px. D (combat panel) MAJOR deferred — Mobile Combat Layout round. F/H minor touch targets deferred.
+**Mobile readiness:** A/B/C/E/G/I/J surfaces PASS at 380px. D (combat panel) MAJOR deferred. F/H minor touch targets deferred.
 
 ### Known issues
 
-**Mobile Combat Layout — DEFERRED (V8.46):** Combat panel side-by-side layout breaks at 380px with 3+ enemies (~60px per combatant). Recommended: stacked portrait layout below `md:` breakpoint, smaller portraits (~64px), CombatMode flex-direction: column on narrow viewport. Bundle with minor deferred touch target fixes (inventory buttons F, map buttons H).
+**Mobile Combat Layout — DEFERRED (V8.46):** Combat panel breaks at 380px with 3+ enemies. Recommended: stacked portrait layout below `md:`, smaller portraits (~64px). Bundle with F/H minor touch target fixes.
 
 **Combat UX & Flow Polish (post-Day-23):** Hit/miss differentiation · miss float · flee-fail pacing.
 
@@ -342,6 +360,8 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint (resol
 | Horror/Lovecraftian (horror) | #84cc16 acid green | None | HP + Sanity |
 | Space Opera (space) | #a855f7 purple | Stellar Units | Hull Integrity |
 | Post-Apocalyptic (apoc) | #ea580c rust | Caps | HP |
+
+*Sub-genre expansion (Light/Classic/Dark Fantasy etc.) deferred to dedicated Genre Session post-Day-25.*
 
 | Feature | Free | Adventurer ($6.99) | Legend ($14.99) |
 | --- | --- | --- | --- |

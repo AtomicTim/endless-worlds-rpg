@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.44
-**Status:** Polish Round 4c COMPLETE (commit 198a757) — Polish Round 4b (Mobile QA) NEXT
+**Version:** 8.45
+**Status:** Nav 2-row mini-column layout COMPLETE (commit 14252ac) — Polish Round 4b (Mobile QA) NEXT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/css-containment-audit.md (V8.41, 0 active risks, 5 future candidates)
@@ -74,37 +74,33 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 **Encounter Avoidance / Stealth System (V8.41 capture):**
 Roll player PER/AGI/stealth-skill against enemy detection DC. On SUCCESS: Avoid / Pre-emptive ability / Sneak attack / Environmental interaction / Engage normally. On FAIL: combat triggers normally.
-*Dependencies:* Day 22 skills (stealth domain), combat-spec §3 pipeline, PER/AGI (exists).
-*Slot:* Day 20.6, Combat Alternatives bucket alongside Day 20.5 Verbal Action.
-*Design risk:* Must not punish combat-built characters — Skyrim-Sneak model.
+*Dependencies:* Day 22 skills (stealth domain), combat-spec §3 pipeline. *Slot:* Day 20.6 alongside Day 20.5. *Design risk:* Skyrim-Sneak model — must not punish combat-built characters.
 
-### V8.44 — Polish 4c: pure module extraction pattern applied proactively
+### V8.45 — Test count note
 
-Claude Code extracted `chooseTierForNode()` into `lib/game/map-tier.ts` before implementing the rule 81 map tier changes — rather than embedding the logic in WorldMap.tsx's useEffect. This is the rule 71 pattern applied proactively (not waiting for a bug to force pure extraction). `map-tier.ts` is now independently testable with 5 dedicated tests. WorldMap.tsx's useEffect simply calls `chooseTierForNode(arrivedNode)` and fires on every node arrival. Clean separation.
+Commit 14252ac reported 762/762 tests vs V8.44's 338. NavigationBar.tsx-only change doesn't explain the jump. Most likely cause: prior rounds ran partial suites (e.g. `jest --testPathPattern nav`) and V8.45 ran the full suite. **Going forward, always run `npx jest` with no pattern flag as the baseline.** 762 is likely the actual project-wide total, which is healthy at this stage.
 
-**nav-cards.ts dedup implementation:** backDest reads `backCards[0]?.targetId` before the DEEPER isAtRegionZone branch emits. If BACK already points to the current settlement, DEEPER is suppressed. If no trail (fresh game), no DEEPER settlement card either — BACK covers it. Cross-region arrivals: BACK = previous settlement, DEEPER = current settlement, no suppression.
+### V8.44 — Polish 4c: pure module extraction applied proactively
 
-**Nav column layout:** 156px fixed-width columns, `var(--line-2)` border framing, `.ew-nav-cols` hidden scrollbar, `NavCard` gets `fullWidth` prop for full-column-width card rendering.
+`chooseTierForNode()` extracted to `lib/game/map-tier.ts` proactively (rule 71 pattern without waiting for a bug to force it). Nav dedup via `backCards[0]?.targetId` check before DEEPER settlement emits.
 
 ### V8.43 — Nav design decisions locked
 
-BACK showing previous region's settlement = **intentional** (rule 74 confirmed). Duplicate BACK + DEEPER at same-region return = design oversight fixed by rule 80. Map tier intra-region gaps = fixed by rule 81.
+BACK showing previous region's settlement = intentional (rule 74 confirmed). Dedup rule 80 defined. Map tier intra-region rule 81 defined.
 
-### V8.42 — Third recurrence of prompt-template hardcoded ID bug
+### V8.42 — Third recurrence: prompt-template hardcoded ID bug
 
-Pattern established: template fix + apply-step safety net. Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded structural IDs, (3) CSS containment (covered by audit doc).
+Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded structural IDs (sweep `generate-*/route.ts`), (3) CSS containment (covered).
 
 ### V8.41 — Workflow lessons + Combat UX Polish Queue
 
-**Baseline drift mitigation:** origin baseline check step 1 of every prompt (rule 76). Test counts are reference values — source of truth = jest output.
+Baseline drift mitigation: rule 76 origin baseline check. Test counts = reference values; `jest` output is authoritative.
 
 **Combat UX & Flow Polish Queue (post-Day-23):** Hit/miss differentiation · Miss feedback over portrait · Flee-fail → death pacing.
 
 ### V8.38 — Three strategic decisions LOCKED
 
-**Multiplayer = PRE-LAUNCH.** Day 24 phase.
-**Customization layer = PRE-LAUNCH** toward end. Day 25 phase.
-**Day 22 skills = FOUNDATIONS NOW.** Skill domain enum. Combat domain wired; others stubbed.
+**Multiplayer = PRE-LAUNCH.** Day 24. **Customization = PRE-LAUNCH** toward end. Day 25. **Day 22 skills = FOUNDATIONS NOW.**
 
 ### Sequence
 
@@ -112,22 +108,23 @@ Pattern established: template fix + apply-step safety net. Audit scope: (1) defe
 2. ~~Day 20.4.3 (60501c8)~~ ✅
 3. ~~Day 20.4.4 (e87b23a)~~ ✅
 4. ~~Polish 4c (198a757)~~ ✅
-5. **Polish 4b** ⏳ NEXT — mobile-viewport QA pass
-6. Day 21 — Container + Loot (multiplayer-aware)
-7. Day 22 — Skills + Leveling (foundations)
-8. Vertical slice playtest
-9. Day 23 — Main Quest Thread
-10. Combat UX & Flow Polish round
-11. Day 24 — Multiplayer Foundation
-12. Day 25 — Customization Layer
-13. Day 20.5 — Verbal Action (deferred)
-14. Day 20.6 — Encounter Avoidance / Stealth (deferred)
+5. ~~Nav 2-row mini-columns (14252ac)~~ ✅
+6. **Polish 4b** ⏳ NEXT — mobile-viewport QA pass
+7. Day 21 — Container + Loot (multiplayer-aware)
+8. Day 22 — Skills + Leveling (foundations)
+9. Vertical slice playtest
+10. Day 23 — Main Quest Thread
+11. Combat UX & Flow Polish round
+12. Day 24 — Multiplayer Foundation
+13. Day 25 — Customization Layer
+14. Day 20.5 — Verbal Action (deferred)
+15. Day 20.6 — Encounter Avoidance / Stealth (deferred)
 
 ### Open strategic questions
 
 - External playtest timing (post-Day-22 or post-Day-23).
 - Difficulty tuning — toggle vs world-tier scaling.
-- Random travel encounters (combat-spec §3) — intersects with Day 20.6.
+- Random travel encounters (combat-spec §3).
 - NPC behavior dispatch (combat-spec §6.3).
 - Map visual rework — dedicated session, deferred.
 - Audit queue: defensive overchecks, prompt-template hardcoded IDs, integration test coverage.
@@ -136,20 +133,21 @@ Pattern established: template fix + apply-step safety net. Audit scope: (1) defe
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Polish Round 4c complete (commit 198a757, 338/338 tests). Polish Round 4b (mobile-viewport QA pass) is next.
-**Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **GitHub Repo:** atomictim/endless-worlds-rpg
+**Current Phase:** Nav 2-row mini-column layout complete (commit 14252ac, 762/762 full suite). Polish Round 4b (mobile-viewport QA pass) is next.
+**Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** atomictim/endless-worlds-rpg
 
 | Phase | Title | Status |
 | --- | --- | --- |
 | 1–18 | MVP through Systems Audit | ✅ Complete |
 | 19A–19F | World Generation Architecture | ✅ Complete |
 | Movement Track | Verified end-to-end | ✅ FROZEN |
-| Combat Spec | /docs/combat-spec.md design doc | ✅ Frozen |
+| Combat Spec | /docs/combat-spec.md | ✅ Frozen |
 | Combat era (Days 20–20.4.2) | Data + resolver + UI + narration + polish + hotfixes | ✅ Complete |
 | Polish 4a (24ac19c) | Nav grouping + tier colors + cross-region BACK + map auto-switch + .ew-said + CSS audit | ✅ Complete |
 | 20.4.3 (60501c8) | Region Expansion Hotfix — prompt template + splitConflatedRegionSettlement | ✅ Complete |
-| 20.4.4 (e87b23a) | Nav/Display Hotfix — settlement DEEPER card + story header display name + stitch guarantee | ✅ Complete |
-| **Polish 4c (198a757)** | **Column layout + nav dedup (rule 80) + map tier auto-switch expansion (rule 81) + mobile scroll** | ✅ **Complete** |
+| 20.4.4 (e87b23a) | Nav/Display Hotfix — settlement DEEPER card + story header display name | ✅ Complete |
+| Polish 4c (198a757) | Column layout + nav dedup (rule 80) + map tier auto-switch (rule 81) + mobile scroll | ✅ Complete |
+| **Nav mini-cols (14252ac)** | **2-row max per mini-column, overflow wraps right, lone cards bottom-aligned** | ✅ **Complete** |
 | **Polish 4b** | **Mobile-viewport QA pass — audit doc + inline fixes + deferred-rework list** | ⏳ **NEXT** |
 | Day 21 | Container + Loot — multiplayer-aware | ⏳ After 4b |
 | Day 22 | Skills + Leveling | ⏳ After Day 21 |
@@ -164,22 +162,15 @@ Pattern established: template fix + apply-step safety net. Audit scope: (1) defe
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic. Noir removed.
 
-### Polish Round 4c (commit 198a757 — 338/338 tests, /game stable)
+### Nav mini-columns (commit 14252ac — 762/762 full suite)
 
-Three-task round. Notable: Claude Code applied the rule 71 pure-extraction pattern proactively on the map tier logic.
-
-**Task 1 — Nav dedup (rule 80):** `buildCards()` reads `backDest = backCards[0]?.targetId` before the DEEPER isAtRegionZone branch emits. If BACK already points to current settlement → DEEPER suppressed. No trail → DEEPER also suppressed (BACK covers it). Cross-region: BACK = prev settlement, DEEPER = current settlement — both emit correctly.
-
-**Task 2 — Map tier auto-switch expansion (rule 81):** `lib/game/map-tier.ts` extracted as new pure module with `chooseTierForNode()` (region zone → 2, everything else → 1). WorldMap's useEffect now calls `setActiveTier(chooseTierForNode(arrivedNode))` on every node arrival — no more "same-region moves leave tier alone." Arrival at settlement → Local tier. Arrival at region zone → Region tier. 5 new tests in map-tier.test.ts.
-
-**Task 3 — Column layout:** NavigationBar.tsx renders 4 fixed-width (156px) columns side-by-side with `var(--line-2)` border framing and italic-serif column labels at top. Cards stack vertically, `NavCard` gets `fullWidth` prop. `.ew-nav-cols` container: `overflow-x: auto` + `overflow-y: visible` (rule 70) + hidden scrollbar for mobile swipe.
-
-**Tests:** 8 new across map-tier.test.ts (5) + nav-cards.test.ts (3). 3 region-graph-builder.test.ts updated to reflect dedup behavior.
+`NavigationBar.tsx` only. `chunkArray<T>(arr, size)` helper splits cards into groups of 2. Within each group block, cards render as a flex row of mini-columns, each mini-column `flexDirection: column, justifyContent: flex-end, width: 140`. Lone cards sit at the bottom row. Group block now auto-sizes (removes fixed 156px width; 1 mini-col = 156px, 2 = 300px). `.ew-nav-cols` strip absorbs width via existing `overflow-x: auto`.
 
 ### Round history (compressed)
 
 | Commit | Round | Rules |
 | --- | --- | --- |
+| 14252ac | Nav mini-cols — 2-row max, overflow wraps right, lone cards bottom-aligned | (rule 72 updated) |
 | 198a757 | Polish 4c — column layout + nav dedup + map tier auto-switch expansion | 80-81 |
 | e87b23a | 20.4.4 — settlement DEEPER card + story header display name + stitch guarantee | (80-81 defined) |
 | 60501c8 | 20.4.3 — region expansion prompt template fix + splitConflatedRegionSettlement | 77-79 |
@@ -188,31 +179,26 @@ Three-task round. Notable: Claude Code applied the rule 71 pure-extraction patte
 | c67f2c0 | 20.4.1 — float routing + inventory-Use + flee DC + defeat respawn fix | 62-65 |
 | fc508f3 | 20.4 — rolls field + inline suffix + floats introduced + defeat teleport groundwork | 57-61 |
 | 732e944 | 20.3 — flex separators + button-only input + crit banner + suppression + resolution | 52-56 |
-| bf3871e | 20.2 — initiative kickoff + inventory stats | 49-51 |
-| 1215bb6 | 20.1 — starting equipment + encounter banner + pacing | 43-48 |
-| abf73e6 | 20 Prompt 3/3 — combat UI + narrator + bestiary | 38-42 |
-| 25ff111 + a4e5975 + 1024287 | 20 Prompts 1–2.5 — resolver + engine + data foundation | 24-37 |
-| 87c89a3 + earlier | Pre-combat + 19A-19F gen phases | 1-23 |
+| bf3871e + 1215bb6 | 20.2 + 20.1 — initiative kickoff, inventory stats, starting equipment, encounter banner | 43-51 |
+| abf73e6 + earlier | 20 Prompt 3 + foundation + pre-combat + 19A-19F | 1-42 |
 
 ### Architecture & system status
 
-**Domain 1 (Engine — pure code):** Navigation + nav-cards module (V8.41-V8.44, column layout + dedup) + cross-region BACK trail awareness + map tier module `lib/game/map-tier.ts` (V8.44, fires on every arrival) · combat-resolver + engine + triggers (V8.32-V8.40) · float stagger + emission synced to feed + codex modal + D&D roll display (V8.40) · region expansion guard + splitConflatedRegionSettlement + region-graph-builder + region-graph-builder pure extraction (V8.42-V8.43) · loot resolver (Day 21).
+**Domain 1 (Engine — pure code):** Navigation + nav-cards module (rules 72-81, 2-row mini-col layout V8.45) + map-tier.ts pure module (V8.44) · combat system (rules 24-71) · region expansion guard + splitConflatedRegionSettlement + region-graph-builder (V8.42-V8.43) · loot resolver (Day 21).
 
 **Domain 2 (Content Library — frozen):** WCD, WorldBible, RegionBible, NPCs, items, loot tables, bestiary, region enemies, starting equipment loadouts.
 
-**AI during gameplay:** Arrival narration ✅ · Dialogue (code-built options) ✅ · Action narration ✅ · Combat narration ✅ · Container search ⏳ Day 21 · Verbal action ⏳ Day 20.5 · Stealth/avoidance ⏳ Day 20.6.
+**AI during gameplay:** Arrival narration ✅ · Dialogue ✅ · Action narration ✅ · Combat narration ✅ · Container search ⏳ Day 21 · Verbal action ⏳ Day 20.5 · Stealth/avoidance ⏳ Day 20.6.
 
 **Generation models:** RegionBible: haiku-4-5, max_tokens 7000, distinct settlement/region IDs (rule 77). WorldBible: sonnet-4-5, max_tokens 10000. Combat narrator: sonnet-4-5.
 
-**Map system:** `lib/game/map-tier.ts` `chooseTierForNode()` pure module (V8.44). Auto-switch: region zone arrival → Region tier · settlement arrival → Local tier · sub-location arrival → Local tier. Fires on every node arrival. Manual override respected until next navigation. Initial mount: Local (rule 21). Visual rework pending.
-
-**Region Expansion Guard (V8.33 + V8.42-V8.43):** toSlug() workaround + splitConflatedRegionSettlement + region-graph-builder + explicit stitch.
+**Map system:** `lib/game/map-tier.ts` `chooseTierForNode()` — region zone → Region tier, everything else → Local. Fires on every node arrival (rule 81). Initial mount: Local (rule 21). Visual rework pending.
 
 **NPC Dialogue:** Options built by code. `.ew-said` = `#f4e8c8`.
 
 ### Known issues
 
-**Polish Round 4b — NEXT:** Phone-width (~380px) QA pass across all major surfaces. Discovery-and-triage round — report issues, fix obvious things inline, defer significant rework. Output: `/docs/mobile-viewport-audit.md` + inline fixes. Combat panel almost certainly needs dedicated mobile-layout round.
+**Polish Round 4b — NEXT:** Phone-width (~380px) QA pass. Discovery-and-triage. Output: `/docs/mobile-viewport-audit.md` + inline fixes. Combat panel almost certainly needs dedicated mobile-layout round.
 
 **Combat UX & Flow Polish (post-Day-23):** Hit/miss differentiation · miss float · flee-fail pacing.
 
@@ -220,7 +206,7 @@ Three-task round. Notable: Claude Code applied the rule 71 pure-extraction patte
 
 **CSS containment future candidates:** PortraitSlot, StoryFeed tooltips, TradeModal floats, GameLayout rail tooltips, WorldMap edge tooltips.
 
-**Other deferred:** Map visual rework, world-gen perf (35s WCD + 120s WorldBible), NPC color overlap, hub codex, grid_position, behavior dispatch, toSlug bug, combat balance.
+**Other deferred:** Map visual rework, world-gen perf, NPC color overlap, hub codex, grid_position, behavior dispatch, toSlug bug, combat balance.
 
 ---
 
@@ -292,21 +278,21 @@ Three-task round. Notable: Claude Code applied the rule 71 pure-extraction patte
 64. Floating damage entry routing uses explicit `switch(event.type)`. Defensive `player_attack target === PLAYER_ID` guard returns null. (V8.39)
 65. Settlement-hub detection in step 7c-2 uses `is_settlement_node === true` predicate ONLY. Category fallback removed (V8.39 lesson). (V8.39)
 66. Floating damage emission lives INSIDE `projectCombatEventsToFeed` (useCombat), called AFTER pacing sleeps. CombatMode is a pure renderer for `floatingByActor`. (V8.40)
-67. Multi-host floating damage uses `computeFloatStartDelay` pure helper. 300ms increments. `animation-fill-mode: both` so 0% keyframe holds during delay. (V8.40)
+67. Multi-host floating damage uses `computeFloatStartDelay` pure helper. 300ms increments. `animation-fill-mode: both`. (V8.40)
 68. Roll display format is D&D-style: `(d20: 17, +2 → 19 vs 12 | 1d6+2)` hits, `(d20: 1)` fumbles, `(d20: 20 | ...)` crits, `(1d8: 4 +4 = 8)` heals. (V8.40)
 69. Codex is rendered as `CodexModal` overlay (z-50, ESC + backdrop + X close). Combat panel remains mounted underneath. (V8.40)
-70. **CSS containment lesson:** `overflow-x/y: auto` on ancestors clips absolutely-positioned children. Use `overflow: visible` on containers hosting absolutely-positioned children that extend outside the box. (V8.40)
+70. **CSS containment lesson:** `overflow-x/y: auto` on ancestors clips absolutely-positioned children. Use `overflow: visible` on containers hosting absolutely-positioned children extending outside the box. (V8.40)
 71. **Integration tests required for routing helpers and lookup keys.** Unit tests against fake events can pass while real-data wiring is broken. (V8.40)
-72. Nav cards group by movement direction: BACK / DEEPER / PEER / UNDISCOVERED. EXIT folds into BACK. Empty groups omitted. Pure-function `lib/game/nav-cards.ts` owns `buildCards` + `groupCardsByDirection`. NavigationBar renders groups as 4 fixed-width (156px) columns side-by-side with `.ew-nav-cols` mobile horizontal scroll (V8.44). (V8.41 + V8.44)
+72. Nav cards group by movement direction: BACK / DEEPER / PEER / UNDISCOVERED. EXIT folds into BACK. Empty groups omitted. Pure-function `lib/game/nav-cards.ts` owns `buildCards` + `groupCardsByDirection`. NavigationBar renders each group as a row of 140px mini-columns (max 2 cards tall, `chunkArray(cards, 2)`), lone cards bottom-aligned (`justifyContent: flex-end`), group block auto-sizing. `.ew-nav-cols` strip handles mobile horizontal scroll. (V8.41 grouping · V8.44 column direction · V8.45 mini-col chunking)
 73. Nav card tier color via `tierOfNode`. Region → `--hl-region` lavender · Settlement → `--hl-loc` sky-blue · Sub-location → `--hl-sublocation` mint · Dungeon → `--hl-dungeon` burnt-copper. Background stays neutral. (V8.41)
-74. Cross-region BACK card consults `masterState.navigation_trail[-2]`. If previous node is a different region, BACK targets that region's settlement hub. **Intentional (confirmed V8.43) — BACK answers "how do I get back to where I came from?"** (V8.41)
-75. WorldMap fires on cross-region arrival → Region tier. Superseded by rule 81 for all arrivals. (V8.41 → V8.44)
+74. Cross-region BACK card consults `masterState.navigation_trail[-2]`. If previous node is a different region, BACK targets that region's settlement hub. **Intentional — BACK answers "how do I get back to where I came from?"** (V8.41)
+75. WorldMap cross-region arrival → Region tier (V8.41). Superseded for all arrivals by rule 81. (V8.41 → V8.44)
 76. **Origin/main baseline check:** Claude Code MUST run `git fetch origin && git log origin/main --oneline -5` as step 1 of every prompt. (V8.41)
 77. **RegionBible prompt template MUST distinguish settlement_id from region_id.** Use `settlementSlug = ${outline.id}_settlement`. Every cross-reference points at `settlementSlug`. Include explicit "REGION vs SETTLEMENT IDS" guidance block. (V8.42)
 78. **Apply-regional-bible heal-on-apply:** `splitConflatedRegionSettlement(bible)` detects id collapse, renames settlement id, stamps settlement fields, re-points sub-locations + NPCs + exits. Runs at step 0d. (V8.42)
 79. **Prompt-template hardcoded structural IDs are a recurring bug class.** Audit: sweep `app/api/game/generate-*/route.ts` for `${outline.id}`, `${region.id}` etc. in id positions where collision is possible. (V8.42)
-80. **Nav card dedup at region zone.** When standing at a region zone, if `trail[-2]` resolves to the current region's settlement, the DEEPER isAtRegionZone branch checks `backCards[0]?.targetId` and suppresses the DEEPER settlement card if it matches. Cross-region: BACK = prev settlement, DEEPER = current settlement — both emit. No trail → DEEPER also suppressed. (V8.43 defined, V8.44 implemented)
-81. **Map tier auto-switch fires on every node arrival.** `lib/game/map-tier.ts` `chooseTierForNode()` pure module: region zone → tier 2 (Region), everything else → tier 1 (Local). WorldMap.tsx useEffect calls `setActiveTier(chooseTierForNode(arrivedNode))` on every arrival. Supersedes rule 75's cross-region-only behavior. Prevents "Local tab selected, region content showing" and the inverse. (V8.43 defined, V8.44 implemented)
+80. **Nav card dedup at region zone.** DEEPER isAtRegionZone branch checks `backCards[0]?.targetId`; suppresses DEEPER settlement card if it matches BACK destination. Cross-region: both emit (different destinations). No trail: DEEPER suppressed. (V8.43 defined · V8.44 implemented)
+81. **Map tier auto-switch fires on every node arrival.** `lib/game/map-tier.ts` `chooseTierForNode()`: region zone → tier 2 (Region), everything else → tier 1 (Local). WorldMap.tsx useEffect calls this on every arrival. Prevents Local-tab-shows-region-content and inverse. (V8.43 defined · V8.44 implemented)
 
 ---
 
@@ -373,6 +359,6 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint (resol
 
 Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim reports commit + tests → Claude.ai updates CLAUDE.md → Tim verifies → next prompt.
 
-**Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40).
+**Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` (no pattern) = authoritative test count.**
 
 **Authority:** Architecture → /docs/architecture-spec.md · Combat → /docs/combat-spec.md · Vision/scope → Game Vision · Strategic/sequencing → Trajectory Notes · Round details → git log + round-history table.

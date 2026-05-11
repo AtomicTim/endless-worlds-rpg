@@ -55,6 +55,16 @@ interface Props {
 
 // ────────────────────────────────────────────────────────────────────────────
 
+/** Split an array into sub-arrays of at most `size` elements.
+ *  Used to build the 2-row-max mini-column grid inside each group block. */
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    result.push(arr.slice(i, i + size));
+  }
+  return result;
+}
+
 export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
   // Adjacent region travel — outline id currently being expanded into
   // a full RegionBible. Set when the player clicks a ◇ peer-unknown
@@ -133,11 +143,15 @@ export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
         {colOrder.map((dir) => {
           const colCards = grouped[dir];
           if (colCards.length === 0) return null;
+          // Chunk into mini-columns of max 2 cards. Extra cards overflow
+          // rightward into new mini-columns. justifyContent: flex-end on
+          // each mini-column ensures a lone card in a partial column sits
+          // at the bottom (row 2), not the top.
+          const miniCols = chunkArray(colCards, 2);
           return (
             <div
               key={dir}
               style={{
-                width:          156,
                 flexShrink:     0,
                 display:        "flex",
                 flexDirection:  "column",
@@ -160,15 +174,31 @@ export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
               >
                 {colLabels[dir]}
               </span>
-              {colCards.map((c) => (
-                <NavCard
-                  key={c.key}
-                  card={c}
-                  onClick={() => onNavigate(c.targetId)}
-                  generatingRegionId={generatingRegionId}
-                  fullWidth
-                />
-              ))}
+              {/* Mini-column grid — flex row of fixed-width columns. */}
+              <div style={{ display: "flex", flexDirection: "row", gap: 4 }}>
+                {miniCols.map((chunk, colIdx) => (
+                  <div
+                    key={colIdx}
+                    style={{
+                      display:        "flex",
+                      flexDirection:  "column",
+                      justifyContent: "flex-end",
+                      gap:            4,
+                      width:          140,
+                    }}
+                  >
+                    {chunk.map((c) => (
+                      <NavCard
+                        key={c.key}
+                        card={c}
+                        onClick={() => onNavigate(c.targetId)}
+                        generatingRegionId={generatingRegionId}
+                        fullWidth
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
             </div>
           );
         })}

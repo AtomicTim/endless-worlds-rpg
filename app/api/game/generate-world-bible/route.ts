@@ -36,6 +36,11 @@ function buildUserPrompt(
 Generate a WorldBible JSON for a ${genre} RPG.
 Character: ${name}, a ${klass}.
 
+UNIQUENESS REQUIREMENT: Every element of this world — its names, themes, enemy
+types, and location aesthetics — must emerge from the WCD above and feel wholly
+distinct. Each generation should be unlike any other. The WCD's world_name and
+atmosphere are the creative anchor for every naming and thematic decision.
+
 CRITICAL ARCHITECTURAL RULE — read before generating:
 The settlement node (is_settlement_node: true) MUST be a public
 gathering space — a town square, crossroads, market plaza, central
@@ -51,10 +56,11 @@ district, territory) — NOT a town or building name.
 The 'settlement_name' is the name of the town within that area.
 Example: region name "The Ashwood Forest", settlement name
 "Thornwick Crossing". NOT: region name "Thornwick Crossing".
-Other valid region names: "The Salt Plains", "Rust Peaks
-Foothills", "Neon Quarter", "The Bone-Drift Steppe".
-Other valid settlement names: "Salt-Iron Crossing",
-"Waystation Seven", "The Refuge", "Hollow Mark".
+Region names reflect the geography of this specific world —
+its landforms, climate, phenomena, or character as described
+in the WCD. Settlement names reflect the local history,
+culture, or purpose of the town within this world's context.
+All names must feel native to the WCD above.
 
 REGION LOCATIONS (Day 20):
 The geographic region also contains ONE standalone location
@@ -175,7 +181,7 @@ Return EXACTLY this JSON structure (fill in the values):
         "objects": [{"id": "region_obj_slug", "name": "Tier 1 Object Name", "description": "1 sentence", "is_interactable": true}],
         "ambient_type": "dungeon_corridor",
         "encounter_chance": 0.6,
-        "encounter_roster": ["fantasy_goblin", "fantasy_skeleton", "<region_id>_themed_enemy_id"],
+        "encounter_roster": ["<genre>_bestiary_enemy_1", "<genre>_bestiary_enemy_2", "<region_id>_themed_enemy_id"],
         "is_boss_room": false
       }
     ],
@@ -299,7 +305,7 @@ starting_region.enemies — generate 3-5 region-themed enemies that
 thematically fit the WCD flavor and the region's atmosphere.
 Constraints (every enemy must obey these):
 - 3-5 entries, each with a UNIQUE id prefixed with the region id
-  (e.g. "the_ashwood_forest_husk_warden")
+  (e.g. "<region_id>_<creature_type>")
 - description: 1 sentence of WCD-consistent flavor for the narrator
 - hp_range: [min, max] — common 8-25, elite 25-50, boss 50-100
 - agi_mod and str_mod: integers between -2 and +4
@@ -335,13 +341,12 @@ combat-eligible — leave their encounter_chance unset (or 0) and
 omit encounter_roster. The standalone region_location IS combat-
 eligible — it MUST carry encounter_chance and encounter_roster.
 
-Example combat-tagged location (a dungeon entrance with mixed
-roster):
+Example combat-tagged location (a dungeon entrance with mixed roster):
 {
-  "id": "the_thorned_cloister",
+  "id": "<location_id_slug>",
   "type": "dungeon",
   "encounter_chance": 0.7,
-  "encounter_roster": ["fantasy_skeleton", "fantasy_cultist", "the_ashwood_forest_husk_warden"],
+  "encounter_roster": ["<genre>_bestiary_enemy", "<genre>_bestiary_enemy", "<region_id>_themed_enemy_id"],
   "is_boss_room": false
 }`;
 }

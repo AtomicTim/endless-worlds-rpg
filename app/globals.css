@@ -67,11 +67,13 @@
     --ink-5: #4a4339; /* hairline */
 
     /* Highlight roles */
-    --hl-loc:      #7dd3fc;  /* locations — settlements, hubs, sub-locations (Tier 3) */
-    --hl-region:   #c4b5fd;  /* region-tier locations (Tier 2 nav targets) */
-    --hl-item:     #e8c547;  /* items — golden yellow, distinct from amber accent */
-    --hl-landmark: #94d8b8;  /* landmarks (WCD-known places) — soft mint, distinct from region lavender */
-    --hl-said:     #e8d5b0;  /* NPC quoted speech — warm cream */
+    --hl-loc:         #7dd3fc;  /* locations — settlement hubs (Tier 3 settlement) */
+    --hl-region:      #c4b5fd;  /* region-tier locations (Tier 2 nav targets) */
+    --hl-sublocation: #94d8b8;  /* sub-location nav cards — soft mint (Polish 4a TASK 2) */
+    --hl-dungeon:     #b45309;  /* dungeon / hostile zone nav cards — burnt copper (Polish 4a TASK 2) */
+    --hl-item:        #e8c547;  /* items — golden yellow, distinct from amber accent */
+    --hl-landmark:    #94d8b8;  /* landmarks (WCD-known places) — soft mint, distinct from region lavender */
+    --hl-said:        #f4e8c8;  /* NPC quoted speech — brighter warm cream (Polish 4a TASK 4) */
     --hl-pass:     #a3e635;
     --hl-fail:     #f87171;
 

@@ -2,28 +2,39 @@
 
 import React, { useMemo } from "react";
 import { useGameStore } from "@/lib/stores/game-store";
+import {
+  buildCards,
+  groupCardsByDirection,
+  type Card,
+  type CardDirection,
+  type CardKind,
+  type CardTier,
+} from "@/lib/game/nav-cards";
 import type {
   Genre,
   MasterState,
   WorldGraph,
-  WorldNode,
 } from "@/types/game";
 
 /**
  * Navigation Bar — typed card system.
  *
  * The map is display-only; the nav bar owns every navigation action.
- * Cards always appear left to right in this fixed order:
  *
- *   [← BACK] [→ DEEPER...] [↑ EXIT] [◆ PEER...] [◇ UNDISCOVERED...]
+ * Polish 4a TASK 1 — cards now group into 4 horizontal rows by
+ * movement direction (BACK / DEEPER / PEER / UNDISCOVERED), with
+ * EXIT folding into BACK. Empty rows do NOT render. Each row gets
+ * an optional small italic-serif label on the left.
  *
- * Each category builds an independent array, and the final list is the
- * concatenation in display order:
+ * Polish 4a TASK 2 — each card's border, leading arrow, and title
+ * are colored by destination tier (region lavender / settlement
+ * sky-blue / sub-location mint / dungeon burnt-copper). Tier comes
+ * from the card's `tier` field (set in `buildCards`).
  *
- *   • TYPE A — back  (0 or 1)
- *   • TYPE B — deeper (0–4)
- *   • TYPE C — exit  (0 or 1)
- *   • TYPE D — peer  (region_locations + adjacent regions)
+ * Polish 4a TASK 3a — the region-zone BACK card prefers the
+ * previous region's settlement when the player just crossed
+ * regions (resolved inside `buildCards` from
+ * masterState.navigation_trail).
  *
  * Tapping a card calls onNavigate(nodeId), which the parent routes
  * through useGameLoop.navigateTo (the only sanctioned UI nav channel).
@@ -36,22 +47,6 @@ interface Props {
   /** Genre is wired through for legacy reasons; theming now lives in
    *  CSS via [data-genre] on the GameLayout root. */
   genre:       Genre;
-}
-
-type CardKind = "back" | "deeper" | "exit" | "peer-known" | "peer-unknown";
-
-interface Card {
-  /** Stable key for React. */
-  key:        string;
-  kind:       CardKind;
-  /** Node id (or adjacent region outline id) handed to onNavigate. */
-  targetId:   string;
-  /** Primary label — destination name, ALL CAPS. */
-  name:       string;
-  /** Secondary label — category / "EXIT TO REGION" / etc., ALL CAPS. */
-  sublabel:   string;
-  /** Whether the player has already visited this node. */
-  discovered: boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -70,12 +65,25 @@ export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
     [worldGraph, masterState]
   );
 
+  const grouped = useMemo(() => groupCardsByDirection(cards), [cards]);
+
   const breadcrumb = useMemo<string>(
     () => buildBreadcrumb(worldGraph),
     [worldGraph]
   );
 
   if (cards.length === 0) return null;
+
+  // Render order — back first (where you came from), then deeper /
+  // peer / undiscovered. Empty groups are skipped (no whitespace,
+  // no label, no row).
+  const rowOrder: CardDirection[] = ["back", "deeper", "peer", "undiscovered"];
+  const rowLabels: Record<CardDirection, string> = {
+    back:         "back",
+    deeper:       "deeper",
+    peer:         "peer",
+    undiscovered: "undiscovered",
+  };
 
   return (
     <div
@@ -104,24 +112,64 @@ export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
         </div>
       )}
       <div
-        className="ew-scroll"
         style={{
-          display:                 "flex",
-          gap:                     8,
-          overflowX:               "auto",
-          padding:                 "12px 16px",
-          WebkitOverflowScrolling: "touch",
-          scrollbarWidth:          "none",
+          display:        "flex",
+          flexDirection:  "column",
+          gap:            6,
+          padding:        "10px 16px 12px",
         }}
       >
-        {cards.map((c) => (
-          <NavCard
-            key={c.key}
-            card={c}
-            onClick={() => onNavigate(c.targetId)}
-            generatingRegionId={generatingRegionId}
-          />
-        ))}
+        {rowOrder.map((dir) => {
+          const rowCards = grouped[dir];
+          if (rowCards.length === 0) return null;
+          return (
+            <div
+              key={dir}
+              style={{
+                display:    "flex",
+                alignItems: "center",
+                gap:        10,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily:    "var(--serif)",
+                  fontStyle:     "italic",
+                  fontSize:      11,
+                  color:         "var(--ink-4)",
+                  opacity:       0.7,
+                  letterSpacing: "0.04em",
+                  width:         70,
+                  flexShrink:    0,
+                  textAlign:     "right",
+                  paddingRight:  4,
+                }}
+              >
+                {rowLabels[dir]}
+              </span>
+              <div
+                className="ew-scroll"
+                style={{
+                  display:                 "flex",
+                  flexWrap:                "wrap",
+                  gap:                     8,
+                  flex:                    1,
+                  minWidth:                0,
+                  WebkitOverflowScrolling: "touch",
+                }}
+              >
+                {rowCards.map((c) => (
+                  <NavCard
+                    key={c.key}
+                    card={c}
+                    onClick={() => onNavigate(c.targetId)}
+                    generatingRegionId={generatingRegionId}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -164,242 +212,6 @@ function buildBreadcrumb(worldGraph: WorldGraph | undefined): string {
   return parts.join(" › ");
 }
 
-// ── Card builder ────────────────────────────────────────────────────────────
-
-function buildCards(
-  worldGraph: WorldGraph | undefined,
-  masterState: MasterState | null,
-): Card[] {
-  if (!worldGraph) return [];
-  const current = worldGraph.nodes[worldGraph.current_node_id];
-  if (!current) return [];
-
-  const isAtRegionZone =
-    current.type === "zone" &&
-    current.is_expandable === true &&
-    current.zone_id === current.id;
-
-  const isAtSettlementHub =
-    current.type === "zone" &&
-    current.is_settlement_node === true;
-
-  const isAtSubLocation = current.type === "sub_location";
-
-  const isAtDungeon =
-    current.type === "zone" &&
-    current.is_settlement_node !== true &&
-    current.is_expandable === false;
-
-  // Resolve the settlement hub for this region (used by exit/back logic
-  // in multiple branches). For a sub_location, the hub is current.zone_id.
-  // For everyone else, find the is_settlement_node node that shares
-  // zone_id with the geographic region.
-  const settlementHub: WorldNode | null = (() => {
-    if (isAtSubLocation) {
-      return worldGraph.nodes[current.zone_id] ?? null;
-    }
-    if (isAtSettlementHub) return current;
-    // At region zone OR dungeon — settlement hub is whichever node sits
-    // under this region with is_settlement_node=true.
-    const regionId = isAtRegionZone ? current.id : current.zone_id;
-    return (
-      Object.values(worldGraph.nodes).find(
-        (n) => n.zone_id === regionId && n.is_settlement_node === true
-      ) ?? null
-    );
-  })();
-
-  // Resolve the geographic region zone for this location.
-  const regionZone: WorldNode | null = (() => {
-    if (isAtRegionZone) return current;
-    const direct = current.zone_id ? worldGraph.nodes[current.zone_id] : null;
-    if (direct?.is_expandable && direct.zone_id === direct.id) return direct;
-    if (direct?.zone_id) {
-      const grandparent = worldGraph.nodes[direct.zone_id];
-      if (grandparent?.is_expandable && grandparent.zone_id === grandparent.id) {
-        return grandparent;
-      }
-    }
-    return null;
-  })();
-
-  // ── TYPE A — back ────────────────────────────────────────────────────────
-  const backCards: Card[] = [];
-  if (isAtSubLocation) {
-    const parent = worldGraph.nodes[current.zone_id];
-    if (parent && parent.id !== current.id) {
-      backCards.push({
-        key:        `back-${parent.id}`,
-        kind:       "back",
-        targetId:   parent.id,
-        name:       parent.name.toUpperCase(),
-        sublabel:   typeLabel(parent),
-        discovered: parent.discovered,
-      });
-    }
-  } else if (isAtDungeon) {
-    // For a standalone dungeon the parent zone is the geographic region.
-    const parent = worldGraph.nodes[current.zone_id];
-    if (parent && parent.id !== current.id) {
-      backCards.push({
-        key:        `back-${parent.id}`,
-        kind:       "back",
-        targetId:   parent.id,
-        name:       parent.name.toUpperCase(),
-        sublabel:   typeLabel(parent),
-        discovered: parent.discovered,
-      });
-    }
-  } else if (isAtRegionZone && settlementHub) {
-    backCards.push({
-      key:        `back-${settlementHub.id}`,
-      kind:       "back",
-      targetId:   settlementHub.id,
-      name:       settlementHub.name.toUpperCase(),
-      sublabel:   typeLabel(settlementHub),
-      discovered: settlementHub.discovered,
-    });
-  }
-
-  // ── TYPE B — deeper ──────────────────────────────────────────────────────
-  const deeperCards: Card[] = [];
-  if (isAtSettlementHub) {
-    for (const id of current.connections) {
-      const node = worldGraph.nodes[id];
-      if (!node) continue;
-      if (node.type !== "sub_location") continue;
-      if (node.zone_id !== current.id) continue;
-      deeperCards.push({
-        key:        `deeper-${node.id}`,
-        kind:       "deeper",
-        targetId:   node.id,
-        name:       node.name.toUpperCase(),
-        sublabel:   typeLabel(node),
-        discovered: node.discovered,
-      });
-    }
-  } else if (isAtDungeon) {
-    // Future-proof: sub_locations of the dungeon. Today there are none,
-    // but the loop below handles them cleanly when they arrive.
-    for (const id of current.connections) {
-      const node = worldGraph.nodes[id];
-      if (!node) continue;
-      if (node.type !== "sub_location") continue;
-      if (node.zone_id !== current.id) continue;
-      deeperCards.push({
-        key:        `deeper-${node.id}`,
-        kind:       "deeper",
-        targetId:   node.id,
-        name:       node.name.toUpperCase(),
-        sublabel:   typeLabel(node),
-        discovered: node.discovered,
-      });
-    }
-  }
-  // At sub_location: no sibling deeper cards — the player must return to
-  // the hub to choose another building (Fix 3).
-
-  // ── TYPE C — exit ────────────────────────────────────────────────────────
-  // ONLY the settlement hub gets the ↑ exit card. From a sub-location the
-  // only nav is ← back to hub; from a dungeon the only nav is ← back to
-  // the region zone. (Fix 1)
-  const exitCards: Card[] = [];
-  if (isAtSettlementHub && regionZone) {
-    exitCards.push({
-      key:        `exit-${regionZone.id}`,
-      kind:       "exit",
-      targetId:   regionZone.id,
-      name:       regionZone.name.toUpperCase(),
-      sublabel:   "EXIT TO REGION",
-      discovered: regionZone.discovered,
-    });
-  }
-
-  // ── TYPE D — peer (region_locations + adjacent regions) ─────────────────
-  const peerCards: Card[] = [];
-  if (isAtRegionZone) {
-    // D1 — known region_locations under this region (dungeons,
-    // wilderness, shrines).
-    for (const node of Object.values(worldGraph.nodes)) {
-      if (node.id === current.id) continue;
-      if (node.zone_id !== current.id) continue;
-      if (node.is_settlement_node === true) continue;
-      if (node.type !== "zone") continue;
-      if (node.is_expandable === true) continue;
-      peerCards.push({
-        key:        `peer-known-${node.id}`,
-        kind:       "peer-known",
-        targetId:   node.id,
-        name:       node.name.toUpperCase(),
-        sublabel:   typeLabel(node),
-        discovered: node.discovered,
-      });
-    }
-
-    // D2 — adjacent regions.
-    //
-    // For the STARTING REGION: use WorldBible.adjacent_regions — the
-    // authoritative list generated at WorldBible time, which remains
-    // stable even after individual regions are expanded.
-    //
-    // For EXPANDED (non-starting) REGIONS: use the current region zone's
-    // graph connections. apply-regional-bible FIX 4 now writes the origin
-    // region zone id into the new region zone's connections, so we can
-    // discover peer regions by scanning connections for is_expandable nodes.
-    //
-    // Self-skip prevents the current region from listing itself.
-    const wb           = masterState?.metadata.world_bible;
-    const knownPeerIds = new Set(peerCards.map((c) => c.targetId));
-    const seen         = new Set<string>();
-
-    const isStartingRegion = !!wb && wb.starting_region.id === current.id;
-
-    if (isStartingRegion) {
-      // Starting region — trust the WorldBible adjacent_regions list.
-      for (const r of wb?.adjacent_regions ?? []) {
-        if (r.id === current.id) continue;
-        if (knownPeerIds.has(r.id)) continue;
-        if (seen.has(r.id)) continue;
-        seen.add(r.id);
-        const graphNode  = worldGraph.nodes[r.id];
-        const isExpanded = !!graphNode && graphNode.discovered === true;
-        peerCards.push({
-          key:        isExpanded ? `peer-known-${r.id}` : `peer-unknown-${r.id}`,
-          kind:       isExpanded ? "peer-known" : "peer-unknown",
-          targetId:   r.id,
-          name:       r.name.toUpperCase(),
-          sublabel:   isExpanded ? "REGION" : "UNDISCOVERED REGION",
-          discovered: isExpanded,
-        });
-      }
-    } else {
-      // Expanded region — scan graph connections for adjacent region zones.
-      // A region zone is: type=zone, is_expandable=true, zone_id=self.
-      for (const connId of current.connections) {
-        const connNode = worldGraph.nodes[connId];
-        if (!connNode) continue;
-        if (connNode.is_expandable !== true) continue;
-        if (connNode.zone_id !== connNode.id)  continue; // must be self-zoned
-        if (connNode.id === current.id)         continue; // not self
-        if (knownPeerIds.has(connNode.id))      continue;
-        if (seen.has(connNode.id))              continue;
-        seen.add(connNode.id);
-        const isExpanded = connNode.discovered === true;
-        peerCards.push({
-          key:        isExpanded ? `peer-known-${connNode.id}` : `peer-unknown-${connNode.id}`,
-          kind:       isExpanded ? "peer-known" : "peer-unknown",
-          targetId:   connNode.id,
-          name:       connNode.name.toUpperCase(),
-          sublabel:   isExpanded ? "REGION" : "UNDISCOVERED REGION",
-          discovered: isExpanded,
-        });
-      }
-    }
-  }
-
-  return [...backCards, ...deeperCards, ...exitCards, ...peerCards];
-}
-
 // ── Card component ──────────────────────────────────────────────────────────
 
 const ARROW: Record<CardKind, string> = {
@@ -408,6 +220,16 @@ const ARROW: Record<CardKind, string> = {
   exit:           "↑",
   "peer-known":   "◆",
   "peer-unknown": "◇",
+};
+
+/** Polish 4a TASK 2 — map destination tier to its CSS color token.
+ *  Border + leading arrow + title pick up this color so the player
+ *  can scan tier at a glance. Background stays neutral. */
+const TIER_COLOR: Record<CardTier, string> = {
+  region:         "var(--hl-region)",
+  settlement:     "var(--hl-loc)",
+  "sub-location": "var(--hl-sublocation)",
+  dungeon:        "var(--hl-dungeon)",
 };
 
 function NavCard({
@@ -432,21 +254,24 @@ function NavCard({
   const isGenerating       = generatingRegionId !== null;
   const isGeneratingTarget = isUnknown && generatingRegionId === card.targetId;
 
+  // Polish 4a TASK 2 — tier color drives border, arrow, and title.
+  const tierColor = TIER_COLOR[card.tier];
+
   const arrowColor =
     isBack ? "var(--ink-3)"
     : isUnknown ? "var(--ink-4)"
-    : "var(--accent)";
+    : tierColor;
   const nameColor =
     isBack    ? "var(--ink-3)"
     : isUnknown ? "var(--ink-3)"
     : isNew   ? "var(--ink-3)"
-    : "var(--ink-1)";
+    : tierColor;
   const subColor =
-    isPeerKnown ? "var(--accent)"
-    : isUnknown  ? "var(--accent)"
+    isPeerKnown ? tierColor
+    : isUnknown  ? tierColor
     : "var(--ink-4)";
 
-  // Backgrounds — Fix 7: TYPE B (deeper) is transparent so settlement
+  // Backgrounds — TYPE B (deeper) is transparent so settlement
   // sub-loc cards read flatter; TYPE D1 keeps the elevated --bg-2 fill;
   // TYPE D2 (undiscovered) is transparent.
   const background =
@@ -455,13 +280,14 @@ function NavCard({
     : isUnknown  ? "transparent"
     : "var(--bg-2)";
 
-  // Border — TYPE B uses 60% accent opacity, TYPE D2 dashed 35%.
+  // Border — colored by destination tier. Undiscovered uses a softer
+  // dashed variant. Back uses the neutral --line so it doesn't read
+  // as a destination color cue.
   const borderColor =
     isBack       ? "var(--line)"
-    : isUnknown  ? "color-mix(in srgb, var(--accent) 35%, transparent)"
-    : isDeeper   ? "color-mix(in srgb, var(--accent) 60%, transparent)"
-    : isNew      ? "color-mix(in srgb, var(--accent) 40%, transparent)"
-    : "var(--accent)";
+    : isUnknown  ? `color-mix(in srgb, ${tierColor} 35%, transparent)`
+    : isNew      ? `color-mix(in srgb, ${tierColor} 50%, transparent)`
+    : tierColor;
   const borderStyle = isUnknown || isNew ? "dashed" : "solid";
 
   // Category / undiscovered badge under the primary name — diamond cards
@@ -551,8 +377,8 @@ function NavCard({
               fontSize:      7,
               fontFamily:    "var(--mono)",
               letterSpacing: "0.2em",
-              color:         "var(--accent)",
-              border:        "1px solid var(--accent)",
+              color:         tierColor,
+              border:        `1px solid ${tierColor}`,
               padding:       "1px 4px",
               flexShrink:    0,
             }}>
@@ -572,8 +398,8 @@ function NavCard({
             ...(showBadge ? {
               alignSelf:    "flex-start",
               border:       `1px solid ${isUnknown
-                ? "color-mix(in srgb, var(--accent) 35%, transparent)"
-                : "color-mix(in srgb, var(--accent) 60%, transparent)"}`,
+                ? `color-mix(in srgb, ${tierColor} 35%, transparent)`
+                : `color-mix(in srgb, ${tierColor} 60%, transparent)`}`,
               padding:      "1px 5px",
               marginTop:    2,
             } : {}),
@@ -584,12 +410,4 @@ function NavCard({
       </span>
     </button>
   );
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-function typeLabel(node: WorldNode): string {
-  if (node.is_expandable === true && node.zone_id === node.id) return "REGION";
-  const raw = (node.category ?? node.type ?? "").toString();
-  return raw.toUpperCase();
 }

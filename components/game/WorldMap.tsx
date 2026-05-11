@@ -57,8 +57,12 @@ export function WorldMap({
     () => findRootZoneId(worldGraph.current_node_id, worldGraph.nodes) ?? null
   );
 
-  // Auto-snap selectedRegionId when the player crosses regions; preserve
-  // the player's tier choice unless they were already on Tier 3.
+  // Auto-snap selectedRegionId when the player crosses regions and,
+  // per Polish 4a TASK 3b, force the map tier to "region" (2) on
+  // cross-region arrival so the player sees the new region they just
+  // entered. Same-region moves leave the tier alone (the player may
+  // have manually switched to World or Local, and we respect that).
+  // See lib/game/nav-cards.ts → isCrossRegionArrival for the predicate.
   useEffect(() => {
     if (!masterState?.world_graph) return;
     const graph        = masterState.world_graph;
@@ -67,7 +71,7 @@ export function WorldMap({
     if (!rootZoneId) return;
     if (rootZoneId !== selectedRegionId) {
       setSelectedRegionId(rootZoneId);
-      setActiveTier((cur) => (cur === 3 ? 3 : cur));
+      setActiveTier(2);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masterState?.world_graph?.current_node_id]);

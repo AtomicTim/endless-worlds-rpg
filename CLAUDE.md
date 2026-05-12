@@ -1,10 +1,10 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.52
-**Status:** V8.52 Polish COMPLETE (commit 4091ff3) — Day 23 Main Quest Thread NEXT
+**Version:** 8.53
+**Status:** Generation Pipeline Polish COMPLETE (commit 43cb43f) — Day 23A World Structure Expansion NEXT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
-**References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/css-containment-audit.md · /docs/mobile-viewport-audit.md · /docs/genre-reference.md · /docs/project-log.md
+**References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
 
 ---
 
@@ -71,35 +71,36 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 ## 📋 Strategic Trajectory Notes
 
-> **Full trajectory notes, round history, future feature ideas, and open questions live in `/docs/project-log.md`.** This section is a summary only.
+> **Full trajectory notes, round history, future feature ideas, and open questions live in `/docs/project-log.md`.** Quest system design spec lives in `/docs/quest-system-spec.md`. This section is a summary only.
 
 ### Sequence
 
-1–10b. ~~Polish through combat rebalance~~ ✅
-10c. ~~V8.52 Polish — WCD themes, gold tiers, food heals (4091ff3)~~ ✅
-11. ~~Vertical slice playtest~~ ✅ (core loop confirmed working)
-12. **Day 23 — Main Quest Thread** ⏳ NEXT
-13. Merchant Trading Foundation round
-14. Combat UX & Flow Polish round (HP timing, hit/miss, flee-fail, death summary)
-15. Mobile Combat Layout round
-16. Day 24 — Multiplayer Foundation
-17. Day 25 — Customization Layer
-18. Genre Session — sub-genre expansion
-19. Day 20.5 — Verbal Action (deferred)
-20. Day 20.6 — Encounter Avoidance / Stealth (deferred)
+1–11. ~~Polish through vertical slice playtest~~ ✅
+12a. ~~Generation Pipeline Polish (43cb43f)~~ ✅
+12. **Day 23A — World Structure Expansion** ⏳ NEXT
+13. Day 23B — Quest Schema + Data Structures
+14. Day 23C — Quest Discovery + Journal UI
+15. Day 23D — Side Quest Generation
+16. Merchant Trading Foundation round
+17. Combat UX & Flow Polish round (HP timing, hit/miss, flee-fail, death summary)
+18. Mobile Combat Layout round
+19. Day 24 — Multiplayer Foundation
+20. Day 25 — Customization Layer
+21. Genre Session — sub-genre expansion
+22. Day 20.5 — Verbal Action (deferred)
+23. Day 20.6 — Encounter Avoidance / Stealth (deferred)
 
 ### Key open questions
 
 - XP threshold tuning — revisit after more playtest data.
 - Death stash / recovery mechanic — design decision needed (see project-log.md).
-- More location node types — wilderness, abandoned villages, workshops (Day 23 scope).
-- Item contextual appropriateness — loot prompt guidance (bundle with Day 23).
+- Item contextual appropriateness — loot prompt guidance (bundle with Day 23A).
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** V8.52 Polish complete (4091ff3, 454/454). Day 23 Main Quest Thread is next.
+**Current Phase:** Generation pipeline polish complete (43cb43f, 454/454). Day 23A World Structure Expansion is next.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** atomictim/endless-worlds-rpg
 
 | Phase | Title | Status |
@@ -108,36 +109,36 @@ This scenario drives every design decision. If a feature makes that scenario *be
 | 19A–19F | World Generation Architecture | ✅ Complete |
 | Movement Track | Verified end-to-end | ✅ FROZEN |
 | Combat Spec | /docs/combat-spec.md | ✅ Frozen |
-| Combat era (Days 20–20.4.2) | Data + resolver + UI + narration + polish + hotfixes | ✅ Complete |
-| Polish era (4a–4b + hotfixes) | Nav grouping/columns/dedup + map tier + display fixes + mobile QA | ✅ Complete |
-| Day 21 (a56940f) | Container + Loot — 3-layer loot architecture, SEARCH REMAINS, FloorLootStrip | ✅ Complete |
-| UX Patch + Potion hotfix | Revisit suppression, popup labels, .ew-said color, looted consumables in combat | ✅ Complete |
-| Day 22 (7833245) | Archetypes, leveling, 25 classes, LevelUpModal, XP bar, STAT_XP wiring | ✅ Complete |
-| Char creation UI fix (9fe5c8d) | Point-buy removed, dynamic 5-class picker, CLASS_FLAVOR | ✅ Complete |
-| Combat Rebalance (00b5450) | abilityMod formula fix, all 5 bestiaries, bible stat budget guidance | ✅ Complete |
-| V8.52 Polish (4091ff3) | WCD 12-theme rotation, gold tiers unified, food heals 5 HP | ✅ Complete |
-| Vertical Slice Playtest | Core loop confirmed: combat fun, loot working, level-up firing correctly | ✅ Complete |
-| **Day 23** | **Main Quest Thread + more location types** | ⏳ **NEXT** |
-| Merchant Trading Foundation | Persistent merchant inventory, buy/sell, engine-enforced gold deduction | ⏳ |
+| Combat era + Polish era + Day 21 | Through loot system | ✅ Complete |
+| Day 22 + fixes + rebalance | Archetypes, leveling, 25 classes, combat fix, creation UI fix | ✅ Complete |
+| V8.52 Polish (4091ff3) | WCD 12-theme rotation, gold tiers, food heals | ✅ Complete |
+| Vertical Slice Playtest | Core loop confirmed working and fun | ✅ Complete |
+| Quest system design | Full spec in /docs/quest-system-spec.md | ✅ Complete |
+| Gen pipeline polish (43cb43f) | RegionBible dedup, post-apply burst, WB/RB prompt trim | ✅ Complete |
+| **Day 23A** | **World structure: 3-4 locations/region, varied types, 3-room dungeons, dungeon locks** | ⏳ **NEXT** |
+| Day 23B | Quest schema + data structures | ⏳ |
+| Day 23C | Quest discovery + Morrowind journal UI | ⏳ |
+| Day 23D | Side quest generation | ⏳ |
+| Merchant Trading Foundation | Persistent merchant inventory, buy/sell | ⏳ |
 | Combat UX & Flow Polish | HP timing + hit/miss + flee-fail + death summary/stash | ⏳ Post-Day-23 |
-| Mobile Combat Layout | Stacked portrait layout at narrow viewport | ⏳ After Combat UX Polish |
+| Mobile Combat Layout | Stacked portrait layout at narrow viewport | ⏳ |
 | Day 24 | Multiplayer Foundation | ⏳ Pre-launch |
 | Day 25 | Customization Layer | ⏳ Pre-launch toward end |
-| Genre Session | Sub-genre expansion (see /docs/genre-reference.md) | ⏳ Post-Day-25 |
-| Skills System | Separate skills layer — deferred (see project-log.md) | ⏳ Post-playtest |
-| Day 20.5 | Verbal Action System + in-combat equip/unequip | ⏳ Deferred |
+| Genre Session | Sub-genre expansion | ⏳ Post-Day-25 |
+| Skills System | Separate skills layer | ⏳ Post-playtest |
+| Day 20.5 | Verbal Action + in-combat equip | ⏳ Deferred |
 | Day 20.6 | Encounter Avoidance / Stealth | ⏳ Deferred |
 | Map Visual Rework | Dedicated session | ⏳ Deferred |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic. 5 classes per genre (25 total).
 
-### Known issues (see project-log.md for full list)
+### Known issues
 
-**HP bar timing — DEFERRED:** HP drops before floating numbers and story text. Bundled with Combat UX Polish.
+**HP bar timing — DEFERRED:** Bundled with Combat UX Polish.
 
 **No equip/unequip during combat — INTENTIONAL (rule 63):** Day 20.5 scope item.
 
-**Item contextual appropriateness:** Food items appearing in dungeon/combat loot. Prompt guidance needed. Day 23 bundle.
+**Item contextual appropriateness:** Food items in dungeon/combat loot. Bundle with Day 23A prompt guidance.
 
 ---
 
@@ -224,18 +225,20 @@ This scenario drives every design decision. If a feature makes that scenario *be
 79. **Prompt-template hardcoded structural IDs are a recurring bug class.** Audit `app/api/game/generate-*/route.ts` for `${outline.id}`, `${region.id}` etc. in id positions. (V8.42)
 80. **Nav card dedup at region zone.** DEEPER isAtRegionZone branch checks `backCards[0]?.targetId`; suppresses DEEPER settlement card if it matches BACK destination. Cross-region: both emit. No trail: DEEPER suppressed. (V8.43 defined · V8.44 implemented)
 81. **Map tier auto-switch fires on every node arrival.** `lib/game/map-tier.ts` `chooseTierForNode()`: region zone → tier 2, everything else → tier 1. WorldMap.tsx useEffect calls this on every arrival. (V8.43 defined · V8.44 implemented)
-82. **jest baseline history.** Original V8.45 count of 762 inflated by `.claude/worktrees/` double-counting; corrected to 393 in V8.47. Day 22 added 59 tests → 452. Combat rebalance added 2 → **454** (see rule 91). (V8.47 + V8.50 + V8.51)
-83. **Loot never auto-credits.** `handleVictory` pushes XP-only; all item/gold drops go to `MasterState.floor_loot[]` as `FloorLootEntry`. Player must explicitly SEARCH REMAINS or TAKE / TAKE ALL from FloorLootStrip. (V8.47)
-84. **Container search is engine-resolved, zero LLM calls.** `resolveInteract` detects `LocationObject.type === "container"` → `resolveLoot()` → `FloorLootEntry` → templated story beat. Engine guarantees ≥1 container per combat-eligible node. (V8.47)
-85. **Currency and inventory cap are canonical constants.** `lib/game/currency.ts` → `currencyKeyFor(genre)` / `currencyLabelFor(genre)`. Horror = "marks". `lib/game/constants.ts` → `INVENTORY_CAP = 20`. Never hardcode. (V8.47)
-86. **Revisit suppression — no re-describing known locations.** On ARRIVING at a node with `discovered === true`: emit one-line "You return to {name}." only — skip cached atmosphere prose AND narrator API call. Spawn settlement starts `discovered: true`. (V8.48)
-87. **Object highlight popup uses context-aware action labels.** CONTAINER → "Search". Fixture/lore/trigger/undefined ITEM POI → "Examine" (never "Pick up"). Navigation-like labels → header + Close only. "Pick up" NEVER appears for LocationObject interactions. (V8.48)
-88. **`resolveUseItem` resolves heal by effect, not by id.** (1) `item_effect?.heal` finite positive → flat heal, consumed. (2) `BASIC_HEALTH_POTION_ID` match → 1d8+4, consumed. (3) Otherwise → no-op. `combat-engine.ts` passes `owned.effect`. (V8.49)
-89. **Archetype system lives in `lib/game/archetypes.ts`.** 25 classes (5 per genre). `buildStartingAttributes(background)` sets all stats to STAT_BASE=2; primary +STAT_PRIMARY_BONUS=2; secondary +STAT_SECONDARY_BONUS=1. `getArchetype(background)` returns ArchetypeConfig. (V8.50)
-90. **Level-up flow is post-combat, player-driven.** `handleVictory` sets `pending_level_up=true` on threshold cross. LevelUpModal opens after combat slice clears. Auto-gains (primary+1, secondary+1, HP) + 5-button free stat picker. STAT_XP mid-combat auto-applies to archetype primary. (V8.50)
-91. **jest baseline = 454 (V8.51).** Day 22 added 59 tests (393→452); combat rebalance added 2 dice modifier cases (452→454). 454 is the authoritative count going forward. (V8.50 + V8.51)
-92. **Ability modifier formula calibrated for 2-10 stat range.** Both `abilityMod` (combat-engine.ts) and `getAttributeModifier` (dice.ts) use `Math.floor((score - 2) / 2)`. Score table: 2-3→+0, 4-5→+1, 6-7→+2, 8-9→+3, 10→+4. These two functions MUST always use the same formula. CharacterSheet pip bar uses `value/2` (min 1). Old D&D formula permanently superseded. (V8.51)
-93. **Enemy stat budgets enforced at two layers.** (1) Static bestiaries: tier-1 agi_mod ≤1, hp_range min ≤8. (2) WorldBible + RegionBible prompts include ENEMY STAT BUDGET guidance block with NEVER constraints on starting tier. JSON skeleton examples use tier-1 values. (V8.51)
+82. **jest baseline history.** Original V8.45 count of 762 inflated by `.claude/worktrees/` double-counting; corrected to 393 in V8.47. Day 22 added 59 → 452. Combat rebalance added 2 → **454** (see rule 91). (V8.47–V8.51)
+83. **Loot never auto-credits.** `handleVictory` pushes XP-only; all drops go to `MasterState.floor_loot[]`. Player must explicitly SEARCH REMAINS or TAKE / TAKE ALL. (V8.47)
+84. **Container search is engine-resolved, zero LLM calls.** `resolveInteract` detects `type === "container"` → `resolveLoot()` → `FloorLootEntry` → templated beat. Engine guarantees ≥1 container per combat-eligible node. (V8.47)
+85. **Currency and inventory cap are canonical constants.** `lib/game/currency.ts` · `lib/game/constants.ts` → `INVENTORY_CAP = 20`. Never hardcode. (V8.47)
+86. **Revisit suppression.** On ARRIVING at `discovered === true`: emit "You return to {name}." only. Spawn settlement starts `discovered: true`. (V8.48)
+87. **Object highlight popup uses context-aware action labels.** CONTAINER → "Search". ITEM POI → "Examine". Navigation-like labels → Close only. "Pick up" NEVER appears for LocationObject interactions. (V8.48)
+88. **`resolveUseItem` resolves heal by effect, not by id.** (1) `item_effect?.heal` finite positive → flat heal. (2) `BASIC_HEALTH_POTION_ID` → 1d8+4. (3) Otherwise → no-op. (V8.49)
+89. **Archetype system in `lib/game/archetypes.ts`.** 25 classes. `buildStartingAttributes(background)` sets stats: STAT_BASE=2, primary +2, secondary +1. (V8.50)
+90. **Level-up flow is post-combat, player-driven.** LevelUpModal opens after combat slice clears. Auto-gains + 5-button free stat picker. STAT_XP mid-combat auto-applies to archetype primary. (V8.50)
+91. **jest baseline = 454 (V8.51).** 454 is the authoritative count going forward. (V8.50 + V8.51)
+92. **Ability modifier formula calibrated for 2-10 stat range.** Both `abilityMod` and `getAttributeModifier` use `Math.floor((score - 2) / 2)`. These MUST always match. CharacterSheet pip bar uses `value/2` (min 1). (V8.51)
+93. **Enemy stat budgets enforced at two layers.** Static bestiaries: tier-1 agi_mod ≤1, hp min ≤8. Bible prompts: ENEMY STAT BUDGET block with NEVER constraints. (V8.51)
+94. **RegionBibleCache in-flight dedup via promise map.** `inFlight` is `Map<string, Promise<RegionBible | null>>` (not a Set). `awaitRegionalBible(sessionId, outlineId)` resolves: (1) cache hit → return; (2) in-flight promise exists → await it; (3) total miss → return null (caller fires live fetch). `pregenerateRegionalBible` stores its promise in `inFlight` at start and deletes on settle. WORLD_EXPLORE branch uses async `awaitRegionalBible`. Pre-V8.53: synchronous lookup returned null mid-pregen → duplicate live call spawned → both completed → pregen result discarded. (V8.53)
+95. **Post-apply pregeneration burst.** After `apply-world-bible` succeeds, the new-game wizard fires `pregenerateRegionalBible()` for all `bible.adjacent_regions` outlines immediately (fire-and-forget). By the time the player finishes the opening narrative (~5-15 min), all adjacent RegionBibles are warm — cross-border navigation hits cache. The inFlight dedup (rule 94) makes subsequent navigator-triggered pregenerateRegionalBible calls no-ops for already-in-flight keys. WorldBible was NOT split into parallel calls — quest coherence requires the starting region and main quest schema to generate as a single creative act. (V8.53)
 
 ---
 
@@ -305,8 +308,8 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint (resol
 
 Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim reports commit + tests → Claude.ai updates docs → Tim verifies → next prompt.
 
-**Update routing:** New rules or status changes → CLAUDE.md. Trajectory notes, round history, future features, design captures → `/docs/project-log.md`.
+**Update routing:** New rules or status changes → CLAUDE.md. Trajectory notes, round history, future features, design captures → `/docs/project-log.md`. Quest system design → `/docs/quest-system-spec.md`.
 
 **Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` (no pattern) = authoritative full-suite test count. Baseline = 454 (rule 91).**
 
-**Authority:** Architecture → /docs/architecture-spec.md · Combat → /docs/combat-spec.md · Vision/scope → Game Vision · Strategic/sequencing → /docs/project-log.md · Round details → git log + project-log.md.
+**Authority:** Architecture → /docs/architecture-spec.md · Combat → /docs/combat-spec.md · Quest system → /docs/quest-system-spec.md · Vision/scope → Game Vision · Strategic/sequencing → /docs/project-log.md.

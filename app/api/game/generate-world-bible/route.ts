@@ -226,6 +226,23 @@ Return EXACTLY this JSON structure (fill in the values):
             }
           }
         ]
+      },
+      {
+        "id": "region_landmark_slug",
+        "name": "The Region Landmark Name (a ruin / shrine / overlook — NOT a dungeon)",
+        "type": "wilderness",
+        "node_type": "landmark",
+        "is_settlement_node": false,
+        "is_interior": false,
+        "atmosphere": "1-2 sentences describing this standalone lore-rich site.",
+        "grid_position": {"x": -8, "y": 6},
+        "connections": ["settlement_slug"],
+        "npc_ids": [],
+        "objects": [
+          {"id": "landmark_obj_slug", "name": "Tier 1 Lore Object Name", "description": "1 sentence", "is_interactable": true, "type": "lore"}
+        ],
+        "ambient_type": "open_ruins",
+        "encounter_chance": 0.1
       }
     ],
     "npcs": [
@@ -448,8 +465,13 @@ Set node_type on the settlement node ("settlement_hub"), every
 sub-location ("settlement_hub" — they live inside it), and every
 region_location.
 
-The starting region is ALWAYS region_type "settled". Its 1
-standalone region_location is the region's first dungeon.
+The starting region is ALWAYS region_type "settled". It MUST have
+2-3 entries in starting_region.region_locations: at LEAST one
+"dungeon" (with the full 3-room dungeon_rooms structure — see
+DUNGEON STRUCTURE below + the JSON skeleton above), plus 1-2 of
+{landmark, wilderness, abandoned_settlement, outpost}. Do NOT
+generate only one region_location — the player needs variety
+beyond the settlement on day 1.
 
 REGION TYPE GUIDANCE for adjacent_regions (set "region_type" on each):
   settled   — 1 settlement_hub + 1-2 dungeons + 1-2 landmark/wilderness
@@ -497,6 +519,18 @@ Room 3 — boss (room_type "boss", encounter_chance 1.0):
     }
   • is_boss_room SHOULD also be true at the parent dungeon-node
     level (encounter_chance 1.0 + named boss enemy in the roster).
+
+V8.54 ENFORCEMENT REMINDER — Every location whose node_type is
+"dungeon" MUST emit a "dungeon_rooms" array with all 3 entries
+(entrance, middle, boss). This applies to:
+  • starting_region.region_locations entries with node_type "dungeon"
+  • adjacent_regions[i] outline previews are exempt (RegionBible
+    fills in their dungeon_rooms when the region expands)
+A dungeon WITHOUT dungeon_rooms is incomplete and will be rejected
+client-side. The JSON skeleton above shows the exact shape — copy
+it; do not abbreviate. The middle room MUST contain a key-object
+with is_key_item: true; the boss room MUST contain a "lock" field
+pointing at that key-object's id.
 
 Example combat-tagged location (a dungeon entrance with mixed roster):
 {

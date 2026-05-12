@@ -588,6 +588,14 @@ export async function POST(request: NextRequest) {
           "[apply-regional-bible]"
         )
       : undefined;
+    // V8.54 — dungeon validation diagnostic. Mirrors apply-world-bible
+    // so grepping "dungeon node X: N rooms validated" surfaces the
+    // count across both bible apply paths.
+    if (nodeType === "dungeon") {
+      console.log(
+        `[apply-regional-bible] dungeon node ${loc.id}: ${dungeonRooms?.length ?? 0} rooms validated.`
+      );
+    }
 
     newNodes[loc.id] = {
       id:                 loc.id,
@@ -678,6 +686,12 @@ export async function POST(request: NextRequest) {
           "[apply-regional-bible]"
         )
       : undefined;
+    // V8.54 — dungeon validation diagnostic.
+    if (nodeType === "dungeon") {
+      console.log(
+        `[apply-regional-bible] dungeon node ${loc.id}: ${dungeonRooms?.length ?? 0} rooms validated.`
+      );
+    }
 
     newNodes[loc.id] = {
       id:                 loc.id,

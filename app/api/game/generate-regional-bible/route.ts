@@ -288,6 +288,23 @@ consistent with the WCD):
           }
         }
       ]
+    },
+    {
+      "id": "${outline.id}_landmark",
+      "name": "[Standalone landmark name — a ruin / shrine / overlook, NOT a dungeon]",
+      "type": "wilderness",
+      "node_type": "landmark",
+      "is_settlement_node": false,
+      "is_interior": false,
+      "atmosphere": "[1-2 sentences describing this lore-rich site]",
+      "grid_position": {"x": ${outline.grid_centre.x - 2}, "y": ${outline.grid_centre.y + 1}},
+      "connections": ["${settlementSlug}"],
+      "npc_ids": [],
+      "objects": [
+        {"id": "${outline.id}_landmark_lore", "name": "[Tier 1 Lore Object]", "description": "[1 sentence]", "is_interactable": true, "type": "lore"}
+      ],
+      "ambient_type": "open_ruins",
+      "encounter_chance": 0.1
     }
   ],
   "exits": [
@@ -341,11 +358,26 @@ consistent with the WCD):
 
 Make everything original and consistent with the WCD.
 Real names for all NPCs. No placeholders.
-The region_locations entry is a STANDALONE point in the geographic
-area (dungeon / wilderness / shrine) — NOT inside the settlement.
-It connects directly to the settlement hub. It MUST have an NPC
-with a believable reason to be there, plus 2 evocative Tier 1
-objects.
+
+REGION_LOCATIONS COUNT GUIDANCE (V8.54 — match outline.region_type):
+The region_locations array MUST hold 2-4 standalone nodes alongside
+the settlement. Mix by region_type:
+  settled  — 1 dungeon + 1-2 of {landmark, wilderness, outpost}  → 2-3 total
+  frontier — 1-2 dungeons + 1-2 of {wilderness, landmark}        → 2-4 total
+  hostile  — 2-3 dungeons + 1-2 of {landmark, abandoned}         → 3-4 total
+            (hostile regions have NO settlement; locations[] is
+            still required for navigation but settlement_id may
+            point at a structural-only outpost entry.)
+Each region_location is a STANDALONE node in the geographic area
+(dungeon / landmark / wilderness / outpost / abandoned_settlement)
+— NOT inside the settlement. Connect each to the settlement hub.
+Dungeons MUST have an NPC with a believable reason to be there,
+plus 2 evocative Tier 1 objects.
+
+DUNGEON ROOMS — every node_type "dungeon" in region_locations MUST
+include a 3-entry dungeon_rooms array (entrance → middle → boss)
+following the skeleton above. A dungeon without dungeon_rooms is
+incomplete and will be rejected client-side.
 
 NPC KNOWLEDGE FORMAT (Architecture C): every NPC's "knowledge"
 array must be objects of shape {topic, content}. The topic is a

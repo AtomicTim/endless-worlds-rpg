@@ -679,6 +679,16 @@ export async function POST(request: NextRequest) {
     const dungeonRooms = nodeType === "dungeon"
       ? validateDungeonRooms(locRecord.dungeon_rooms, `starting_region.locations[${loc.id}]`, "[apply-world-bible]")
       : undefined;
+    // V8.54 — dungeon validation diagnostic. Empty count means the AI
+    // emitted a dungeon without rooms (or with malformed rooms — see
+    // validateDungeonRooms warnings above); this is the canonical
+    // signal that the prompt's DUNGEON STRUCTURE block needs another
+    // pass. Tim greps these lines after a fresh world generates.
+    if (nodeType === "dungeon") {
+      console.log(
+        `[apply-world-bible] dungeon node ${loc.id}: ${dungeonRooms?.length ?? 0} rooms validated.`
+      );
+    }
 
     graphNodes[loc.id] = {
       id:                 loc.id,
@@ -748,6 +758,15 @@ export async function POST(request: NextRequest) {
     const dungeonRooms = nodeType === "dungeon"
       ? validateDungeonRooms(locRecord.dungeon_rooms, `starting_region.region_locations[${loc.id}]`, "[apply-world-bible]")
       : undefined;
+    // V8.54 — dungeon validation diagnostic. Region_locations are the
+    // MOST likely place a starting-region dungeon lives, so a missing
+    // room count here is the most actionable WB-prompt issue to
+    // surface in server logs.
+    if (nodeType === "dungeon") {
+      console.log(
+        `[apply-world-bible] dungeon node ${loc.id}: ${dungeonRooms?.length ?? 0} rooms validated.`
+      );
+    }
 
     const regionLocNode: WorldNode = {
       id:                 loc.id,

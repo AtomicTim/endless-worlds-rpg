@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.53
-**Status:** Generation Pipeline Polish COMPLETE (commit 43cb43f) — Day 23A World Structure Expansion NEXT
+**Version:** 8.54
+**Status:** Day 23A Part 1 (data foundation) COMPLETE (commit 7424776) — Day 23A Part 2 (runtime + UI) NEXT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -65,7 +65,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 **Per-prompt protocols (cumulative):**
 - **V8.40 — Investigation-before-patching.** Validate root-cause hypothesis BEFORE patching.
 - **V8.41 — Origin/main baseline check.** Step 1 of every prompt: `git fetch origin && git log origin/main --oneline -5`.
-- **V8.51 — jest baseline = 454.** See rule 91.
+- **V8.54 — jest baseline = 484.** See rule 91.
 
 ---
 
@@ -77,12 +77,14 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 1–11. ~~Polish through vertical slice playtest~~ ✅
 12a. ~~Generation Pipeline Polish (43cb43f)~~ ✅
-12. **Day 23A — World Structure Expansion** ⏳ NEXT
+12b. ~~Day 23A Part 1 — Data Foundation (7424776)~~ ✅
+12c. **Day 23A Part 2 — Runtime + UI** ⏳ NEXT
 13. Day 23B — Quest Schema + Data Structures
 14. Day 23C — Quest Discovery + Journal UI
 15. Day 23D — Side Quest Generation
+15a. Day 23.5 — Character Creation Rework
 16. Merchant Trading Foundation round
-17. Combat UX & Flow Polish round (HP timing, hit/miss, flee-fail, death summary)
+17. Combat UX & Flow Polish round
 18. Mobile Combat Layout round
 19. Day 24 — Multiplayer Foundation
 20. Day 25 — Customization Layer
@@ -94,41 +96,32 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 - XP threshold tuning — revisit after more playtest data.
 - Death stash / recovery mechanic — design decision needed (see project-log.md).
-- Item contextual appropriateness — loot prompt guidance (bundle with Day 23A).
+- Character creation rework — design questions captured in project-log.md Day 23.5 section.
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Generation pipeline polish complete (43cb43f, 454/454). Day 23A World Structure Expansion is next.
+**Current Phase:** Day 23A Part 1 complete (7424776, 484/484). Day 23A Part 2 runtime + UI is next.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** atomictim/endless-worlds-rpg
 
 | Phase | Title | Status |
 | --- | --- | --- |
-| 1–18 | MVP through Systems Audit | ✅ Complete |
-| 19A–19F | World Generation Architecture | ✅ Complete |
-| Movement Track | Verified end-to-end | ✅ FROZEN |
-| Combat Spec | /docs/combat-spec.md | ✅ Frozen |
-| Combat era + Polish era + Day 21 | Through loot system | ✅ Complete |
-| Day 22 + fixes + rebalance | Archetypes, leveling, 25 classes, combat fix, creation UI fix | ✅ Complete |
-| V8.52 Polish (4091ff3) | WCD 12-theme rotation, gold tiers, food heals | ✅ Complete |
-| Vertical Slice Playtest | Core loop confirmed working and fun | ✅ Complete |
-| Quest system design | Full spec in /docs/quest-system-spec.md | ✅ Complete |
-| Gen pipeline polish (43cb43f) | RegionBible dedup, post-apply burst, WB/RB prompt trim | ✅ Complete |
-| **Day 23A** | **World structure: 3-4 locations/region, varied types, 3-room dungeons, dungeon locks** | ⏳ **NEXT** |
-| Day 23B | Quest schema + data structures | ⏳ |
+| 1–11 | MVP through vertical slice playtest | ✅ Complete |
+| Gen pipeline (43cb43f) | RegionBible dedup, post-apply burst, WB/RB prompt trim | ✅ Complete |
+| **Day 23A pt 1** (7424776) | **Types, prompts, apply routes, pure helper libs, 30 tests** | ✅ **Complete** |
+| **Day 23A pt 2** | **useGameLoop dungeon entry/nav, NavigationBar room cards, lock UI, breadcrumb** | ⏳ **NEXT** |
+| Day 23B | Quest schema + data structures + world intro template | ⏳ |
 | Day 23C | Quest discovery + Morrowind journal UI | ⏳ |
 | Day 23D | Side quest generation | ⏳ |
+| Day 23.5 | Character creation rework | ⏳ |
 | Merchant Trading Foundation | Persistent merchant inventory, buy/sell | ⏳ |
 | Combat UX & Flow Polish | HP timing + hit/miss + flee-fail + death summary/stash | ⏳ Post-Day-23 |
 | Mobile Combat Layout | Stacked portrait layout at narrow viewport | ⏳ |
 | Day 24 | Multiplayer Foundation | ⏳ Pre-launch |
 | Day 25 | Customization Layer | ⏳ Pre-launch toward end |
 | Genre Session | Sub-genre expansion | ⏳ Post-Day-25 |
-| Skills System | Separate skills layer | ⏳ Post-playtest |
-| Day 20.5 | Verbal Action + in-combat equip | ⏳ Deferred |
-| Day 20.6 | Encounter Avoidance / Stealth | ⏳ Deferred |
-| Map Visual Rework | Dedicated session | ⏳ Deferred |
+| Skills System / Verbal Action / Stealth | Deferred systems | ⏳ Deferred |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic. 5 classes per genre (25 total).
 
@@ -137,8 +130,6 @@ This scenario drives every design decision. If a feature makes that scenario *be
 **HP bar timing — DEFERRED:** Bundled with Combat UX Polish.
 
 **No equip/unequip during combat — INTENTIONAL (rule 63):** Day 20.5 scope item.
-
-**Item contextual appropriateness:** Food items in dungeon/combat loot. Bundle with Day 23A prompt guidance.
 
 ---
 
@@ -225,7 +216,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 79. **Prompt-template hardcoded structural IDs are a recurring bug class.** Audit `app/api/game/generate-*/route.ts` for `${outline.id}`, `${region.id}` etc. in id positions. (V8.42)
 80. **Nav card dedup at region zone.** DEEPER isAtRegionZone branch checks `backCards[0]?.targetId`; suppresses DEEPER settlement card if it matches BACK destination. Cross-region: both emit. No trail: DEEPER suppressed. (V8.43 defined · V8.44 implemented)
 81. **Map tier auto-switch fires on every node arrival.** `lib/game/map-tier.ts` `chooseTierForNode()`: region zone → tier 2, everything else → tier 1. WorldMap.tsx useEffect calls this on every arrival. (V8.43 defined · V8.44 implemented)
-82. **jest baseline history.** Original V8.45 count of 762 inflated by `.claude/worktrees/` double-counting; corrected to 393 in V8.47. Day 22 added 59 → 452. Combat rebalance added 2 → **454** (see rule 91). (V8.47–V8.51)
+82. **jest baseline history.** Original V8.45 count of 762 inflated by worktrees double-counting; corrected to 393. Day 22 +59 → 452. Combat rebalance +2 → 454. Day 23A pt 1 +30 → **484**. See rule 91. (V8.47–V8.54)
 83. **Loot never auto-credits.** `handleVictory` pushes XP-only; all drops go to `MasterState.floor_loot[]`. Player must explicitly SEARCH REMAINS or TAKE / TAKE ALL. (V8.47)
 84. **Container search is engine-resolved, zero LLM calls.** `resolveInteract` detects `type === "container"` → `resolveLoot()` → `FloorLootEntry` → templated beat. Engine guarantees ≥1 container per combat-eligible node. (V8.47)
 85. **Currency and inventory cap are canonical constants.** `lib/game/currency.ts` · `lib/game/constants.ts` → `INVENTORY_CAP = 20`. Never hardcode. (V8.47)
@@ -234,11 +225,12 @@ This scenario drives every design decision. If a feature makes that scenario *be
 88. **`resolveUseItem` resolves heal by effect, not by id.** (1) `item_effect?.heal` finite positive → flat heal. (2) `BASIC_HEALTH_POTION_ID` → 1d8+4. (3) Otherwise → no-op. (V8.49)
 89. **Archetype system in `lib/game/archetypes.ts`.** 25 classes. `buildStartingAttributes(background)` sets stats: STAT_BASE=2, primary +2, secondary +1. (V8.50)
 90. **Level-up flow is post-combat, player-driven.** LevelUpModal opens after combat slice clears. Auto-gains + 5-button free stat picker. STAT_XP mid-combat auto-applies to archetype primary. (V8.50)
-91. **jest baseline = 454 (V8.51).** 454 is the authoritative count going forward. (V8.50 + V8.51)
+91. **jest baseline = 484 (V8.54).** Day 23A pt 1 added 30 dungeon helper tests (454→484). 484 is the authoritative count going forward. (V8.50 + V8.51 + V8.54)
 92. **Ability modifier formula calibrated for 2-10 stat range.** Both `abilityMod` and `getAttributeModifier` use `Math.floor((score - 2) / 2)`. These MUST always match. CharacterSheet pip bar uses `value/2` (min 1). (V8.51)
 93. **Enemy stat budgets enforced at two layers.** Static bestiaries: tier-1 agi_mod ≤1, hp min ≤8. Bible prompts: ENEMY STAT BUDGET block with NEVER constraints. (V8.51)
-94. **RegionBibleCache in-flight dedup via promise map.** `inFlight` is `Map<string, Promise<RegionBible | null>>` (not a Set). `awaitRegionalBible(sessionId, outlineId)` resolves: (1) cache hit → return; (2) in-flight promise exists → await it; (3) total miss → return null (caller fires live fetch). `pregenerateRegionalBible` stores its promise in `inFlight` at start and deletes on settle. WORLD_EXPLORE branch uses async `awaitRegionalBible`. Pre-V8.53: synchronous lookup returned null mid-pregen → duplicate live call spawned → both completed → pregen result discarded. (V8.53)
-95. **Post-apply pregeneration burst.** After `apply-world-bible` succeeds, the new-game wizard fires `pregenerateRegionalBible()` for all `bible.adjacent_regions` outlines immediately (fire-and-forget). By the time the player finishes the opening narrative (~5-15 min), all adjacent RegionBibles are warm — cross-border navigation hits cache. The inFlight dedup (rule 94) makes subsequent navigator-triggered pregenerateRegionalBible calls no-ops for already-in-flight keys. WorldBible was NOT split into parallel calls — quest coherence requires the starting region and main quest schema to generate as a single creative act. (V8.53)
+94. **RegionBibleCache in-flight dedup via promise map.** `inFlight` is `Map<string, Promise<RegionBible | null>>`. `awaitRegionalBible` resolves: (1) cache hit; (2) await in-flight promise; (3) null → live fetch. Pre-V8.53: synchronous lookup mid-pregen spawned a duplicate call — both completed, pregen discarded. (V8.53)
+95. **Post-apply pregeneration burst.** After `apply-world-bible` succeeds, wizard fires `pregenerateRegionalBible()` for all adjacent_regions (fire-and-forget). WorldBible NOT split into parallel calls — quest coherence requires single creative act. (V8.53)
+96. **Dungeon data layer ships in two pure modules. (V8.54)** `lib/game/dungeon-validation.ts`: `deriveNodeType`, `deriveRegionType`, `validateDungeonRooms` — wired into both apply routes so `node_type`, `region_type`, `dungeon_rooms[]` land on the world graph. `lib/game/dungeon-navigation.ts`: 14 pure functions covering all dungeon runtime + UI (predicates, room lookups, `dungeon_state` init/advance/revisit dedup, adjacency, lock + key-item checks, nav-card construction). All part-2 runtime wiring uses these helpers exclusively — no dungeon logic in useGameLoop beyond dispatch. Test coverage: 30 cases including predicate edge cases, mismatch guard, discovery + unlock idempotence.
 
 ---
 
@@ -310,6 +302,6 @@ Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim rep
 
 **Update routing:** New rules or status changes → CLAUDE.md. Trajectory notes, round history, future features, design captures → `/docs/project-log.md`. Quest system design → `/docs/quest-system-spec.md`.
 
-**Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` (no pattern) = authoritative full-suite test count. Baseline = 454 (rule 91).**
+**Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` (no pattern) = authoritative full-suite test count. Baseline = 484 (rule 91).**
 
 **Authority:** Architecture → /docs/architecture-spec.md · Combat → /docs/combat-spec.md · Quest system → /docs/quest-system-spec.md · Vision/scope → Game Vision · Strategic/sequencing → /docs/project-log.md.

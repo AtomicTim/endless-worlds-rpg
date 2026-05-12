@@ -29,7 +29,7 @@
  * visited node ids, most recent at end; trail[-2] is the prior node).
  */
 
-import type { MasterState, WorldGraph, WorldNode } from "@/types/game";
+import type { LocationNodeType, MasterState, WorldGraph, WorldNode } from "@/types/game";
 
 export type CardKind = "back" | "deeper" | "exit" | "peer-known" | "peer-unknown";
 
@@ -106,8 +106,47 @@ export function groupCardsByDirection(cards: readonly Card[]): Record<CardDirect
   return out;
 }
 
+/**
+ * V8.55 (Day 23A) — render a typed LocationNodeType as the small
+ * uppercase badge under the nav-card title.
+ *
+ * Falls back to "LOCATION" for `undefined` or for any unrecognised
+ * value (defensive against future LocationNodeType additions that
+ * don't have a label yet).
+ *
+ * Pre-V8.55 nav cards derived this badge from the legacy `category`
+ * (the bible-side LocationDefinition.type slug). The Day 23A
+ * region_locations skeleton uses `type: "wilderness"` for non-dungeon
+ * standalone nodes — and the AI was overriding to `type: "dungeon"`
+ * on every entry, producing nav cards uniformly labelled "DUNGEON".
+ * node_type is the canonical Day 23A field the AI now emits correctly,
+ * so we read from it directly. typeLabel() prefers node_type over
+ * category to fix this drift.
+ */
+const NODE_TYPE_LABEL: Record<LocationNodeType, string> = {
+  settlement_hub:       "SETTLEMENT",
+  outpost:              "OUTPOST",
+  wilderness:           "WILDERNESS",
+  dungeon:              "DUNGEON",
+  landmark:             "LANDMARK",
+  abandoned_settlement: "RUINS",
+};
+
+export function nodeTypeLabel(nodeType: LocationNodeType | undefined | null): string {
+  if (!nodeType) return "LOCATION";
+  return NODE_TYPE_LABEL[nodeType] ?? "LOCATION";
+}
+
 function typeLabel(node: WorldNode): string {
   if (node.is_expandable === true && node.zone_id === node.id) return "REGION";
+  // V8.55 — prefer node_type when present so a landmark renders
+  // "LANDMARK" / wilderness renders "WILDERNESS" instead of all
+  // region_locations defaulting to the category string (which the
+  // AI sometimes sets to "dungeon" for every entry).
+  if (node.node_type) return nodeTypeLabel(node.node_type);
+  // Settlement hubs without a node_type (legacy bibles, test fixtures
+  // that don't run through apply-world-bible) get a sensible default.
+  if (node.is_settlement_node === true) return "SETTLEMENT";
   const raw = (node.category ?? node.type ?? "").toString();
   return raw.toUpperCase();
 }

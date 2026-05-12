@@ -4,7 +4,7 @@
 **Status:** Potion hotfix COMPLETE (commit 0bef82b) — Day 22 Skills + Leveling NEXT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
-**References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/css-containment-audit.md · /docs/mobile-viewport-audit.md · /docs/genre-reference.md
+**References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/css-containment-audit.md · /docs/mobile-viewport-audit.md · /docs/genre-reference.md · /docs/project-log.md
 
 ---
 
@@ -71,85 +71,31 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 ## 📋 Strategic Trajectory Notes
 
-### Future Feature Ideas (captured, not yet slotted)
-
-**Encounter Avoidance / Stealth System (V8.41 capture):**
-Roll player PER/AGI/stealth-skill against enemy detection DC. On SUCCESS: Avoid / Pre-emptive ability / Sneak attack / Environmental interaction / Engage normally. On FAIL: combat triggers normally.
-*Dependencies:* Day 22 skills (stealth domain). *Slot:* Day 20.6 alongside Day 20.5. *Design risk:* Skyrim-Sneak model — must not punish combat-built characters.
-
-**EPIC/LEGENDARY Loot Reveal Animation (V8.46 capture):**
-When a RARE or LEGENDARY item is found, trigger a full-screen overlay: item portrait fades in with animated border glow, name and description appear. Destiny exotic drop energy.
-*Slot:* Post-Day-22 polish round. *Design note:* Only fires for RARE+; COMMON/UNCOMMON get the standard loot strip reveal.
-
-**Genre Expansion + Sub-Genre System (V8.46 capture):**
-Full genre reference in `/docs/genre-reference.md`. Fantasy splits into Light / Classic / Dark. All other genres get same sub-genre treatment.
-*Slot:* Dedicated Genre Session post-Day-25.
-
-**Merchant Trading Foundation (V8.46 design decision):**
-Existing merchant system is narrator-only with zero engine-side transaction logic.
-*Slot:* After Day 21 loot infrastructure is in play. Dedicated round.
-
-### V8.49 — Potion hotfix root cause
-
-**Root cause (diagnosed pre-patch per V8.40):** `resolveUseItem` in `combat-resolver.ts` was hardcoded to a single id check: `item_id === BASIC_HEALTH_POTION_ID`. Starting equipment potions carry that static id and worked. Looted potions are stamped with `crypto.randomUUID()` by `loot-resolver.ts` — they never matched, causing the function to return `item_consumed: false` / `healed_amount: 0`. Item stayed in inventory; HP unchanged. Out-of-combat use already worked correctly because `logic-resolver.ts` reads `effect.heal` directly (a different code path entirely).
-
-**Fix (commit 0bef82b):** `combat-engine.ts` now threads `owned.effect` through to `resolveUseItem`. The resolver reads `effect.heal` as the primary path, keeping `BASIC_HEALTH_POTION_ID` as a backwards-compat fallback for any pre-normalised starting equipment. Resolution order captured in rule 88.
-
-**HP timing deferred:** The HP bar dropping before floating numbers and story text is a separate pacing issue — HP state updates synchronously on combat event processing, before the pacing delays in `projectCombatEventsToFeed` fire. Fix requires HP display to read from "pending state" in the event timeline. Deferred to Combat UX & Flow Polish queue alongside hit/miss differentiation and flee-fail pacing.
-
-### V8.48 — UX Patch
-
-Revisit suppression (rule 86) · Context-aware popup labels (rule 87) · `.ew-said` color `#f4e8c8` → `#f0c060`.
-WCD variety second pass still needed — WCD prompt itself needs theme-diversity instruction.
-
-### V8.47 — Day 21 + jest baseline correction
-
-3-layer loot system, loot-resolver, FloorLootStrip, SEARCH REMAINS. jest baseline corrected 762 → **393** (worktrees fix).
-
-### V8.44 — Polish 4c: pure module extraction applied proactively
-
-`chooseTierForNode()` extracted to `lib/game/map-tier.ts` proactively.
-
-### V8.42 — Third recurrence: prompt-template hardcoded ID bug
-
-### V8.41 — Workflow + Combat UX Polish Queue
-
-**Combat UX & Flow Polish Queue (post-Day-23):** Hit/miss differentiation · Miss feedback over portrait · Flee-fail → death pacing · **HP bar timing** (bar drops before floating numbers/story text — V8.49 new addition).
-
-### V8.38 — Three strategic decisions LOCKED
-
-**Multiplayer = PRE-LAUNCH.** Day 24. **Customization = PRE-LAUNCH** toward end. Day 25. **Day 22 skills = FOUNDATIONS NOW.**
+> **Full trajectory notes, round history, future feature ideas, and open questions live in `/docs/project-log.md`.** This section is a summary only.
 
 ### Sequence
 
-1–5. ~~Polish 4a through Nav mini-cols~~ ✅
-6. ~~Polish 4b (4fe27e3)~~ ✅
-7. ~~Day 21 Container + Loot (a56940f)~~ ✅
-8. ~~UX Patch (4619a32)~~ ✅
-9. ~~Potion hotfix (0bef82b)~~ ✅
+1–9. ~~Polish through potion hotfix~~ ✅
 10. **Day 22 — Skills + Leveling** ⏳ NEXT
 11. Vertical slice playtest
 12. Day 23 — Main Quest Thread
 13. Merchant Trading Foundation round
 14. WCD variety second pass (small prompt patch)
-15. Combat UX & Flow Polish round (includes HP timing)
-16. Mobile Combat Layout round (deferred from 4b)
+15. Combat UX & Flow Polish round (HP timing, hit/miss, flee-fail)
+16. Mobile Combat Layout round
 17. Day 24 — Multiplayer Foundation
 18. Day 25 — Customization Layer
 19. Genre Session — sub-genre expansion
 20. Day 20.5 — Verbal Action (deferred)
 21. Day 20.6 — Encounter Avoidance / Stealth (deferred)
 
-### Open strategic questions
+### Key open questions
 
 - External playtest timing (post-Day-22 or post-Day-23).
 - Difficulty tuning — toggle vs world-tier scaling.
-- Random travel encounters (combat-spec §3).
-- NPC behavior dispatch (combat-spec §6.3).
-- Map visual rework — dedicated session, deferred.
-- Audit queue: defensive overchecks, prompt-template hardcoded IDs, integration test coverage.
-- Genre Session scope and timing (post-Day-25 standalone vs bundled with Day 25).
-- WCD variety second pass — WCD prompt needs its own theme-diversity instruction.
+- Death stash / recovery mechanic — design decision needed (see project-log.md).
+- WCD variety second pass — WCD prompt needs own theme-diversity instruction.
+- CLAUDE.md + project-log.md split implemented — update workflow is now: small changes → project-log.md only, new rules → CLAUDE.md rules section only.
 
 ---
 
@@ -172,62 +118,25 @@ WCD variety second pass still needed — WCD prompt itself needs theme-diversity
 | **Day 22** | **Skills + Leveling — skill domain foundations, stat-of-your-choice XP, STAT_XP wiring** | ⏳ **NEXT** |
 | Vertical slice playtest | Full game start → win condition | ⏳ Before Day 23 |
 | Day 23 | Main Quest Thread | ⏳ Post-playtest |
-| Merchant Trading Foundation | Persistent merchant inventory, buy/sell, engine-enforced gold deduction | ⏳ After Day 21 loot |
-| WCD variety second pass | WCD prompt theme-diversity instruction | ⏳ Small patch, any quiet round |
-| Combat UX & Flow Polish | Hit/miss diff + miss float + flee-fail pacing + HP bar timing | ⏳ Post-Day-23 |
-| Mobile Combat Layout | Stacked portrait layout at narrow viewport (4b deferred) | ⏳ After Combat UX Polish |
+| Merchant Trading Foundation | Persistent merchant inventory, buy/sell, engine-enforced gold deduction | ⏳ |
+| Combat UX & Flow Polish | HP timing + hit/miss diff + miss float + flee-fail pacing | ⏳ Post-Day-23 |
+| Mobile Combat Layout | Stacked portrait layout at narrow viewport | ⏳ After Combat UX Polish |
 | Day 24 | Multiplayer Foundation | ⏳ Pre-launch |
 | Day 25 | Customization Layer | ⏳ Pre-launch toward end |
 | Genre Session | Sub-genre expansion (see /docs/genre-reference.md) | ⏳ Post-Day-25 |
-| Day 20.5 | Verbal Action System | ⏳ Deferred (Combat Alternatives) |
-| Day 20.6 | Encounter Avoidance / Stealth | ⏳ Deferred (Combat Alternatives) |
+| Day 20.5 | Verbal Action System + in-combat equip/unequip | ⏳ Deferred |
+| Day 20.6 | Encounter Avoidance / Stealth | ⏳ Deferred |
 | Map Visual Rework | Dedicated session | ⏳ Deferred |
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic. Sub-genre expansion deferred to Genre Session.
 
-### Round history (compressed)
+### Known issues (see project-log.md for full list)
 
-| Commit | Round | Rules |
-| --- | --- | --- |
-| 0bef82b | Potion hotfix — resolveUseItem reads effect.heal (primary), BASIC_HEALTH_POTION_ID (fallback) | 88 |
-| 4619a32 | UX patch — revisit suppression, context-aware popup labels, .ew-said #f0c060 | 86-87 |
-| a56940f | Day 21 — 3-layer loot, loot-resolver, FloorLootStrip, container flow, SEARCH REMAINS, currency.ts, constants.ts | 82-85 |
-| ad82300 | WorldBible variety fix — remove biased named examples, uniqueness instruction | (rule 79 applied) |
-| 4fe27e3 | Polish 4b — mobile audit + CodexModal close + ActionBar button sizing | — |
-| 14252ac | Nav mini-cols — 2-row max, overflow wraps right, lone cards bottom-aligned | (rule 72 updated) |
-| 198a757 | Polish 4c — column layout + nav dedup + map tier auto-switch expansion | 80-81 |
-| e87b23a | 20.4.4 — settlement DEEPER card + story header display name + stitch guarantee | (80-81 defined) |
-| 60501c8 | 20.4.3 — region expansion prompt template fix + splitConflatedRegionSettlement | 77-79 |
-| 24ac19c | Polish 4a — nav grouping/tiers/cross-region BACK/map auto-switch/.ew-said/CSS audit | 72-76 |
-| f17c221 | 20.4.2 — float CSS clip + stagger + sync to feed + codex modal + D&D roll format | 66-71 |
-| c67f2c0 + fc508f3 + 732e944 + bf3871e + 1215bb6 | 20.4.1 through 20.1 | 43-65 |
-| abf73e6 + earlier | 20 Prompt 3 + foundation + pre-combat + 19A-19F | 1-42 |
+**HP bar timing — DEFERRED to Combat UX Polish:** HP drops before floating numbers and story text. Fix: read HP from event timeline, not raw state.
 
-### Architecture & system status
+**No equip/unequip during combat — INTENTIONAL (rule 63):** Equip/Unequip buttons hidden during combat as interim measure. Day 20.5 scope item.
 
-**Domain 1 (Engine — pure code):** Navigation + nav-cards (rules 72-81) + map-tier.ts + combat system (rules 24-71, 88) + region expansion guard + loot system (rules 83-85) + revisit suppression (rule 86) + context-aware popup (rule 87).
-
-**Domain 2 (Content Library — frozen):** WCD, WorldBible (+ world_loot_items[]), RegionBible (+ region_loot_items[] + boss_drop_item), NPCs, items, loot tables, bestiary, region enemies, starting equipment.
-
-**AI during gameplay:** Arrival narration ✅ (first visit only — rule 86) · Dialogue ✅ · Action narration ✅ · Combat narration ✅ · Container search ✅ (templated, zero LLM) · Verbal action ⏳ Day 20.5 · Stealth/avoidance ⏳ Day 20.6.
-
-**Mobile readiness:** A/B/C/E/G/I/J surfaces PASS at 380px. D (combat panel) MAJOR deferred. F/H minor deferred.
-
-### Known issues
-
-**HP bar timing — DEFERRED to Combat UX Polish:** HP bar state updates synchronously on combat event processing, before pacing delays for floating numbers and story text fire. Player sees HP drop, then numbers and text appear. Fix: HP display should read from pending state in event timeline rather than raw state. Bundled with hit/miss differentiation and flee-fail pacing.
-
-**WCD variety second pass:** WCD prompt still defaults to honor/oath/covenant themes in Fantasy. Needs its own theme-diversity instruction. Small patch, any quiet round.
-
-**Merchant Trading Foundation (post-Day-21):** Existing narrator-only merchant system has no engine-side transaction logic. Dedicated round needed.
-
-**Mobile Combat Layout — DEFERRED:** Combat panel breaks at 380px with 3+ enemies. Bundle with F/H minor touch target fixes.
-
-**Day 20.5 + 20.6 (post-Day-25):** Verbal Action + Encounter Avoidance.
-
-**CSS containment future candidates:** PortraitSlot, StoryFeed tooltips, TradeModal floats, GameLayout rail tooltips, WorldMap edge tooltips.
-
-**Other deferred:** Map visual rework, world-gen perf, NPC color overlap, hub codex, grid_position, behavior dispatch, toSlug bug, combat balance, enemy loot post-combat (test deferred until Day 22 XP/leveling — too slow to kill enemies without level-appropriate power).
+**WCD variety second pass:** WCD prompt defaults to honor/oath/covenant themes. Needs theme-diversity instruction. Small patch, any quiet round.
 
 ---
 
@@ -295,7 +204,7 @@ WCD variety second pass still needed — WCD prompt itself needs theme-diversity
 60. Defeat teleport — `last_settlement_hub_id` initialized at game spawn. handleDefeat uses 3-tier fallback chain. Cross-region teleport per soulslike model. (V8.38)
 61. Resolution events (defeat / flee_success) carry destination payload. Victory does NOT get destination line. (V8.38)
 62. `rolls.d20` stores RAW d20 value (1-20). `target_dc` wrapped in `Math.round()` for display. (V8.39)
-63. Inventory Use button during combat routes through `submitCombatAction`. Equip/Unequip/Read/Search/Drop buttons HIDDEN during combat. (V8.39)
+63. Inventory Use button during combat routes through `submitCombatAction`. Equip/Unequip/Read/Search/Drop buttons HIDDEN during combat. INTERIM until Day 20.5. (V8.39)
 64. Floating damage entry routing uses explicit `switch(event.type)`. Defensive `player_attack target === PLAYER_ID` guard returns null. (V8.39)
 65. Settlement-hub detection in step 7c-2 uses `is_settlement_node === true` predicate ONLY. Category fallback removed. (V8.39)
 66. Floating damage emission lives INSIDE `projectCombatEventsToFeed` (useCombat), called AFTER pacing sleeps. CombatMode is a pure renderer for `floatingByActor`. (V8.40)
@@ -320,7 +229,7 @@ WCD variety second pass still needed — WCD prompt itself needs theme-diversity
 85. **Currency and inventory cap are canonical constants.** `lib/game/currency.ts` → `currencyKeyFor(genre)` / `currencyLabelFor(genre)`. Horror = "marks". `lib/game/constants.ts` → `INVENTORY_CAP = 20`. Never hardcode. (V8.47)
 86. **Revisit suppression — no re-describing known locations.** On ARRIVING at a node with `discovered === true`: emit one-line "You return to {name}." only — skip cached atmosphere prose AND narrator API call. First visit (discovered=false) still gets full description. Spawn settlement starts `discovered: true` so first MOVE-back suppresses correctly. (V8.48)
 87. **Object highlight popup uses context-aware action labels.** `InteractionPopover.tsx`: CONTAINER objects → "Search" primary. Fixture/lore/trigger/undefined ITEM POI in feed → "Examine" primary (never "Pick up" — real loot lives in FloorLootStrip per rule 83). Navigation-like label heuristic (`isNavigationLikeLabel`: bridge/gate/passage/stairs/path/trail/doorway/archway/corridor) → header + Close only. "Pick up" NEVER appears for LocationObject interactions. (V8.48)
-88. **`resolveUseItem` resolves heal by effect, not by id.** Resolution order: (1) `item_effect?.heal` is a finite positive number → flat heal of that amount, `item_consumed: true` — covers all looted consumables. (2) `item_id === BASIC_HEALTH_POTION_ID` → original 1d8+4 die-roll heal, `item_consumed: true` — backwards-compat fallback for pre-normalised starting equipment. (3) Otherwise → no-op (`item_consumed: false`) — Antidote, Trail Rations with `effect: {}` until their effects are wired. `combat-engine.ts` passes `owned.effect` to the resolver. `rolls.damage_die_roll` populated for flat heals; `damage_die` omitted to signal "flat" to the renderer. Out-of-combat use (logic-resolver) already read `effect.heal` directly and was never broken. (V8.49)
+88. **`resolveUseItem` resolves heal by effect, not by id.** Resolution order: (1) `item_effect?.heal` is a finite positive number → flat heal, `item_consumed: true`. (2) `item_id === BASIC_HEALTH_POTION_ID` → 1d8+4 die-roll, `item_consumed: true` (backwards-compat fallback). (3) Otherwise → no-op. `combat-engine.ts` passes `owned.effect` to the resolver. Out-of-combat use (logic-resolver) read `effect.heal` directly and was never broken. (V8.49)
 
 ---
 
@@ -387,8 +296,10 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint (resol
 
 ## Workflow
 
-Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim reports commit + tests → Claude.ai updates CLAUDE.md → Tim verifies → next prompt.
+Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim reports commit + tests → Claude.ai updates docs → Tim verifies → next prompt.
+
+**Update routing:** New rules or status changes → CLAUDE.md. Trajectory notes, round history, future features, design captures → `/docs/project-log.md`. This keeps CLAUDE.md lean and fast to write.
 
 **Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` (no pattern) = authoritative full-suite test count. True baseline = 393 (rule 82).**
 
-**Authority:** Architecture → /docs/architecture-spec.md · Combat → /docs/combat-spec.md · Vision/scope → Game Vision · Strategic/sequencing → Trajectory Notes · Round details → git log + round-history table.
+**Authority:** Architecture → /docs/architecture-spec.md · Combat → /docs/combat-spec.md · Vision/scope → Game Vision · Strategic/sequencing → /docs/project-log.md · Round details → git log + project-log.md.

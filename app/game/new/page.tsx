@@ -3,13 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Genre } from "@/types/game";
-import type { Attributes, WorldBible, WorldConsistencyDocument } from "@/types/game";
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const TOTAL_POINTS = 20;
-const ATTR_MIN = 1;
-const ATTR_MAX = 8;
+import type { WorldBible, WorldConsistencyDocument } from "@/types/game";
+import { BACKGROUND_CONFIGS } from "@/lib/game/starting-equipment";
+import { ARCHETYPE_MAP } from "@/lib/game/archetypes";
 
 // ─── Genre data ──────────────────────────────────────────────────────────────
 
@@ -70,149 +66,76 @@ const GENRES: GenreDef[] = [
   },
 ];
 
-// ─── Attribute data ───────────────────────────────────────────────────────────
+// ─── Class flavor (display data per class id) ────────────────────────────────
+//
+// V8.51 — class cards are built dynamically from BACKGROUND_CONFIGS[genre]
+// so every class shipped in starting-equipment.ts appears in the picker
+// (15 originals + 10 new Day 22 archetypes = 5 per genre). This map
+// supplies the display strings: a short flavor line and the most
+// identity-defining starting item name (the one that "feels like" the
+// class, not necessarily the weapon — e.g. Herald's Letter of Introduction
+// over the Fine Rapier). Class display names are derived from the id via
+// formatClassName below.
+const CLASS_FLAVOR: Record<string, { description: string; startingItem: string }> = {
+  // ── Fantasy ───────────────────────────────────────────────────────────────
+  knight:         { description: "A sworn defender of the realm. Your oath is your armor.",                                  startingItem: "Iron Sword" },
+  rogue:          { description: "Shadows are your home. You've never met a lock that could hold you.",                       startingItem: "Lockpicks" },
+  mage:           { description: "Power flows through your blood. The arcane whispers in your dreams.",                       startingItem: "Spell Tome" },
+  // Day 22 — new Fantasy classes.
+  ranger:         { description: "The wilds are your domain. You read the land like others read faces.",                      startingItem: "Hunting Bow" },
+  herald:         { description: "Words are your weapon. You've talked your way in and out of places steel couldn't touch.",  startingItem: "Letter of Introduction" },
 
-const ATTR_DEFS: { key: keyof Attributes; label: string; description: string }[] = [
-  { key: "strength",     label: "Strength",     description: "Physical power and melee combat effectiveness." },
-  { key: "agility",      label: "Agility",       description: "Speed, stealth, and ranged combat precision." },
-  { key: "charisma",     label: "Charisma",      description: "Persuasion, deception, and social influence." },
-  { key: "intelligence", label: "Intelligence",  description: "Knowledge, hacking, and puzzle-solving ability." },
-  { key: "perception",   label: "Perception",    description: "Awareness, investigation, and noticing hidden details." },
-];
+  // ── Cyberpunk ─────────────────────────────────────────────────────────────
+  netrunner:      { description: "You live in the data streams. Meat-space is just where you park your body.",                startingItem: "Neural Deck" },
+  fixer:          { description: "Connections are currency. You know people who know people.",                                startingItem: "Burner Phone" },
+  street_samurai: { description: "Steel and reflex. You solve problems the old-fashioned way.",                               startingItem: "Katana" },
+  // Day 22 — new Cyberpunk classes.
+  enforcer:       { description: "Muscle and momentum. You solve problems the direct way.",                                   startingItem: "Heavy Baton" },
+  ghost:          { description: "You were never here. The best operatives leave no trace.",                                  startingItem: "Signal Scanner" },
 
-// ─── Background data ──────────────────────────────────────────────────────────
+  // ── Horror / Lovecraftian ─────────────────────────────────────────────────
+  investigator:   { description: "You sought the truth. Now you wish you hadn't. Some questions have no safe answers.",       startingItem: "Case Notes" },
+  cultist:        { description: "You've seen beyond the veil. What waited on the other side looked back.",                   startingItem: "Forbidden Text" },
+  survivor:       { description: "You don't know why you're still alive. You stopped asking.",                                startingItem: "Makeshift Club" },
+  // Day 22 — new Horror classes.
+  phantom:        { description: "Between one blink and the next, you're gone. Or you were never there at all.",              startingItem: "Straight Razor" },
+  medium:         { description: "The dead speak to you. So do the living — whether they want to or not.",                    startingItem: "Ritual Focus" },
 
-interface BackgroundDef {
-  id: string;
-  name: string;
-  description: string;
-  bonus: string;
-  startingItem: string;
-}
+  // ── Space Opera ───────────────────────────────────────────────────────────
+  commander:      { description: "Born to lead fleets. Ships and crews bend to your will.",                                   startingItem: "Command Badge" },
+  pilot:          { description: "The void is your ocean. You've flown through nebulae that have no name.",                   startingItem: "Nav Charts" },
+  engineer:       { description: "You keep the ship flying through sheer stubborn competence.",                               startingItem: "Engineer's Toolkit" },
+  // Day 22 — new Space Opera classes.
+  marine:         { description: "The corps forged you. Front lines, breach points, and whatever comes after.",               startingItem: "Assault Rifle" },
+  recon:          { description: "You see everything before it sees you. Intel is survival.",                                 startingItem: "Tactical Scanner" },
 
-const BACKGROUNDS: Record<Genre, BackgroundDef[]> = {
-  [Genre.FANTASY]: [
-    {
-      id: "knight",
-      name: "Knight",
-      description: "A sworn defender of the realm. Your oath is your armor.",
-      bonus: "+2 Strength",
-      startingItem: "Iron Sword",
-    },
-    {
-      id: "rogue",
-      name: "Rogue",
-      description: "Shadows are your home. You've never met a lock that could hold you.",
-      bonus: "+2 Agility",
-      startingItem: "Lockpicks",
-    },
-    {
-      id: "mage",
-      name: "Mage",
-      description: "Power flows through your blood. The arcane whispers in your dreams.",
-      bonus: "+2 Intelligence",
-      startingItem: "Spell Tome",
-    },
-  ],
-  [Genre.CYBERPUNK]: [
-    {
-      id: "netrunner",
-      name: "Netrunner",
-      description: "You live in the data streams. Meat-space is just where you park your body.",
-      bonus: "+2 Intelligence",
-      startingItem: "Neural Deck",
-    },
-    {
-      id: "fixer",
-      name: "Fixer",
-      description: "Connections are currency. You know people who know people.",
-      bonus: "+2 Charisma",
-      startingItem: "Burner Phone",
-    },
-    {
-      id: "street_samurai",
-      name: "Street Samurai",
-      description: "Steel and reflex. You solve problems the old-fashioned way.",
-      bonus: "+2 Agility",
-      startingItem: "Katana",
-    },
-  ],
-  [Genre.HORROR_LOVECRAFTIAN]: [
-    {
-      id: "investigator",
-      name: "Investigator",
-      description: "You sought the truth. Now you wish you hadn't. Some questions have no safe answers.",
-      bonus: "+2 Intelligence",
-      startingItem: "Case Notes",
-    },
-    {
-      id: "cultist",
-      name: "Cultist",
-      description: "You've seen beyond the veil. What waited on the other side looked back.",
-      bonus: "+2 Perception",
-      startingItem: "Forbidden Text",
-    },
-    {
-      id: "survivor",
-      name: "Survivor",
-      description: "You don't know why you're still alive. You stopped asking.",
-      bonus: "+2 Strength",
-      startingItem: "Makeshift Club",
-    },
-  ],
-  [Genre.SPACE_OPERA]: [
-    {
-      id: "commander",
-      name: "Commander",
-      description: "Born to lead fleets. Ships and crews bend to your will.",
-      bonus: "+2 Charisma",
-      startingItem: "Command Badge",
-    },
-    {
-      id: "pilot",
-      name: "Pilot",
-      description: "The void is your ocean. You've flown through nebulae that have no name.",
-      bonus: "+2 Agility",
-      startingItem: "Nav Charts",
-    },
-    {
-      id: "engineer",
-      name: "Engineer",
-      description: "You keep the ship flying through sheer stubborn competence.",
-      bonus: "+2 Intelligence",
-      startingItem: "Engineer's Toolkit",
-    },
-  ],
-  [Genre.POST_APOCALYPTIC]: [
-    {
-      id: "scavenger",
-      name: "Scavenger",
-      description: "Junk is treasure if you know what you're looking at. You always know.",
-      bonus: "+2 Perception",
-      startingItem: "Scrap Tool",
-    },
-    {
-      id: "raider",
-      name: "Raider",
-      description: "Take what you need. Leave nothing. The wasteland respects strength.",
-      bonus: "+2 Strength",
-      startingItem: "Pipe Wrench",
-    },
-    {
-      id: "medic",
-      name: "Medic",
-      description: "People need you alive. That's the only reason you're still breathing.",
-      bonus: "+2 Intelligence",
-      startingItem: "First Aid Kit",
-    },
-  ],
+  // ── Post-Apocalyptic ──────────────────────────────────────────────────────
+  scavenger:      { description: "Junk is treasure if you know what you're looking at. You always know.",                     startingItem: "Scrap Tool" },
+  raider:         { description: "Take what you need. Leave nothing. The wasteland respects strength.",                       startingItem: "Pipe Wrench" },
+  medic:          { description: "People need you alive. That's the only reason you're still breathing.",                     startingItem: "First Aid Kit" },
+  // Day 22 — new Post-Apoc classes.
+  runner:         { description: "Fast is alive. Everything worth having out here is worth running for.",                     startingItem: "Carbon-Fibre Blade" },
+  demagogue:      { description: "Hope and fear in equal measure. People follow you and they're not sure why.",               startingItem: "Rallying Manifesto" },
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Stat ids → display names (used on class cards for the +2 bonus line).
+const STAT_LABEL: Record<string, string> = {
+  strength:     "Strength",
+  agility:      "Agility",
+  intelligence: "Intelligence",
+  perception:   "Perception",
+  charisma:     "Charisma",
+};
 
-function makeDefaultAttributes(): Attributes {
-  return { strength: 4, agility: 4, charisma: 4, intelligence: 4, perception: 4 };
+// "street_samurai" → "Street Samurai" for the class card title.
+function formatClassName(id: string): string {
+  return id
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function validateName(name: string): string {
   const trimmed = name.trim();
@@ -261,16 +184,24 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
+//
+// V8.51 — 3-step flow (was 4-step pre-Day-22). The point-buy "Distribute
+// Attributes" step is gone: per rule 89 the archetype map deterministically
+// computes starting stats from `background` (base 2, primary +2, secondary
+// +1, others stay at 2). The /api/game/new route ignores any `attributes`
+// payload; we no longer send one.
+//
+//   Step 1 → Genre
+//   Step 2 → Character name
+//   Step 3 → Background (class) → Begin Journey
 
 export default function NewGamePage() {
   const router = useRouter();
 
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedGenre, setSelectedGenre]         = useState<Genre | null>(null);
   const [characterName, setCharacterName]         = useState("");
   const [nameError, setNameError]                 = useState("");
-  const [attributes, setAttributes]               = useState<Attributes>(makeDefaultAttributes());
-  const [hoveredAttr, setHoveredAttr]             = useState<keyof Attributes | null>(null);
   const [selectedBackground, setSelectedBackground] = useState<string | null>(null);
   const [isLoading, setIsLoading]                 = useState(false);
   const [loadingMessage, setLoadingMessage]       = useState("Creating character...");
@@ -280,16 +211,21 @@ export default function NewGamePage() {
   const worldName  = genre?.worldName ?? "World";
   const dataAttr   = genre?.dataAttr ?? "";
 
-  const usedPoints      = Object.values(attributes).reduce((s, v) => s + v, 0);
-  const remainingPoints = TOTAL_POINTS - usedPoints;
+  // Dynamically build the class list for the selected genre. Reads
+  // straight from BACKGROUND_CONFIGS so any class added to
+  // starting-equipment.ts is automatically picker-eligible. Each entry
+  // pulls description + key item from CLASS_FLAVOR and primary stat
+  // from ARCHETYPE_MAP — no per-class data lives in this file.
+  const backgroundIds = selectedGenre
+    ? Object.keys(BACKGROUND_CONFIGS[selectedGenre] ?? {})
+    : [];
 
   // ── Navigation ──────────────────────────────────────────────────────────────
 
   function canAdvance(): boolean {
     if (step === 1) return selectedGenre !== null;
     if (step === 2) return validateName(characterName) === "";
-    if (step === 3) return remainingPoints === 0;
-    if (step === 4) return selectedBackground !== null;
+    if (step === 3) return selectedBackground !== null;
     return false;
   }
 
@@ -298,42 +234,34 @@ export default function NewGamePage() {
       const err = validateName(characterName);
       if (err) { setNameError(err); return; }
     }
-    if (canAdvance() && step < 4) setStep((prev) => (prev + 1) as 1 | 2 | 3 | 4);
+    if (canAdvance() && step < 3) setStep((prev) => (prev + 1) as 1 | 2 | 3);
   }
 
   function handleBack() {
-    if (step > 1) setStep((prev) => (prev - 1) as 1 | 2 | 3 | 4);
+    if (step > 1) setStep((prev) => (prev - 1) as 1 | 2 | 3);
   }
 
   // ── Genre selection ─────────────────────────────────────────────────────────
 
   function handleGenreSelect(g: Genre) {
     setSelectedGenre(g);
+    // Reset background — a class valid in one genre is meaningless in
+    // another, and the genre switch may shrink the available list.
     setSelectedBackground(null);
-  }
-
-  // ── Attribute distribution ──────────────────────────────────────────────────
-
-  function handleAttrChange(key: keyof Attributes, delta: 1 | -1) {
-    setAttributes((prev) => {
-      const next = prev[key] + delta;
-      if (next < ATTR_MIN || next > ATTR_MAX) return prev;
-      const newRemaining = TOTAL_POINTS - (usedPoints + delta);
-      if (newRemaining < 0) return prev;
-      return { ...prev, [key]: next };
-    });
   }
 
   // ── Submit ──────────────────────────────────────────────────────────────────
 
   async function handleSubmit() {
-    if (!selectedGenre || !selectedBackground || remainingPoints !== 0) return;
+    if (!selectedGenre || !selectedBackground) return;
     setIsLoading(true);
     setLoadingMessage("Creating your character...");
     setSubmitError("");
 
     try {
       // ── Step 1: create the session (default starting location, empty world). ──
+      // V8.51 — `attributes` payload removed. /api/game/new computes
+      // them deterministically from `background` via buildStartingAttributes.
       const res = await fetch("/api/game/new", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -341,7 +269,6 @@ export default function NewGamePage() {
           genre: selectedGenre,
           characterName: characterName.trim(),
           background: selectedBackground,
-          attributes,
         }),
       });
 
@@ -473,7 +400,7 @@ export default function NewGamePage() {
 
       {/* Wizard container */}
       <main className="max-w-4xl mx-auto px-4 py-10">
-        <StepIndicator current={step} total={4} />
+        <StepIndicator current={step} total={3} />
 
         {/* ── Step 1: Genre ─────────────────────────────────────────────── */}
         {step === 1 && (
@@ -600,126 +527,13 @@ export default function NewGamePage() {
           </div>
         )}
 
-        {/* ── Step 3: Attributes ────────────────────────────────────────── */}
-        {step === 3 && (
-          <div>
-            <h1 className="text-2xl font-bold mb-2 text-center tracking-wide text-glow"
-              style={{ color: "var(--color-primary)" }}>
-              Distribute Attributes
-            </h1>
-            <p className="text-center text-sm mb-2" style={{ color: "var(--color-muted)" }}>
-              You have <strong>20 points</strong> to distribute. Each attribute: min 1, max 8.
-            </p>
-
-            {/* Remaining counter */}
-            <div className="flex justify-center mb-8">
-              <div
-                className="px-4 py-1 rounded border text-sm font-bold font-mono transition-colors"
-                style={{
-                  borderColor: remainingPoints === 0 ? "var(--color-primary)" : remainingPoints < 0 ? "#ef4444" : "var(--color-border)",
-                  color: remainingPoints === 0 ? "var(--color-primary)" : remainingPoints < 0 ? "#ef4444" : "var(--color-text)",
-                  backgroundColor: remainingPoints === 0
-                    ? "color-mix(in srgb, var(--color-primary) 10%, transparent)"
-                    : "transparent",
-                }}
-              >
-                {remainingPoints > 0
-                  ? `${remainingPoints} point${remainingPoints === 1 ? "" : "s"} remaining`
-                  : remainingPoints === 0
-                  ? "✓ Points fully allocated"
-                  : "Over budget!"}
-              </div>
-            </div>
-
-            <div className="max-w-lg mx-auto space-y-3">
-              {ATTR_DEFS.map(({ key, label, description }) => {
-                const val = attributes[key];
-                const canInc = val < ATTR_MAX && remainingPoints > 0;
-                const canDec = val > ATTR_MIN;
-                return (
-                  <div
-                    key={key}
-                    className="flex items-center gap-4 px-4 py-3 rounded border transition-colors"
-                    style={{
-                      borderColor: hoveredAttr === key ? "var(--color-primary)" : "var(--color-border)",
-                      backgroundColor: hoveredAttr === key
-                        ? "color-mix(in srgb, var(--color-primary) 5%, transparent)"
-                        : "transparent",
-                    }}
-                    onMouseEnter={() => setHoveredAttr(key)}
-                    onMouseLeave={() => setHoveredAttr(null)}
-                  >
-                    {/* Label + description (always rendered; opacity hides when not hovered) */}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-bold" style={{ color: "var(--color-text)" }}>
-                        {label}
-                      </div>
-                      <div
-                        className="text-xs mt-0.5 transition-opacity duration-150"
-                        style={{
-                          color: "var(--color-muted)",
-                          opacity: hoveredAttr === key ? 1 : 0,
-                        }}
-                      >
-                        {description}
-                      </div>
-                    </div>
-
-                    {/* Pip bar */}
-                    <div className="flex gap-1">
-                      {Array.from({ length: ATTR_MAX }, (_, i) => (
-                        <div
-                          key={i}
-                          className="w-3 h-3 rounded-sm transition-colors"
-                          style={{
-                            backgroundColor: i < val ? "var(--color-primary)" : "var(--color-border)",
-                          }}
-                        />
-                      ))}
-                    </div>
-
-                    {/* Controls */}
-                    <div className="flex items-center gap-2 ml-2">
-                      <button
-                        onClick={() => handleAttrChange(key, -1)}
-                        disabled={!canDec}
-                        className="w-7 h-7 rounded border text-sm font-bold transition-opacity"
-                        style={{
-                          borderColor: "var(--color-border)",
-                          color: canDec ? "var(--color-primary)" : "var(--color-muted)",
-                          opacity: canDec ? 1 : 0.4,
-                        }}
-                      >
-                        −
-                      </button>
-                      <span
-                        className="w-6 text-center text-sm font-bold"
-                        style={{ color: "var(--color-text)" }}
-                      >
-                        {val}
-                      </span>
-                      <button
-                        onClick={() => handleAttrChange(key, 1)}
-                        disabled={!canInc}
-                        className="w-7 h-7 rounded border text-sm font-bold transition-opacity"
-                        style={{
-                          borderColor: "var(--color-border)",
-                          color: canInc ? "var(--color-primary)" : "var(--color-muted)",
-                          opacity: canInc ? 1 : 0.4,
-                        }}
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ── Step 4: Background ───────────────────────────────────────── */}
-        {step === 4 && selectedGenre && (
+        {/* ── Step 3: Background ───────────────────────────────────────── */}
+        {/* V8.51 — was Step 4 pre-Day-22. Cards dynamically render every
+            class in BACKGROUND_CONFIGS[selectedGenre] (5 per genre after
+            Day 22). Stat bonus reads from ARCHETYPE_MAP — replaces the
+            old hardcoded "+2 X" strings so the picker can't drift from
+            the actual archetype distribution. */}
+        {step === 3 && selectedGenre && (
           <div>
             <h1 className="text-2xl font-bold mb-2 text-center tracking-wide text-glow"
               style={{ color: "var(--color-primary)" }}>
@@ -729,13 +543,25 @@ export default function NewGamePage() {
               Your history shapes who you are — and what you begin with.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mx-auto">
-              {BACKGROUNDS[selectedGenre].map((bg) => {
-                const isSelected = selectedBackground === bg.id;
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
+              {backgroundIds.map((bgId) => {
+                const isSelected = selectedBackground === bgId;
+                const arch       = ARCHETYPE_MAP[bgId];
+                const flavor     = CLASS_FLAVOR[bgId];
+                const primaryStat = arch ? STAT_LABEL[arch.primary] ?? arch.primary : "—";
+                const bonusLine  = arch ? `+2 ${primaryStat}` : "";
+                // Fall back to a generic description when a class is
+                // present in BACKGROUND_CONFIGS but missing from
+                // CLASS_FLAVOR (defensive — every shipped class has an
+                // entry, but newly-added classes lacking flavor should
+                // still appear in the picker rather than crash render).
+                const description = flavor?.description
+                  ?? "A path with its own quiet weight.";
+                const itemHint    = flavor?.startingItem ?? "Class kit";
                 return (
                   <button
-                    key={bg.id}
-                    onClick={() => setSelectedBackground(bg.id)}
+                    key={bgId}
+                    onClick={() => setSelectedBackground(bgId)}
                     className="text-left p-5 rounded border transition-all duration-150 hover:scale-[1.02] active:scale-[0.99] flex flex-col"
                     style={{
                       borderColor: isSelected ? "var(--color-primary)" : "var(--color-border)",
@@ -751,18 +577,18 @@ export default function NewGamePage() {
                       className="text-base font-bold mb-2 tracking-wide"
                       style={{ color: isSelected ? "var(--color-primary)" : "var(--color-text)" }}
                     >
-                      {bg.name}
+                      {formatClassName(bgId)}
                     </div>
                     <p className="text-xs leading-relaxed mb-4 flex-1" style={{ color: "var(--color-muted)" }}>
-                      {bg.description}
+                      {description}
                     </p>
                     <div className="space-y-1 border-t pt-3 mt-auto"
                       style={{ borderColor: "var(--color-border)" }}>
                       <div className="text-xs font-bold" style={{ color: "var(--color-accent)" }}>
-                        {bg.bonus}
+                        {bonusLine}
                       </div>
                       <div className="text-xs" style={{ color: "var(--color-muted)" }}>
-                        Starts with: {bg.startingItem}
+                        Starts with: {itemHint}
                       </div>
                     </div>
                   </button>
@@ -807,7 +633,7 @@ export default function NewGamePage() {
           </button>
 
           {/* Next / Begin button */}
-          {step < 4 ? (
+          {step < 3 ? (
             <button
               onClick={handleNext}
               disabled={!canAdvance()}

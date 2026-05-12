@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.49
-**Status:** Potion hotfix COMPLETE (commit 0bef82b) — Day 22 Skills + Leveling NEXT
+**Version:** 8.50
+**Status:** Day 22 Skills + Leveling COMPLETE (commit 7833245) — Vertical Slice Playtest NEXT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/css-containment-audit.md · /docs/mobile-viewport-audit.md · /docs/genre-reference.md · /docs/project-log.md
@@ -65,7 +65,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 **Per-prompt protocols (cumulative):**
 - **V8.40 — Investigation-before-patching.** Validate root-cause hypothesis BEFORE patching.
 - **V8.41 — Origin/main baseline check.** Step 1 of every prompt: `git fetch origin && git log origin/main --oneline -5`.
-- **V8.47 — jest baseline = 393.** See rule 82.
+- **V8.50 — jest baseline = 452.** See rule 91.
 
 ---
 
@@ -76,12 +76,12 @@ This scenario drives every design decision. If a feature makes that scenario *be
 ### Sequence
 
 1–9. ~~Polish through potion hotfix~~ ✅
-10. **Day 22 — Skills + Leveling** ⏳ NEXT
-11. Vertical slice playtest
+10. ~~Day 22 — Skills + Leveling (7833245)~~ ✅
+11. **Vertical slice playtest** ⏳ NEXT
 12. Day 23 — Main Quest Thread
 13. Merchant Trading Foundation round
 14. WCD variety second pass (small prompt patch)
-15. Combat UX & Flow Polish round (HP timing, hit/miss, flee-fail)
+15. Combat UX & Flow Polish round (HP timing, hit/miss, flee-fail, death summary)
 16. Mobile Combat Layout round
 17. Day 24 — Multiplayer Foundation
 18. Day 25 — Customization Layer
@@ -91,17 +91,16 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 ### Key open questions
 
-- External playtest timing (post-Day-22 or post-Day-23).
-- Difficulty tuning — toggle vs world-tier scaling.
+- Vertical slice scope — what constitutes a "complete" playthrough for the playtest?
+- XP threshold tuning — values intentionally easy to change after playtest data.
 - Death stash / recovery mechanic — design decision needed (see project-log.md).
 - WCD variety second pass — WCD prompt needs own theme-diversity instruction.
-- CLAUDE.md + project-log.md split implemented — update workflow is now: small changes → project-log.md only, new rules → CLAUDE.md rules section only.
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Potion hotfix complete (commit 0bef82b, 393/393). Day 22 Skills + Leveling is next.
+**Current Phase:** Day 22 complete (commit 7833245, 452/452). Vertical slice playtest is next.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** atomictim/endless-worlds-rpg
 
 | Phase | Title | Status |
@@ -112,31 +111,32 @@ This scenario drives every design decision. If a feature makes that scenario *be
 | Combat Spec | /docs/combat-spec.md | ✅ Frozen |
 | Combat era (Days 20–20.4.2) | Data + resolver + UI + narration + polish + hotfixes | ✅ Complete |
 | Polish era (4a–4b + hotfixes) | Nav grouping/columns/dedup + map tier + display fixes + mobile QA | ✅ Complete |
-| Day 21 (a56940f) | Container + Loot — 3-layer loot architecture, SEARCH REMAINS, FloorLootStrip, containers, loot resolver | ✅ Complete |
-| UX Patch (4619a32) | Revisit suppression, context-aware object popup labels, .ew-said color | ✅ Complete |
-| Potion hotfix (0bef82b) | resolveUseItem now reads effect.heal; looted consumables work in combat | ✅ Complete |
-| **Day 22** | **Skills + Leveling — skill domain foundations, stat-of-your-choice XP, STAT_XP wiring** | ⏳ **NEXT** |
-| Vertical slice playtest | Full game start → win condition | ⏳ Before Day 23 |
+| Day 21 (a56940f) | Container + Loot — 3-layer loot architecture, SEARCH REMAINS, FloorLootStrip | ✅ Complete |
+| UX Patch + Potion hotfix (4619a32, 0bef82b) | Revisit suppression, popup labels, .ew-said color, looted consumables in combat | ✅ Complete |
+| Day 22 (7833245) | Archetypes, leveling, 25 classes, LevelUpModal, XP bar, STAT_XP wiring | ✅ Complete |
+| **Vertical Slice Playtest** | **Full game start → meaningful session end. Tuning baseline.** | ⏳ **NEXT** |
 | Day 23 | Main Quest Thread | ⏳ Post-playtest |
 | Merchant Trading Foundation | Persistent merchant inventory, buy/sell, engine-enforced gold deduction | ⏳ |
-| Combat UX & Flow Polish | HP timing + hit/miss diff + miss float + flee-fail pacing | ⏳ Post-Day-23 |
+| WCD variety second pass | WCD prompt theme-diversity instruction | ⏳ Small patch |
+| Combat UX & Flow Polish | HP timing + hit/miss + flee-fail + death summary/stash | ⏳ Post-Day-23 |
 | Mobile Combat Layout | Stacked portrait layout at narrow viewport | ⏳ After Combat UX Polish |
 | Day 24 | Multiplayer Foundation | ⏳ Pre-launch |
 | Day 25 | Customization Layer | ⏳ Pre-launch toward end |
 | Genre Session | Sub-genre expansion (see /docs/genre-reference.md) | ⏳ Post-Day-25 |
+| Skills System | Separate skills layer — deferred (see project-log.md) | ⏳ After Day 22 is stable |
 | Day 20.5 | Verbal Action System + in-combat equip/unequip | ⏳ Deferred |
 | Day 20.6 | Encounter Avoidance / Stealth | ⏳ Deferred |
 | Map Visual Rework | Dedicated session | ⏳ Deferred |
 
-**Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic. Sub-genre expansion deferred to Genre Session.
+**Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic. 5 classes per genre (25 total). Sub-genre expansion deferred to Genre Session.
 
 ### Known issues (see project-log.md for full list)
 
-**HP bar timing — DEFERRED to Combat UX Polish:** HP drops before floating numbers and story text. Fix: read HP from event timeline, not raw state.
+**HP bar timing — DEFERRED:** HP drops before floating numbers and story text. Bundled with Combat UX Polish.
 
-**No equip/unequip during combat — INTENTIONAL (rule 63):** Equip/Unequip buttons hidden during combat as interim measure. Day 20.5 scope item.
+**No equip/unequip during combat — INTENTIONAL (rule 63):** Day 20.5 scope item.
 
-**WCD variety second pass:** WCD prompt defaults to honor/oath/covenant themes. Needs theme-diversity instruction. Small patch, any quiet round.
+**WCD variety second pass:** WCD prompt defaults to honor/oath/covenant themes. Small patch, any quiet round.
 
 ---
 
@@ -223,13 +223,16 @@ This scenario drives every design decision. If a feature makes that scenario *be
 79. **Prompt-template hardcoded structural IDs are a recurring bug class.** Audit `app/api/game/generate-*/route.ts` for `${outline.id}`, `${region.id}` etc. in id positions. (V8.42)
 80. **Nav card dedup at region zone.** DEEPER isAtRegionZone branch checks `backCards[0]?.targetId`; suppresses DEEPER settlement card if it matches BACK destination. Cross-region: both emit. No trail: DEEPER suppressed. (V8.43 defined · V8.44 implemented)
 81. **Map tier auto-switch fires on every node arrival.** `lib/game/map-tier.ts` `chooseTierForNode()`: region zone → tier 2, everything else → tier 1. WorldMap.tsx useEffect calls this on every arrival. (V8.43 defined · V8.44 implemented)
-82. **jest true baseline = 393 (V8.47 correction).** V8.45 reported 762 due to stale `.claude/worktrees/` subtree double-counting. Fixed in `jest.config.ts` via `testPathIgnorePatterns` + `modulePathIgnorePatterns` excluding `.claude/`. 393 is the authoritative full-suite count going forward. (V8.47)
-83. **Loot never auto-credits.** `handleVictory` pushes XP-only; all item/gold drops go to `MasterState.floor_loot[]` as `FloorLootEntry`. Player must explicitly SEARCH REMAINS or TAKE / TAKE ALL from FloorLootStrip. Enables no-gold and no-loot playthroughs. (V8.47)
-84. **Container search is engine-resolved, zero LLM calls.** `resolveInteract` detects `LocationObject.type === "container"` → `resolveLoot()` → `FloorLootEntry` → templated story beat. Non-container objects → `INTERACT_NON_CONTAINER` with type-specific empty template. Engine guarantees ≥1 container per combat-eligible node. (V8.47)
+82. **jest baseline history.** Original V8.45 count of 762 was inflated by `.claude/worktrees/` double-counting; corrected to 393 in V8.47. Day 22 added 59 new tests → current baseline = **452** (see rule 91). (V8.47 + V8.50)
+83. **Loot never auto-credits.** `handleVictory` pushes XP-only; all item/gold drops go to `MasterState.floor_loot[]` as `FloorLootEntry`. Player must explicitly SEARCH REMAINS or TAKE / TAKE ALL from FloorLootStrip. (V8.47)
+84. **Container search is engine-resolved, zero LLM calls.** `resolveInteract` detects `LocationObject.type === "container"` → `resolveLoot()` → `FloorLootEntry` → templated story beat. Engine guarantees ≥1 container per combat-eligible node. (V8.47)
 85. **Currency and inventory cap are canonical constants.** `lib/game/currency.ts` → `currencyKeyFor(genre)` / `currencyLabelFor(genre)`. Horror = "marks". `lib/game/constants.ts` → `INVENTORY_CAP = 20`. Never hardcode. (V8.47)
-86. **Revisit suppression — no re-describing known locations.** On ARRIVING at a node with `discovered === true`: emit one-line "You return to {name}." only — skip cached atmosphere prose AND narrator API call. First visit (discovered=false) still gets full description. Spawn settlement starts `discovered: true` so first MOVE-back suppresses correctly. (V8.48)
-87. **Object highlight popup uses context-aware action labels.** `InteractionPopover.tsx`: CONTAINER objects → "Search" primary. Fixture/lore/trigger/undefined ITEM POI in feed → "Examine" primary (never "Pick up" — real loot lives in FloorLootStrip per rule 83). Navigation-like label heuristic (`isNavigationLikeLabel`: bridge/gate/passage/stairs/path/trail/doorway/archway/corridor) → header + Close only. "Pick up" NEVER appears for LocationObject interactions. (V8.48)
-88. **`resolveUseItem` resolves heal by effect, not by id.** Resolution order: (1) `item_effect?.heal` is a finite positive number → flat heal, `item_consumed: true`. (2) `item_id === BASIC_HEALTH_POTION_ID` → 1d8+4 die-roll, `item_consumed: true` (backwards-compat fallback). (3) Otherwise → no-op. `combat-engine.ts` passes `owned.effect` to the resolver. Out-of-combat use (logic-resolver) read `effect.heal` directly and was never broken. (V8.49)
+86. **Revisit suppression — no re-describing known locations.** On ARRIVING at a node with `discovered === true`: emit one-line "You return to {name}." only — skip cached atmosphere prose AND narrator API call. Spawn settlement starts `discovered: true`. (V8.48)
+87. **Object highlight popup uses context-aware action labels.** CONTAINER → "Search". Fixture/lore/trigger/undefined ITEM POI → "Examine" (never "Pick up"). Navigation-like labels (bridge/gate/passage/stairs/path/trail/doorway/archway/corridor) → header + Close only. "Pick up" NEVER appears for LocationObject interactions. (V8.48)
+88. **`resolveUseItem` resolves heal by effect, not by id.** (1) `item_effect?.heal` finite positive → flat heal, consumed. (2) `BASIC_HEALTH_POTION_ID` match → 1d8+4, consumed (backwards-compat). (3) Otherwise → no-op. `combat-engine.ts` passes `owned.effect`. (V8.49)
+89. **Archetype system lives in `lib/game/archetypes.ts`.** 25 classes (5 per genre × 5 genres). Each class maps to a primary and secondary stat. `buildStartingAttributes(background)` initializes all 5 stats at `STAT_BASE=2`; primary gets `+STAT_PRIMARY_BONUS=2`; secondary gets `+STAT_SECONDARY_BONUS=1`. Old single-stat `bonusAttribute` bump is superseded. `getArchetype(background)` returns the ArchetypeConfig. (V8.50)
+90. **Level-up flow is post-combat, player-driven.** `handleVictory` awards XP and sets `pending_level_up=true` if an `XP_THRESHOLDS` boundary is crossed mid-combat. LevelUpModal opens after combat slice clears (gated on `pending_level_up && !combat.active`). Modal shows auto-gains (primary+1, secondary+1, HP) and a 5-button free stat picker (cap-aware). `applyLevelUp` mutates attributes + HP + clears flag. Templated "[LEVEL UP]" beat lands in story feed in `--hl-pass` green. Defeat discards pending level-up (XP is rolled back per rule 31). STAT_XP items mid-combat auto-apply to archetype primary (no picker — keeps combat flow clean); out-of-combat STAT_XP opens an inline inventory picker. (V8.50)
+91. **jest baseline = 452 (V8.50).** Day 22 added 59 new tests: all 25 archetype mappings, XP threshold boundaries, multi-level jumps, cap enforcement, HP scaling per archetype, applyStatBoost cap, missing-free-stat tolerance. 452 is the authoritative count going forward. (V8.50)
 
 ---
 
@@ -254,6 +257,7 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint (resol
 | Sub-location / Landmark | #94d8b8 mint | --hl-sublocation / --hl-landmark |
 | Dungeon | #b45309 burnt-copper | --hl-dungeon |
 | NPC highlights | var(--accent) orange | — |
+| Level-up beat | --hl-pass green (centered, same weight as victory banner) | — |
 | Combat routine player/enemy | #7ab8c8 teal / #e87c6d warm red | --combat-player / --combat-enemy |
 | Combat crits | #3b82a8 deeper blue / #c0392b blood red BOLD | --combat-player-crit / --combat-enemy-crit |
 | Combat outcomes | #7dbb8e victory / #a93226 defeat / #a8a29c flee | — |
@@ -264,7 +268,7 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint (resol
 
 ---
 
-## Tech Stack · Genre Definitions · Monetization
+## Tech Stack · Classes · Monetization
 
 | Layer | Tool |
 | --- | --- |
@@ -275,15 +279,15 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint (resol
 | AI (RegionBible) | claude-haiku-4-5-20251001 |
 | Payments | Stripe · Deploy: Vercel · Audio: Howler.js · State: Zustand |
 
-| Genre | Primary | Currency | HP |
-| --- | --- | --- | --- |
-| Fantasy (fantasy) | #f59e0b amber | Gold | HP |
-| Cyberpunk (cyber) | #22d3ee cyan | Credits | Integrity |
-| Horror/Lovecraftian (horror) | #84cc16 acid green | Marks | HP + Sanity |
-| Space Opera (space) | #a855f7 purple | Stellar Units | Hull Integrity |
-| Post-Apocalyptic (apoc) | #ea580c rust | Caps | HP |
+| Genre | Primary Color | Currency | HP | Classes (5) |
+| --- | --- | --- | --- | --- |
+| Fantasy | #f59e0b amber | Gold | HP | Knight · Rogue · Mage · Ranger · Herald |
+| Cyberpunk | #22d3ee cyan | Credits | Integrity | Netrunner · Fixer · Street Samurai · Enforcer · Ghost |
+| Horror | #84cc16 acid green | Marks | HP + Sanity | Investigator · Cultist · Survivor · Phantom · Medium |
+| Space Opera | #a855f7 purple | Stellar Units | Hull Integrity | Commander · Pilot · Engineer · Marine · Recon |
+| Post-Apoc | #ea580c rust | Caps | HP | Scavenger · Raider · Medic · Runner · Demagogue |
 
-*Sub-genre expansion deferred to Genre Session post-Day-25. See /docs/genre-reference.md.*
+*Sub-genre expansion deferred to Genre Session post-Day-25.*
 
 | Feature | Free | Adventurer ($6.99) | Legend ($14.99) |
 | --- | --- | --- | --- |
@@ -298,8 +302,8 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint (resol
 
 Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim reports commit + tests → Claude.ai updates docs → Tim verifies → next prompt.
 
-**Update routing:** New rules or status changes → CLAUDE.md. Trajectory notes, round history, future features, design captures → `/docs/project-log.md`. This keeps CLAUDE.md lean and fast to write.
+**Update routing:** New rules or status changes → CLAUDE.md. Trajectory notes, round history, future features, design captures → `/docs/project-log.md`.
 
-**Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` (no pattern) = authoritative full-suite test count. True baseline = 393 (rule 82).**
+**Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` (no pattern) = authoritative full-suite test count. Baseline = 452 (rule 91).**
 
 **Authority:** Architecture → /docs/architecture-spec.md · Combat → /docs/combat-spec.md · Vision/scope → Game Vision · Strategic/sequencing → /docs/project-log.md · Round details → git log + project-log.md.

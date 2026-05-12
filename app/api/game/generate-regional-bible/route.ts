@@ -276,12 +276,12 @@ consistent with the WCD):
       "id": "${outline.id}_themed_enemy_id",
       "name": "[Themed Enemy Name]",
       "description": "[1 sentence of WCD-consistent flavor for narration]",
-      "hp_range": [12, 18],
+      "hp_range": [9, 14],
       "agi_mod": 1,
-      "str_mod": 2,
+      "str_mod": 1,
       "damage_die": "1d8",
       "armor_bonus": 1,
-      "xp_value": 60,
+      "xp_value": 55,
       "loot_table_id": "${outline.id}_themed_enemy_id_loot",
       "is_boss": false,
       "behavior_flavor": "[1-3 word phrase]"
@@ -336,14 +336,41 @@ Constraints:
 - 3-5 entries with UNIQUE ids prefixed with the region id
   (e.g. "${outline.id}_husk_warden")
 - description: 1 sentence of WCD-consistent flavor for narration
-- hp_range: [min, max] — common 8-25, elite 25-50, boss 50-100
-- agi_mod and str_mod: integers between -2 and +4
+- hp_range: [min, max] — see ENEMY STAT BUDGET BY REGION TIER below
+- agi_mod and str_mod: integers (range bounded by tier — see below)
 - armor_bonus: integer between 0 and 3
 - damage_die: one of "1d4", "1d6", "1d8", "1d10", "2d4", "2d6", "2d8"
 - xp_value: integer between 25 and 1000 scaled to difficulty
 - behavior_flavor: 1-3 word phrase
 - is_boss: false unless this enemy IS a region-tied boss
 - loot_table_id: stub of form "<enemy_id>_loot"
+
+ENEMY STAT BUDGET BY REGION TIER (V8.51 — calibrated for the 2-10
+player stat scale, NOT the D&D 1-20 scale):
+
+Player modifier formula: floor((stat - 2) / 2). Stat 4 = +1 mod.
+Target DC = 10 + enemy.agi_mod + enemy.armor_bonus.
+
+Starting region / first dungeon enemies (level 1 appropriate):
+  hp_range:    [4, 8]    agi_mod: 0–1    armor_bonus: 0
+  str_mod:     0–1       damage_die:     "1d4" or "1d6"
+  Design check: a level-1 player should kill these in 2-3 hits.
+
+First expansion region enemies (levels 2-4):
+  hp_range:    [7, 14]   agi_mod: 1–2    armor_bonus: 0–1
+  str_mod:     1–2       damage_die:     "1d6" or "1d8"
+
+Deep region enemies (levels 4+):
+  hp_range:    [12, 22]  agi_mod: 2–3    armor_bonus: 1–2
+  str_mod:     2–3       damage_die:     "1d8" or "2d4"
+
+Pick the tier that matches this region's position in the world.
+A region adjacent to the starting hub uses the "first expansion"
+budget; a region two hops out uses the "deep region" budget.
+NEVER generate starting-tier enemies with:
+  - agi_mod above 1
+  - hp_range minimum above 8
+  - damage_die larger than "1d6"
 
 ENCOUNTER TAGGING for combat-eligible region_locations:
 The standalone region_location IS combat-eligible. It MUST carry:

@@ -219,12 +219,12 @@ Return EXACTLY this JSON structure (fill in the values):
         "id": "<region_id>_themed_enemy_id",
         "name": "Themed Enemy Name",
         "description": "1 sentence of WCD-consistent flavor for the narrator.",
-        "hp_range": [12, 18],
+        "hp_range": [5, 8],
         "agi_mod": 1,
-        "str_mod": 2,
-        "damage_die": "1d8",
-        "armor_bonus": 1,
-        "xp_value": 60,
+        "str_mod": 0,
+        "damage_die": "1d6",
+        "armor_bonus": 0,
+        "xp_value": 25,
         "loot_table_id": "<region_id>_themed_enemy_id_loot",
         "is_boss": false,
         "behavior_flavor": "1-3 word phrase"
@@ -247,8 +247,8 @@ Return EXACTLY this JSON structure (fill in the values):
           "id": "<region_slug>_outline_enemy_id",
           "name": "Outline Enemy Name",
           "description": "1 sentence of WCD-consistent flavor.",
-          "hp_range": [10, 16],
-          "agi_mod": 0,
+          "hp_range": [8, 13],
+          "agi_mod": 1,
           "str_mod": 1,
           "damage_die": "1d6",
           "armor_bonus": 1,
@@ -320,8 +320,8 @@ Constraints (every enemy must obey these):
 - 3-5 entries, each with a UNIQUE id prefixed with the region id
   (e.g. "<region_id>_<creature_type>")
 - description: 1 sentence of WCD-consistent flavor for the narrator
-- hp_range: [min, max] — common 8-25, elite 25-50, boss 50-100
-- agi_mod and str_mod: integers between -2 and +4
+- hp_range: [min, max] — see ENEMY STAT BUDGET BY REGION TIER below
+- agi_mod and str_mod: integers (range bounded by tier — see below)
 - armor_bonus: integer between 0 and 3
 - damage_die: one of "1d4", "1d6", "1d8", "1d10", "2d4", "2d6", "2d8"
 - xp_value: integer between 25 and 1000 scaled to difficulty
@@ -331,9 +331,38 @@ Constraints (every enemy must obey these):
 - loot_table_id: stub of form "<enemy_id>_loot" — Day 21 will wire
   the real loot tables to these ids without changing the bible.
 
+ENEMY STAT BUDGET BY REGION TIER (V8.51 — calibrated for the 2-10
+player stat scale, NOT the D&D 1-20 scale):
+
+Player modifier formula: floor((stat - 2) / 2). Stat 4 = +1 mod.
+Target DC = 10 + enemy.agi_mod + enemy.armor_bonus. A level-1 player
+typically has +0 to +1 on attacks, so DC 11-12 yields ~50% hit rate.
+
+Starting region / first dungeon enemies (level 1 appropriate):
+  hp_range:    [4, 8]    agi_mod: 0–1    armor_bonus: 0
+  str_mod:     0–1       damage_die:     "1d4" or "1d6"
+  Design check: a level-1 player should kill these in 2-3 hits.
+
+First expansion region enemies (levels 2-4):
+  hp_range:    [7, 14]   agi_mod: 1–2    armor_bonus: 0–1
+  str_mod:     1–2       damage_die:     "1d6" or "1d8"
+
+Deep region enemies (levels 4+):
+  hp_range:    [12, 22]  agi_mod: 2–3    armor_bonus: 1–2
+  str_mod:     2–3       damage_die:     "1d8" or "2d4"
+
+The starting_region this prompt generates is always the FIRST tier.
+NEVER generate starting region enemies with:
+  - agi_mod above 1
+  - hp_range minimum above 8
+  - damage_die larger than "1d6"
+Violating these guarantees produces an unwinnable level-1 fight.
+
 adjacent_regions[i].enemies — give 1-2 enemies per outline (less
 detail, since the full roster is generated when the region is
-expanded into a RegionBible). Same shape, same constraints.
+expanded into a RegionBible). Same shape, same constraints. Outline
+regions can use the "first expansion" tier budget above when the
+WCD positions them as adjacent / mid-game regions.
 
 ENCOUNTER TAGGING for combat-eligible locations:
 For each location of type "dungeon", "wilderness", "ruin", "stronghold",

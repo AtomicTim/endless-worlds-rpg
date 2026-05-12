@@ -162,7 +162,10 @@ describe("ATTACK", () => {
     mockedD20.mockReturnValueOnce(15); // roll
     mockedD6.mockReturnValueOnce(4);   // damage die
 
-    const state  = withStrength(baseState(), 18); // STR 18 → +4 mod
+    // V8.51 — was STR 18 under the legacy D&D formula (+4 mod). New
+    // formula floor((stat-2)/2) gives STR 10 → +4. Same mod, same
+    // assertion math, but stats now respect the 2-10 archetype cap.
+    const state  = withStrength(baseState(), 10); // STR 10 → +4 mod
     const result = resolveAction(
       actionOf({ action_type: ActionType.ATTACK, primary_target: "goblin" }),
       state
@@ -182,7 +185,9 @@ describe("ATTACK", () => {
     mockedD20.mockReturnValueOnce(20);
     mockedD6.mockReturnValueOnce(5);
 
-    const state  = withStrength(baseState(), 14); // +2 mod
+    // V8.51 — STR 6 under new formula gives the same +2 mod the
+    // legacy STR 14 produced under the D&D formula.
+    const state  = withStrength(baseState(), 6); // +2 mod
     const result = resolveAction(
       actionOf({ action_type: ActionType.ATTACK, primary_target: "wolf" }),
       state
@@ -198,7 +203,10 @@ describe("ATTACK", () => {
   it("flags critical_miss on a natural 1 with no damage", () => {
     mockedD20.mockReturnValueOnce(1);
 
-    const state  = withStrength(baseState(), 18);
+    // V8.51 — was STR 18 (the legacy "high stat"). Crit-miss path
+    // doesn't read the mod for damage, so any positive stat works
+    // here; using 10 stays consistent with the other ATTACK tests.
+    const state  = withStrength(baseState(), 10);
     const result = resolveAction(
       actionOf({ action_type: ActionType.ATTACK, primary_target: "ogre" }),
       state
@@ -216,7 +224,9 @@ describe("ATTACK", () => {
 describe("EXAMINE", () => {
   it("always succeeds with no state changes and reports perception bonus", () => {
     const state  = baseState();
-    state.player_state.attributes.perception = 16; // +3
+    // V8.51 — was PER 16 under the legacy D&D formula (+3 mod). New
+    // formula: PER 8 → +3. Same mod, assertion preserved.
+    state.player_state.attributes.perception = 8; // +3
     const result = resolveAction(
       actionOf({ action_type: ActionType.EXAMINE, primary_target: "altar" }),
       state
@@ -329,8 +339,12 @@ describe("USE_ITEM", () => {
 describe("DIALOGUE", () => {
   it("succeeds and exposes Charisma + modifier", () => {
     let state = baseState();
+    // V8.51 — STR 10 / CHA 6 under the new formula → STR mod +4 (cap),
+    // CHA mod +2 (same as legacy CHA 14 / STR 18 produced under the
+    // D&D formula). Asserted CHA score updates to match the new stat
+    // scale where 10 is the cap.
     state = withStrength(state, 10);
-    state.player_state.attributes.charisma = 14;
+    state.player_state.attributes.charisma = 6;
 
     const result = resolveAction(
       actionOf({ action_type: ActionType.DIALOGUE, primary_target: "old_hermit" }),
@@ -338,7 +352,7 @@ describe("DIALOGUE", () => {
     );
 
     expect(result.success).toBe(true);
-    expect(result.narrative_context.charisma).toBe(14);
+    expect(result.narrative_context.charisma).toBe(6);
     expect(result.narrative_context.charisma_modifier).toBe(2);
     expect(result.narrative_context.npc_key).toBe("old_hermit");
     expect(result.narrative_context.trust_score).toBeNull(); // NPC not in registry

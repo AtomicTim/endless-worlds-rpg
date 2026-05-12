@@ -30,9 +30,14 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     health:      30,
     max_health:  30,
     resources:   { gold: 100 },
+    // V8.51 — calibrated for the new abilityMod formula
+    // (floor((stat - 2) / 2)). STR 6 / AGI 6 both yield +2 modifiers,
+    // matching the assertions in this file written under the legacy
+    // D&D formula (STR 14 also gave +2). The other stats stay at the
+    // 2-10 ceiling — they don't feed combat math.
     attributes: {
-      strength:     14,
-      agility:      14,
+      strength:     6,
+      agility:      6,
       charisma:     10,
       intelligence: 10,
       perception:   10,

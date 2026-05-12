@@ -129,7 +129,11 @@ function AttributeRow({ label, value }: { label: string; value: number }) {
 
   const mod    = getAttributeModifier(value);
   const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
-  const pips   = Math.min(5, Math.round(value / 4));
+  // V8.51 — pip scaling re-calibrated for the 2-10 stat range. The
+  // legacy `value / 4` divisor produced ~3 pips max for a 10-cap
+  // stat; `value / 2` fills 1-5 pips cleanly across 2-10
+  // (2→1, 4→2, 6→3, 8→4, 10→5).
+  const pips   = Math.min(5, Math.max(1, Math.round(value / 2)));
 
   return (
     <div

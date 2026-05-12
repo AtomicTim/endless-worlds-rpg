@@ -71,9 +71,14 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     health:      20,
     max_health:  30,    // 10 HP "headroom" so the heal lands a positive roll
     resources:   { gold: 100 },
+    // V8.51 — calibrated for the new abilityMod formula
+    // (floor((stat - 2) / 2)). STR/AGI 6 → +2 mods, preserves the math
+    // baked into the file's RNG sequences (originally STR/AGI 14 under
+    // the legacy D&D formula gave the same +2). Other stats stay at the
+    // 2-10 ceiling.
     attributes: {
-      strength:     14,
-      agility:      14,
+      strength:     6,
+      agility:      6,
       charisma:     10,
       intelligence: 10,
       perception:   10,

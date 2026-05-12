@@ -1292,9 +1292,22 @@ export function handleFleeSuccess({
 // Player stat helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Standard d20 ability modifier: floor((score - 10) / 2). */
+/**
+ * Ability modifier calibrated for our 2-10 stat range (V8.51+).
+ *
+ *   score 2-3 → +0    score 6-7 →  +2
+ *   score 4-5 → +1    score 8-9 →  +3
+ *   score 10  → +4    (max achievable)
+ *
+ * The legacy D&D 5e formula `floor((score - 10) / 2)` produced
+ * negative modifiers across our whole stat range — a Knight with
+ * archetype-rolled AGI 3 was rolling d20-4 to hit, ~25% hit rate
+ * against typical enemy DC. Combat was unwinnable at level 1.
+ * dice.ts's getAttributeModifier mirrors this formula so display
+ * and stat-check paths stay consistent.
+ */
 function abilityMod(score: number): number {
-  return Math.floor((score - 10) / 2);
+  return Math.floor((score - 2) / 2);
 }
 
 /**

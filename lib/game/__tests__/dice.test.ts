@@ -60,29 +60,46 @@ describe("rollD4", () => {
   });
 });
 
-describe("getAttributeModifier", () => {
-  it("returns 0 for score 10", () => {
-    expect(getAttributeModifier(10)).toBe(0);
+// V8.51 — calibrated for our 2-10 stat scale.
+//   floor((score - 2) / 2)
+//   score 2 → 0    score 6 → 2
+//   score 3 → 0    score 7 → 2
+//   score 4 → 1    score 8 → 3
+//   score 5 → 1    score 9 → 3
+//   score 10 → 4 (max achievable)
+describe("getAttributeModifier — Day 22 archetype stat scale (2-10)", () => {
+  it("returns 0 for score 2 (floor / unbumped stat)", () => {
+    expect(getAttributeModifier(2)).toBe(0);
   });
 
-  it("returns 0 for score 11 (D&D rounding)", () => {
-    expect(getAttributeModifier(11)).toBe(0);
+  it("returns 0 for score 3 (archetype secondary base)", () => {
+    expect(getAttributeModifier(3)).toBe(0);
   });
 
-  it("returns 3 for score 16", () => {
-    expect(getAttributeModifier(16)).toBe(3);
+  it("returns 1 for score 4 (archetype primary base)", () => {
+    expect(getAttributeModifier(4)).toBe(1);
   });
 
-  it("returns -1 for score 8", () => {
-    expect(getAttributeModifier(8)).toBe(-1);
+  it("returns 1 for score 5 (rounds down)", () => {
+    expect(getAttributeModifier(5)).toBe(1);
   });
 
-  it("returns 5 for score 20", () => {
-    expect(getAttributeModifier(20)).toBe(5);
+  it("returns 2 for score 6", () => {
+    expect(getAttributeModifier(6)).toBe(2);
   });
 
-  it("returns -5 for score 1", () => {
-    expect(getAttributeModifier(1)).toBe(-5);
+  it("returns 3 for score 8", () => {
+    expect(getAttributeModifier(8)).toBe(3);
+  });
+
+  it("returns 4 for score 10 (cap)", () => {
+    expect(getAttributeModifier(10)).toBe(4);
+  });
+
+  it("returns -1 for score 1 (defensive — below 2-10 floor)", () => {
+    // Stats should never drop below 2 in practice (STAT_BASE), but the
+    // formula tolerates lower values rather than throwing.
+    expect(getAttributeModifier(1)).toBe(-1);
   });
 });
 

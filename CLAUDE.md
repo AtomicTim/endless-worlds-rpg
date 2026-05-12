@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.56
-**Status:** Nav card fix COMPLETE (commit e29a3c0, 491/491) — Day 23A Part 2 NEXT
+**Version:** 8.57
+**Status:** Day 23A COMPLETE (commit 5a3e2da, 499/499) — Day 23B Quest Schema + Data Structures NEXT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -65,7 +65,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 **Per-prompt protocols (cumulative):**
 - **V8.40 — Investigation-before-patching.** Validate root-cause hypothesis BEFORE patching.
 - **V8.41 — Origin/main baseline check.** Step 1 of every prompt: `git fetch origin && git log origin/main --oneline -5`.
-- **V8.56 — jest baseline = 491.** See rule 91.
+- **V8.57 — jest baseline = 499.** See rule 91.
 
 ---
 
@@ -76,12 +76,8 @@ This scenario drives every design decision. If a feature makes that scenario *be
 ### Sequence
 
 1–11. ~~Polish through vertical slice playtest~~ ✅
-12a. ~~Generation Pipeline Polish (43cb43f)~~ ✅
-12b. ~~Day 23A Part 1 — Data Foundation (7424776)~~ ✅
-12b.5. ~~Day 23A Part 1.5 — Schema Fix (e6d5c29)~~ ✅
-12b.6. ~~Nav card fix — nodeTypeLabel, peer regression tests (e29a3c0)~~ ✅
-12c. **Day 23A Part 2 — Runtime + UI** ⏳ NEXT
-13. Day 23B — Quest Schema + Data Structures
+12a–12c. ~~Day 23A — World Structure, dungeons, location variety (all parts)~~ ✅
+13. **Day 23B — Quest Schema + Data Structures** ⏳ NEXT
 14. Day 23C — Quest Discovery + Journal UI
 15. Day 23D — Side Quest Generation
 15a. Day 23.5 — Character Creation Rework
@@ -99,14 +95,14 @@ This scenario drives every design decision. If a feature makes that scenario *be
 - XP threshold tuning — revisit after more playtest data.
 - Death stash / recovery mechanic — design decision needed (see project-log.md).
 - Character creation rework — design questions in project-log.md Day 23.5 section.
-- Nav card disappearance after dungeon visit — buildCards confirmed clean; likely malformed graph node. If it persists post-Part-2, share master_state.world_graph.nodes dump.
-- Nav card color differentiation for node types — deferred discussion (all non-dungeon region_locations still burnt-copper for now).
+- Nav card peer disappearance after dungeon return — buildCards confirmed clean; if it still reproduces, share master_state.world_graph.nodes dump.
+- Nav card color differentiation for node types — deferred (all non-dungeon region_locations still burnt-copper).
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Nav card fix complete (e29a3c0, 491/491). Day 23A Part 2 runtime + UI is next.
+**Current Phase:** Day 23A complete (5a3e2da, 499/499). Day 23B Quest Schema is next.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** atomictim/endless-worlds-rpg
 
 | Phase | Title | Status |
@@ -116,8 +112,8 @@ This scenario drives every design decision. If a feature makes that scenario *be
 | Day 23A pt 1 (7424776) | Types, prompts, apply routes, pure helper libs, 30 tests | ✅ Complete |
 | Day 23A pt 1.5 (e6d5c29) | Schema fix: skeleton + enforcement + diagnostic logging | ✅ Complete |
 | Nav card fix (e29a3c0) | nodeTypeLabel helper, typeLabel fallback chain, peer regression tests | ✅ Complete |
-| **Day 23A pt 2** | **useGameLoop dungeon entry/nav, NavigationBar room cards, lock UI, 3-tier breadcrumb** | ⏳ **NEXT** |
-| Day 23B | Quest schema + data structures + world intro template | ⏳ |
+| Day 23A pt 2 (5a3e2da) | useDungeonRuntime, DungeonLockPopover, room cards, 3-tier breadcrumb, 8 tests | ✅ Complete |
+| **Day 23B** | **Quest schema + WCD archetype + faction web + world intro template** | ⏳ **NEXT** |
 | Day 23C | Quest discovery + Morrowind journal UI | ⏳ |
 | Day 23D | Side quest generation | ⏳ |
 | Day 23.5 | Character creation rework | ⏳ |
@@ -137,9 +133,9 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 **No equip/unequip during combat — INTENTIONAL (rule 63):** Day 20.5 scope item.
 
-**Nav card peer disappearance after dungeon return — UNRESOLVED:** buildCards confirmed correct via 3 regression tests. Likely malformed graph node flags (is_expandable: true or wrong zone_id on dungeon node). If it reproduces post-Part-2, share master_state.world_graph.nodes for the affected region to pinpoint.
+**Nav card peer disappearance after dungeon return — UNRESOLVED:** buildCards confirmed correct. Likely malformed graph node (is_expandable or zone_id). Share master_state.world_graph.nodes if it reproduces.
 
-**Nav card colors for non-dungeon region_locations — DEFERRED:** All non-dungeon node types still use burnt-copper. Color differentiation discussion pending.
+**Nav card colors — DEFERRED:** All non-dungeon region_locations use burnt-copper. Differentiation discussion pending.
 
 ---
 
@@ -226,7 +222,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 79. **Prompt-template hardcoded structural IDs are a recurring bug class.** Audit `app/api/game/generate-*/route.ts` for `${outline.id}`, `${region.id}` etc. in id positions. (V8.42)
 80. **Nav card dedup at region zone.** DEEPER isAtRegionZone branch checks `backCards[0]?.targetId`; suppresses DEEPER settlement card if it matches BACK destination. Cross-region: both emit. No trail: DEEPER suppressed. (V8.43 defined · V8.44 implemented)
 81. **Map tier auto-switch fires on every node arrival.** `lib/game/map-tier.ts` `chooseTierForNode()`: region zone → tier 2, everything else → tier 1. WorldMap.tsx useEffect calls this on every arrival. (V8.43 defined · V8.44 implemented)
-82. **jest baseline history.** Original V8.45 count of 762 inflated by worktrees double-counting; corrected to 393. Day 22 +59 → 452. Combat rebalance +2 → 454. Day 23A pt 1 +30 → 484. Nav card fix +7 → **491**. See rule 91. (V8.47–V8.56)
+82. **jest baseline history.** 393 → Day 22 +59 → 452 → combat rebalance +2 → 454 → Day 23A pt1 +30 → 484 → nav card fix +7 → 491 → Day 23A pt2 +8 → **499**. See rule 91. (V8.47–V8.57)
 83. **Loot never auto-credits.** `handleVictory` pushes XP-only; all drops go to `MasterState.floor_loot[]`. Player must explicitly SEARCH REMAINS or TAKE / TAKE ALL. (V8.47)
 84. **Container search is engine-resolved, zero LLM calls.** `resolveInteract` detects `type === "container"` → `resolveLoot()` → `FloorLootEntry` → templated beat. Engine guarantees ≥1 container per combat-eligible node. (V8.47)
 85. **Currency and inventory cap are canonical constants.** `lib/game/currency.ts` · `lib/game/constants.ts` → `INVENTORY_CAP = 20`. Never hardcode. (V8.47)
@@ -235,14 +231,17 @@ This scenario drives every design decision. If a feature makes that scenario *be
 88. **`resolveUseItem` resolves heal by effect, not by id.** (1) `item_effect?.heal` finite positive → flat heal. (2) `BASIC_HEALTH_POTION_ID` → 1d8+4. (3) Otherwise → no-op. (V8.49)
 89. **Archetype system in `lib/game/archetypes.ts`.** 25 classes. `buildStartingAttributes(background)` sets stats: STAT_BASE=2, primary +2, secondary +1. (V8.50)
 90. **Level-up flow is post-combat, player-driven.** LevelUpModal opens after combat slice clears. Auto-gains + 5-button free stat picker. STAT_XP mid-combat auto-applies to archetype primary. (V8.50)
-91. **jest baseline = 491 (V8.56).** Nav card fix added 7 tests (484→491). 491 is the authoritative count going forward. (V8.50 + V8.51 + V8.54 + V8.56)
+91. **jest baseline = 499 (V8.57).** Day 23A pt2 added 8 tests (491→499). 499 is the authoritative count going forward. (V8.57)
 92. **Ability modifier formula calibrated for 2-10 stat range.** Both `abilityMod` and `getAttributeModifier` use `Math.floor((score - 2) / 2)`. These MUST always match. CharacterSheet pip bar uses `value/2` (min 1). (V8.51)
 93. **Enemy stat budgets enforced at two layers.** Static bestiaries: tier-1 agi_mod ≤1, hp min ≤8. Bible prompts: ENEMY STAT BUDGET block with NEVER constraints. (V8.51)
 94. **RegionBibleCache in-flight dedup via promise map.** `inFlight` is `Map<string, Promise<RegionBible | null>>`. `awaitRegionalBible` resolves: (1) cache hit; (2) await in-flight promise; (3) null → live fetch. (V8.53)
 95. **Post-apply pregeneration burst.** After `apply-world-bible` succeeds, wizard fires `pregenerateRegionalBible()` for all adjacent_regions (fire-and-forget). WorldBible NOT split — quest coherence requires single creative act. (V8.53)
 96. **Dungeon data layer in two pure modules.** `lib/game/dungeon-validation.ts` wired into both apply routes. `lib/game/dungeon-navigation.ts`: 14 pure functions for all dungeon runtime + UI. (V8.54)
 97. **LLM generation prompt skeleton anchors output count and structure.** Instructions alone cannot override the skeleton. When adding required fields or changing expected counts: (1) update skeleton, (2) add enforcement block, (3) add diagnostic logging. Skeleton is ground truth. (V8.55)
-98. **Nav card type label derives from `node_type` via `nodeTypeLabel()`.** NODE_TYPE_LABEL map: settlement_hub→SETTLEMENT, outpost→OUTPOST, wilderness→WILDERNESS, dungeon→DUNGEON, landmark→LANDMARK, abandoned_settlement→RUINS. `typeLabel()` fallback chain: REGION (self-zoned expandable) → nodeTypeLabel(node_type) → SETTLEMENT (is_settlement_node, no node_type) → category.toUpperCase(). Nav card peer disappearance after dungeon return confirmed NOT in buildCards (3 regression tests added as guard). If bug persists, share master_state.world_graph.nodes for affected region — likely malformed is_expandable or zone_id on the dungeon node. (V8.56)
+98. **Nav card type label derives from `node_type` via `nodeTypeLabel()`.** NODE_TYPE_LABEL map: settlement_hub→SETTLEMENT, outpost→OUTPOST, wilderness→WILDERNESS, dungeon→DUNGEON, landmark→LANDMARK, abandoned_settlement→RUINS. `typeLabel()` fallback chain: REGION → nodeTypeLabel(node_type) → SETTLEMENT → category.toUpperCase(). (V8.56)
+99. **Dungeon runtime in `hooks/useDungeonRuntime.ts` — separate hook, mirrors useCombat split.** Not in useGameLoop. Watches current_node_id via useEffect; on dungeon arrival without dungeon_state, calls initDungeonState (dungeon-navigation.ts), marks entrance discovered, emits entrance description as cache-hit-style beat (no LLM). Re-fire guarded by useRef. Also observes combat dismissal; emits "The dungeon falls silent." once per cleared boss room. (V8.57)
+100. **Room navigation semantics.** navigateToRoom validates adjacency + lock state, advances dungeon_state, fires encounter check using room.encounter_chance on FIRST VISIT ONLY (revisit suppression suppresses description AND encounter on cleared rooms). Room descriptions: zero LLM cost (100% savings on dungeon traversal). BACK from entrance → parent region zone. BACK from non-entrance → entrance room. dungeon_state persists across dungeon exits — re-entry resumes with rooms_visited and lock state intact. (V8.57)
+101. **DungeonLockPopover handles all boss room lock interactions.** Clicking locked boss room card opens popover (not navigation): shows DungeonLock.hint + [USE {key_item_name}] when key in inventory + [TRY TO FORCE IT — STR ≥ 6] when raw score ≥ 6 + [CLOSE]. Both paths call dungeon-navigation.ts helpers, flip lock.unlocked: true, emit templated beats. Key item consumed from inventory. STR threshold is raw score ≥ 6 (not modifier). (V8.57)
 
 ---
 
@@ -314,6 +313,6 @@ Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim rep
 
 **Update routing:** New rules or status changes → CLAUDE.md. Trajectory notes, round history, future features, design captures → `/docs/project-log.md`. Quest system design → `/docs/quest-system-spec.md`.
 
-**Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` (no pattern) = authoritative full-suite test count. Baseline = 491 (rule 91).**
+**Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` (no pattern) = authoritative full-suite test count. Baseline = 499 (rule 91).**
 
 **Authority:** Architecture → /docs/architecture-spec.md · Combat → /docs/combat-spec.md · Quest system → /docs/quest-system-spec.md · Vision/scope → Game Vision · Strategic/sequencing → /docs/project-log.md.

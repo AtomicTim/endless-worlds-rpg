@@ -7,10 +7,15 @@ import type { LootPool } from "./types";
 export const LOOT_POOL: LootPool = {
   genre: Genre.CYBERPUNK,
 
+  // V8.52 — universal gold tier ranges (see fantasy.ts gold_drops
+  // comment for rationale). Credits replace gold as the label; the
+  // older per-genre upscaling (cyber dropped ~6× fantasy) is gone —
+  // payouts now feel consistent. Credit-denominated item prices live
+  // in their own scale and don't have to track this directly.
   gold_drops: [
-    { weight: 60, min:  20, max:  80 },
-    { weight: 30, min:  60, max: 200 },
-    { weight: 10, min: 150, max: 500 },
+    { weight: 60, min:  3, max: 18 },
+    { weight: 30, min: 12, max: 35 },
+    { weight: 10, min: 30, max: 80 },
   ],
 
   consumables: [
@@ -50,7 +55,9 @@ export const LOOT_POOL: LootPool = {
         description: "Flavorless gray bar. Calories without questions.",
         quantity:    1,
         stackable:   true,
-        effect:      {},
+        // V8.52 — food/sustenance consumables now restore HP. See
+        // fantasy.ts Trail Rations comment.
+        effect:      { heal: 5 },
         value:       8,
       },
     },

@@ -3,16 +3,22 @@ import type { LootPool } from "./types";
 
 /**
  * Day 21 — Horror / Lovecraftian static loot pool. Currency: Marks.
- * Items lean cult / occult / decay; rates are leaner than other genres
- * to make every find feel costly.
+ * Items lean cult / occult / decay.
+ *
+ * V8.52 — gold ranges aligned with the universal scale (see fantasy.ts
+ * gold_drops comment). The pre-V8.52 leaner-rates tuning that made
+ * every find "feel costly" is gone; consistent loot payouts across
+ * genres took priority. Horror's scarcity identity now lives in its
+ * sparser ITEM drop rates and rarer LORE finds rather than thinner
+ * Marks payouts.
  */
 export const LOOT_POOL: LootPool = {
   genre: Genre.HORROR_LOVECRAFTIAN,
 
   gold_drops: [
-    { weight: 60, min:  2, max:  8 },
-    { weight: 30, min:  6, max: 20 },
-    { weight: 10, min: 18, max: 55 },
+    { weight: 60, min:  3, max: 18 },
+    { weight: 30, min: 12, max: 35 },
+    { weight: 10, min: 30, max: 80 },
   ],
 
   consumables: [
@@ -51,7 +57,11 @@ export const LOOT_POOL: LootPool = {
         description: "Bread stamped with a sign. Cultist food. It tastes of iron.",
         quantity:    1,
         stackable:   true,
-        effect:      {},
+        // V8.52 — food/sustenance consumables now restore HP. See
+        // fantasy.ts Trail Rations comment. (Future: this item could
+        // gain a sanity-cost side effect when the sanity mechanic
+        // wires up; deferred for now.)
+        effect:      { heal: 5 },
         value:       6,
       },
     },

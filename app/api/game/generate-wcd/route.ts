@@ -36,6 +36,37 @@ function buildUserPrompt(body: Required<Omit<RequestBody, "creation_choices">> &
     "- grid_size: 40",
     "- world_origin: {\"x\": 0, \"y\": 0}",
     "",
+    // V8.52 — Theme diversity instruction. Earlier prompts (pre-V8.52)
+    // produced a strong default toward oath / honor / covenant / vow
+    // themes for Fantasy. The WorldBible-level fix (ad82300) addressed
+    // the bible layer; this block addresses the WCD that seeds it.
+    "THEME DIVERSITY REQUIREMENT",
+    "",
+    "Every world must have a distinctly different thematic foundation.",
+    "Do NOT default to oath, honor, covenant, vow, or promise themes",
+    "unless they emerge organically from a randomly selected concept.",
+    "",
+    "Before generating, internally select a primary theme from this list",
+    "(rotate through them — do not repeat the same theme twice in a row):",
+    "  - Elemental forces (volcanic, glacial, storm, tidal, earthquake)",
+    "  - Ancient ruins and lost civilizations",
+    "  - Plague and survival",
+    "  - Political intrigue and factions at war",
+    "  - Wild nature and dangerous ecosystems",
+    "  - Religious schism and competing gods",
+    "  - Trade, commerce, and economic conflict",
+    "  - Exploration and unmapped territories",
+    "  - Corruption and decay (physical or moral)",
+    "  - Mythological creatures as the dominant power",
+    "  - Technological remnants from a fallen age",
+    "  - Seasonal extremes (eternal winter, endless summer, etc.)",
+    "",
+    "The world's name, region names, settlement names, NPC archetypes,",
+    "and WCD rules should all reinforce the chosen theme. A volcanic",
+    "world should feel like fire and survival. A trade world should",
+    "feel like merchants and smugglers. Oath-breaking and honor are ONE",
+    "theme on this list — do not let them bleed into other themes.",
+    "",
     "Make it feel original and specific to this genre and character. Avoid generic clichés. Be creative and unexpected.",
   ].join("\n");
 }

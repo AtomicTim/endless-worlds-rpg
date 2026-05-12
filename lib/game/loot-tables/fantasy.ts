@@ -16,10 +16,16 @@ import type { LootPool } from "./types";
 export const LOOT_POOL: LootPool = {
   genre: Genre.FANTASY,
 
+  // V8.52 — universal gold tier ranges (apply identically across all 5
+  // genre tables; currency labels vary but numeric scale is consistent
+  // so 87-gold-from-one-enemy outliers don't recur). The three weight
+  // tiers map to "basic enemy" / "mid enemy" / "tough enemy" payouts.
+  // Boss path multiplies the rolled tier by BOSS_GOLD_MULTIPLIER=3 in
+  // loot-resolver, producing typical boss drops in the 75-150 band.
   gold_drops: [
-    { weight: 60, min:  3, max: 12 },
-    { weight: 30, min: 10, max: 30 },
-    { weight: 10, min: 25, max: 75 },
+    { weight: 60, min:  3, max: 18 },
+    { weight: 30, min: 12, max: 35 },
+    { weight: 10, min: 30, max: 80 },
   ],
 
   consumables: [
@@ -58,7 +64,10 @@ export const LOOT_POOL: LootPool = {
         description: "Dried meat and hardtack wrapped in oilcloth.",
         quantity:    1,
         stackable:   true,
-        effect:      {},
+        // V8.52 — food/sustenance consumables now restore HP. No hunger
+        // system; eating gives a small heal so the item isn't a
+        // mechanical no-op. resolveUseItem reads effect.heal directly.
+        effect:      { heal: 5 },
         value:       5,
       },
     },

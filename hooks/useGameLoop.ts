@@ -12,7 +12,7 @@ import { generateLocationStub } from "@/lib/game/location-stub-generator";
 import { findAmbientResponse } from "@/lib/game/ambient-objects";
 import {
   matchRegionOutline,
-  getCachedRegionalBible,
+  awaitRegionalBible,
   cacheRegionalBible,
   pregenerateRegionalBible,
   invalidateRegionalBibleCache,
@@ -1281,8 +1281,14 @@ export function useGameLoop() {
               .map((r) => r.name),
           ];
 
-          // Cache hit short-circuits the AI call entirely (~5s saved).
-          const cached = getCachedRegionalBible(sessionId, matchedOutline.id);
+          // V8.53 — awaitRegionalBible adds in-flight dedup on top of
+          // the cache hit check. If a pregen is mid-flight for this
+          // outline (most likely from the wizard's post-apply burst),
+          // we await its existing promise rather than racing a
+          // duplicate /api/game/generate-regional-bible call. Pre-V8.53
+          // logs showed both fetches completing and the live one's
+          // result silently overwriting the pregen's after-the-fact.
+          const cached = await awaitRegionalBible(sessionId, matchedOutline.id);
           let regionBible: RegionBible | null = cached;
           // FIX 2 — track which step failed so the failure handler can
           // roll back the player and skip narration for this turn.

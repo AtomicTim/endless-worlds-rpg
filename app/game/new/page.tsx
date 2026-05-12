@@ -6,6 +6,7 @@ import { Genre } from "@/types/game";
 import type { WorldBible, WorldConsistencyDocument } from "@/types/game";
 import { BACKGROUND_CONFIGS } from "@/lib/game/starting-equipment";
 import { ARCHETYPE_MAP } from "@/lib/game/archetypes";
+import { pregenerateRegionalBible } from "@/lib/game/regional-bible-cache";
 
 // ─── Genre data ──────────────────────────────────────────────────────────────
 
@@ -363,6 +364,38 @@ export default function NewGamePage() {
         console.warn("[wizard] apply-world-bible failed:", data.error);
         setSubmitError(data.error ?? "Failed to apply world. Please try again.");
         return;
+      }
+
+      // V8.53 — Fire pre-generation for every adjacent region in
+      // parallel BEFORE redirecting into the game. The player loads
+      // straight into the opening narrative; by the time they finish
+      // reading + exploring the spawn settlement (5-15 min typically),
+      // the 3 adjacent RegionBibles are usually warm. Cross-border
+      // navigation then goes near-instant via the cache hit path.
+      // Pre-V8.53 this fired only on directional narrator hints, well
+      // after the player was already mid-journey.
+      //
+      // Fire-and-forget intentionally. pregenerateRegionalBible's
+      // inFlight Map (V8.53) makes subsequent same-key calls no-op,
+      // so this is safe to call alongside the older narrator-hint
+      // trigger in useGameLoop without duplicate work.
+      const adjacentRegions = bible.adjacent_regions ?? [];
+      const existingRegionNames = adjacentRegions.map((r) => r.name);
+      adjacentRegions.forEach((outline) => {
+        pregenerateRegionalBible({
+          sessionId,
+          outline,
+          originRegionName:    bible.starting_region.name,
+          directionFromOrigin: outline.direction_from_start,
+          genre:               selectedGenre,
+          wcd,
+          existingRegionNames: existingRegionNames.filter((n) => n !== outline.name),
+        });
+      });
+      if (adjacentRegions.length > 0) {
+        console.log(
+          `[wizard] Fired background pre-generation for ${adjacentRegions.length} adjacent region(s).`
+        );
       }
 
       // ── Step 5: brief beat before the player drops into the game. ──────────

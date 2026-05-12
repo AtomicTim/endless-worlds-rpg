@@ -203,9 +203,7 @@ consistent with the WCD):
       "name": "[Full Real Name]",
       "home_location_id": "${subSlug}",
       "role": "innkeeper",
-      "appearance": "[1 sentence]",
       "personality": "[1 sentence]",
-      "speech_style": "[3 words]",
       "knowledge": [{"topic": "[3-5 word label]", "content": "[Full WCD-consistent sentence]"}],
       "default_trust": 50
     },
@@ -214,9 +212,7 @@ consistent with the WCD):
       "name": "[Full Real Name]",
       "home_location_id": "${subSlug}",
       "role": "patron",
-      "appearance": "[1 sentence]",
       "personality": "[1 sentence]",
-      "speech_style": "[3 words]",
       "knowledge": [{"topic": "[3-5 word label]", "content": "[Full WCD-consistent sentence]"}],
       "default_trust": 50
     },
@@ -225,10 +221,8 @@ consistent with the WCD):
       "name": "[Full Real Name]",
       "home_location_id": "${regionLocSlug}",
       "role": "explorer",
-      "appearance": "[1 sentence]",
       "personality": "[1 sentence — give them a reason to be at this remote spot]",
-      "speech_style": "[3 words]",
-      "knowledge": ["[WCD-consistent fact specific to this site]"],
+      "knowledge": [{"topic": "[3-5 word label]", "content": "[WCD-consistent fact specific to this site]"}],
       "default_trust": 50
     }
   ],
@@ -275,7 +269,6 @@ consistent with the WCD):
     {
       "id": "${outline.id}_themed_enemy_id",
       "name": "[Themed Enemy Name]",
-      "description": "[1 sentence of WCD-consistent flavor for narration]",
       "hp_range": [9, 14],
       "agi_mod": 1,
       "str_mod": 1,
@@ -335,7 +328,6 @@ thematically fit the WCD flavor and the region's atmosphere.
 Constraints:
 - 3-5 entries with UNIQUE ids prefixed with the region id
   (e.g. "${outline.id}_husk_warden")
-- description: 1 sentence of WCD-consistent flavor for narration
 - hp_range: [min, max] — see ENEMY STAT BUDGET BY REGION TIER below
 - agi_mod and str_mod: integers (range bounded by tier — see below)
 - armor_bonus: integer between 0 and 3

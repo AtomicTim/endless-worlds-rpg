@@ -193,9 +193,12 @@ function validateEnemy(raw: unknown, context: string): Enemy | null {
   const o = raw as Record<string, unknown>;
   const id   = typeof o.id   === "string" ? o.id.trim()   : "";
   const name = typeof o.name === "string" ? o.name.trim() : "";
+  // V8.53 — description optional. WB-trimming applies here too because
+  // RegionBibles are expanded from the same prompt family. See
+  // apply-world-bible:validateEnemy for the symmetric rationale.
   const desc = typeof o.description === "string" ? o.description.trim() : "";
-  if (!id || !name || !desc) {
-    console.warn(`[apply-regional-bible] Enemy in ${context} missing id/name/description — dropping.`);
+  if (!id || !name) {
+    console.warn(`[apply-regional-bible] Enemy in ${context} missing id/name — dropping.`);
     return null;
   }
   const hpRange = Array.isArray(o.hp_range) ? o.hp_range : null;

@@ -191,9 +191,7 @@ Return EXACTLY this JSON structure (fill in the values):
         "name": "Full Name",
         "home_location_id": "tavern_slug",
         "role": "innkeeper",
-        "appearance": "1 sentence",
         "personality": "1 sentence",
-        "speech_style": "brief",
         "knowledge": [
           {"topic": "Local rumours (3-5 words)", "content": "Full WCD-consistent sentence the NPC knows."}
         ],
@@ -204,9 +202,7 @@ Return EXACTLY this JSON structure (fill in the values):
         "name": "Full Name",
         "home_location_id": "shop_slug",
         "role": "merchant",
-        "appearance": "1 sentence",
         "personality": "1 sentence",
-        "speech_style": "brief",
         "knowledge": [
           {"topic": "Trade goods (3-5 words)", "content": "Full WCD-consistent sentence the NPC knows."}
         ],
@@ -218,7 +214,6 @@ Return EXACTLY this JSON structure (fill in the values):
       {
         "id": "<region_id>_themed_enemy_id",
         "name": "Themed Enemy Name",
-        "description": "1 sentence of WCD-consistent flavor for the narrator.",
         "hp_range": [5, 8],
         "agi_mod": 1,
         "str_mod": 0,
@@ -246,7 +241,6 @@ Return EXACTLY this JSON structure (fill in the values):
         {
           "id": "<region_slug>_outline_enemy_id",
           "name": "Outline Enemy Name",
-          "description": "1 sentence of WCD-consistent flavor.",
           "hp_range": [8, 13],
           "agi_mod": 1,
           "str_mod": 1,
@@ -279,7 +273,6 @@ Return EXACTLY this JSON structure (fill in the values):
       "name": "Item Name",
       "type": "WEAPON|ARMOR|CONSUMABLE|VALUABLE|LORE",
       "rarity": "COMMON|UNCOMMON|RARE",
-      "description": "1 sentence — what this item is and why it exists in this world.",
       "effect": {},
       "quantity": 1,
       "stackable": false,
@@ -304,13 +297,29 @@ town. Connect it to the settlement node via connections.
 Make content original, specific to the WCD and genre.
 REAL NAMES for all NPCs. No placeholders.
 
-NPC KNOWLEDGE FORMAT (Architecture C): each NPC's "knowledge" array
-must be objects of shape {topic, content}. The topic is a 3-5 word
-button label the player sees ("Bandits in the foothills",
-"The old crypt"); content is the full WCD-consistent sentence the
-NPC will reveal on a passed stat check. Generate 2-4 knowledge items
-per NPC, each centered on something the player would plausibly want
-to ask about. Do NOT emit plain strings — always {topic, content}.
+V8.53 — MINIMUM-VIABLE WORLDBIBLE
+Generate ONLY what the player needs at game start. RegionBible
+expansion adds richness when adjacent regions are entered. Skip
+backstory, dialogue hints, relationship history, and any flavor
+that can be deferred. Goal: smallest WorldBible response that still
+boots a playable world.
+
+NPC FIELDS (Architecture C): generate id, name, home_location_id,
+role, a 1-sentence personality, knowledge[], default_trust. Skip
+appearance and speech_style — they're filled in on demand by the
+narrator. Generate 1-2 knowledge items per NPC (was 2-4 pre-V8.53)
+in {topic, content} shape: topic is a 3-5 word button label, content
+is the full WCD-consistent sentence the NPC reveals on a passed
+stat check. Do NOT emit plain strings — always {topic, content}.
+
+ENEMY FIELDS: generate stats only — id, name, hp_range, agi_mod,
+str_mod, damage_die, armor_bonus, xp_value, loot_table_id, is_boss,
+behavior_flavor. Skip description; the narrator and the genre
+bestiary supply flavor at runtime.
+
+WORLD LOOT ITEM FIELDS: generate id, name, type, rarity, effect,
+quantity, stackable, value. Skip description; item descriptions
+generate lazily at first interaction in a later phase.
 
 DAY 20 COMBAT — REGION ENEMIES & ENCOUNTER TAGGING:
 
@@ -319,7 +328,6 @@ thematically fit the WCD flavor and the region's atmosphere.
 Constraints (every enemy must obey these):
 - 3-5 entries, each with a UNIQUE id prefixed with the region id
   (e.g. "<region_id>_<creature_type>")
-- description: 1 sentence of WCD-consistent flavor for the narrator
 - hp_range: [min, max] — see ENEMY STAT BUDGET BY REGION TIER below
 - agi_mod and str_mod: integers (range bounded by tier — see below)
 - armor_bonus: integer between 0 and 3
@@ -413,6 +421,10 @@ default. Example for a "salt-crusted desert" world: a "Salt-Brined
 Saber" (WEAPON UNCOMMON), a "Sand-Glass Vial" (VALUABLE COMMON),
 a "Salt-Pilgrim's Robe" (ARMOR COMMON), a "Map to the Buried
 Wells" (LORE UNCOMMON), etc.
+
+V8.53 — DO NOT include a "description" field on world_loot_items.
+Names alone communicate the item's identity; descriptions generate
+on demand at first interaction in a later phase.
 
 Item id format: "<world_slug>_<item_slug>". Stat fields by type:
 - WEAPON: effect: { "damage_die": "1d6"|"1d8"|"1d10" } and a value

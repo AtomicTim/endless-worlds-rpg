@@ -54,9 +54,15 @@ function validateEnemy(raw: unknown, context: string): Enemy | null {
   const o = raw as Record<string, unknown>;
   const id   = typeof o.id   === "string" ? o.id.trim()   : "";
   const name = typeof o.name === "string" ? o.name.trim() : "";
+  // V8.53 — description is no longer required. The WB prompt was
+  // trimmed to drop enemy descriptions (minimum-viable detail). When
+  // missing, the genre bestiary's static description applies if the
+  // enemy id matches a bestiary entry, otherwise the narrator invents
+  // flavor on demand. Default to empty string so downstream type
+  // contracts still pass.
   const desc = typeof o.description === "string" ? o.description.trim() : "";
-  if (!id || !name || !desc) {
-    console.warn(`[apply-world-bible] Enemy in ${context} missing id/name/description — dropping.`);
+  if (!id || !name) {
+    console.warn(`[apply-world-bible] Enemy in ${context} missing id/name — dropping.`);
     return null;
   }
   const hpRange = Array.isArray(o.hp_range) ? o.hp_range : null;

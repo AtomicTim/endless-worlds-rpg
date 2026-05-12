@@ -23,18 +23,32 @@ Current merchant system is narrator-only. Needs: persistent NPC inventory, buy/s
 *Slot:* After Day 21 loot in play. Dedicated round.
 
 **Death Summary + Loss Display (V8.49):**
-Currently defeat just teleports the player with no summary. Player should see what they lost: XP forfeited (amount gained in the fight), gold lost (10% of balance), HP set to 50%. Display as a "YOU DIED" summary beat or overlay before the story feed continues.
-*Slot:* Combat UX & Flow Polish round (bundle with HP timing, hit/miss). Small addition to `handleDefeat` + defeat resolution event payload.
+Player should see what they lost on death: XP forfeited (amount gained in the fight), gold lost (10% of balance), HP set to 50%.
+*Slot:* Combat UX & Flow Polish round.
 
 **Death Stash / Recovery Mechanic (V8.49):**
-Dark Souls bloodstain analog. When a player dies, a `death_stash` FloorLootEntry is placed at the death node containing the gold that was lost (10% of balance). Player can navigate back and reclaim it via the loot strip. Only one stash active at a time — a second death clears the previous stash.
-*Design decision needed:* Does this soften death too much given "death must matter" principle? Counter-argument: the journey back IS the penalty, and the gold is only the 10% loss not all gold. The stash creates interesting risk/reward decisions.
-*Slot:* Combat UX & Flow Polish round or dedicated Death UX round.
-*Implementation:* `handleDefeat` stamps a special FloorLootEntry at `state.origin_node_id` before teleport. `MasterState` gains `death_stash_node_id?: string` for single-stash enforcement.
+Dark Souls bloodstain analog. `death_stash` FloorLootEntry placed at death node containing lost gold. One stash active at a time.
+*Design decision needed:* Does this soften death too much? Counter: the journey back IS the penalty.
+*Slot:* Combat UX & Flow Polish round.
 
 **In-Combat Equipment Swapping (V8.49):**
-Equip/Unequip currently hidden during combat (rule 63, intentional interim). When Day 20.5 Verbal Action lands, in-combat equipment swapping should be revisited. Design question: cost to swap? (spend your turn, or free action?)
+Equip/Unequip hidden during combat (rule 63, intentional interim). Revisit with Day 20.5 Verbal Action.
+*Design question:* costs your turn or free action?
 *Slot:* Day 20.5 scope item.
+
+**Skills System — DEFERRED from Day 22 (V8.49):**
+D&D distinguishes ability scores (broad stats like STR/DEX) from skills (specific applications like Athletics/Stealth with proficiency bonuses). For this game's pickup-game format, stats serve as skills for now — a PER check IS a Perception check, a CHA check IS a Persuasion check. A separate skills layer adds character sheet overhead that doesn't serve the format at this stage.
+*Design questions to answer at slot time:*
+- Separate skill points pool, or skills as named modifiers on top of stats?
+- Proficiency system (D&D-style: you're either proficient or not) vs a trained/untrained/mastered tiered system?
+- How does the archetype class signal implied skill proficiencies? (A Rogue is "skilled at" stealth narratively — but does that mean the engine gives them a bonus on AGI stealth checks?)
+- Skill list scope: broad (Athletics, Stealth, Persuasion, Investigation, Survival = 5-6 skills per stat) or narrow (just name the stat check differently per context)?
+*Slot:* Dedicated Skills round, after Day 22 leveling is live and playtested. Dependencies: Day 22 stat system must be stable first.
+
+**World Save / Replay / Share (V8.49):**
+Generated worlds should be saveable as portable artifacts. Players can: replay a world with a new character, share a world link so someone else plays it, return to a saved world for a longer campaign. Distinct from multiplayer (Day 24) — this is world portability, not simultaneous play. Makes procedural generation feel like authored content — the world has permanence, the characters don't.
+*Slot:* Post-Day-25, likely bundled with or just after the Customization Layer.
+*Implementation considerations:* World state stored in Supabase already; need: world permalink, shareable URL, "start new character in this world" flow, world browser UI.
 
 ---
 
@@ -47,9 +61,67 @@ Equip/Unequip currently hidden during combat (rule 63, intentional interim). Whe
 - Map visual rework — dedicated session, deferred.
 - Audit queue: defensive overchecks, prompt-template hardcoded IDs, integration test coverage.
 - Genre Session scope and timing (post-Day-25 standalone vs bundled with Day 25).
-- WCD variety second pass — WCD prompt needs own theme-diversity instruction (WorldBible fix ad82300 was necessary but not sufficient; WCD itself still defaults to honor/oath/covenant in Fantasy).
+- WCD variety second pass — WCD prompt needs own theme-diversity instruction.
 - Death stash design decision (see Future Features above).
 - In-combat equipping — cost model (turn vs free action).
+- Skills system design (see Future Features above — full design questions listed there).
+- World save/replay/share scope and timing (see Future Features above).
+- XP threshold tuning — revisit after vertical slice playtest; values in constants.ts are intentionally easy to change.
+
+---
+
+## Day 22 Design Decisions (pre-prompt, V8.49)
+
+**Archetype system:** Option B confirmed. Class chosen at character creation IS the archetype. No separate archetype selection. Each class maps to a primary stat (+2 starting, +1 auto per level) and secondary stat (+1 starting, +1 auto per level). Player also gets +1 free point to any stat per level-up.
+
+**5 classes per genre:** Expand from 3 to 5 per genre. Add 2 new classes per genre to fill PER and CHA/STR coverage gaps. All existing classes retained unchanged.
+
+New classes to add:
+| Genre | New Class | Primary | Secondary |
+|---|---|---|---|
+| Fantasy | Ranger | PER | AGI |
+| Fantasy | Herald | CHA | INT |
+| Cyberpunk | Enforcer | STR | AGI |
+| Cyberpunk | Ghost | PER | AGI |
+| Horror | Phantom | AGI | PER |
+| Horror | Medium | CHA | INT |
+| Space Opera | Marine | STR | AGI |
+| Space Opera | Recon | PER | AGI |
+| Post-Apoc | Runner | AGI | PER |
+| Post-Apoc | Demagogue | CHA | INT |
+
+Existing class primary/secondary mapping:
+| Class | Primary | Secondary |
+|---|---|---|
+| Knight | STR | AGI |
+| Rogue | AGI | PER |
+| Mage | INT | PER |
+| Netrunner | INT | PER |
+| Fixer | CHA | INT |
+| Street Samurai | AGI | STR |
+| Investigator | INT | PER |
+| Cultist | PER | INT |
+| Survivor | STR | AGI |
+| Commander | CHA | INT |
+| Pilot | AGI | PER |
+| Engineer | INT | STR |
+| Scavenger | PER | INT |
+| Raider | STR | AGI |
+| Medic | INT | CHA |
+
+**Starting stats:** All stats begin at 2. Archetype primary +2 → starts at 4. Archetype secondary +1 → starts at 3. Other 3 stats remain at 2. Stat cap = 10.
+
+**Level cap:** 10 (tunable constant). Revisit after vertical slice playtest.
+
+**XP thresholds:** 100 / 200 / 350 / 550 / 800 / 1100 / 1450 / 1850 / 2300 (levels 1→2 through 9→10). Stored in constants.ts as XP_THRESHOLDS array. Easy to tune.
+
+**HP growth per level:** Flat +5 HP base. STR-primary classes +3 bonus (total +8). AGI-primary classes +1 bonus (total +6). All others +0 (total +5). No CON stat — HP growth is archetype-flavored instead.
+
+**Skills:** Deferred. Stats serve as skills for now. Full skills design discussion captured in Future Feature Ideas above.
+
+**STAT_XP items:** Using one prompts "Choose a stat to improve" picker → +1 to chosen stat. Rare drop — lets players break archetype pattern.
+
+**Level-up during combat:** If XP threshold crossed mid-combat, set `pending_level_up: true` on player state. Level-up modal fires after combat resolves (victory, flee). Defeat discards pending level-up (XP is rolled back per rule 31 anyway).
 
 ---
 
@@ -64,124 +136,40 @@ Equip/Unequip currently hidden during combat (rule 63, intentional interim). Whe
 | 4fe27e3 | Polish 4b — mobile audit + CodexModal close 44×44px + ActionBar combat buttons 44px | — | D (combat panel) MAJOR deferred; F/H minor deferred |
 | 14252ac | Nav mini-cols — 2-row max, overflow wraps right, lone cards bottom-aligned | 72 updated | |
 | 198a757 | Polish 4c — column layout + nav dedup + map tier auto-switch expansion | 80-81 | chooseTierForNode extracted to map-tier.ts |
-| e87b23a | 20.4.4 — settlement DEEPER card + story header display name + stitch guarantee | (80-81 defined) | |
-| 60501c8 | 20.4.3 — region expansion prompt template fix + splitConflatedRegionSettlement | 77-79 | Third recurrence of hardcoded ID bug |
-| 24ac19c | Polish 4a — nav grouping/tiers/cross-region BACK/map auto-switch/.ew-said/CSS audit | 72-76 | |
-| f17c221 | 20.4.2 — float CSS clip + stagger + sync to feed + codex modal + D&D roll format | 66-71 | CSS containment lesson (rule 70) |
-| c67f2c0 | 20.4.1 — float routing + inventory-Use + flee DC + defeat respawn fix | 62-65 | |
-| fc508f3 | 20.4 — rolls field + inline suffix + floats introduced + defeat teleport groundwork | 57-61 | |
-| 732e944 | 20.3 — flex separators + button-only input + crit banner + suppression + resolution | 52-56 | |
-| bf3871e + 1215bb6 | 20.2 + 20.1 — initiative kickoff, inventory stats, starting equipment, encounter banner | 43-51 | |
-| abf73e6 + earlier | 20 Prompt 3 + foundation + pre-combat + 19A-19F | 1-42 | |
+| e87b23a + 60501c8 + 24ac19c | 20.4.4 through Polish 4a | 72-81 | |
+| f17c221 through abf73e6 | 20.4.2 through 19A-19F | 1-71 | See earlier entries |
 
 ---
 
-## V8.49 — Potion Hotfix
+## V8.49 — Potion Hotfix + Design Notes
 
-**Root cause:** `resolveUseItem` was hardcoded to `item_id === BASIC_HEALTH_POTION_ID`. Looted potions get `crypto.randomUUID()` → never matched → no-op branch → item stayed in inventory, HP unchanged. Out-of-combat use already worked via logic-resolver which read `effect.heal` directly.
+**Root cause:** `resolveUseItem` hardcoded to `BASIC_HEALTH_POTION_ID`. Looted potions get UUID → never matched → no-op. Fix (0bef82b): reads `effect.heal` directly as primary path.
 
-**Fix (0bef82b, 393/393):** `combat-engine.ts` threads `owned.effect` through. Resolver reads `effect.heal` as primary path. BASIC_HEALTH_POTION_ID fallback kept for backwards-compat.
+**HP timing deferred:** HP bar drops before floating numbers/story text. Fix: HP display reads from event timeline. Bundled with Combat UX Polish.
 
-**HP timing deferred:** HP bar drops before floating numbers/story text. HP state updates synchronously; pacing delays in `projectCombatEventsToFeed` haven't fired yet. Fix: HP display reads from event timeline. Bundled with Combat UX Polish.
-
-**Notes from playtest (Day 21 session):**
-- Container search flow ✅
-- Loot thematic cohesion ✅ ("Forsaken's Vigil Disc" RARE, "Scorched Salt-Cellar" UNCOMMON)
-- Codex tracking items ✅
-- Region expansion pipeline ✅
-- Revisit suppression ✅
-- Enemy loot (SEARCH REMAINS post-combat) — deferred until Day 22 leveling; too slow to kill enemies without level-appropriate power
-- Boss fight — deferred until multi-room dungeon generation implemented
-- Inventory cap warning at 20 — not yet tested
+**Playtest notes (Day 21 session):** Container search ✅ · Loot cohesion ✅ · Codex ✅ · Region expansion ✅ · Revisit suppression ✅. Enemy loot, boss, inventory cap — all deferred.
 
 ---
 
 ## V8.48 — UX Patch (4619a32)
 
-**Fix 1 — Revisit suppression (rule 86):** Cache-hit ARRIVING reads `world_graph.nodes[id].discovered` BEFORE step-7 flip. Return visit emits "You return to {name}." only — skips cached prose AND narrator API. Spawn settlement starts `discovered=true` so first MOVE-back correctly suppresses.
-
-**Fix 2 — Context-aware popup labels (rule 87):** InteractionPopover.tsx: CONTAINER → "Search" primary; fixture/lore/trigger/unknown ITEM POI → "Examine" (never "Pick up"); `isNavigationLikeLabel` heuristic (bridge/gate/passage/stairs/path/trail/doorway/archway/corridor) → header + Close only.
-
-**Design distinction captured:** PICK UP (physical item into inventory from loot strip) ≠ SEARCH (rolling loot from container). Two different actions; must look different in UI.
-
-**Fix 3 — `.ew-said` color:** `#f4e8c8` cream → `#f0c060` warmer golden. `#e8b84b` available as toggle. Italic + weight-600 preserved.
+Revisit suppression (rule 86) · Context-aware popup labels (rule 87) · `.ew-said` #f0c060.
+Design distinction: PICK UP (physical item from loot strip) ≠ SEARCH (rolling loot from container).
 
 ---
 
-## V8.47 — Day 21 Container + Loot (a56940f)
+## V8.47 — Day 21 (a56940f)
 
-**Jest baseline correction:** V8.45 reported 762 due to `.claude/worktrees/` double-counting. Fixed via `testPathIgnorePatterns` + `modulePathIgnorePatterns`. **True baseline = 393.**
-
-**Architecture:**
-- Layer 1: 5 genre LootPools (`lib/game/loot-tables/{fantasy,cyberpunk,horror,space,apoc}.ts`)
-- Layer 2: `WorldBible.world_loot_items[]` (6-8 world-themed items)
-- Layer 3: `RegionBible.region_loot_items[]` + `boss_drop_item`
-- `lib/game/loot-resolver.ts` — pure, RNG-injectable
-- `lib/game/floor-loot.ts` — pure transitions
-- `hooks/useFloorLoot.ts` — thin React wrapper
-- `components/game/FloorLootStrip.tsx` — SEARCH REMAINS / item pills / gold pill / TAKE ALL
-- `lib/game/currency.ts` — canonical currencyKeyFor / currencyLabelFor
-- `lib/game/constants.ts` — INVENTORY_CAP = 20
-- `MasterState.floor_loot?: FloorLootEntry[]` — persists across navigation, auto-prunes
-- Container guarantee: both WorldBible and RegionBible routes promote one `is_interactable` to `type:"container"` in every combat-eligible node
-- `/game` route: 109kB → 117kB (+8kB)
-
-**Investigation findings (V8.40 protocol):**
-- `CombatEnemyInstance` already carries `loot_table_id` + `is_boss` — perfect for SEARCH REMAINS
-- `handleVictory` previously auto-rolled loot inline — required full refactor to XP-only + pending manifest
-- `RegionBible` route had no normalize step — added for loot fields + container guarantee
+3-layer loot system · loot-resolver · FloorLootStrip · SEARCH REMAINS · currency.ts · constants.ts · jest baseline corrected 762→393.
 
 ---
 
-## V8.46 — Polish 4b + Genre Doc
+## V8.41-V8.46 — Combat Polish Era
 
-**Mobile QA (380px audit, 10 surfaces):**
-- PASS: A (layout shell), B (story feed), C (nav bar), E (floating damage), G (codex modal), I (forms), J (resolution banners)
-- MAJOR DEFERRED D: Combat panel — 3+ enemies at 380px ~60px per combatant. Recommended: stacked portrait layout below `md:`, ~64px portraits. Bundle with F/H minor items.
-- MINOR DEFERRED F: Inventory action buttons ~22px
-- MINOR DEFERRED H: World map NPC/EXAMINE buttons ~28-32px
-
-Two inline fixes applied: CodexModal close button 24→44×44px, ActionBar combat buttons 34→44px.
-
-**Genre reference:** `/docs/genre-reference.md` created — all brainstormed genres with mechanics, loot, enemies, UI identity. 40+ genres/sub-genres.
-
-**Tim's confirmed Fantasy sub-genre split:** Light (Zelda, Dragon Quest) / Classic (LOTR, D&D) / Dark (GoT, Warhammer, Berserk). Full Genre Session post-Day-25.
-
----
-
-## V8.41-V8.45 — Combat Polish Era
-
-**V8.45 — Nav mini-cols (rule 72 updated):** 2-row max, overflow right, lone cards bottom-aligned.
-
-**V8.44 — Polish 4c:** `chooseTierForNode()` extracted to `map-tier.ts` proactively. Nav dedup via `backCards[0]?.targetId`.
-
-**V8.43 — Map tier + nav dedup (rules 80-81 defined):** `chooseTierForNode()` spec; DEEPER settlement suppression at region zone.
-
-**V8.42 — Third ID bug recurrence (rules 77-79):** `splitConflatedRegionSettlement()` heal-on-apply. Recurring bug class: audit `generate-*/route.ts` for hardcoded structural IDs.
-
-**V8.41 — Nav grouping + workflow (rules 72-76):** BACK/DEEPER/PEER/UNDISCOVERED groups. Origin/main baseline check protocol. Cross-region BACK targets last settlement hub.
+Nav grouping/columns/dedup · map-tier · Polish 4a-4b · WorldBible variety fix · genre-reference.md created.
 
 ---
 
 ## V8.38-V8.40 — Combat Foundation Era
 
-**V8.40 — Investigation-before-patching protocol. CSS containment lesson (rule 70). Integration tests required (rule 71).**
-
-**V8.39 — Defeat respawn (rule 65) + float routing fix (rule 64) + inventory Use in combat (rule 63).**
-
-**V8.38 — Three strategic decisions LOCKED:**
-- Multiplayer = PRE-LAUNCH (Day 24)
-- Customization = PRE-LAUNCH (Day 25)
-- Day 22 skills = FOUNDATIONS NOW
-
-**V8.37 — Use item templated (rule 53). Crit two-line (rule 54). Event suppression (rule 55). Resolution events (rule 56).**
-
-**V8.36 — advanceUntilPlayerTurnOrEnd (rule 49). kickoffCombatIfEnemyFirst (rule 50). Inventory combat stats (rule 51).**
-
-**V8.35 — Starting equipment module (rule 43). combat_start templated (rule 45). Pacing delays 800ms/800ms/500ms (rule 47).**
-
-**V8.34 — CombatMode strip (rule 39). Portrait slot 128px (rule 40). Bestiary codex on combat_start (rule 41). New game preamble (rule 42).**
-
-**V8.32-V8.33 — Combat math/engine/loop (rules 28-37). Region bible idempotency. GRAPH_NAVIGATE vs WORLD_EXPLORE.**
-
-**V8.31 — Combat spec (rule 27). Enemy interface (rule 24). 4-layer enemy lookup (rule 25). region_bibles accumulation (rule 26).**
+Investigation-before-patching · CSS containment lesson · three strategic decisions LOCKED (Multiplayer/Customization/Day 22 PRE-LAUNCH).

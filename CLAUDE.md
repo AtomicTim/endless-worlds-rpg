@@ -1,10 +1,10 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.46
-**Status:** Polish Round 4b COMPLETE (commit 4fe27e3) — Day 21 Container + Loot NEXT
+**Version:** 8.47
+**Status:** Day 21 Container + Loot COMPLETE (commit a56940f) — Day 22 Skills + Leveling NEXT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
-**References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/css-containment-audit.md · /docs/mobile-viewport-audit.md
+**References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/css-containment-audit.md · /docs/mobile-viewport-audit.md · /docs/genre-reference.md
 
 ---
 
@@ -65,6 +65,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 **Per-prompt protocols (cumulative):**
 - **V8.40 — Investigation-before-patching.** Validate root-cause hypothesis BEFORE patching.
 - **V8.41 — Origin/main baseline check.** Step 1 of every prompt: `git fetch origin && git log origin/main --oneline -5`.
+- **V8.47 — jest baseline = 393.** See rule 82.
 
 ---
 
@@ -77,44 +78,51 @@ Roll player PER/AGI/stealth-skill against enemy detection DC. On SUCCESS: Avoid 
 *Dependencies:* Day 22 skills (stealth domain). *Slot:* Day 20.6 alongside Day 20.5. *Design risk:* Skyrim-Sneak model — must not punish combat-built characters.
 
 **EPIC/LEGENDARY Loot Reveal Animation (V8.46 capture):**
-When a RARE or LEGENDARY item is found (from any source), trigger a full-screen or large overlay: item portrait fades in with animated border glow, item name and description appear. Same energy as a Destiny exotic drop. Goal: make rare finds feel genuinely special and rewarding.
-*Dependencies:* Day 21 loot system (needs ItemRarity in play) + item portrait assets (or generated ASCII art). *Slot:* Post-Day-22 polish round, after loot system is live and item pool is known. *Design note:* Only fires for RARE+; COMMON and UNCOMMON get the standard loot strip reveal.
+When a RARE or LEGENDARY item is found, trigger a full-screen overlay: item portrait fades in with animated border glow, name and description appear. Destiny exotic drop energy.
+*Slot:* Post-Day-22 polish round. *Design note:* Only fires for RARE+; COMMON/UNCOMMON get the standard loot strip reveal.
 
 **Genre Expansion + Sub-Genre System (V8.46 capture):**
-The current 5 genres are too broad. Eventually replace with more precise options including sub-genres, each with defined tone, reference works, and distinct AI/visual vocabulary.
+Full genre reference captured in `/docs/genre-reference.md`. Fantasy splits into Light / Classic / Dark as the confirmed example. All other genres get the same sub-genre treatment.
+*Slot:* Dedicated Genre Session post-Day-25. *Impact:* Genre enum + all genre-keyed tables need updating.
 
-Tim's confirmed example — Fantasy splits into three:
-- **Light Fantasy** — bright, playful, quest-driven. Reference: *Legend of Zelda*, *Dragon Quest*.
-- **Classic Fantasy** — grounded, heroic, traditional. Reference: *LOTR*, *D&D*, classic high fantasy.
-- **Dark Fantasy** — brutal, morally grey, oppressive. Reference: *Game of Thrones*, *Warhammer*, *Berserk*.
+**Merchant Trading Foundation (V8.46 design decision):**
+Existing merchant system is narrator-only with zero engine-side transaction logic. Needs: persistent merchant inventory per NPC, buy/sell pricing, gold deduction enforced by engine, Trade UI updated to real prices.
+*Slot:* After Day 21 loot infrastructure is in play. Dedicated round.
 
-Each sub-genre needs: distinct WCD/WorldBible tone instructions, adjusted loot tables and enemy aesthetics, appropriate UI color palette, and AI narrator voice calibration. All other current genres (Cyberpunk, Horror, Space Opera, Post-Apocalyptic) will receive the same sub-genre treatment in the dedicated session.
+### V8.47 — Day 21 findings + jest baseline correction
 
-*Slot:* Dedicated **Genre Session** — a full design round to enumerate all genres + sub-genres with reference examples and distinguishing characteristics. Likely post-Day-25 or as part of Day 25 Customization Layer. *Impact at slot time:* `Genre` enum in `types/game.ts` + all genre-keyed tables (loot-tables/, starting-equipment.ts, bestiary/, WCD/WorldBible prompts) will need updating.
+**Jest baseline correction (IMPORTANT):** V8.45 reported 762 as "first accurate full-suite count." This was WRONG — the `.claude/worktrees/` subtree was being double-counted by jest. Day 21's investigation found and fixed this: `jest.config.ts` now has `testPathIgnorePatterns` + `modulePathIgnorePatterns` excluding `.claude/`. **True baseline = 393.** All counts between V8.45 and V8.47 were inflated. 393 is the authoritative count going forward.
 
-### V8.46 — Polish Round 4b results + Mobile Combat Layout deferred round
+**Investigation findings pre-patch (V8.40 protocol):**
+- `CombatEnemyInstance` already carries `loot_table_id` + `is_boss` — perfect for SEARCH REMAINS lookup with no bestiary roundtrip.
+- `handleVictory` previously auto-rolled loot and mutated `player.resources` + `player.inventory` inline — required full refactor to "XP-only + pending manifest."
+- `RegionBible` route had no normalize step — added one for loot fields + container guarantee.
 
-**Audit summary (10 surfaces at 380px):**
-- A Layout shell, B Story feed, C Nav bar, E Floating damage, G Codex modal, I Forms/inputs, J Resolution banners — **PASS or inline-fixed**
-- D Combat panel — **MAJOR ISSUE DEFERRED**: 3+ enemies at 380px produces ~60px per combatant. Dedicated **Mobile Combat Layout** round needed. Recommended: stacked portrait layout below `md:`, smaller portraits (~64px), CombatMode flex-direction: column on narrow viewport.
-- F Inventory action buttons — minor: ~22px. Deferred.
-- H World map NPC/EXAMINE buttons — minor: ~28-32px. Deferred.
+**Architecture delivered:**
+- 5 genre `LootPool`s: `lib/game/loot-tables/{fantasy,cyberpunk,horror,space,apoc}.ts`
+- `WorldBible.world_loot_items[]` (Layer 2) + `RegionBible.region_loot_items[]` + `boss_drop_item` (Layer 3)
+- `lib/game/loot-resolver.ts` — pure, RNG-injectable, normal vs boss paths
+- `lib/game/floor-loot.ts` — pure transitions (applySearchRemains, applyTake, applyTakeGold, applyTakeAll, buildFloorLootView, pickRegionLootItemsForNode, pickBossDropItemForNode)
+- `hooks/useFloorLoot.ts` — thin React wrapper over pure transitions
+- `components/game/FloorLootStrip.tsx` — between StoryFeed and NavigationBar; SEARCH REMAINS / item pills / gold pill / TAKE ALL; disabled at INVENTORY_CAP with warning
+- `lib/game/currency.ts` — canonical currencyKeyFor / currencyLabelFor (horror = "marks")
+- `lib/game/constants.ts` — INVENTORY_CAP = 20
+- `MasterState.floor_loot?: FloorLootEntry[]` — persists across navigation, auto-prunes when emptied
+- Container guarantee: both WorldBible and RegionBible routes promote one `is_interactable` object to `type:"container"` in every combat-eligible node
+- `/game` route: 109 kB → 117 kB (+8 kB for Day 21 modules)
 
-**Two inline fixes applied:** CodexModal close button 24→44×44px · ActionBar combat buttons 34→44px.
+### V8.46 — Polish Round 4b results + genre doc
 
-**Mobile Combat Layout round** added to deferred queue after Combat UX & Flow Polish. Bundle F/H minor items into it.
-
-### V8.45 — Test count note
-
-`npx jest` (no pattern) = authoritative full-suite baseline. 762 was the first accurate full-suite count.
+Mobile QA: 7/10 surfaces pass. D (combat panel) MAJOR deferred — Mobile Combat Layout round. F/H minor deferred.
+Genre reference: `/docs/genre-reference.md` created covering all brainstormed genres with mechanics, loot, enemies, UI identity.
 
 ### V8.44 — Polish 4c: pure module extraction applied proactively
 
-`chooseTierForNode()` extracted to `lib/game/map-tier.ts` proactively (rule 71 without waiting for a bug). Nav dedup via `backCards[0]?.targetId`.
+`chooseTierForNode()` extracted to `lib/game/map-tier.ts` proactively (rule 71 without waiting for a bug).
 
 ### V8.42 — Third recurrence: prompt-template hardcoded ID bug
 
-Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded structural IDs (sweep `generate-*/route.ts`), (3) CSS containment (covered).
+Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded structural IDs, (3) CSS containment.
 
 ### V8.41 — Workflow + Combat UX Polish Queue
 
@@ -128,16 +136,18 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 
 1–5. ~~Polish 4a through Nav mini-cols~~ ✅
 6. ~~Polish 4b (4fe27e3)~~ ✅
-7. **Day 21 — Container + Loot** ⏳ NEXT
-8. Day 22 — Skills + Leveling (foundations)
+7. ~~Day 21 Container + Loot (a56940f)~~ ✅
+8. **Day 22 — Skills + Leveling** ⏳ NEXT
 9. Vertical slice playtest
 10. Day 23 — Main Quest Thread
-11. Combat UX & Flow Polish round
-12. **Mobile Combat Layout round** (V8.46 new — deferred from 4b)
-13. Day 24 — Multiplayer Foundation
-14. Day 25 — Customization Layer / Genre Session (TBD if combined)
-15. Day 20.5 — Verbal Action (deferred)
-16. Day 20.6 — Encounter Avoidance / Stealth (deferred)
+11. Merchant Trading Foundation round
+12. Combat UX & Flow Polish round
+13. Mobile Combat Layout round (deferred from 4b)
+14. Day 24 — Multiplayer Foundation
+15. Day 25 — Customization Layer
+16. Genre Session — sub-genre expansion
+17. Day 20.5 — Verbal Action (deferred)
+18. Day 20.6 — Encounter Avoidance / Stealth (deferred)
 
 ### Open strategic questions
 
@@ -153,7 +163,7 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Polish Round 4b complete (commit 4fe27e3, 762/762). Day 21 Container + Loot is next.
+**Current Phase:** Day 21 complete (commit a56940f, 393/393 tests — see rule 82). Day 22 Skills + Leveling is next.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** atomictim/endless-worlds-rpg
 
 | Phase | Title | Status |
@@ -164,31 +174,39 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 | Combat Spec | /docs/combat-spec.md | ✅ Frozen |
 | Combat era (Days 20–20.4.2) | Data + resolver + UI + narration + polish + hotfixes | ✅ Complete |
 | Polish era (4a–4b + hotfixes) | Nav grouping/columns/dedup + map tier + display fixes + mobile QA | ✅ Complete |
-| **Day 21** | **Container + Loot — loot registry, tables, dungeon containers, per-character inventory, multiplayer-aware** | ⏳ **NEXT** |
-| Day 22 | Skills + Leveling | ⏳ After Day 21 |
+| Day 21 (a56940f) | Container + Loot — 3-layer loot architecture, SEARCH REMAINS, FloorLootStrip, containers, loot resolver | ✅ Complete |
+| **Day 22** | **Skills + Leveling — skill domain foundations, stat-of-your-choice XP, STAT_XP wiring** | ⏳ **NEXT** |
 | Vertical slice playtest | Full game start → win condition | ⏳ Before Day 23 |
 | Day 23 | Main Quest Thread | ⏳ Post-playtest |
+| Merchant Trading Foundation | Persistent merchant inventory, buy/sell, engine-enforced gold deduction | ⏳ After Day 21 loot in place |
 | Combat UX & Flow Polish | Hit/miss differentiation + miss float + flee-fail pacing | ⏳ Post-Day-23 |
 | Mobile Combat Layout | Stacked portrait layout at narrow viewport (4b deferred) | ⏳ After Combat UX Polish |
 | Day 24 | Multiplayer Foundation | ⏳ Pre-launch |
 | Day 25 | Customization Layer | ⏳ Pre-launch toward end |
-| Genre Session | Sub-genre expansion (Light/Classic/Dark Fantasy + all genres) | ⏳ Post-Day-25 |
+| Genre Session | Sub-genre expansion (see /docs/genre-reference.md) | ⏳ Post-Day-25 |
 | Day 20.5 | Verbal Action System | ⏳ Deferred (Combat Alternatives) |
 | Day 20.6 | Encounter Avoidance / Stealth | ⏳ Deferred (Combat Alternatives) |
 | Map Visual Rework | Dedicated session | ⏳ Deferred |
 
-**Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic. Noir removed. Sub-genre expansion deferred to Genre Session.
+**Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic. Sub-genre expansion deferred to Genre Session.
 
-### Polish Round 4b (commit 4fe27e3 — 762/762 full suite)
+### Day 21 (commit a56940f — 393/393 tests, /game 117 kB)
 
-Discovery-and-triage mobile QA. Produced `/docs/mobile-viewport-audit.md`. Two inline fixes (CodexModal close 44×44px, ActionBar combat buttons 44px). Major deferred: combat panel. Minor deferred: inventory buttons (F), map buttons (H).
+See V8.47 trajectory note above for full summary. Key facts for Claude Code reference:
+- `MasterState.floor_loot?: FloorLootEntry[]` — new field, persists across navigation
+- `INVENTORY_CAP = 20` in `lib/game/constants.ts`
+- `currencyKeyFor(genre)` / `currencyLabelFor(genre)` in `lib/game/currency.ts`
+- `LocationObject.type?: "container" | "fixture" | "lore" | "trigger"` — new optional field
+- `ItemType` enum additions: VALUABLE, QUEST_ITEM (stub), STAT_XP
+- `handleVictory` → XP-only + pending FloorLootEntry; no auto-loot
 
 ### Round history (compressed)
 
 | Commit | Round | Rules |
 | --- | --- | --- |
-| ad82300 | WorldBible variety fix — remove biased named examples, add uniqueness instruction, neutral placeholder IDs | (rule 79 applied) |
-| 4fe27e3 | Polish 4b — mobile audit + CodexModal close button + ActionBar button sizing | — |
+| a56940f | Day 21 — 3-layer loot, loot-resolver, FloorLootStrip, container flow, SEARCH REMAINS, currency.ts, constants.ts | 82-85 |
+| ad82300 | WorldBible variety fix — remove biased named examples, uniqueness instruction | (rule 79 applied) |
+| 4fe27e3 | Polish 4b — mobile audit + CodexModal close + ActionBar button sizing | — |
 | 14252ac | Nav mini-cols — 2-row max, overflow wraps right, lone cards bottom-aligned | (rule 72 updated) |
 | 198a757 | Polish 4c — column layout + nav dedup + map tier auto-switch expansion | 80-81 |
 | e87b23a | 20.4.4 — settlement DEEPER card + story header display name + stitch guarantee | (80-81 defined) |
@@ -196,24 +214,24 @@ Discovery-and-triage mobile QA. Produced `/docs/mobile-viewport-audit.md`. Two i
 | 24ac19c | Polish 4a — nav grouping/tiers/cross-region BACK/map auto-switch/.ew-said/CSS audit | 72-76 |
 | f17c221 | 20.4.2 — float CSS clip + stagger + sync to feed + codex modal + D&D roll format | 66-71 |
 | c67f2c0 | 20.4.1 — float routing + inventory-Use + flee DC + defeat respawn fix | 62-65 |
-| fc508f3 | 20.4 — rolls field + inline suffix + floats introduced + defeat teleport groundwork | 57-61 |
-| 732e944 | 20.3 — flex separators + button-only input + crit banner + suppression + resolution | 52-56 |
-| bf3871e + 1215bb6 | 20.2 + 20.1 — initiative kickoff, inventory stats, starting equipment, encounter banner | 43-51 |
+| fc508f3 + 732e944 + bf3871e + 1215bb6 | 20.4 through 20.1 | 43-61 |
 | abf73e6 + earlier | 20 Prompt 3 + foundation + pre-combat + 19A-19F | 1-42 |
 
 ### Architecture & system status
 
-**Domain 1 (Engine — pure code):** Navigation + nav-cards (rules 72-81, mini-col layout) + map-tier.ts + combat system (rules 24-71) + region expansion guard + loot resolver (Day 21).
+**Domain 1 (Engine — pure code):** Navigation + nav-cards (rules 72-81) + map-tier.ts + combat system (rules 24-71) + region expansion guard + loot system (rules 83-85): loot-resolver.ts · floor-loot.ts · loot-tables/ · FloorLootStrip · currency.ts · constants.ts.
 
-**Domain 2 (Content Library — frozen):** WCD, WorldBible, RegionBible, NPCs, items, loot tables, bestiary, region enemies, starting equipment loadouts.
+**Domain 2 (Content Library — frozen):** WCD, WorldBible (+ world_loot_items[]), RegionBible (+ region_loot_items[] + boss_drop_item), NPCs, items, loot tables, bestiary, region enemies, starting equipment.
 
-**AI during gameplay:** Arrival narration ✅ · Dialogue ✅ · Action narration ✅ · Combat narration ✅ · Container search ⏳ Day 21 · Verbal action ⏳ Day 20.5 · Stealth/avoidance ⏳ Day 20.6.
+**AI during gameplay:** Arrival narration ✅ · Dialogue ✅ · Action narration ✅ · Combat narration ✅ · Container search ✅ (templated, zero LLM) · Verbal action ⏳ Day 20.5 · Stealth/avoidance ⏳ Day 20.6.
 
-**Mobile readiness:** A/B/C/E/G/I/J surfaces PASS at 380px. D (combat panel) MAJOR deferred. F/H minor touch targets deferred.
+**Mobile readiness:** A/B/C/E/G/I/J surfaces PASS at 380px. D (combat panel) MAJOR deferred. F/H minor deferred.
 
 ### Known issues
 
-**Mobile Combat Layout — DEFERRED (V8.46):** Combat panel breaks at 380px with 3+ enemies. Recommended: stacked portrait layout below `md:`, smaller portraits (~64px). Bundle with F/H minor touch target fixes.
+**Merchant Trading Foundation (post-Day-21):** Existing narrator-only merchant system has no engine-side transaction logic. Dedicated round needed.
+
+**Mobile Combat Layout — DEFERRED:** Combat panel breaks at 380px with 3+ enemies. Bundle with F/H minor touch target fixes.
 
 **Combat UX & Flow Polish (post-Day-23):** Hit/miss differentiation · miss float · flee-fail pacing.
 
@@ -308,6 +326,10 @@ Discovery-and-triage mobile QA. Produced `/docs/mobile-viewport-audit.md`. Two i
 79. **Prompt-template hardcoded structural IDs are a recurring bug class.** Audit `app/api/game/generate-*/route.ts` for `${outline.id}`, `${region.id}` etc. in id positions. (V8.42)
 80. **Nav card dedup at region zone.** DEEPER isAtRegionZone branch checks `backCards[0]?.targetId`; suppresses DEEPER settlement card if it matches BACK destination. Cross-region: both emit. No trail: DEEPER suppressed. (V8.43 defined · V8.44 implemented)
 81. **Map tier auto-switch fires on every node arrival.** `lib/game/map-tier.ts` `chooseTierForNode()`: region zone → tier 2, everything else → tier 1. WorldMap.tsx useEffect calls this on every arrival. (V8.43 defined · V8.44 implemented)
+82. **jest true baseline = 393 (V8.47 correction).** V8.45 reported 762 due to stale `.claude/worktrees/` subtree being double-counted. Fixed in `jest.config.ts` via `testPathIgnorePatterns` + `modulePathIgnorePatterns` excluding `.claude/`. 393 is the authoritative full-suite count going forward. The `npx jest` (no pattern) protocol remains — just the expected number is now 393, not 762. (V8.47)
+83. **Loot never auto-credits.** `handleVictory` pushes XP-only; all item/gold drops go to `MasterState.floor_loot[]` as `FloorLootEntry` (pending until SEARCH REMAINS resolves it). Player must explicitly SEARCH REMAINS (post-combat) or TAKE / TAKE ALL from FloorLootStrip. Gold goes to `player.resources` via `on_take_gold` only. Enables no-gold and no-loot playthroughs by design. (V8.47)
+84. **Container search is engine-resolved, zero LLM calls.** `resolveInteract` detects `LocationObject.type === "container"` → calls `resolveLoot()` → pushes `FloorLootEntry` → templated story beat via `getSearchNarrative()`. Non-container `is_interactable` objects return `INTERACT_NON_CONTAINER` with object-type-specific empty template from `lib/game/container-templates.ts`. Already-searched containers return `CONTAINER_ALREADY_SEARCHED`. Engine guarantees ≥1 container per combat-eligible node at WorldBible/RegionBible apply time. (V8.47)
+85. **Currency and inventory cap are canonical constants.** Currency key/label: `lib/game/currency.ts` → `currencyKeyFor(genre)` / `currencyLabelFor(genre)`. Horror genre currency = "marks". Inventory cap: `lib/game/constants.ts` → `INVENTORY_CAP = 20`. Never hardcode these values elsewhere. (V8.47)
 
 ---
 
@@ -357,11 +379,11 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint (resol
 | --- | --- | --- | --- |
 | Fantasy (fantasy) | #f59e0b amber | Gold | HP |
 | Cyberpunk (cyber) | #22d3ee cyan | Credits | Integrity |
-| Horror/Lovecraftian (horror) | #84cc16 acid green | None | HP + Sanity |
+| Horror/Lovecraftian (horror) | #84cc16 acid green | Marks | HP + Sanity |
 | Space Opera (space) | #a855f7 purple | Stellar Units | Hull Integrity |
 | Post-Apocalyptic (apoc) | #ea580c rust | Caps | HP |
 
-*Sub-genre expansion (Light/Classic/Dark Fantasy etc.) deferred to dedicated Genre Session post-Day-25.*
+*Sub-genre expansion deferred to Genre Session post-Day-25. See /docs/genre-reference.md.*
 
 | Feature | Free | Adventurer ($6.99) | Legend ($14.99) |
 | --- | --- | --- | --- |
@@ -376,6 +398,6 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint (resol
 
 Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim reports commit + tests → Claude.ai updates CLAUDE.md → Tim verifies → next prompt.
 
-**Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` (no pattern) = authoritative full-suite test count.**
+**Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` (no pattern) = authoritative full-suite test count. True baseline = 393 (rule 82).**
 
 **Authority:** Architecture → /docs/architecture-spec.md · Combat → /docs/combat-spec.md · Vision/scope → Game Vision · Strategic/sequencing → Trajectory Notes · Round details → git log + round-history table.

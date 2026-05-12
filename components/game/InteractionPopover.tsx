@@ -17,6 +17,20 @@ interface ActionDef {
   build: (poiLabel: string) => string | null; // null = close only
 }
 
+// UX (V8.47+) — Action sets per POI type.
+//
+// Architecture note on ITEM (V8.47 rule 83): real pickup items live in
+// the FloorLootStrip, NOT as story-feed highlights. Anything classified
+// ITEM in the feed is therefore an environmental object/fixture the
+// narrator surfaced — never something the player can literally pocket.
+// "Pick up" was removed from this set: it suggested an action the
+// architecture no longer supports for feed highlights and was wrong for
+// environmental features like bridges, stones, or carvings that get
+// classified ITEM by the narrator.
+//
+// CONTAINER keeps SEARCH primary — the natural action for V8.47
+// containers — and the action routes through resolveInteract's
+// container-search path (rule 84: engine-resolved, zero LLM).
 const ACTIONS_BY_TYPE: Record<PointOfInterest["type"], ActionDef[]> = {
   LOCATION: [
     { label: "Go there",         build: (l) => `go to ${l}` },
@@ -32,13 +46,15 @@ const ACTIONS_BY_TYPE: Record<PointOfInterest["type"], ActionDef[]> = {
   CONTAINER: [
     { label: "Search",  build: (l) => `search ${l}` },
     { label: "Examine", build: (l) => `examine ${l}` },
-    { label: "Take",    build: (l) => `take ${l}` },
-    { label: "Ignore",  build: () => null },
+    { label: "Leave",   build: () => null },
   ],
+  // ITEM no longer offers Pick up — feed highlights are fixtures, not
+  // pocketable items (real loot lives in FloorLootStrip per rule 83).
+  // EXAMINE is the only meaningful interaction; Close lets the player
+  // dismiss without triggering anything.
   ITEM: [
-    { label: "Pick up",   build: (l) => `take ${l}` },
     { label: "Examine",   build: (l) => `examine ${l}` },
-    { label: "Leave it",  build: () => null },
+    { label: "Close",     build: () => null },
   ],
   HAZARD: [
     { label: "Avoid",    build: (l) => `avoid ${l}` },
@@ -52,6 +68,27 @@ const ACTIONS_BY_TYPE: Record<PointOfInterest["type"], ActionDef[]> = {
     { label: "Close", build: () => null },
   ],
 };
+
+// UX (V8.47+) — Navigation-suggesting labels skip the action grid.
+// Words like "bridge", "gate", "passage" describe physical features the
+// player would traverse, not interact with through a popup. For these
+// the popover renders header + Close only — the player can still type
+// "cross the bridge" in the input bar if they want a custom action.
+const NAVIGATION_NAME_PATTERNS = [
+  /\bbridge\b/i,
+  /\bgate\b/i,
+  /\bpassage\b/i,
+  /\bstairs?\b/i,
+  /\bstairwell\b/i,
+  /\bpath(way)?\b/i,
+  /\btrail\b/i,
+  /\bdoorway\b/i,
+  /\barchway\b/i,
+  /\bcorridor\b/i,
+];
+function isNavigationLikeLabel(label: string): boolean {
+  return NAVIGATION_NAME_PATTERNS.some((re) => re.test(label));
+}
 
 const POPOVER_WIDTH  = 280;
 const POPOVER_MARGIN = 12;
@@ -77,7 +114,14 @@ export function InteractionPopover({ point, position, onAction, onClose }: Inter
   }, [onClose]);
 
   const accent = POI_COLORS[point.type];
-  const actions = ACTIONS_BY_TYPE[point.type];
+  // UX (V8.47+) — Navigation-like labels (bridge, gate, passage…) get
+  // a header + Close popover only. The action grid is suppressed
+  // because these objects describe traversal features, not popup-
+  // actionable items. Player can still type a custom verb.
+  const isNavLike = isNavigationLikeLabel(point.label);
+  const actions: ActionDef[] = isNavLike
+    ? [{ label: "Close", build: () => null }]
+    : ACTIONS_BY_TYPE[point.type];
 
   const handleAction = (build: (l: string) => string | null) => {
     const cmd = build(point.label);

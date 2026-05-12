@@ -73,7 +73,13 @@
     --hl-dungeon:     #b45309;  /* dungeon / hostile zone nav cards — burnt copper (Polish 4a TASK 2) */
     --hl-item:        #e8c547;  /* items — golden yellow, distinct from amber accent */
     --hl-landmark:    #94d8b8;  /* landmarks (WCD-known places) — soft mint, distinct from region lavender */
-    --hl-said:        #f4e8c8;  /* NPC quoted speech — brighter warm cream (Polish 4a TASK 4) */
+    /* NPC quoted speech — UX (V8.47+): the previous #f4e8c8 cream sat
+       too close to var(--ink-1) narrator prose, so dialogue and
+       description read as the same colour at a glance. #f0c060 (warmer
+       golden) gives spoken word a distinct amber-leaning tint while
+       staying paired with italic + weight-600 for clear typographic
+       hierarchy. Tim — toggle to #e8b84b for a slightly darker amber. */
+    --hl-said:        #f0c060;  /* alt: #e8b84b (darker amber) */
     --hl-pass:     #a3e635;
     --hl-fail:     #f87171;
 

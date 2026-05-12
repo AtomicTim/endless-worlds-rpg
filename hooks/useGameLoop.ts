@@ -1636,11 +1636,39 @@ export function useGameLoop() {
         updatedState.world_state.location_status === LocationStatus.ARRIVING ||
         resolutionForNarrator.narrative_context.movement_mandatory === true;
       const arriveLocId = updatedState.world_state.current_location_id;
+
+      // UX (V8.47+) — Revisit suppression. The first arrival at a node
+      // emits its full physical_description; without this gate every
+      // subsequent arrival would re-emit the same prose (stacking
+      // duplicate descriptions in the feed as the player navigates
+      // back-and-forth). Detect revisit via
+      // `world_graph.nodes[id].discovered`:
+      //   • Settlement nodes initialize `discovered: true` at apply-time
+      //     (apply-world-bible:675 via loc.is_settlement_node). The
+      //     player already saw the start narrative for the spawn
+      //     settlement, so the first MOVE back is genuinely a revisit
+      //     and we suppress.
+      //   • Sub-locations / dungeons / region zones initialize false.
+      //     First MOVE → discovered: false → full description shown.
+      //     End-of-step-7 safety net flips it true unconditionally.
+      //     Subsequent MOVE → discovered: true → suppressed.
+      // The flag is read here BEFORE step 7's flip, so it reflects the
+      // pre-arrival state. Monotonic — never reverts.
+      const arrivedGraphNode = arriveLocId
+        ? updatedState.world_graph?.nodes[arriveLocId]
+        : undefined;
+      const arrivedNodeIsRevisit =
+        isArrivingAction &&
+        parsedAction.action_type === ActionType.MOVE &&
+        arrivedGraphNode?.discovered === true;
+      const arrivedNodeName = arrivedGraphNode?.name ?? null;
+
       let cachedArrivalText: string | null = null;
       if (
         isArrivingAction &&
         arriveLocId &&
-        parsedAction.action_type === ActionType.MOVE
+        parsedAction.action_type === ActionType.MOVE &&
+        !arrivedNodeIsRevisit
       ) {
         const liveForCache = useGameStore.getState().locationAssets;
         const locAsset = liveForCache.find(
@@ -1674,7 +1702,35 @@ export function useGameLoop() {
       // implies the destination's world_asset already exists, so 7-C
       // will not fire either.
       let narratorResponse;
-      if (cachedArrivalText) {
+      if (arrivedNodeIsRevisit) {
+        // UX (V8.47+) — Revisit: synthesize a one-line "You return to
+        // X." beat instead of re-emitting the full physical_description.
+        // The rest of the pipeline (graph maintenance, asset refresh,
+        // arrival header) runs unchanged so navigation + map + nav
+        // cards still update. Skips both the cache-hit prose and the
+        // narrator API entirely.
+        console.log(
+          "[GameLoop/5] Revisit detected — suppressing arrival description for",
+          arriveLocId
+        );
+        const returnLine = arrivedNodeName
+          ? `You return to ${arrivedNodeName}.`
+          : "You return.";
+        narratorResponse = {
+          response_tier:      1 as const,
+          narrative_text:     returnLine,
+          ascii_art:          null,
+          sound_id:           null,
+          new_npcs:           [],
+          items_acquired:     [],
+          points_of_interest: [],
+          codex_entries:      [],
+          log_summary:        undefined,
+          dialogue_options:   [],
+          trust_changes:      [],
+          items_for_sale:     [],
+        };
+      } else if (cachedArrivalText) {
         console.log(
           "[GameLoop/5] Arrival cache hit — synthesizing response, skipping narrator API for",
           arriveLocId

@@ -136,6 +136,16 @@ export interface PlayerState {
   level:       number;
   xp:          number;
   buffs?:      ActiveBuff[];
+  /** Day 22 — set true by handleVictory (combat-engine) when the
+   *  awarded XP crosses the next XP threshold mid-combat. The
+   *  LevelUpModal opens when this is true AND combat is no longer
+   *  active, so the level-up beat lands after the resolution banner
+   *  rather than interrupting the drain. Cleared by applyLevelUp. */
+  pending_level_up?: boolean;
+  /** Day 22 — copy of STAT_CAP cached on the player so the LevelUpModal
+   *  can render "(Max)" labels without importing the constant. The
+   *  authoritative cap lives in lib/game/constants.ts. */
+  stat_cap?:   number;
 }
 
 // ---------------------------------------------------------------------------

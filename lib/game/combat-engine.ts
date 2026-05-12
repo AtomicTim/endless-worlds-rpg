@@ -26,6 +26,8 @@ import {
   rollInitiative,
   type Rng,
 } from "./combat-resolver";
+import { applyStatBoost, checkLevelUp } from "./level-resolver";
+import { getArchetype } from "./archetypes";
 
 /**
  * Day 20 Combat — state-transition engine.
@@ -573,6 +575,35 @@ export function executePlayerAction({
         console.warn(`[combat-engine] use_item: ${action.item_id} not in inventory — turn forfeit.`);
         break;
       }
+
+      // Day 22 — STAT_XP fast-apply for mid-combat use. The inventory
+      // picker isn't shown during combat (would slow the action loop),
+      // so the boost auto-targets the player's archetype primary stat.
+      // Falls back to STR if the background isn't a registered archetype.
+      // The item is consumed exactly like any other consumable; a
+      // use_item event renders the templated story-feed beat.
+      if (owned.type === ItemType.STAT_XP) {
+        const arch = getArchetype(player.background);
+        const targetStat = arch?.primary ?? "strength";
+        const beforeValue = player.attributes[targetStat];
+        const afterAttrs  = applyStatBoost(player, targetStat);
+        const capped      = afterAttrs[targetStat] === beforeValue;
+        p = consumeItem({ ...p, attributes: afterAttrs }, action.item_id);
+        events.push(makeEvent({
+          type:                "use_item",
+          actor:               PLAYER_ID,
+          target:              PLAYER_ID,
+          outcome:             "item_used",
+          damage_dealt:        0,
+          remaining_target_hp: player.health,
+          weapon_or_item:      owned.name,
+          context_note:        capped
+                                ? `${targetStat} already at cap`
+                                : `+1 ${targetStat} (mid-combat fast-apply → primary)`,
+        }));
+        break;
+      }
+
       const result = resolveUseItem({
         item_id:     action.item_id,
         // V8.49 — pass the item's effect through so resolveUseItem can
@@ -1039,9 +1070,17 @@ export function handleVictory({
   // and so the hook layer can still introspect it from the result
   // without re-fetching MasterState.
   void world_genre;
+  const newXp = player.xp + totalXp;
+
+  // Day 22 — detect XP threshold crossing. The level-up modal opens
+  // AFTER combat dismisses (gated on `!combat?.active && pending`),
+  // so we just flag it here. checkLevelUp clamps at LEVEL_CAP — a
+  // capped player accumulates XP without re-triggering the modal.
+  const { leveled_up } = checkLevelUp(newXp, player.level);
   const newPlayer: PlayerState = {
     ...player,
-    xp: player.xp + totalXp,
+    xp: newXp,
+    ...(leveled_up ? { pending_level_up: true } : {}),
   };
 
   const events: CombatEvent[] = [makeEvent({

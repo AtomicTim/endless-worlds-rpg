@@ -325,6 +325,30 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
           return <SceneDivider label={content.replace(/^—\s|\s—$/g, "")} />;
         }
 
+        // Day 22 — level-up beat. Centered, bright pass-green to mark
+        // the moment, sized like the victory banner. Tagged via
+        // metadata.level_up so the visual treatment is decoupled from
+        // the message text.
+        if (metadata?.level_up === true) {
+          return (
+            <div
+              className="message-enter ew-mono"
+              style={{
+                fontSize:      13,
+                letterSpacing: "0.24em",
+                color:         "var(--hl-pass)",
+                margin:        "12px 0",
+                fontStyle:     "normal",
+                fontWeight:    700,
+                textAlign:     "center",
+                textTransform: "uppercase",
+              }}
+            >
+              {content}
+            </div>
+          );
+        }
+
         // Generic system event — small italic accent.
         return (
           <div

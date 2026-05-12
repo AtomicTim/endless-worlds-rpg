@@ -8,6 +8,7 @@ import {
   type WorldState,
   type LogBook,
 } from "@/types/game";
+import { STAT_CAP } from "./constants";
 
 const GENRE_TONE: Record<Genre, string> = {
   [Genre.FANTASY]:             "heroic",
@@ -54,6 +55,12 @@ export function createNewMasterState(
     inventory: [],
     level:     1,
     xp:        0,
+    // Day 22 — initialize leveling fields. The /api/game/new route
+    // overwrites attributes via buildStartingAttributes(background)
+    // immediately after this factory call; pending_level_up + stat_cap
+    // stay at these defaults.
+    pending_level_up: false,
+    stat_cap:  STAT_CAP,
   };
 
   const world_state: WorldState = {

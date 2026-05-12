@@ -15,6 +15,7 @@ import { WorldMap } from "@/components/game/WorldMap";
 import { NavigationBar } from "@/components/game/NavigationBar";
 import { CombatMode } from "@/components/game/CombatMode";
 import { CodexModal } from "@/components/game/CodexModal";
+import { LevelUpModal } from "@/components/game/LevelUpModal";
 import { FloorLootStrip } from "@/components/game/FloorLootStrip";
 import { useFloorLoot } from "@/hooks/useFloorLoot";
 import { AssetCategory, Genre } from "@/types/game";
@@ -331,6 +332,9 @@ export default function GamePage() {
               /game without changing routes, so combat / dialogue stay
               mounted while the player consults the codex. */}
           <CodexModal />
+          {/* Day 22 — Level-up modal. Opens when player_state
+              .pending_level_up=true AND combat is no longer active. */}
+          <LevelUpModal />
           {/* V8.34 (Prompt 3 Task 3) — when combat is active, swap the
               navigation strip + input bar for the CombatMode panel.
               CombatMode covers more vertical space so the player has

@@ -149,6 +149,66 @@ export const BACKGROUND_CONFIGS: Record<Genre, Record<string, BackgroundConfig>>
         ),
       ],
     },
+    // Day 22 — new class. PER primary, AGI secondary. Hunter / scout
+    // identity: tracks and reads the land.
+    ranger: {
+      bonusAttribute: "perception",
+      startingItems: [
+        {
+          name:        "Hunting Bow",
+          type:        ItemType.WEAPON,
+          equipped:    true,
+          effect:      { damage_die: "1d6" },
+          description: "Yew limbs, waxed string. Heavier draw than it looks.",
+        },
+        {
+          name:        "Traveler's Cloak",
+          type:        ItemType.ARMOR,
+          equipped:    true,
+          effect:      { armor_bonus: 1 },
+          description: "Oiled wool, hooded. Doesn't snag on briars and turns most rain.",
+        },
+        {
+          name:        "Rolled Map",
+          type:        ItemType.LORE,
+          description: "A weathered map of the borderlands. Several places marked, none labelled.",
+        },
+        healthPotion(
+          "Basic Health Potion",
+          "A small vial of red liquid that restores some health.",
+        ),
+      ],
+    },
+    // Day 22 — new class. CHA primary, INT secondary. Diplomat / orator
+    // identity: opens doors through standing rather than steel.
+    herald: {
+      bonusAttribute: "charisma",
+      startingItems: [
+        {
+          name:        "Fine Rapier",
+          type:        ItemType.WEAPON,
+          equipped:    true,
+          effect:      { damage_die: "1d6" },
+          description: "Slender, balanced, etched with a noble crest. Carried as much for ceremony as combat.",
+        },
+        {
+          name:        "Formal Attire",
+          type:        ItemType.ARMOR,
+          equipped:    true,
+          effect:      { armor_bonus: 0 },
+          description: "Court doublet and embroidered cloak. Looks like nothing; opens many doors.",
+        },
+        {
+          name:        "Letter of Introduction",
+          type:        ItemType.KEY,
+          description: "Sealed parchment from a patron of standing. Few guards stop a bearer who holds it openly.",
+        },
+        healthPotion(
+          "Basic Health Potion",
+          "A small vial of red liquid that restores some health.",
+        ),
+      ],
+    },
   },
   // ── Cyberpunk ────────────────────────────────────────────────────────────
   [Genre.CYBERPUNK]: {
@@ -219,6 +279,61 @@ export const BACKGROUND_CONFIGS: Record<Genre, Record<string, BackgroundConfig>>
           equipped:    true,
           effect:      { armor_bonus: 2 },
           description: "Carbon-fiber weave under leather. Stops most low-velocity rounds.",
+        },
+        healthPotion(
+          "Stim Patch",
+          "Adhesive nanotech patch — dumps healing compounds straight into the bloodstream.",
+        ),
+      ],
+    },
+    // Day 22 — new class. STR primary, AGI secondary. Corp muscle /
+    // bouncer identity: makes problems disappear with kinetic answers.
+    enforcer: {
+      bonusAttribute: "strength",
+      startingItems: [
+        {
+          name:        "Heavy Baton",
+          type:        ItemType.WEAPON,
+          equipped:    true,
+          effect:      { damage_die: "1d8" },
+          description: "Telescoping alloy baton with a weighted cap. Less lethal — mostly.",
+        },
+        {
+          name:        "Reinforced Coat",
+          type:        ItemType.ARMOR,
+          equipped:    true,
+          effect:      { armor_bonus: 2 },
+          description: "Long coat layered with kevlar inserts. Bulky but stops a knife cold.",
+        },
+        healthPotion(
+          "Stim Patch",
+          "Adhesive nanotech patch — dumps healing compounds straight into the bloodstream.",
+        ),
+      ],
+    },
+    // Day 22 — new class. PER primary, AGI secondary. Recon / infiltrator
+    // identity: reads rooms before entering them.
+    ghost: {
+      bonusAttribute: "perception",
+      startingItems: [
+        {
+          name:        "Silenced Pistol",
+          type:        ItemType.WEAPON,
+          equipped:    true,
+          effect:      { damage_die: "1d6" },
+          description: "Subsonic rounds, integral suppressor. Whispers louder than it shoots.",
+        },
+        {
+          name:        "Adaptive Camo Mesh",
+          type:        ItemType.ARMOR,
+          equipped:    true,
+          effect:      { armor_bonus: 1 },
+          description: "Photoreactive fibres laced through dark fabric. Reads the ambient light and blends.",
+        },
+        {
+          name:        "Signal Scanner",
+          type:        ItemType.KEY,
+          description: "Palm-sized scanner that maps comms traffic. Sees doors before they open.",
         },
         healthPotion(
           "Stim Patch",
@@ -301,6 +416,61 @@ export const BACKGROUND_CONFIGS: Record<Genre, Record<string, BackgroundConfig>>
           equipped:    true,
           effect:      { armor_bonus: 1 },
           description: "Strapped-on layers of canvas and leather. Smells of mildew.",
+        },
+        healthPotion(
+          "First-Aid Kit",
+          "Bandages, antiseptic, a single morphine ampule. Patches a bad cut.",
+        ),
+      ],
+    },
+    // Day 22 — new class. AGI primary, PER secondary. Backstreet
+    // killer / haunted operator identity.
+    phantom: {
+      bonusAttribute: "agility",
+      startingItems: [
+        {
+          name:        "Straight Razor",
+          type:        ItemType.WEAPON,
+          equipped:    true,
+          effect:      { damage_die: "1d4" },
+          description: "Folding razor honed to a hair-splitter. Quick, quiet, and never empty.",
+        },
+        {
+          name:        "Dark Coat",
+          type:        ItemType.ARMOR,
+          equipped:    true,
+          effect:      { armor_bonus: 1 },
+          description: "Long coat of black wool, lined with concealed pockets. The collar hides the face.",
+        },
+        healthPotion(
+          "First-Aid Kit",
+          "Bandages, antiseptic, a single morphine ampule. Patches a bad cut.",
+        ),
+      ],
+    },
+    // Day 22 — new class. CHA primary, INT secondary. Spirit-talker /
+    // séance leader identity: pulls truth from the dead and the credulous.
+    medium: {
+      bonusAttribute: "charisma",
+      startingItems: [
+        {
+          name:        "Silver-Tipped Cane",
+          type:        ItemType.WEAPON,
+          equipped:    true,
+          effect:      { damage_die: "1d4" },
+          description: "Ebony cane with a silver pommel. Walking stick by day, club by night.",
+        },
+        {
+          name:        "Séance Vestments",
+          type:        ItemType.ARMOR,
+          equipped:    true,
+          effect:      { armor_bonus: 0 },
+          description: "Dark robes worn for the parlour. The fabric holds incense smoke for days.",
+        },
+        {
+          name:        "Ritual Focus",
+          type:        ItemType.LORE,
+          description: "A small bone-and-silver pendulum. It moves when no hand moves it.",
         },
         healthPotion(
           "First-Aid Kit",
@@ -395,6 +565,61 @@ export const BACKGROUND_CONFIGS: Record<Genre, Record<string, BackgroundConfig>>
         ),
       ],
     },
+    // Day 22 — new class. STR primary, AGI secondary. Boarding-action
+    // shock trooper identity.
+    marine: {
+      bonusAttribute: "strength",
+      startingItems: [
+        {
+          name:        "Assault Rifle",
+          type:        ItemType.WEAPON,
+          equipped:    true,
+          effect:      { damage_die: "1d8" },
+          description: "Standard-pattern caseless rifle. Heavy. Bites hard at close range.",
+        },
+        {
+          name:        "Combat Armor",
+          type:        ItemType.ARMOR,
+          equipped:    true,
+          effect:      { armor_bonus: 2 },
+          description: "Composite plate over reactive mesh. Adds weight and confidence in equal measure.",
+        },
+        healthPotion(
+          "Medkit",
+          "Standard fleet medkit. Auto-injector and quick-seal patches.",
+        ),
+      ],
+    },
+    // Day 22 — new class. PER primary, AGI secondary. Long-range scout
+    // identity: eyes on the target before anyone else has them.
+    recon: {
+      bonusAttribute: "perception",
+      startingItems: [
+        {
+          name:        "Sniper Carbine",
+          type:        ItemType.WEAPON,
+          equipped:    true,
+          effect:      { damage_die: "1d6" },
+          description: "Short-barrel marksman rifle. Optics calibrated to atmosphere and gravity.",
+        },
+        {
+          name:        "Scout Suit",
+          type:        ItemType.ARMOR,
+          equipped:    true,
+          effect:      { armor_bonus: 1 },
+          description: "Low-profile suit threaded with thermal baffles. Slips past most sensor sweeps.",
+        },
+        {
+          name:        "Tactical Scanner",
+          type:        ItemType.KEY,
+          description: "Compact spotting scope with networked uplink. Flags hostiles before they flag you.",
+        },
+        healthPotion(
+          "Medkit",
+          "Standard fleet medkit. Auto-injector and quick-seal patches.",
+        ),
+      ],
+    },
   },
   // ── Post-Apocalyptic ─────────────────────────────────────────────────────
   [Genre.POST_APOCALYPTIC]: {
@@ -470,6 +695,61 @@ export const BACKGROUND_CONFIGS: Record<Genre, Record<string, BackgroundConfig>>
           name:        "First Aid Kit",
           type:        ItemType.CONSUMABLE,
           description: "Half-depleted but still useful. Bandages, antibiotics, a tourniquet.",
+        },
+        healthPotion(
+          "Medkit",
+          "Crumpled tin box of bandages, antibiotics, and a syringe of who-knows-what.",
+        ),
+      ],
+    },
+    // Day 22 — new class. AGI primary, PER secondary. Courier /
+    // wasteland scrambler identity: moves while everyone else digs in.
+    runner: {
+      bonusAttribute: "agility",
+      startingItems: [
+        {
+          name:        "Carbon-Fibre Blade",
+          type:        ItemType.WEAPON,
+          equipped:    true,
+          effect:      { damage_die: "1d6" },
+          description: "Salvaged composite blade. Lighter than steel, sharper than it should be.",
+        },
+        {
+          name:        "Runner's Leathers",
+          type:        ItemType.ARMOR,
+          equipped:    true,
+          effect:      { armor_bonus: 1 },
+          description: "Stripped-down leathers cut for speed. Plates removed, motion preserved.",
+        },
+        healthPotion(
+          "Medkit",
+          "Crumpled tin box of bandages, antibiotics, and a syringe of who-knows-what.",
+        ),
+      ],
+    },
+    // Day 22 — new class. CHA primary, INT secondary. Wasteland orator
+    // identity: rallies the desperate into a following.
+    demagogue: {
+      bonusAttribute: "charisma",
+      startingItems: [
+        {
+          name:        "Modified Pistol",
+          type:        ItemType.WEAPON,
+          equipped:    true,
+          effect:      { damage_die: "1d6" },
+          description: "Customised sidearm with a flared barrel. Loud enough to silence a crowd.",
+        },
+        {
+          name:        "Long Coat",
+          type:        ItemType.ARMOR,
+          equipped:    true,
+          effect:      { armor_bonus: 0 },
+          description: "Patched canvas duster strung with badges. The badges mean things to the right people.",
+        },
+        {
+          name:        "Rallying Manifesto",
+          type:        ItemType.LORE,
+          description: "Hand-bound pamphlet of slogans and parables. The kind of thing that builds a following.",
         },
         healthPotion(
           "Medkit",

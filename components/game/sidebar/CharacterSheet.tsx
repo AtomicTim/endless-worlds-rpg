@@ -7,6 +7,7 @@ import { getAttributeModifier } from "@/lib/game/dice";
 import { useGameStore } from "@/lib/stores/game-store";
 import { SidebarPanel } from "./SidebarPanel";
 import { getGenreColors } from "@/components/game/genre-ui";
+import { xpForNextLevel } from "@/lib/game/level-resolver";
 
 const ATTR_KEYS = [
   "strength",
@@ -209,7 +210,12 @@ export function CharacterSheet() {
   const hpLabel       = colors.hp;
   const primaryCurrency =
     currencyKey ? resources[currencyKey] ?? 0 : null;
-  const maxXp           = level * 500;
+  // Day 22 — XP bar reads the next threshold from level-resolver.
+  // At LEVEL_CAP (xpForNextLevel returns null) we display "MAX" and
+  // fill the bar so the player can see they're capped.
+  const nextThreshold = xpForNextLevel(level);
+  const maxXp         = nextThreshold ?? Math.max(xp, 1);
+  const isMaxLevel    = nextThreshold === null;
 
   const extraResources = Object.entries(resources).filter(
     ([k, v]) => k !== currencyKey && typeof v === "number" && (v as number) > 0
@@ -245,10 +251,14 @@ export function CharacterSheet() {
         <div className="flex justify-between text-[10px]">
           <span style={{ color: "var(--color-muted)" }}>Level {level}</span>
           <span style={{ color: "var(--color-muted)" }}>
-            {xp}/{maxXp} XP
+            {isMaxLevel ? `${xp} XP (MAX)` : `${xp}/${maxXp} XP`}
           </span>
         </div>
-        <StatBar value={xp} max={maxXp} color="var(--color-accent)" />
+        <StatBar
+          value={isMaxLevel ? maxXp : xp}
+          max={maxXp}
+          color="var(--color-accent)"
+        />
       </div>
 
       {/* HP — label comes from genre vocabulary (HP/Integrity/Hull Integrity/etc.) */}

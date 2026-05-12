@@ -3,11 +3,35 @@
 import { useState } from "react";
 import { Package } from "lucide-react";
 import { Genre, ItemType, ItemRarity } from "@/types/game";
-import type { Item } from "@/types/game";
-import { useGameStore } from "@/lib/stores/game-store";
+import type { Attributes, Item } from "@/types/game";
+import { useGameStore, makeMessage } from "@/lib/stores/game-store";
 import { useCombat } from "@/hooks/useCombat";
 import { SidebarPanel } from "./SidebarPanel";
 import { getGenreColors } from "@/components/game/genre-ui";
+import { applyStatBoost } from "@/lib/game/level-resolver";
+import { STAT_CAP } from "@/lib/game/constants";
+
+// Day 22 — short labels for the STAT_XP inline picker buttons. The
+// LevelUpModal uses the same shorts (kept in two places intentionally —
+// the modal is a top-level overlay, the inventory picker lives in the
+// sidebar, neither imports the other's UI constants).
+const STAT_SHORT: Record<keyof Attributes, string> = {
+  strength:     "STR",
+  agility:      "AGI",
+  intelligence: "INT",
+  perception:   "PER",
+  charisma:     "CHA",
+};
+const STAT_NAMES: Record<keyof Attributes, string> = {
+  strength:     "Strength",
+  agility:      "Agility",
+  intelligence: "Intelligence",
+  perception:   "Perception",
+  charisma:     "Charisma",
+};
+const STAT_KEYS_LIST: Array<keyof Attributes> = [
+  "strength", "agility", "intelligence", "perception", "charisma",
+];
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -52,6 +76,14 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
   const inventory    = useGameStore((s) => s.masterState?.player_state.inventory) ?? [];
   const isProcessing = useGameStore((s) => s.isProcessing);
   const genre        = useGameStore((s) => s.masterState?.metadata.genre) ?? Genre.FANTASY;
+  // Day 22 — STAT_XP application happens directly in the panel: pick a
+  // stat, mutate player_state via setMasterState, consume the item.
+  // Out-of-combat only — the combat path routes through submitCombatAction
+  // and the engine auto-applies to the archetype's primary stat (no
+  // picker mid-fight to keep the action loop snappy).
+  const masterState    = useGameStore((s) => s.masterState);
+  const setMasterState = useGameStore((s) => s.setMasterState);
+  const addMessage     = useGameStore((s) => s.addMessage);
   // Day 20.4.1 TASK 2 — when combat is active, the sidebar Use button
   // must route through the combat-engine action loop instead of
   // useGameLoop.submitAction (which would hit the V8.37 input gate
@@ -69,6 +101,9 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
   const [draggingId,  setDraggingId]  = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [rejectedSlot, setRejectedSlot] = useState<string | null>(null);
+  // Day 22 — when the player clicks USE on a STAT_XP item, expand an
+  // inline stat picker beneath the action buttons. Null = picker closed.
+  const [statPickerOpen, setStatPickerOpen] = useState<boolean>(false);
 
   const equippedWeapon    = inventory.find((i) => i.equipped && i.type === ItemType.WEAPON)    ?? null;
   const equippedArmor     = inventory.find((i) => i.equipped && i.type === ItemType.ARMOR)     ?? null;
@@ -182,6 +217,54 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
       lines.push(`Worth: ${item.value} ${currencyLbl}`);
     }
     return lines.join("\n");
+  }
+
+  // ── Day 22 — STAT_XP application (out-of-combat only) ────────────────────
+  // Combat-path STAT_XP is handled by combat-engine's use_item case
+  // (auto-applies to archetype primary). Out-of-combat we let the
+  // player pick. Both paths consume the item exactly once.
+  function applyStatXpAndConsume(itemId: string, stat: keyof Attributes) {
+    if (!masterState) return;
+    const player = masterState.player_state;
+    const owned  = player.inventory.find((i) => i.id === itemId);
+    if (!owned || owned.type !== ItemType.STAT_XP) return;
+
+    const beforeValue = player.attributes[stat];
+    const afterAttrs  = applyStatBoost(player, stat);
+    const afterValue  = afterAttrs[stat];
+    const capped      = afterValue === beforeValue;
+
+    // Consume one stack — drop the row when it would hit zero. Same
+    // pattern as combat-engine's consumeItem helper, kept local to
+    // avoid pulling a combat-engine import into the sidebar.
+    const nextQty = (owned.quantity ?? 1) - 1;
+    const newInventory = nextQty > 0
+      ? player.inventory.map((i) => (i.id === itemId ? { ...i, quantity: nextQty } : i))
+      : player.inventory.filter((i) => i.id !== itemId);
+
+    setMasterState({
+      ...masterState,
+      player_state: {
+        ...player,
+        attributes: afterAttrs,
+        inventory:  newInventory,
+      },
+    });
+
+    // Templated story-feed beat — no LLM call.
+    const beat = capped
+      ? `You study ${owned.name}, but your ${STAT_NAMES[stat]} is already at its peak.`
+      : `You study ${owned.name} and feel your ${STAT_NAMES[stat]} sharpen.`;
+    addMessage(
+      makeMessage("SYSTEM", beat, {
+        stat_xp_used: true,
+        stat,
+        capped,
+      })
+    );
+
+    setSelectedId(null);
+    setStatPickerOpen(false);
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -505,6 +588,32 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
                 </button>
               )}
 
+              {/* Day 22 — STAT_XP USE button. Out-of-combat opens an
+                  inline 5-stat picker below the action row. In-combat
+                  routes through submitCombatAction; combat-engine
+                  auto-applies to archetype primary (no picker mid-fight
+                  to keep the action loop snappy). */}
+              {selectedItem.type === ItemType.STAT_XP && (
+                <button
+                  className="flex-1 rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-opacity disabled:opacity-40"
+                  style={{ backgroundColor: "var(--hl-pass)", color: "#000" }}
+                  disabled={isProcessing || (inCombat && combatResolving)}
+                  onClick={() => {
+                    if (inCombat) {
+                      void submitCombatAction({
+                        action:  "use_item",
+                        item_id: selectedItem.id,
+                      });
+                      setSelectedId(null);
+                    } else {
+                      setStatPickerOpen((open) => !open);
+                    }
+                  }}
+                >
+                  Use
+                </button>
+              )}
+
               {onSubmit && !inCombat && (
                 <button
                   className="rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-opacity disabled:opacity-40"
@@ -521,6 +630,49 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
                   Drop
                 </button>
               )}
+            </div>
+          )}
+
+          {/* Day 22 — STAT_XP inline picker. Only shows for STAT_XP
+              items, out-of-combat, after the player taps USE. */}
+          {selectedItem.type === ItemType.STAT_XP && !inCombat && statPickerOpen && masterState && (
+            <div
+              className="mt-2 space-y-1.5"
+              style={{
+                borderTop: "1px solid var(--color-border)",
+                paddingTop: 8,
+              }}
+            >
+              <p
+                className="text-[9px] uppercase tracking-wider"
+                style={{ color: "var(--color-muted)" }}
+              >
+                Improve which stat?
+              </p>
+              <div className="grid grid-cols-5 gap-1">
+                {STAT_KEYS_LIST.map((s) => {
+                  const current = masterState.player_state.attributes[s];
+                  const capped  = current >= STAT_CAP;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      disabled={capped}
+                      onClick={() => applyStatXpAndConsume(selectedItem.id, s)}
+                      className="flex flex-col items-center rounded-sm px-1 py-1 text-[9px] uppercase transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+                      style={{
+                        backgroundColor: "color-mix(in srgb, var(--hl-pass) 12%, transparent)",
+                        border:          "1px solid color-mix(in srgb, var(--hl-pass) 40%, transparent)",
+                        color:           "var(--hl-pass)",
+                      }}
+                      title={capped ? `${STAT_NAMES[s]} is already at the cap (${STAT_CAP}).` : `+1 ${STAT_NAMES[s]}`}
+                    >
+                      <span className="font-bold">{STAT_SHORT[s]}</span>
+                      <span className="text-[10px]">{current}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

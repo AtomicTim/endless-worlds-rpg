@@ -96,8 +96,11 @@ function buildUserPrompt(
   const obj2Slug       = `${outline.id}_obj2`;
   const obj3Slug       = `${outline.id}_obj3`;
   const obj4Slug       = `${outline.id}_obj4`;
-  const obj5Slug       = `${outline.id}_obj5`;
-  const obj6Slug       = `${outline.id}_obj6`;
+  // V8.54 (Day 23A) — region_location objects[] is now empty (the dungeon
+  // schema moved them into dungeon_rooms[]). obj5/obj6 slugs that previously
+  // seeded those object ids are no longer referenced. Dropped to satisfy
+  // no-unused-vars; if future region_locations regain objects, regenerate
+  // these slugs alongside.
 
   return `${wcdBlock}
 
@@ -229,32 +232,62 @@ consistent with the WCD):
   "region_locations": [
     {
       "id": "${regionLocSlug}",
-      "name": "[Standalone landmark name — dungeon / wilderness / shrine]",
+      "name": "[Standalone dungeon name]",
       "type": "dungeon",
+      "node_type": "dungeon",
       "is_settlement_node": false,
       "is_interior": false,
-      "atmosphere": "[1 sentence]",
+      "atmosphere": "[1 sentence — the dungeon's exterior and history]",
       "grid_position": {"x": ${outline.grid_centre.x + 1}, "y": ${outline.grid_centre.y}},
       "connections": ["${settlementSlug}"],
       "npc_ids": ["character_${npc3Slug}"],
-      "objects": [
-        {
-          "id": "${obj5Slug}",
-          "name": "[Exact Object Name with lore weight]",
-          "description": "[1 sentence — hint at history or mystery]",
-          "is_interactable": true
-        },
-        {
-          "id": "${obj6Slug}",
-          "name": "[Exact Object Name with lore weight]",
-          "description": "[1 sentence — hint at history or mystery]",
-          "is_interactable": true
-        }
-      ],
+      "objects": [],
       "ambient_type": "dungeon_corridor",
       "encounter_chance": 0.6,
       "encounter_roster": ["fantasy_skeleton", "${outline.id}_themed_enemy_id"],
-      "is_boss_room": false
+      "is_boss_room": false,
+      "dungeon_rooms": [
+        {
+          "id": "${regionLocSlug}_entrance",
+          "name": "[Entrance Room Name]",
+          "description": "[1-2 sentences. Establishes the dungeon identity.]",
+          "room_type": "entrance",
+          "connections": ["${regionLocSlug}_middle"],
+          "encounter_chance": 0.5,
+          "objects": [
+            {"id": "${regionLocSlug}_entrance_chest", "name": "[Container Name]", "description": "[1 sentence]", "is_interactable": true, "type": "container"},
+            {"id": "${regionLocSlug}_entrance_lore", "name": "[Lore Object Name]", "description": "[1 sentence — foreshadows the boss lock]", "is_interactable": true, "type": "lore"}
+          ]
+        },
+        {
+          "id": "${regionLocSlug}_middle",
+          "name": "[Middle Chamber Name]",
+          "description": "[1-2 sentences. The chamber that hides the key.]",
+          "room_type": "middle",
+          "connections": ["${regionLocSlug}_entrance", "${regionLocSlug}_boss"],
+          "encounter_chance": 0.7,
+          "objects": [
+            {"id": "${regionLocSlug}_middle_chest", "name": "[Container Name]", "description": "[1 sentence]", "is_interactable": true, "type": "container"},
+            {"id": "${regionLocSlug}_middle_key_object", "name": "[Story-Named Key Object Name]", "description": "[1 sentence — where the key item rests]", "is_interactable": true, "type": "container", "is_key_item": true, "unlocks_node": "${regionLocSlug}_boss"}
+          ]
+        },
+        {
+          "id": "${regionLocSlug}_boss",
+          "name": "[Boss Chamber Name]",
+          "description": "[1-2 sentences. The climactic chamber.]",
+          "room_type": "boss",
+          "connections": ["${regionLocSlug}_middle"],
+          "encounter_chance": 1.0,
+          "objects": [],
+          "lock": {
+            "type": "key",
+            "hint": "[1-2 sentence description of the sealed door + why it is locked]",
+            "key_item_id": "${regionLocSlug}_middle_key_object",
+            "key_item_name": "[Story-Named Key Object Name]",
+            "unlocked": false
+          }
+        }
+      ]
     }
   ],
   "exits": [
@@ -376,6 +409,41 @@ The standalone region_location IS combat-eligible. It MUST carry:
 The settlement hub and tavern sub-location are NOT combat-eligible
 — omit encounter_chance/encounter_roster on those (or set chance
 to 0).
+
+DAY 23A — LOCATION VARIETY & DUNGEON STRUCTURE (region_type "${outline.region_type ?? "settled"}")
+
+Every node MUST carry a "node_type" from this fixed set:
+  • settlement_hub | outpost | wilderness | dungeon | landmark
+  • abandoned_settlement
+
+REGION TYPE GUIDANCE — match this region's mix:
+  settled   — 1 settlement_hub + 1-2 dungeons + 1-2 landmark/wilderness
+  frontier  — 0-1 outposts + 1-2 dungeons + 1-2 wilderness/landmarks
+  hostile   — 0 settlements + 2-3 dungeons + 1-2 landmarks/abandoned
+              All non-dungeon nodes encounter_chance ≥ 0.3
+
+DUNGEON STRUCTURE (mandatory for every "node_type: dungeon" node):
+The dungeon location MUST carry a "dungeon_rooms" array of EXACTLY
+3 entries — entrance → middle → boss — following the skeleton shown
+above. Required fields per room: id, name, description (1-2 sent),
+room_type, connections (room ids), encounter_chance, objects[].
+
+Room 1 entrance — encounter_chance 0.5; ≥1 object type "container";
+optional 1 "lore" object foreshadowing the boss lock.
+Room 2 middle  — encounter_chance 0.7; ≥1 "container" PLUS a named
+story key-object with is_interactable: true, type: "container",
+is_key_item: true, unlocks_node: "{dungeon_id}_boss". The key-object
+name must be specific to the dungeon (e.g. "The Warden's Seal",
+"The Cracked Signet Ring") — never a generic "iron key".
+Room 3 boss    — encounter_chance 1.0; objects: []; lock object with
+type "key", hint string, key_item_id matching the middle-room key
+object id, key_item_name matching its name, unlocked: false.
+
+DAY 23A — LOOT CONTEXT GUIDANCE
+Dungeon / combat drop tables: weapons, armor, valuables, healing
+consumables, rare RARE artifacts. NEVER generate food / ration
+items in dungeon loot or enemy drops — food belongs in
+settlement/outpost containers and merchant inventories only.
 
 DAY 21 LOOT — REGION LOOT ITEMS:
 

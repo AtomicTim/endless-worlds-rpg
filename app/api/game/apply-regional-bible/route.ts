@@ -18,6 +18,10 @@ import {
   mergeNodePreservingDiscovered,
   splitConflatedRegionSettlement,
 } from "@/lib/game/region-expansion-guard";
+import {
+  deriveNodeType,
+  validateDungeonRooms,
+} from "@/lib/game/dungeon-validation";
 
 /**
  * Day 19D — Apply a freshly-generated RegionBible to a session.
@@ -574,6 +578,17 @@ export async function POST(request: NextRequest) {
       zoneId = loc.id;
     }
 
+    // Day 23A — derive node_type + (for dungeons) validate rooms.
+    const locRecord = loc as unknown as Record<string, unknown>;
+    const nodeType  = deriveNodeType(locRecord);
+    const dungeonRooms = nodeType === "dungeon"
+      ? validateDungeonRooms(
+          locRecord.dungeon_rooms,
+          `locations[${loc.id}]`,
+          "[apply-regional-bible]"
+        )
+      : undefined;
+
     newNodes[loc.id] = {
       id:                 loc.id,
       name:               loc.name,
@@ -598,6 +613,9 @@ export async function POST(request: NextRequest) {
       encounter_roster:   Array.isArray(loc.encounter_roster) && loc.encounter_roster.length > 0
                             ? [...loc.encounter_roster] : undefined,
       is_boss_room:       loc.is_boss_room === true ? true : undefined,
+      // Day 23A — location-typology + dungeon-room persistence.
+      ...(nodeType        ? { node_type: nodeType } : {}),
+      ...(dungeonRooms    ? { dungeon_rooms: dungeonRooms } : {}),
     };
     // Day 20.4.3 — diagnostic log on settlement creation. Matches
     // apply-world-bible's region-zone log so cross-region apply
@@ -650,6 +668,17 @@ export async function POST(request: NextRequest) {
       sessionId,
     });
 
+    // Day 23A — derive node_type + (for dungeons) validate rooms.
+    const locRecord = loc as unknown as Record<string, unknown>;
+    const nodeType  = deriveNodeType(locRecord);
+    const dungeonRooms = nodeType === "dungeon"
+      ? validateDungeonRooms(
+          locRecord.dungeon_rooms,
+          `region_locations[${loc.id}]`,
+          "[apply-regional-bible]"
+        )
+      : undefined;
+
     newNodes[loc.id] = {
       id:                 loc.id,
       name:               loc.name,
@@ -674,6 +703,9 @@ export async function POST(request: NextRequest) {
       encounter_roster:   Array.isArray(loc.encounter_roster) && loc.encounter_roster.length > 0
                             ? [...loc.encounter_roster] : undefined,
       is_boss_room:       loc.is_boss_room === true ? true : undefined,
+      // Day 23A — location-typology + dungeon-room persistence.
+      ...(nodeType        ? { node_type: nodeType } : {}),
+      ...(dungeonRooms    ? { dungeon_rooms: dungeonRooms } : {}),
     };
   }
 

@@ -169,20 +169,63 @@ Return EXACTLY this JSON structure (fill in the values):
     ],
     "region_locations": [
       {
-        "id": "region_landmark_slug",
-        "name": "The Region Landmark Name (dungeon / wilderness / shrine — NOT inside the town)",
+        "id": "region_dungeon_slug",
+        "name": "The Region Dungeon Name (NOT inside the town)",
         "type": "dungeon",
+        "node_type": "dungeon",
         "is_settlement_node": false,
         "is_interior": false,
-        "atmosphere": "1-2 sentences describing this standalone point in the geographic area.",
+        "atmosphere": "1-2 sentences describing the dungeon's exterior + history.",
         "grid_position": {"x": 10, "y": -5},
         "connections": ["settlement_slug"],
         "npc_ids": [],
-        "objects": [{"id": "region_obj_slug", "name": "Tier 1 Object Name", "description": "1 sentence", "is_interactable": true}],
+        "objects": [],
         "ambient_type": "dungeon_corridor",
         "encounter_chance": 0.6,
         "encounter_roster": ["<genre>_bestiary_enemy_1", "<genre>_bestiary_enemy_2", "<region_id>_themed_enemy_id"],
-        "is_boss_room": false
+        "is_boss_room": false,
+        "dungeon_rooms": [
+          {
+            "id": "region_dungeon_slug_entrance",
+            "name": "The Entrance Hall Name",
+            "description": "1-2 sentences. Establishes the dungeon's identity and history.",
+            "room_type": "entrance",
+            "connections": ["region_dungeon_slug_middle"],
+            "encounter_chance": 0.5,
+            "objects": [
+              {"id": "entrance_chest_slug", "name": "Entrance Container Name", "description": "1 sentence", "is_interactable": true, "type": "container"},
+              {"id": "entrance_lore_slug", "name": "Lore Item Name", "description": "1 sentence — hints at the boss room lock", "is_interactable": true, "type": "lore"}
+            ]
+          },
+          {
+            "id": "region_dungeon_slug_middle",
+            "name": "The Middle Chamber Name",
+            "description": "1-2 sentences. The room where the key item is hidden.",
+            "room_type": "middle",
+            "connections": ["region_dungeon_slug_entrance", "region_dungeon_slug_boss"],
+            "encounter_chance": 0.7,
+            "objects": [
+              {"id": "middle_chest_slug", "name": "Middle Container Name", "description": "1 sentence", "is_interactable": true, "type": "container"},
+              {"id": "middle_key_object_slug", "name": "The Story-Named Key Object (e.g. The Warden's Seal)", "description": "1 sentence. Where the key item rests.", "is_interactable": true, "type": "container", "is_key_item": true, "unlocks_node": "region_dungeon_slug_boss"}
+            ]
+          },
+          {
+            "id": "region_dungeon_slug_boss",
+            "name": "The Boss Chamber Name",
+            "description": "1-2 sentences. The climactic chamber sealed by the key.",
+            "room_type": "boss",
+            "connections": ["region_dungeon_slug_middle"],
+            "encounter_chance": 1.0,
+            "objects": [],
+            "lock": {
+              "type": "key",
+              "hint": "1-2 sentences describing the sealed door + why it is locked.",
+              "key_item_id": "middle_key_object_slug",
+              "key_item_name": "The Story-Named Key Object",
+              "unlocked": false
+            }
+          }
+        ]
       }
     ],
     "npcs": [
@@ -231,6 +274,7 @@ Return EXACTLY this JSON structure (fill in the values):
       "id": "region_slug",
       "name": "Region Name",
       "type": "wilderness",
+      "region_type": "settled|frontier|hostile",
       "grid_centre": {"x": 22, "y": 8},
       "direction_from_start": "north",
       "distance": "adjacent",
@@ -391,6 +435,69 @@ combat-eligible — leave their encounter_chance unset (or 0) and
 omit encounter_roster. The standalone region_location IS combat-
 eligible — it MUST carry encounter_chance and encounter_roster.
 
+DAY 23A — LOCATION VARIETY & REGION TYPES
+
+Every node has a "node_type" from this fixed set (case-sensitive):
+  • settlement_hub      — Safe town with services (tavern + shop + etc.)
+  • outpost             — 1-2 NPCs, limited supplies, no full services
+  • wilderness          — Outdoor travel node; optional 0.1-0.2 encounter
+  • dungeon             — Dangerous multi-room structure (see DUNGEON STRUCTURE)
+  • landmark            — Ruin / monument / sacred site; lore-rich; light encounter
+  • abandoned_settlement — Ruined former settlement; survivors or haunts
+Set node_type on the settlement node ("settlement_hub"), every
+sub-location ("settlement_hub" — they live inside it), and every
+region_location.
+
+The starting region is ALWAYS region_type "settled". Its 1
+standalone region_location is the region's first dungeon.
+
+REGION TYPE GUIDANCE for adjacent_regions (set "region_type" on each):
+  settled   — 1 settlement_hub + 1-2 dungeons + 1-2 landmark/wilderness
+  frontier  — 0-1 outposts + 1-2 dungeons + 1-2 wilderness/landmarks
+  hostile   — 0 settlements + 2-3 dungeons + 1-2 landmarks/abandoned
+              All non-dungeon nodes get encounter_chance ≥ 0.3 to
+              match the threat; richer boss loot rewards the risk.
+Mix the 3 (or more) adjacent_regions so the player sees variety —
+generate at least one non-settled region whenever the WCD permits.
+
+DAY 23A — DUNGEON STRUCTURE (mandatory for every node_type "dungeon")
+
+Every dungeon node MUST carry a "dungeon_rooms" array of EXACTLY
+3 entries in this fixed order: entrance → middle → boss. Ids
+follow the pattern \`{dungeon_id}_entrance\` / \`_middle\` / \`_boss\`.
+
+Room 1 — entrance (room_type "entrance", encounter_chance 0.5):
+  • description: 1-2 sentences. Establishes the dungeon's identity.
+  • objects: at least 1 with type "container". May add 1 "lore"
+    object that foreshadows the boss-room lock.
+  • connections: ["{dungeon_id}_middle"]
+
+Room 2 — middle (room_type "middle", encounter_chance 0.7):
+  • description: 1-2 sentences. Where the key is hidden.
+  • objects: at least 1 type "container", PLUS the key-object:
+    a named story object (e.g. "The Warden's Seal", "Aldric's
+    Iron Key", "The Cracked Signet Ring") — never a generic
+    "iron key". The key-object MUST have:
+      "is_interactable": true
+      "type": "container"
+      "is_key_item": true
+      "unlocks_node": "{dungeon_id}_boss"
+  • connections: ["{dungeon_id}_entrance", "{dungeon_id}_boss"]
+
+Room 3 — boss (room_type "boss", encounter_chance 1.0):
+  • description: 1-2 sentences. The climactic chamber.
+  • objects: [] (boss + drop carries the reward)
+  • connections: ["{dungeon_id}_middle"]
+  • lock: {
+      "type": "key",
+      "hint": "1-2 sentence description of the sealed door",
+      "key_item_id": "{middle-room key-object id}",
+      "key_item_name": "{the key-object's display name}",
+      "unlocked": false
+    }
+  • is_boss_room SHOULD also be true at the parent dungeon-node
+    level (encounter_chance 1.0 + named boss enemy in the roster).
+
 Example combat-tagged location (a dungeon entrance with mixed roster):
 {
   "id": "<location_id_slug>",
@@ -425,6 +532,15 @@ Wells" (LORE UNCOMMON), etc.
 V8.53 — DO NOT include a "description" field on world_loot_items.
 Names alone communicate the item's identity; descriptions generate
 on demand at first interaction in a later phase.
+
+V8.54 (Day 23A) — LOOT CONTEXT GUIDANCE
+Dungeon / combat drop tables should produce: weapons, armor,
+valuables, healing consumables (potions / stims / medkits), and
+the rare RARE artifact. NEVER generate food / ration / bread /
+trail-mix items in dungeon loot or in enemy drop tables — food
+belongs in settlement and outpost containers + merchant
+inventories only. Mismatched flavor (a goblin dropping "Dried
+Provisions" mid-dungeon) was a recurring playtest complaint.
 
 Item id format: "<world_slug>_<item_slug>". Stat fields by type:
 - WEAPON: effect: { "damage_die": "1d6"|"1d8"|"1d10" } and a value

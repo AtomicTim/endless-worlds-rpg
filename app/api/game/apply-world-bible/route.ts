@@ -7,6 +7,7 @@ import type {
   LocationDefinition,
   MasterState,
   NPCDefinition,
+  RegionType,
   WorldAsset,
   WorldBible,
   WorldConsistencyDocument,
@@ -15,6 +16,11 @@ import type {
 } from "@/types/game";
 import { Genre } from "@/types/game";
 import { getGenreBestiary } from "@/lib/game/bestiary";
+import {
+  VALID_REGION_TYPES,
+  deriveNodeType,
+  validateDungeonRooms,
+} from "@/lib/game/dungeon-validation";
 
 /**
  * Day 19B — Apply a freshly-generated WorldBible to a session.
@@ -667,6 +673,13 @@ export async function POST(request: NextRequest) {
       isExpandable
     );
 
+    // Day 23A — derive node_type + (for dungeons) validate rooms.
+    const locRecord = loc as unknown as Record<string, unknown>;
+    const nodeType  = deriveNodeType(locRecord);
+    const dungeonRooms = nodeType === "dungeon"
+      ? validateDungeonRooms(locRecord.dungeon_rooms, `starting_region.locations[${loc.id}]`, "[apply-world-bible]")
+      : undefined;
+
     graphNodes[loc.id] = {
       id:                 loc.id,
       name:               loc.name,
@@ -693,6 +706,9 @@ export async function POST(request: NextRequest) {
       encounter_roster:   Array.isArray(loc.encounter_roster) && loc.encounter_roster.length > 0
                             ? [...loc.encounter_roster] : undefined,
       is_boss_room:       loc.is_boss_room === true ? true : undefined,
+      // Day 23A — location-typology + dungeon-room persistence.
+      ...(nodeType        ? { node_type: nodeType } : {}),
+      ...(dungeonRooms    ? { dungeon_rooms: dungeonRooms } : {}),
     };
   }
 
@@ -723,7 +739,17 @@ export async function POST(request: NextRequest) {
     if (!validConnections.includes(startingNodeId)) {
       validConnections.push(startingNodeId);
     }
-    const regionLocNode = {
+    // Day 23A — region_locations are the dungeon / wilderness / landmark
+    // nodes that live in the geographic region. Derive node_type and
+    // validate dungeon_rooms here so the runtime knows whether to
+    // switch into room-navigation mode on arrival.
+    const locRecord = loc as unknown as Record<string, unknown>;
+    const nodeType  = deriveNodeType(locRecord);
+    const dungeonRooms = nodeType === "dungeon"
+      ? validateDungeonRooms(locRecord.dungeon_rooms, `starting_region.region_locations[${loc.id}]`, "[apply-world-bible]")
+      : undefined;
+
+    const regionLocNode: WorldNode = {
       id:                 loc.id,
       name:               loc.name,
       // FIX 3 — region_locations MUST carry type: "zone" (NOT
@@ -759,6 +785,9 @@ export async function POST(request: NextRequest) {
       encounter_roster:   Array.isArray(loc.encounter_roster) && loc.encounter_roster.length > 0
                             ? [...loc.encounter_roster] : undefined,
       is_boss_room:       loc.is_boss_room === true ? true : undefined,
+      // Day 23A — location-typology + dungeon-room persistence.
+      ...(nodeType        ? { node_type: nodeType } : {}),
+      ...(dungeonRooms    ? { dungeon_rooms: dungeonRooms } : {}),
     };
     // FIX 3 — diagnostic. Surface the three fields the WorldMap
     // predicate keys off so a generation regression is immediately
@@ -837,6 +866,10 @@ export async function POST(request: NextRequest) {
       asset_id:      `location_${geographicRegionId}`,
       discovered:    true,
       map_position:  bibleNarrowed.starting_region.grid_centre,
+      // Day 23A — the starting region is ALWAYS "settled" by spec
+      // (per quest-system-spec.md). Adjacent_regions vary; their
+      // zone nodes are created in step 4d.
+      region_type:   "settled",
     };
     // Wire the settlement node back to the geographic region. The
     // settlement ↔ region_location wiring already happened in 4b/4b-2;
@@ -962,6 +995,13 @@ export async function POST(request: NextRequest) {
   const placeholderBackLink = isSameAsSettlement ? startingNodeId : geographicRegionId;
   for (const region of bibleNarrowed.adjacent_regions) {
     if (graphNodes[region.id]) continue; // shouldn't collide, but defensive
+    // Day 23A — propagate region_type from the outline (defaults to
+    // "settled" when the AI omitted it, matching the spec default).
+    const rtRaw = (region as unknown as { region_type?: unknown }).region_type;
+    const regionType: RegionType =
+      typeof rtRaw === "string" && VALID_REGION_TYPES.has(rtRaw as RegionType)
+        ? (rtRaw as RegionType)
+        : "settled";
     graphNodes[region.id] = {
       id:            region.id,
       name:          region.name,
@@ -975,6 +1015,7 @@ export async function POST(request: NextRequest) {
       asset_id:      `location_${region.id}`,
       discovered:    false,
       map_position:  region.grid_centre,
+      region_type:   regionType,
     };
   }
   // For the legacy single-tier shape (region.id === startingNodeId),

@@ -95,6 +95,14 @@ export interface Item {
   /** Sell value in genre currency. Common 5-15, Uncommon 20-50,
    *  Rare 100-300, Legendary 500+. */
   value?:      number;
+  // ── Day 23A — Dungeon key items ──────────────────────────────────────────
+  /** Day 23A — when true, this item is a story-named key found in a
+   *  dungeon's middle chamber. Used by the boss-room USE-key flow:
+   *  inventory check filters on is_key_item && unlocks_node === room. */
+  is_key_item?: boolean;
+  /** Day 23A — node id this key unlocks. Set on the Item alongside
+   *  is_key_item. Consumed on USE-key, then removed from inventory. */
+  unlocks_node?: string;
 }
 
 export interface EquippedLoadout {
@@ -166,6 +174,94 @@ export interface WorldState {
 // Day 18 — World Graph (persistent connected location graph)
 // ---------------------------------------------------------------------------
 
+// ── Day 23A — Location & region typology ─────────────────────────────────────
+
+/**
+ * Day 23A — semantic node-type for a WorldGraph node. Refines the
+ * coarser `category` field (which carries legacy `LocationDefinition.type`
+ * strings) into a small fixed set the runtime + UI key off:
+ *   • settlement_hub — Safe town with services
+ *   • outpost — 1-2 NPCs, limited supplies, no full services
+ *   • wilderness — Outdoor travel node, optional low encounter
+ *   • dungeon — Dangerous multi-room structure (carries dungeon_rooms[])
+ *   • landmark — Ruin / monument / sacred site; lore-rich
+ *   • abandoned_settlement — Ruined former settlement
+ */
+export type LocationNodeType =
+  | "settlement_hub"
+  | "outpost"
+  | "wilderness"
+  | "dungeon"
+  | "landmark"
+  | "abandoned_settlement";
+
+/**
+ * Day 23A — region difficulty / character. Drives location-mix
+ * generation in the WB/RB prompts (settled = settlement + dungeons +
+ * landmarks; frontier = outposts + dungeons; hostile = no settlement,
+ * higher encounter chance across the board).
+ */
+export type RegionType = "settled" | "frontier" | "hostile";
+
+/**
+ * Day 23A — locked-door schema. Only `"key"` lock type is implemented
+ * for 23A; full lock variety (code / riddle / fragments / lore) is
+ * Day 23C scope per quest-system-spec.md.
+ */
+export interface DungeonLock {
+  /** Lock kind. Day 23A ships "key" only. */
+  type:           "key";
+  /** 1-2 sentence narrative description shown when the player clicks
+   *  the locked nav card. Establishes WHY the door is sealed. */
+  hint:           string;
+  /** Item id required to unlock. Matches an Item.id stamped onto the
+   *  player's inventory after the key item is taken from the dungeon's
+   *  middle chamber. */
+  key_item_id:    string;
+  /** Display name for the key item — used in the USE-key button
+   *  label and the templated unlock story-feed beat. */
+  key_item_name:  string;
+  /** True after the player has consumed the key item to open this
+   *  door. Persists with the dungeon node so re-entry stays unlocked. */
+  unlocked:       boolean;
+}
+
+/**
+ * Day 23A — one room inside a dungeon node. Dungeons are 3-room
+ * structures: entrance → middle → boss. Rooms live on the parent
+ * dungeon WorldNode (dungeon_rooms[]) rather than as standalone
+ * graph nodes — they're navigation children but never appear on
+ * the world map.
+ */
+export interface DungeonRoom {
+  /** Permanent slug — typically `${dungeon_id}_${entrance|middle|boss}`. */
+  id:               string;
+  /** Display name (e.g. "The Entrance Hall", "The Warden's Chamber"). */
+  name:             string;
+  /** 1-2 sentence room description shown on first entry. Stored on the
+   *  room so room-to-room navigation skips the narrator API call. */
+  description:      string;
+  /** Structural slot. Drives nav-card labelling + boss-room lock. */
+  room_type:        "entrance" | "middle" | "side" | "boss";
+  /** Ids of adjacent rooms within the same dungeon. Entrance ↔ middle;
+   *  middle ↔ boss. The boss connection from middle is rendered but
+   *  blocked by `lock` until unlocked. */
+  connections:      string[];
+  /** Tier-1 objects (containers, fixtures, the key item) inside the
+   *  room. Same schema as LocationDefinition.objects so the existing
+   *  container-search + INTERACT pipeline applies unchanged. */
+  objects:          LocationObject[];
+  /** Probability of a combat encounter on FIRST entry — checked per
+   *  room arrival (entrance ~0.5, middle ~0.7, boss 1.0). */
+  encounter_chance: number;
+  /** Lock metadata — present on boss rooms; undefined elsewhere. */
+  lock?:            DungeonLock;
+  /** True once the player has visited this room at least once.
+   *  Read by revisit suppression (rule 86) so re-entry shows
+   *  "You return to the {room name}." instead of re-describing. */
+  discovered:       boolean;
+}
+
 export interface WorldNode {
   /** Permanent normalized slug — matches the location's bare id (NOT prefixed). */
   id:             string;
@@ -207,6 +303,21 @@ export interface WorldNode {
   encounter_roster?:   string[];
   /** Mirrored from LocationDefinition.is_boss_room. */
   is_boss_room?:       boolean;
+  // ── Day 23A — Location variety + dungeon structure ───────────────────────
+  /** Day 23A — semantic node-type. Refines `category` for the runtime
+   *  + UI; mostly informational but `dungeon` is the trigger for the
+   *  room-navigation system. Optional for legacy nodes; safe to treat
+   *  `undefined` as "use the legacy category as a fallback". */
+  node_type?:       LocationNodeType;
+  /** Day 23A — region difficulty character. Set on region zone nodes
+   *  only (type === "zone" + is_settlement_node === false). Drives
+   *  WorldMap visual treatment + encounter weighting in 23B. */
+  region_type?:     RegionType;
+  /** Day 23A — for `node_type === "dungeon"` nodes, the 3-room
+   *  structure (entrance → middle → boss). Rooms are navigation
+   *  children of this node and never appear as top-level graph nodes
+   *  on the world map. Undefined for non-dungeon nodes. */
+  dungeon_rooms?:   DungeonRoom[];
 }
 
 export interface WorldGraph {
@@ -362,6 +473,16 @@ export interface LocationObject {
   unlock_requires?:  string;
   /** When true, examining this object delivers a quest breadcrumb. */
   quest_relevance?:  boolean;
+  // ── Day 23A — Dungeon key items ──────────────────────────────────────────
+  /** Day 23A — marks a LocationObject (or the Item it spawns) as the
+   *  dungeon key item that unlocks a downstream room. Set on the
+   *  middle-chamber object that contains the key + on the Item itself
+   *  when it lands in player inventory. */
+  is_key_item?:      boolean;
+  /** Day 23A — when is_key_item is true, the room/node id this key
+   *  unlocks. The locked nav card's USE-key handler matches against
+   *  this. */
+  unlocks_node?:     string;
 }
 
 export interface LocationDefinition {
@@ -527,6 +648,15 @@ export interface RegionOutline {
   name:                 string;
   /** Region type — settlement_hub, wilderness, dungeon, port, ruin, stronghold, etc. */
   type:                 string;
+  /** Day 23A — region difficulty character. Settled regions have a
+   *  settlement_hub + dungeons + landmarks; frontier swaps settlement
+   *  for outposts; hostile has no settlement at all and higher
+   *  encounter chance everywhere. Drives both the RegionBible prompt's
+   *  location-mix instructions when this outline expands and the
+   *  WorldMap's region-tier visual treatment. Optional for legacy
+   *  bibles generated before Day 23A — apply-world-bible's normalizer
+   *  defaults to "settled" when missing. */
+  region_type?:         RegionType;
   grid_centre:          { x: number; y: number };
   direction_from_start: string;
   distance:             "adjacent" | "near" | "far";
@@ -772,6 +902,24 @@ export interface MasterState {
    *  to the current node when rendering. Empty entries are cleaned up
    *  by TAKE handlers when both items and gold reach zero. */
   floor_loot?:             FloorLootEntry[];
+  /** Day 23A — active-dungeon navigation slice. Populated when the
+   *  player is inside a dungeon node; cleared when they exit back to
+   *  the parent region. Dungeon rooms aren't graph nodes — they live
+   *  on the dungeon's WorldNode.dungeon_rooms[] array — so the runtime
+   *  tracks "which room am I in" here.
+   *
+   *  node_id          — id of the dungeon WorldNode the player is in
+   *  current_room_id  — id of the currently-occupied room within it
+   *  rooms_visited    — ids of every room the player has entered at
+   *                     least once. Read by the revisit-suppression
+   *                     path to choose between the full room
+   *                     description and "You return to …".
+   */
+  dungeon_state?: {
+    node_id:         string;
+    current_room_id: string;
+    rooms_visited:   string[];
+  };
 }
 
 // ---------------------------------------------------------------------------

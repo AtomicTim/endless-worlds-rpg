@@ -402,10 +402,6 @@ describe("pickRegionLootItemsForNode + pickBossDropItemForNode", () => {
             region_loot_items: [item],
           },
           adjacent_regions: [],
-          main_quest: {
-            title: "", antagonist_name: "", antagonist_location: "",
-            goal: "", opening_hook: "", breadcrumbs: [], win_condition: "",
-          },
           generated_at: "0",
         },
       },

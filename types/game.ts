@@ -432,6 +432,21 @@ export interface WorldConsistencyDocument {
   grid_size:     number;
   /** Starting region centre (typically {x:0, y:0}). */
   world_origin:  { x: number; y: number };
+  /** Day 23B — Main quest seed. The WCD picks the archetype that fits the
+   *  world's theme most naturally and lays out the faction web + finale
+   *  type. The WorldBible expands this into breadcrumbs, resolutions, and
+   *  the world_intro_template. Optional so legacy WCDs still load. */
+  main_quest?: {
+    archetype:          QuestArchetype;
+    threat_description: string;
+    factions: Array<{
+      id:          string;
+      name:        string;
+      role:        "defenders" | "exploiters" | "deniers";
+      description: string;
+    }>;
+    finale_type:        FinaleType;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -483,6 +498,12 @@ export interface LocationObject {
    *  unlocks. The locked nav card's USE-key handler matches against
    *  this. */
   unlocks_node?:     string;
+  /** Day 23B — when set, this object is the seeded anchor for the named
+   *  floating breadcrumb (e.g. "breadcrumb_act2"). apply-regional-bible
+   *  reads this marker and stamps anchor_location_id on the matching
+   *  QuestBreadcrumb so the discovery trigger (23C) knows which object
+   *  unlocks the reveal. */
+  quest_breadcrumb_id?: string;
 }
 
 export interface LocationDefinition {
@@ -556,6 +577,11 @@ export interface NPCDefinition {
   quest_relevance?:  string;
   /** Index 0-4 of the breadcrumb this NPC can hint at. */
   knows_breadcrumb?: number;
+  /** Day 23B — when set, this NPC carries dialogue or knowledge that
+   *  anchors the named floating breadcrumb (e.g. "breadcrumb_act2").
+   *  apply-regional-bible reads this marker and stamps the breadcrumb's
+   *  anchor_location_id to the NPC's home_location_id. */
+  quest_breadcrumb_id?: string;
   is_merchant?:      boolean;
   /** What the merchant sells. */
   speciality?:       string;
@@ -613,34 +639,141 @@ export interface RegionExit {
   description:      string;
 }
 
+// ---------------------------------------------------------------------------
+// Day 23B — Main Quest schema
+//
+// Two related shapes:
+//   • The WORLDBIBLE shape (declared inline on WorldBible.main_quest) is what
+//     the LLM produces at world generation: title + archetype + threat +
+//     factions + finale_type + breadcrumbs (no anchors yet) + resolutions +
+//     world_intro_template. It does NOT carry runtime fields like
+//     anchor_location_id / discovered / status — those are added at
+//     apply-world-bible time when the runtime quest_threads slice is
+//     initialized.
+//   • The RUNTIME shape (MainQuest, below) is the live quest state stored in
+//     MasterState.quest_threads. It carries the runtime additions:
+//     anchor_location_id (set when a floating breadcrumb is seeded into a
+//     region), discovered (set when the player triggers the breadcrumb),
+//     status, active_resolution_id (set at climax), climax_location_id (set
+//     when the dungeon boss room is wired in 23C).
+//
+// Archetype is INTERNAL — never surfaced to the player. The narrator must
+// never mention it. See quest-system-spec.md §"The Six Archetypes".
+// ---------------------------------------------------------------------------
+
+export type QuestArchetype =
+  | "ancient_awakening"
+  | "power_vacuum"
+  | "corruption"
+  | "forbidden_knowledge"
+  | "sacrifice"
+  | "the_return";
+
+export type FinaleType = "confrontation" | "choice" | "discovery";
+
+export type QuestStatus = "active" | "completed" | "failed";
+
+/** Runtime faction state — populated from the WB faction seed plus the
+ *  npc_ids of NPCs the apply-world-bible / apply-regional-bible routes
+ *  associate with this faction. Day 23B: npc_ids start empty and fill in
+ *  as faction alignment is wired up across 23C/23D. */
+export interface QuestFaction {
+  id:          string;
+  name:        string;
+  role:        "defenders" | "exploiters" | "deniers";
+  description: string;
+  /** NPC asset ids ("character_<slug>") who belong to this faction. */
+  npc_ids:     string[];
+}
+
+/** Runtime breadcrumb. Act 1 + climax are FIXED (always seeded at world gen,
+ *  anchor_type "fixed"). Acts 2 + 3 are FLOATING — content baked at gen time
+ *  but anchor_location_id is unset until a RegionBible expansion seeds them
+ *  into an eligible region (rule per quest-system-spec §"Floating
+ *  Breadcrumb Model"). */
 export interface QuestBreadcrumb {
-  /** 0 through 4 — first breadcrumb is the starting hook delivery. */
-  index:             number;
-  /** The actual hint or discovery the player receives. */
-  content:           string;
-  delivery_method:   "npc_dialogue" | "discovered_object" | "environmental" | "overheard";
-  /** Location ID where this naturally fits. */
-  suggested_location: string;
-  /** NPC delivering the hint when delivery_method is "npc_dialogue". */
-  npc_id?:           string;
-  /** Object ID containing the hint when delivery_method is "discovered_object". */
-  object_id?:        string;
+  id:                  string;
+  act:                 1 | 2 | 3 | "climax";
+  content:             string;
+  anchor_type:         "fixed" | "floating";
+  /** Location id where this breadcrumb was seeded. Undefined when the
+   *  breadcrumb is still floating (Acts 2/3 before RegionBible anchoring). */
+  anchor_location_id?: string;
+  /** True once the player has triggered the breadcrumb (read the lore object,
+   *  heard the NPC dialogue, etc.). */
+  discovered:          boolean;
+}
+
+/** Two resolutions per world; one is the player's chosen ending after the
+ *  climax. Both are valid endings — neither is secretly "wrong". */
+export interface QuestResolution {
+  id:                 "resolution_a" | "resolution_b";
+  summary:            string;
+  tone:               "hopeful" | "dark" | "ambiguous";
+  /** Faction id this resolution favors. Set at WB time when the resolution
+   *  is generated with knowledge of the faction web. */
+  faction_alignment?: string;
 }
 
 export interface MainQuest {
-  /** Internal label — the player never sees this. */
-  title:               string;
-  antagonist_name:     string;
-  /** Region or location ID where the antagonist is rooted. */
-  antagonist_location: string;
-  antagonist_faction?: string;
-  /** What completing the quest requires. */
-  goal:                string;
-  /** First hint planted in the starting scene. */
-  opening_hook:        string;
-  /** Exactly 5 breadcrumbs, escalating in danger and revelation. */
-  breadcrumbs:         QuestBreadcrumb[];
-  win_condition:       string;
+  id:                    string;
+  title:                 string;
+  /** Internal-only. The narrator never references this. */
+  archetype:             QuestArchetype;
+  threat_description:    string;
+  factions:              QuestFaction[];
+  finale_type:           FinaleType;
+  /** Dungeon boss room or world-unique climax site. Wired in 23C when the
+   *  starting region's main dungeon is identified. */
+  climax_location_id?:   string;
+  breadcrumbs:           QuestBreadcrumb[];
+  /** Exactly two — never more, never fewer. */
+  resolutions:           [QuestResolution, QuestResolution];
+  /** Set at climax when the player commits to a resolution. */
+  active_resolution_id?: "resolution_a" | "resolution_b";
+  status:                QuestStatus;
+}
+
+export interface QuestEntry {
+  id:        string;
+  quest_id:  string;
+  /** First-person, diary format. Generated by the journal-entry pipeline
+   *  (23C) when the player discovers something quest-relevant. */
+  text:      string;
+  /** Insertion order. Journal sort key. */
+  timestamp: number;
+  /** True when this entry is also surfaced in the Log Book as a QUEST tag. */
+  tagged:    boolean;
+}
+
+export interface SideQuest {
+  id:                string;
+  title:             string;
+  status:            QuestStatus;
+  source_type:       "npc" | "environment";
+  /** NPC id or LocationObject id that started this quest. */
+  source_id:         string;
+  /** Directional, never a map pin. Shown at the top of the side-quest
+   *  section of the journal. */
+  current_objective: string;
+  entries:           QuestEntry[];
+  can_fail:          boolean;
+  /** Plain-English description of what action fails the quest. Consumed by
+   *  the side-quest engine (23D) on relevant player choices. */
+  failure_trigger?:  string;
+}
+
+/** The slice of MasterState that owns all live quest state. Optional on
+ *  MasterState so legacy saves load cleanly; apply-world-bible initializes
+ *  it on every new game. */
+export interface QuestThreads {
+  main_quest?:          MainQuest;
+  side_quests:          SideQuest[];
+  /** Faction id → score in [-100, 100]. Tracks how the player has aligned
+   *  with each faction's interests across the game. */
+  faction_alignment:    Record<string, number>;
+  completed_quest_ids:  string[];
+  failed_quest_ids:     string[];
 }
 
 export interface RegionOutline {
@@ -739,7 +872,36 @@ export interface WorldBible {
   starting_region:  RegionBible;
   /** Structural outlines of 3-5 adjacent regions. */
   adjacent_regions: RegionOutline[];
-  main_quest:       MainQuest;
+  /** Day 23B — bible-shape main quest. Distinct from the runtime MainQuest
+   *  (which carries anchor_location_id / discovered / status / climax). The
+   *  bible-shape carries archetype, threat description, factions WITHOUT
+   *  npc_ids, breadcrumbs WITHOUT anchors, resolutions, and the
+   *  world_intro_template (3-part second-person intro, {name}/{class}
+   *  placeholders, resolved at game start). Optional so legacy WBs still
+   *  parse — apply-world-bible falls back to a synthesized default. */
+  main_quest?: {
+    title:              string;
+    archetype:          QuestArchetype;
+    threat_description: string;
+    factions: Array<{
+      id:          string;
+      name:        string;
+      role:        "defenders" | "exploiters" | "deniers";
+      description: string;
+    }>;
+    finale_type:        FinaleType;
+    breadcrumbs: Array<{
+      id:          string;
+      act:         1 | 2 | 3 | "climax";
+      content:     string;
+      anchor_type: "fixed" | "floating";
+    }>;
+    resolutions: [
+      { id: "resolution_a"; summary: string; tone: "hopeful" | "dark" | "ambiguous" },
+      { id: "resolution_b"; summary: string; tone: "hopeful" | "dark" | "ambiguous" },
+    ];
+    world_intro_template: string;
+  };
   /** ISO timestamp. */
   generated_at:     string;
   /** Day 21 — 6-8 world-themed loot items generated at apply-world-bible
@@ -843,12 +1005,21 @@ export interface Metadata {
    *  architecture: generated once at character creation, injected as the
    *  first block of every AI prompt, and never modified afterwards. */
   world_consistency?: WorldConsistencyDocument;
-  /** Day 19B — Main quest from the WorldBible. Stored on metadata so the
-   *  game loop can plant breadcrumbs without re-fetching the full bible
-   *  every turn. The full WorldBible itself lives in
-   *  game_sessions.world_bible (jsonb column) for analytics + Phase 2
-   *  region expansion lookups. */
-  main_quest?: MainQuest;
+  /** Day 19B / Day 23B — Main quest from the WorldBible, stored on metadata
+   *  so the game loop can plant breadcrumbs without re-fetching the full
+   *  bible every turn. Day 23B redefined the shape — it now mirrors the
+   *  WorldBible.main_quest bible shape (archetype, threat, factions
+   *  without npc_ids, breadcrumbs without anchors, resolutions,
+   *  world_intro_template). The runtime quest state — anchor_location_id,
+   *  discovered flags, status, faction npc_ids — lives in
+   *  MasterState.quest_threads instead. */
+  main_quest?: WorldBible["main_quest"];
+  /** Day 23B — Resolved world intro text, with {name} and {class}
+   *  placeholders swapped from the player's character at game start. The
+   *  game's new-game preamble (rule 42) reads this and emits it as the
+   *  opening story-feed beat instead of the legacy "Your adventure
+   *  begins..." line. Empty / undefined falls back to the legacy. */
+  world_intro?: string;
   /** Day 19D — Pre-generated WorldBible. Mirrored from the
    *  game_sessions.world_bible jsonb column so the game loop can match
    *  WORLD_EXPLORE destinations against adjacent_regions without an extra
@@ -920,6 +1091,12 @@ export interface MasterState {
     current_room_id: string;
     rooms_visited:   string[];
   };
+  /** Day 23B — Live quest state. Initialized by apply-world-bible from the
+   *  WorldBible's main_quest seed. Holds the runtime main quest (with
+   *  anchor_location_id / discovered / status), discovered side quests,
+   *  per-faction alignment score [-100..100], and the lists of completed /
+   *  failed quest ids. Optional so old saves load cleanly. */
+  quest_threads?: QuestThreads;
 }
 
 // ---------------------------------------------------------------------------

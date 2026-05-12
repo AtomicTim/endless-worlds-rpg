@@ -38,6 +38,17 @@ interface RequestBody {
   genre?:                 Genre;
   wcd?:                   WorldConsistencyDocument;
   existing_region_names?: string[];
+  /** Day 23B — Active floating breadcrumb to seed in this region if a
+   *  plausible anchor exists. Caller (useGameLoop) supplies the first
+   *  unanchored act-2 / act-3 breadcrumb from quest_threads. When
+   *  undefined, the ACTIVE QUEST CONTEXT block is omitted and the bible
+   *  generates without quest seeding. */
+  floating_breadcrumb?: {
+    id:          string;
+    act:         1 | 2 | 3 | "climax";
+    content:     string;
+    anchor_type: "fixed" | "floating";
+  };
 }
 
 const SYSTEM_PROMPT =
@@ -64,12 +75,52 @@ function buildUserPrompt(
   originRegionName:    string,
   directionFromOrigin: string,
   wcd:                 WorldConsistencyDocument,
-  existingNames:       string[]
+  existingNames:       string[],
+  floatingBreadcrumb?: NonNullable<RequestBody["floating_breadcrumb"]>,
 ): string {
   const wcdBlock = formatWcdBlock(wcd);
   const opposite = OPPOSITE[directionFromOrigin.toLowerCase()] ?? "the opposite direction";
   void existingNames;
   void genre;
+
+  // Day 23B — Active quest context block. When the caller supplies a
+  // floating breadcrumb that hasn't yet been anchored, the bible is
+  // asked to embed it naturally (NPC dialogue, dungeon lore object, or
+  // landmark atmosphere) and mark the carrier with quest_breadcrumb_id
+  // so apply-regional-bible can stamp anchor_location_id afterward.
+  // Omitted entirely when no floating breadcrumb is supplied — most
+  // expansions land that way (Act 1 fixed at world gen, climax fixed at
+  // 23C, and acts 2+3 only float ONCE each before they're anchored).
+  const questContextBlock = floatingBreadcrumb
+    ? [
+        "═══════════════════════════════════════════════════════════════",
+        "ACTIVE QUEST CONTEXT (Day 23B)",
+        "═══════════════════════════════════════════════════════════════",
+        "The world has an ongoing main quest. If this region contains a",
+        "plausible anchor for the following breadcrumb (an NPC who would",
+        "know, a dungeon with relevant history, a lore site), embed it",
+        "naturally. If not eligible, do not force it.",
+        "",
+        `Floating breadcrumb to seed (id "${floatingBreadcrumb.id}", act ${floatingBreadcrumb.act}):`,
+        `  "${floatingBreadcrumb.content}"`,
+        "",
+        "Guidelines:",
+        "  - If seeding via NPC: give that NPC dialogue or knowledge that",
+        "    hints at the breadcrumb content WITHOUT stating it explicitly.",
+        `    Mark the NPC with: "quest_breadcrumb_id": "${floatingBreadcrumb.id}"`,
+        "    in the RegionBible output.",
+        "  - If seeding via dungeon lore: add (or repurpose) a LORE object",
+        "    inside one of the dungeon rooms whose description reflects the",
+        `    breadcrumb. Mark the object with "quest_breadcrumb_id": "${floatingBreadcrumb.id}".`,
+        "  - If seeding via landmark: add it to the landmark's atmosphere or",
+        "    a lore object there.",
+        "  - Never seed more than 1 floating breadcrumb per region.",
+        "  - If none of the region's content can plausibly carry the",
+        "    breadcrumb, simply omit the quest_breadcrumb_id field — the",
+        "    breadcrumb stays floating and the next region gets a chance.",
+        "═══════════════════════════════════════════════════════════════",
+      ].join("\n")
+    : "";
 
   // Day 20.4.3 Region Expansion Hotfix — the LLM template previously
   // hardcoded `locations[0].id = outline.id`, which forced the bible
@@ -102,7 +153,7 @@ function buildUserPrompt(
   // no-unused-vars; if future region_locations regain objects, regenerate
   // these slugs alongside.
 
-  return `${wcdBlock}
+  return `${wcdBlock}${questContextBlock ? "\n\n" + questContextBlock : ""}
 
 Expand this region outline into a RegionBible JSON.
 Region: ${JSON.stringify(outline)}
@@ -777,6 +828,7 @@ export async function POST(request: NextRequest) {
     genre,
     wcd,
     existing_region_names,
+    floating_breadcrumb,
   } = body;
 
   if (!session_id || !outline || !origin_region_name || !direction_from_origin || !genre || !wcd) {
@@ -790,7 +842,14 @@ export async function POST(request: NextRequest) {
   }
 
   const existing = Array.isArray(existing_region_names) ? existing_region_names : [];
-  const userPrompt = buildUserPrompt(genre, outline, origin_region_name, direction_from_origin, wcd, existing);
+  if (floating_breadcrumb) {
+    console.log(
+      `[RegionBible] Seeding floating breadcrumb ${floating_breadcrumb.id} (act ${floating_breadcrumb.act}) into ${outline.name}.`
+    );
+  }
+  const userPrompt = buildUserPrompt(
+    genre, outline, origin_region_name, direction_from_origin, wcd, existing, floating_breadcrumb,
+  );
 
   // Per-request client so the API key is read fresh each call.
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });

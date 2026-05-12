@@ -21,6 +21,7 @@ import {
   deriveNodeType,
   validateDungeonRooms,
 } from "@/lib/game/dungeon-validation";
+import { initializeQuestThreads, resolveWorldIntro } from "@/lib/game/quest-threads";
 
 /**
  * Day 19B — Apply a freshly-generated WorldBible to a session.
@@ -1071,6 +1072,32 @@ export async function POST(request: NextRequest) {
     starting_node_id: startingNodeId,
   };
 
+  // ── 4e. Day 23B — Initialize quest_threads + resolve world_intro ───────────
+  // Build the runtime quest slice from the WorldBible's main_quest seed and
+  // resolve the world_intro_template with the player's character name/class.
+  // Both are no-ops when the bible was generated before Day 23B (no
+  // main_quest field) — quest_threads stays undefined, world_intro stays
+  // empty, and the game falls back to the legacy preamble.
+  const questThreads = initializeQuestThreads(bibleNarrowed);
+  const worldIntro   = resolveWorldIntro(
+    bibleNarrowed.main_quest?.world_intro_template,
+    current.player_state.name,
+    current.player_state.background
+  );
+
+  // Diagnostic per spec — surfaces archetype + breadcrumb count + finale
+  // on every apply so a missing field is visible in server logs.
+  if (questThreads?.main_quest) {
+    const mq = questThreads.main_quest;
+    console.log(
+      `[apply-world-bible] main_quest: ${mq.archetype}, ` +
+      `${mq.breadcrumbs.length} breadcrumbs, finale: ${mq.finale_type}, ` +
+      `factions: ${mq.factions.length}, intro length: ${worldIntro.length}`
+    );
+  } else {
+    console.log("[apply-world-bible] main_quest: <missing — bible had no quest seed>");
+  }
+
   // ── 5. Patch master_state ──────────────────────────────────────────────────
   const patched: MasterState = {
     ...current,
@@ -1082,6 +1109,9 @@ export async function POST(request: NextRequest) {
       // match WORLD_EXPLORE destinations against adjacent_regions without
       // an extra fetch on every move.
       world_bible:       bibleNarrowed,
+      // Day 23B — pre-resolved opening intro. The game loop's new-game
+      // preamble reads this and falls back to the legacy line when empty.
+      ...(worldIntro ? { world_intro: worldIntro } : {}),
     },
     world_state: {
       ...current.world_state,
@@ -1101,6 +1131,9 @@ export async function POST(request: NextRequest) {
     // useGameLoop step 7c-2 then keeps it current as the player
     // visits other settlements.
     last_settlement_hub_id: startingNodeId,
+    // Day 23B — runtime quest slice. undefined when the bible had no
+    // main_quest seed; the rest of the codebase guards on this.
+    ...(questThreads ? { quest_threads: questThreads } : {}),
   };
 
   // ── 6. Persist master_state + dedicated columns ────────────────────────────

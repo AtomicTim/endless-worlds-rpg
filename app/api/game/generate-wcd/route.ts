@@ -67,6 +67,55 @@ function buildUserPrompt(body: Required<Omit<RequestBody, "creation_choices">> &
     "feel like merchants and smugglers. Oath-breaking and honor are ONE",
     "theme on this list — do not let them bleed into other themes.",
     "",
+    // Day 23B — Main quest archetype + faction web seed. The WCD selects
+    // the archetype that fits the theme most naturally and lays out 2-3
+    // factions with different relationships to the threat. The archetype
+    // is INTERNAL — never label it in player-facing output. See
+    // /docs/quest-system-spec.md §"The Six Archetypes".
+    "MAIN QUEST GENERATION",
+    "",
+    "Every world has a main quest baked into its identity. It is NOT a",
+    "mission the player is given — it is a crisis the world is already",
+    "experiencing when the player arrives.",
+    "",
+    "Internally select the archetype that fits this world's theme most",
+    "organically:",
+    "  ancient_awakening   — something dormant has woken",
+    "  power_vacuum        — an old order collapsed, factions compete",
+    "  corruption          — something pure is rotting from within",
+    "  forbidden_knowledge — a dangerous truth has surfaced",
+    "  sacrifice           — survival requires a price",
+    "  the_return          — something that left is coming back",
+    "",
+    "Generate 2-3 factions with different relationships to the threat:",
+    "  defenders  — trying to stop it the 'right' way",
+    "  exploiters — see it as an opportunity for power",
+    "  deniers    — refuse to acknowledge it or suppress knowledge of it",
+    "",
+    "Each faction needs id (slug), name, role, and a 1-2 sentence description.",
+    "",
+    "Select the finale type based on archetype affinity:",
+    "  power_vacuum, sacrifice                       → always 'choice'",
+    "  forbidden_knowledge                           → always 'discovery'",
+    "  ancient_awakening, corruption, the_return     → 'confrontation' or",
+    "                                                  'discovery' (pick by tone)",
+    "",
+    "DO NOT label the archetype in any player-facing content. The threat",
+    "should feel native to this world, not like a template. The world AS",
+    "A WHOLE should read as if this archetype has always been true — its",
+    "names, atmosphere, factions, and rules all reinforce the threat.",
+    "",
+    "Emit a main_quest object alongside the rest of the WCD:",
+    '  "main_quest": {',
+    '    "archetype": "ancient_awakening",',
+    '    "threat_description": "1-2 sentences describing what is happening RIGHT NOW in this world.",',
+    '    "factions": [',
+    '      { "id": "faction_slug_a", "name": "...", "role": "defenders",  "description": "1-2 sentences" },',
+    '      { "id": "faction_slug_b", "name": "...", "role": "exploiters", "description": "1-2 sentences" }',
+    '    ],',
+    '    "finale_type": "confrontation"',
+    '  }',
+    "",
     "Make it feel original and specific to this genre and character. Avoid generic clichés. Be creative and unexpected.",
   ].join("\n");
 }
@@ -76,6 +125,14 @@ const VALID_LANDMARK_TYPES = new Set([
 ]);
 const VALID_KNOWN_BY = new Set(["everyone", "locals", "scholars"]);
 const VALID_DISPOSITIONS = new Set(["allied", "neutral", "hostile", "unknown"]);
+
+// Day 23B — main quest seed validation tables.
+const VALID_ARCHETYPES = new Set([
+  "ancient_awakening", "power_vacuum", "corruption",
+  "forbidden_knowledge", "sacrifice", "the_return",
+]);
+const VALID_FACTION_ROLES = new Set(["defenders", "exploiters", "deniers"]);
+const VALID_FINALE_TYPES = new Set(["confrontation", "choice", "discovery"]);
 
 function stripJsonFences(raw: string): string {
   return raw
@@ -219,6 +276,49 @@ function normalizeWcd(parsed: unknown): unknown {
         faction.disposition_to_player = "neutral";
       }
 
+      return faction;
+    });
+  }
+
+  // Day 23B — main_quest seed normalization. The WCD prompt asks for
+  // archetype + factions + finale_type. Missing pieces get safe defaults
+  // (ancient_awakening / confrontation) so the WB still has something to
+  // expand. Per-faction defaults mirror the landmark/faction loops above.
+  if (o.main_quest && typeof o.main_quest === "object" && !Array.isArray(o.main_quest)) {
+    const mq = o.main_quest as Record<string, unknown>;
+    if (typeof mq.archetype !== "string" || !VALID_ARCHETYPES.has(mq.archetype as string)) {
+      console.warn(`[normalizeWcd] main_quest.archetype invalid (${String(mq.archetype)}) — defaulting to "ancient_awakening".`);
+      mq.archetype = "ancient_awakening";
+    }
+    if (typeof mq.threat_description !== "string" || !(mq.threat_description as string).trim()) {
+      mq.threat_description = "Something is happening in this world that demands attention.";
+    }
+    if (typeof mq.finale_type !== "string" || !VALID_FINALE_TYPES.has(mq.finale_type as string)) {
+      console.warn(`[normalizeWcd] main_quest.finale_type invalid (${String(mq.finale_type)}) — defaulting to "confrontation".`);
+      mq.finale_type = "confrontation";
+    }
+    if (!Array.isArray(mq.factions)) {
+      const coerced = coerceToArray(mq.factions);
+      mq.factions = coerced ?? [];
+    }
+    mq.factions = (mq.factions as unknown[]).map((f, idx) => {
+      if (!f || typeof f !== "object") return f;
+      const faction = { ...(f as Record<string, unknown>) };
+      if (typeof faction.name !== "string" || !(faction.name as string).trim()) {
+        faction.name = `Quest Faction ${idx + 1}`;
+      }
+      if (typeof faction.id !== "string" || !(faction.id as string).trim()) {
+        faction.id = (faction.name as string).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+      }
+      if (typeof faction.role !== "string" || !VALID_FACTION_ROLES.has(faction.role as string)) {
+        // Cycle the default roles so 2-3 factions auto-cover the web when
+        // the AI emits malformed entries.
+        const roleCycle = ["defenders", "exploiters", "deniers"];
+        faction.role = roleCycle[idx % roleCycle.length];
+      }
+      if (typeof faction.description !== "string" || !(faction.description as string).trim()) {
+        faction.description = `The ${faction.name} have a stake in the world's crisis.`;
+      }
       return faction;
     });
   }
@@ -394,6 +494,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  console.log(`[WCD] Generated: ${validated.wcd.world_name}`);
+  // Day 23B — surface the main quest seed in logs so a missing archetype or
+  // empty faction array shows up at the WCD layer instead of waiting for
+  // the WorldBible expansion to fail.
+  const mqLog = validated.wcd.main_quest;
+  if (mqLog) {
+    console.log(
+      `[WCD] Generated: ${validated.wcd.world_name} | main_quest: ${mqLog.archetype}, ` +
+      `${mqLog.factions.length} factions, finale: ${mqLog.finale_type}`
+    );
+  } else {
+    console.log(`[WCD] Generated: ${validated.wcd.world_name} | main_quest: <missing — WB will run with default>`);
+  }
   return NextResponse.json({ wcd: validated.wcd });
 }

@@ -1341,6 +1341,27 @@ export function useGameLoop() {
           let expansionFailed = false;
 
           if (!regionBible) {
+            // Day 23B — pick the first unanchored floating breadcrumb (act 2 or
+            // 3) from quest_threads so the RegionBible prompt can seed it via
+            // an NPC, dungeon lore object, or landmark in the new region.
+            // Skips when quest_threads is missing (legacy save) or every
+            // floating breadcrumb is already anchored.
+            const floatingBreadcrumb = (() => {
+              const bcs = updatedState.quest_threads?.main_quest?.breadcrumbs ?? [];
+              const candidate = bcs.find(
+                (b) =>
+                  b.anchor_type === "floating" &&
+                  !b.anchor_location_id &&
+                  (b.act === 2 || b.act === 3)
+              );
+              if (!candidate) return undefined;
+              return {
+                id:          candidate.id,
+                act:         candidate.act,
+                content:     candidate.content,
+                anchor_type: candidate.anchor_type,
+              };
+            })();
             try {
               const genRes = await fetch("/api/game/generate-regional-bible", {
                 method:  "POST",
@@ -1353,6 +1374,7 @@ export function useGameLoop() {
                   genre:                 updatedState.metadata.genre,
                   wcd:                   wcdRegion,
                   existing_region_names: existingRegionNames,
+                  ...(floatingBreadcrumb ? { floating_breadcrumb: floatingBreadcrumb } : {}),
                 }),
               });
               if (genRes.ok) {

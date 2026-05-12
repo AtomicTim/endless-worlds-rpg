@@ -28,10 +28,38 @@ function buildUserPrompt(
 ): string {
   const wcdBlock    = formatWcdBlock(wcd);
   const generatedAt = new Date().toISOString();
+
+  // Day 23B — Main quest context block.
+  // The WCD seed (archetype + threat + factions + finale_type) drives the
+  // WorldBible's quest expansion: breadcrumbs, two resolutions, and the
+  // 3-part world_intro_template. When the WCD lacks main_quest (legacy or
+  // generator skipped it), fall back to "ancient_awakening / confrontation"
+  // so the bible still emits a full quest scaffold.
+  const wcdMq = wcd.main_quest ?? {
+    archetype:          "ancient_awakening" as const,
+    threat_description: "Something is happening in this world that demands attention.",
+    factions:           [],
+    finale_type:        "confrontation" as const,
+  };
+  const wcdMqBlock = [
+    "═══════════════════════════════════════════════════════════════",
+    "MAIN QUEST SEED (from the WCD — expand into the full quest schema below)",
+    "═══════════════════════════════════════════════════════════════",
+    `Archetype:    ${wcdMq.archetype}   (INTERNAL — never label it to the player)`,
+    `Threat:       ${wcdMq.threat_description}`,
+    `Finale type:  ${wcdMq.finale_type}`,
+    "Factions:",
+    ...((wcdMq.factions ?? []).map(
+      (f) => `  - ${f.name} [${f.role}] — ${f.description}`
+    )),
+    "═══════════════════════════════════════════════════════════════",
+  ].join("\n");
   // Skeleton-based prompt: showing the model the exact JSON shape (with
   // every required key) is the single most reliable way to keep it from
   // wandering into alias names / nested wrappers / missing fields.
   return `${wcdBlock}
+
+${wcdMqBlock}
 
 Generate a WorldBible JSON for a ${genre} RPG.
 Character: ${name}, a ${klass}.
@@ -316,17 +344,57 @@ Return EXACTLY this JSON structure (fill in the values):
     }
   ],
   "main_quest": {
-    "title": "Quest Title",
-    "antagonist_name": "Name",
-    "antagonist_location": "location_id",
-    "goal": "1 sentence",
-    "opening_hook": "1 sentence",
-    "breadcrumbs": [
-      {"index": 0, "content": "hint", "delivery_method": "npc_dialogue", "suggested_location": "location_id"},
-      {"index": 1, "content": "hint", "delivery_method": "environmental", "suggested_location": "location_id"},
-      {"index": 2, "content": "hint", "delivery_method": "discovered_object", "suggested_location": "location_id"}
+    "title": "Quest Title — internal label, never shown to player",
+    "archetype": "${wcdMq.archetype}",
+    "threat_description": "${wcdMq.threat_description.replace(/"/g, '\\"')}",
+    "factions": [
+      ${(wcdMq.factions ?? []).map((f) => JSON.stringify({
+        id:          f.id,
+        name:        f.name,
+        role:        f.role,
+        description: f.description,
+      })).join(",\n      ") || "{ \"id\": \"defenders_slug\", \"name\": \"...\", \"role\": \"defenders\", \"description\": \"1-2 sentences\" }"}
     ],
-    "win_condition": "1 sentence"
+    "finale_type": "${wcdMq.finale_type}",
+    "breadcrumbs": [
+      {
+        "id": "breadcrumb_act1",
+        "act": 1,
+        "content": "1-2 sentences. Act 1 reveal triggered by first major NPC conversation OR first dungeon completion (whichever happens first). FIXED — always in the starting region.",
+        "anchor_type": "fixed"
+      },
+      {
+        "id": "breadcrumb_act2",
+        "act": 2,
+        "content": "1-2 sentences. Act 2 reveal — escalates the threat with new context. FLOATING — RegionBible expansion will attach this to an eligible region (NPC dialogue, dungeon lore, or landmark).",
+        "anchor_type": "floating"
+      },
+      {
+        "id": "breadcrumb_act3",
+        "act": 3,
+        "content": "1-2 sentences. Act 3 reveal — names the climax stakes. FLOATING — RegionBible expansion will attach this later than act 2.",
+        "anchor_type": "floating"
+      },
+      {
+        "id": "breadcrumb_climax",
+        "act": "climax",
+        "content": "1-2 sentences. The confrontation / choice / discovery moment itself. FIXED — apply-world-bible will anchor this to the main dungeon's boss room.",
+        "anchor_type": "fixed"
+      }
+    ],
+    "resolutions": [
+      {
+        "id": "resolution_a",
+        "summary": "1-2 sentences. One of two satisfying endings — favors the defenders or aligns with restoration. Tone typically hopeful or ambiguous.",
+        "tone": "hopeful"
+      },
+      {
+        "id": "resolution_b",
+        "summary": "1-2 sentences. The darker / more complicated ending. Both endings are valid — neither is secretly 'wrong'. Tone typically dark or ambiguous.",
+        "tone": "dark"
+      }
+    ],
+    "world_intro_template": "WORLD INTRO TEMPLATE — second-person, ~6-7 sentences total. Three parts separated by blank lines:\\n\\n(1) WORLD RIGHT NOW (2-3 sentences, present tense — what is happening TODAY in {world_name}; mood and gravity; no history dump; no quest spoilers).\\n\\n(2) WHO YOU ARE IN IT (2-3 sentences — refer to {name} and {class}; why they came here; what they've noticed; what feels wrong).\\n\\n(3) OPENING MOMENT (1 sentence — drop in mid-scene at the starting settlement; specific and immediate)."
   },
   "world_loot_items": [
     {
@@ -519,6 +587,27 @@ Room 3 — boss (room_type "boss", encounter_chance 1.0):
     }
   • is_boss_room SHOULD also be true at the parent dungeon-node
     level (encounter_chance 1.0 + named boss enemy in the roster).
+
+DAY 23B (V8.59) ENFORCEMENT REMINDER — MAIN QUEST FIELDS
+The main_quest object MUST emit:
+  • title, archetype (from the seed: "${wcdMq.archetype}"),
+    threat_description, factions[], finale_type (from the seed:
+    "${wcdMq.finale_type}").
+  • breadcrumbs[]: EXACTLY 4 entries — one each for act 1, 2, 3, and
+    "climax". Acts 1 and "climax" have anchor_type "fixed". Acts 2
+    and 3 have anchor_type "floating". Use the ids exactly as shown
+    in the skeleton: breadcrumb_act1 / breadcrumb_act2 /
+    breadcrumb_act3 / breadcrumb_climax.
+  • resolutions[]: EXACTLY 2 entries — resolution_a and resolution_b,
+    each with a 1-2 sentence summary and a tone of "hopeful", "dark",
+    or "ambiguous". Both must be satisfying — neither is secretly
+    "wrong".
+  • world_intro_template: the 3-part second-person intro described in
+    the skeleton. Use the {name} and {class} placeholders literally
+    — apply-world-bible swaps them in at game start. Do NOT embed
+    the player's name directly. Do NOT spoil the main quest.
+Skipping any of these fields or abbreviating breadcrumbs to fewer
+than 4 entries causes apply-world-bible to reject the response.
 
 V8.54 ENFORCEMENT REMINDER — Every location whose node_type is
 "dungeon" MUST emit a "dungeon_rooms" array with all 3 entries
@@ -969,27 +1058,54 @@ function normalizeWorldBible(parsed: unknown): unknown {
     }
   }
 
-  const placeholderBreadcrumb = {
-    index:              0,
-    content:            "A strange rumour circulates",
-    delivery_method:    "npc_dialogue",
-    suggested_location: "",
-  };
+  // Day 23B — main_quest normalization. Backfill any field the AI skipped
+  // so the new schema (archetype + threat + factions + finale_type +
+  // 4 breadcrumbs + 2 resolutions + world_intro_template) always
+  // type-checks. The validator below still enforces that the 4
+  // breadcrumbs and 2 resolutions are present; this just keeps the
+  // shape stable so the validator's error messages are useful.
+  const defaultBreadcrumbs = [
+    { id: "breadcrumb_act1",    act: 1,         content: "A strange rumour circulates among the locals.",          anchor_type: "fixed"    },
+    { id: "breadcrumb_act2",    act: 2,         content: "Travelers from the next region report something amiss.", anchor_type: "floating" },
+    { id: "breadcrumb_act3",    act: 3,         content: "The pattern becomes clear — and dangerous.",             anchor_type: "floating" },
+    { id: "breadcrumb_climax",  act: "climax",  content: "The source must be confronted directly.",                anchor_type: "fixed"    },
+  ];
+  const defaultResolutions = [
+    { id: "resolution_a", summary: "The threat is contained without dismantling what holds the world together.",      tone: "hopeful" },
+    { id: "resolution_b", summary: "The threat is ended at a cost that leaves the world quieter, and emptier, for it.", tone: "dark"    },
+  ];
+  const defaultIntro =
+    "You arrive at {name}'s starting settlement under a sky that does not yet make sense.\n\n" +
+    "As a {class}, you have learned to notice things others miss. Something is wrong here, " +
+    "though no one will say so directly.\n\n" +
+    "A figure looks up as you cross the threshold.";
 
   if (!o.main_quest || typeof o.main_quest !== "object") {
     o.main_quest = {
-      title:               "The Unknown Threat",
-      antagonist_name:     "Unknown",
-      antagonist_location: "",
-      goal:                "Discover the truth",
-      opening_hook:        "Something stirs in the shadows",
-      breadcrumbs:         [placeholderBreadcrumb],
-      win_condition:       "Defeat the antagonist",
+      title:                "The Unknown Threat",
+      archetype:            "ancient_awakening",
+      threat_description:   "Something is happening in this world that demands attention.",
+      factions:             [],
+      finale_type:          "confrontation",
+      breadcrumbs:          defaultBreadcrumbs,
+      resolutions:          defaultResolutions,
+      world_intro_template: defaultIntro,
     };
   } else {
     const mq = o.main_quest as Record<string, unknown>;
-    if (!Array.isArray(mq.breadcrumbs) || mq.breadcrumbs.length === 0) {
-      mq.breadcrumbs = [placeholderBreadcrumb];
+    if (typeof mq.title              !== "string" || !(mq.title              as string).trim()) mq.title              = "The Unknown Threat";
+    if (typeof mq.archetype          !== "string" || !(mq.archetype          as string).trim()) mq.archetype          = "ancient_awakening";
+    if (typeof mq.threat_description !== "string" || !(mq.threat_description as string).trim()) mq.threat_description = "Something is happening in this world that demands attention.";
+    if (typeof mq.finale_type        !== "string" || !(mq.finale_type        as string).trim()) mq.finale_type        = "confrontation";
+    if (!Array.isArray(mq.factions))     mq.factions     = [];
+    if (!Array.isArray(mq.breadcrumbs) || (mq.breadcrumbs as unknown[]).length === 0) {
+      mq.breadcrumbs = defaultBreadcrumbs;
+    }
+    if (!Array.isArray(mq.resolutions) || (mq.resolutions as unknown[]).length < 2) {
+      mq.resolutions = defaultResolutions;
+    }
+    if (typeof mq.world_intro_template !== "string" || !(mq.world_intro_template as string).trim()) {
+      mq.world_intro_template = defaultIntro;
     }
   }
 
@@ -1075,10 +1191,22 @@ function validateBible(parsed: unknown): { ok: true; bible: WorldBible } | { ok:
     return { ok: false, error: `adjacent_regions must have at least 1 entry (got ${Array.isArray(o.adjacent_regions) ? o.adjacent_regions.length : "non-array"})` };
   }
 
+  // Day 23B — main_quest is now optional on WorldBible (legacy bibles
+  // without it are allowed through). When present, enforce the new
+  // schema: 4 breadcrumbs, 2 resolutions, world_intro_template present.
+  // The normalizer above backfills missing fields with safe defaults so
+  // this validator's job is just to catch a fully-stripped main_quest.
   const mq = o.main_quest as Record<string, unknown> | undefined;
-  if (!mq || typeof mq !== "object") return { ok: false, error: "main_quest missing" };
-  if (!Array.isArray(mq.breadcrumbs) || mq.breadcrumbs.length < 2) {
-    return { ok: false, error: `main_quest.breadcrumbs must have at least 2 entries (got ${Array.isArray(mq.breadcrumbs) ? mq.breadcrumbs.length : "non-array"})` };
+  if (mq && typeof mq === "object") {
+    if (!Array.isArray(mq.breadcrumbs) || mq.breadcrumbs.length < 4) {
+      return { ok: false, error: `main_quest.breadcrumbs must have at least 4 entries (got ${Array.isArray(mq.breadcrumbs) ? mq.breadcrumbs.length : "non-array"})` };
+    }
+    if (!Array.isArray(mq.resolutions) || mq.resolutions.length < 2) {
+      return { ok: false, error: `main_quest.resolutions must have at least 2 entries (got ${Array.isArray(mq.resolutions) ? mq.resolutions.length : "non-array"})` };
+    }
+    if (typeof mq.world_intro_template !== "string" || !(mq.world_intro_template as string).trim()) {
+      return { ok: false, error: "main_quest.world_intro_template missing or empty" };
+    }
   }
 
   return { ok: true, bible: parsed as WorldBible };

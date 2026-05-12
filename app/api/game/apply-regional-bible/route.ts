@@ -12,6 +12,7 @@ import type {
   WorldGraph,
   WorldNode,
 } from "@/types/game";
+import { applyBreadcrumbAnchors } from "@/lib/game/quest-threads";
 import { getGenreBestiary } from "@/lib/game/bestiary";
 import {
   isApplyRegionalBibleRedundant,
@@ -1062,12 +1063,37 @@ export async function POST(request: NextRequest) {
     [bibleNarrowed.id]: bibleNarrowed,
   };
 
+  // Day 23B — Floating breadcrumb anchoring. The RegionBible prompt is
+  // asked to embed an active floating breadcrumb when a plausible anchor
+  // exists (rule 5 of the quest spec). The LLM marks the carrier (an NPC,
+  // a dungeon room object, or a landmark object) with quest_breadcrumb_id.
+  // applyBreadcrumbAnchors scans the bible for those markers and returns
+  // the updated quest_threads slice plus the list of stamped anchors for
+  // logging.
+  const anchorResult = applyBreadcrumbAnchors(
+    currentMasterState.quest_threads,
+    bibleNarrowed
+  );
+  const nextQuestThreads = anchorResult.threads;
+  for (const a of anchorResult.anchored) {
+    // act lives on the breadcrumb itself — look it up off the runtime
+    // shape so the log line matches the quest spec format exactly.
+    const bc = nextQuestThreads?.main_quest?.breadcrumbs.find((b) => b.id === a.breadcrumbId);
+    const actLabel = bc?.act === "climax" ? "climax" : `act${bc?.act ?? "?"}`;
+    console.log(
+      `[apply-regional-bible] breadcrumb ${actLabel} anchored to ${a.locationId}`
+    );
+  }
+
   const patchedMasterState: MasterState = {
     ...currentMasterState,
     metadata: {
       ...currentMasterState.metadata,
       region_bibles: nextRegionBibles,
     },
+    // Day 23B — write back the breadcrumb anchor stamps (or pass through
+    // unchanged when no markers were found).
+    ...(nextQuestThreads ? { quest_threads: nextQuestThreads } : {}),
     world_state: {
       ...currentMasterState.world_state,
       current_location_id: regionZoneId,

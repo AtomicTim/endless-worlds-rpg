@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.54
-**Status:** Day 23A Part 1 (data foundation) COMPLETE (commit 7424776) — Day 23A Part 2 (runtime + UI) NEXT
+**Version:** 8.55
+**Status:** Day 23A pt1.5 schema fix COMPLETE (commit e6d5c29) — verify generation then dispatch Day 23A Part 2
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -78,7 +78,8 @@ This scenario drives every design decision. If a feature makes that scenario *be
 1–11. ~~Polish through vertical slice playtest~~ ✅
 12a. ~~Generation Pipeline Polish (43cb43f)~~ ✅
 12b. ~~Day 23A Part 1 — Data Foundation (7424776)~~ ✅
-12c. **Day 23A Part 2 — Runtime + UI** ⏳ NEXT
+12b.5. ~~Day 23A Part 1.5 — Schema Fix (e6d5c29)~~ ✅
+12c. **Day 23A Part 2 — Runtime + UI** ⏳ NEXT (after generation verified)
 13. Day 23B — Quest Schema + Data Structures
 14. Day 23C — Quest Discovery + Journal UI
 15. Day 23D — Side Quest Generation
@@ -102,14 +103,15 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Day 23A Part 1 complete (7424776, 484/484). Day 23A Part 2 runtime + UI is next.
+**Current Phase:** Day 23A pt1.5 schema fix complete (e6d5c29, 484/484). Generate a new world and confirm `dungeon node {id}: 3 rooms validated` in server console before dispatching part 2.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** atomictim/endless-worlds-rpg
 
 | Phase | Title | Status |
 | --- | --- | --- |
 | 1–11 | MVP through vertical slice playtest | ✅ Complete |
 | Gen pipeline (43cb43f) | RegionBible dedup, post-apply burst, WB/RB prompt trim | ✅ Complete |
-| **Day 23A pt 1** (7424776) | **Types, prompts, apply routes, pure helper libs, 30 tests** | ✅ **Complete** |
+| Day 23A pt 1 (7424776) | Types, prompts, apply routes, pure helper libs, 30 tests | ✅ Complete |
+| Day 23A pt 1.5 (e6d5c29) | Schema fix: skeleton + enforcement reminder + diagnostic logging | ✅ Complete |
 | **Day 23A pt 2** | **useGameLoop dungeon entry/nav, NavigationBar room cards, lock UI, breadcrumb** | ⏳ **NEXT** |
 | Day 23B | Quest schema + data structures + world intro template | ⏳ |
 | Day 23C | Quest discovery + Morrowind journal UI | ⏳ |
@@ -176,7 +178,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 39. CombatMode is the bottom-strip swap when `master_state.combat?.active === true`. (V8.34)
 40. Each combatant row reserves a portrait slot (~128px). (V8.34)
 41. Bestiary codex entries write on `combat_start`, deduplicated by enemy.id. (V8.34)
-42. New game preamble: `recent_messages.length === 0` triggers "Your adventure begins. What will you do first?" (V8.34)
+42. New game preamble: `recent_messages.length === 0` triggers "Your adventure begins. What will you do first?" (V8.34) — to be replaced by world opening intro in Day 23B.
 43. Starting equipment lives in `lib/game/starting-equipment.ts` as separate module. (V8.35)
 44. Every starting weapon ships with `equipped: true` AND `effect.damage_die`. Every starting armor ships with `equipped: true` AND `effect.armor_bonus`. (V8.35)
 45. `combat_start` is templated, not LLM-narrated. (V8.35)
@@ -230,7 +232,8 @@ This scenario drives every design decision. If a feature makes that scenario *be
 93. **Enemy stat budgets enforced at two layers.** Static bestiaries: tier-1 agi_mod ≤1, hp min ≤8. Bible prompts: ENEMY STAT BUDGET block with NEVER constraints. (V8.51)
 94. **RegionBibleCache in-flight dedup via promise map.** `inFlight` is `Map<string, Promise<RegionBible | null>>`. `awaitRegionalBible` resolves: (1) cache hit; (2) await in-flight promise; (3) null → live fetch. Pre-V8.53: synchronous lookup mid-pregen spawned a duplicate call — both completed, pregen discarded. (V8.53)
 95. **Post-apply pregeneration burst.** After `apply-world-bible` succeeds, wizard fires `pregenerateRegionalBible()` for all adjacent_regions (fire-and-forget). WorldBible NOT split into parallel calls — quest coherence requires single creative act. (V8.53)
-96. **Dungeon data layer ships in two pure modules. (V8.54)** `lib/game/dungeon-validation.ts`: `deriveNodeType`, `deriveRegionType`, `validateDungeonRooms` — wired into both apply routes so `node_type`, `region_type`, `dungeon_rooms[]` land on the world graph. `lib/game/dungeon-navigation.ts`: 14 pure functions covering all dungeon runtime + UI (predicates, room lookups, `dungeon_state` init/advance/revisit dedup, adjacency, lock + key-item checks, nav-card construction). All part-2 runtime wiring uses these helpers exclusively — no dungeon logic in useGameLoop beyond dispatch. Test coverage: 30 cases including predicate edge cases, mismatch guard, discovery + unlock idempotence.
+96. **Dungeon data layer ships in two pure modules.** `lib/game/dungeon-validation.ts`: `deriveNodeType`, `deriveRegionType`, `validateDungeonRooms` — wired into both apply routes. `lib/game/dungeon-navigation.ts`: 14 pure functions for all dungeon runtime + UI. All part-2 runtime uses these helpers exclusively. 30 tests cover all edge cases. (V8.54)
+97. **LLM generation prompt skeleton anchors the model's output count and structure.** Instructions alone cannot override what the JSON skeleton example shows — the model follows the skeleton literally. When adding required new fields or changing expected counts in any generation prompt: (1) update the JSON skeleton example to include the new fields at the correct count, (2) add an explicit enforcement/reminder block immediately after the relevant instruction, (3) add diagnostic logging to the apply route to confirm the new structure lands. The skeleton is ground truth. (V8.55)
 
 ---
 

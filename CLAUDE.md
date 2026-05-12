@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.47
-**Status:** Day 21 Container + Loot COMPLETE (commit a56940f) — Day 22 Skills + Leveling NEXT
+**Version:** 8.48
+**Status:** UX Patch COMPLETE (commit 4619a32) — Day 22 Skills + Leveling NEXT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/css-containment-audit.md · /docs/mobile-viewport-audit.md · /docs/genre-reference.md
@@ -82,39 +82,34 @@ When a RARE or LEGENDARY item is found, trigger a full-screen overlay: item port
 *Slot:* Post-Day-22 polish round. *Design note:* Only fires for RARE+; COMMON/UNCOMMON get the standard loot strip reveal.
 
 **Genre Expansion + Sub-Genre System (V8.46 capture):**
-Full genre reference captured in `/docs/genre-reference.md`. Fantasy splits into Light / Classic / Dark as the confirmed example. All other genres get the same sub-genre treatment.
-*Slot:* Dedicated Genre Session post-Day-25. *Impact:* Genre enum + all genre-keyed tables need updating.
+Full genre reference in `/docs/genre-reference.md`. Fantasy splits into Light / Classic / Dark. All other genres get same sub-genre treatment.
+*Slot:* Dedicated Genre Session post-Day-25.
 
 **Merchant Trading Foundation (V8.46 design decision):**
-Existing merchant system is narrator-only with zero engine-side transaction logic. Needs: persistent merchant inventory per NPC, buy/sell pricing, gold deduction enforced by engine, Trade UI updated to real prices.
+Existing merchant system is narrator-only with zero engine-side transaction logic.
 *Slot:* After Day 21 loot infrastructure is in play. Dedicated round.
+
+### V8.48 — UX Patch findings + WCD variety second pass needed
+
+**UX Patch (commit 4619a32):**
+
+**Revisit suppression:** Cache-hit ARRIVING path now reads `world_graph.nodes[id].discovered` BEFORE the end-of-step-7 flip. Return visit (discovered=true): emits one-line "You return to {name}." only — skips cached prose AND narrator API. Sub-locations start `discovered: false` so first arrival still gets full description. Spawn settlement starts `discovered: true` — first MOVE-back correctly suppresses since spawn narrative already covered it.
+
+**Object popup labels (design distinction V8.48):** Clarified the difference between PICK UP (physical item into player inventory from loot strip) and SEARCH (rolling loot from a container). These are different actions and must look different:
+- CONTAINER objects (LocationObject.type="container") → "Search" primary button
+- ITEM POI in story feed → always environmental; real loot lives in FloorLootStrip (rule 83) → "Examine" primary, never "Pick up"
+- Navigation-like labels (bridge/gate/passage/stairs/path/trail/doorway/archway/corridor) → `isNavigationLikeLabel` heuristic → header + Close only; player types custom verb if needed
+- "Pick up" label NEVER appears for LocationObject interactions
+
+**NPC dialogue color:** `--hl-said` updated `#f4e8c8` cream → `#f0c060` warmer golden. `#e8b84b` (darker amber) available as toggle alternative. Italic + weight-600 preserved.
+
+**WCD variety second pass (open issue):** The WorldBible prompt fix (ad82300) prevented biased examples from overriding world themes, but the WCD itself still defaults to honor/oath/covenant themes in Fantasy. The WCD prompt needs its own "each world should feel wholly distinct" instruction. Low-priority but needed before the variety fix is truly complete. Queue for a small WCD prompt patch.
 
 ### V8.47 — Day 21 findings + jest baseline correction
 
-**Jest baseline correction (IMPORTANT):** V8.45 reported 762 as "first accurate full-suite count." This was WRONG — the `.claude/worktrees/` subtree was being double-counted by jest. Day 21's investigation found and fixed this: `jest.config.ts` now has `testPathIgnorePatterns` + `modulePathIgnorePatterns` excluding `.claude/`. **True baseline = 393.** All counts between V8.45 and V8.47 were inflated. 393 is the authoritative count going forward.
+**Jest baseline correction:** V8.45 reported 762, was wrong due to `.claude/worktrees/` double-counting. Fixed in jest.config.ts. **True baseline = 393.**
 
-**Investigation findings pre-patch (V8.40 protocol):**
-- `CombatEnemyInstance` already carries `loot_table_id` + `is_boss` — perfect for SEARCH REMAINS lookup with no bestiary roundtrip.
-- `handleVictory` previously auto-rolled loot and mutated `player.resources` + `player.inventory` inline — required full refactor to "XP-only + pending manifest."
-- `RegionBible` route had no normalize step — added one for loot fields + container guarantee.
-
-**Architecture delivered:**
-- 5 genre `LootPool`s: `lib/game/loot-tables/{fantasy,cyberpunk,horror,space,apoc}.ts`
-- `WorldBible.world_loot_items[]` (Layer 2) + `RegionBible.region_loot_items[]` + `boss_drop_item` (Layer 3)
-- `lib/game/loot-resolver.ts` — pure, RNG-injectable, normal vs boss paths
-- `lib/game/floor-loot.ts` — pure transitions (applySearchRemains, applyTake, applyTakeGold, applyTakeAll, buildFloorLootView, pickRegionLootItemsForNode, pickBossDropItemForNode)
-- `hooks/useFloorLoot.ts` — thin React wrapper over pure transitions
-- `components/game/FloorLootStrip.tsx` — between StoryFeed and NavigationBar; SEARCH REMAINS / item pills / gold pill / TAKE ALL; disabled at INVENTORY_CAP with warning
-- `lib/game/currency.ts` — canonical currencyKeyFor / currencyLabelFor (horror = "marks")
-- `lib/game/constants.ts` — INVENTORY_CAP = 20
-- `MasterState.floor_loot?: FloorLootEntry[]` — persists across navigation, auto-prunes when emptied
-- Container guarantee: both WorldBible and RegionBible routes promote one `is_interactable` object to `type:"container"` in every combat-eligible node
-- `/game` route: 109 kB → 117 kB (+8 kB for Day 21 modules)
-
-### V8.46 — Polish Round 4b results + genre doc
-
-Mobile QA: 7/10 surfaces pass. D (combat panel) MAJOR deferred — Mobile Combat Layout round. F/H minor deferred.
-Genre reference: `/docs/genre-reference.md` created covering all brainstormed genres with mechanics, loot, enemies, UI identity.
+**Day 21 architecture:** 5 genre LootPools + 3-layer loot system + loot-resolver.ts + floor-loot.ts + FloorLootStrip + currency.ts + constants.ts. MasterState gains `floor_loot?: FloorLootEntry[]`. handleVictory → XP-only + pending manifest.
 
 ### V8.44 — Polish 4c: pure module extraction applied proactively
 
@@ -137,17 +132,19 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 1–5. ~~Polish 4a through Nav mini-cols~~ ✅
 6. ~~Polish 4b (4fe27e3)~~ ✅
 7. ~~Day 21 Container + Loot (a56940f)~~ ✅
-8. **Day 22 — Skills + Leveling** ⏳ NEXT
-9. Vertical slice playtest
-10. Day 23 — Main Quest Thread
-11. Merchant Trading Foundation round
-12. Combat UX & Flow Polish round
-13. Mobile Combat Layout round (deferred from 4b)
-14. Day 24 — Multiplayer Foundation
-15. Day 25 — Customization Layer
-16. Genre Session — sub-genre expansion
-17. Day 20.5 — Verbal Action (deferred)
-18. Day 20.6 — Encounter Avoidance / Stealth (deferred)
+8. ~~UX Patch (4619a32)~~ ✅
+9. **Day 22 — Skills + Leveling** ⏳ NEXT
+10. Vertical slice playtest
+11. Day 23 — Main Quest Thread
+12. Merchant Trading Foundation round
+13. WCD variety second pass (small prompt patch)
+14. Combat UX & Flow Polish round
+15. Mobile Combat Layout round (deferred from 4b)
+16. Day 24 — Multiplayer Foundation
+17. Day 25 — Customization Layer
+18. Genre Session — sub-genre expansion
+19. Day 20.5 — Verbal Action (deferred)
+20. Day 20.6 — Encounter Avoidance / Stealth (deferred)
 
 ### Open strategic questions
 
@@ -158,12 +155,13 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 - Map visual rework — dedicated session, deferred.
 - Audit queue: defensive overchecks, prompt-template hardcoded IDs, integration test coverage.
 - Genre Session scope and timing (post-Day-25 standalone vs bundled with Day 25).
+- WCD variety second pass — WCD prompt needs its own theme-diversity instruction.
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Day 21 complete (commit a56940f, 393/393 tests — see rule 82). Day 22 Skills + Leveling is next.
+**Current Phase:** UX patch complete (commit 4619a32, 393/393). Day 22 Skills + Leveling is next.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** atomictim/endless-worlds-rpg
 
 | Phase | Title | Status |
@@ -175,10 +173,12 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 | Combat era (Days 20–20.4.2) | Data + resolver + UI + narration + polish + hotfixes | ✅ Complete |
 | Polish era (4a–4b + hotfixes) | Nav grouping/columns/dedup + map tier + display fixes + mobile QA | ✅ Complete |
 | Day 21 (a56940f) | Container + Loot — 3-layer loot architecture, SEARCH REMAINS, FloorLootStrip, containers, loot resolver | ✅ Complete |
+| UX Patch (4619a32) | Revisit suppression, context-aware object popup labels, .ew-said color | ✅ Complete |
 | **Day 22** | **Skills + Leveling — skill domain foundations, stat-of-your-choice XP, STAT_XP wiring** | ⏳ **NEXT** |
 | Vertical slice playtest | Full game start → win condition | ⏳ Before Day 23 |
 | Day 23 | Main Quest Thread | ⏳ Post-playtest |
-| Merchant Trading Foundation | Persistent merchant inventory, buy/sell, engine-enforced gold deduction | ⏳ After Day 21 loot in place |
+| Merchant Trading Foundation | Persistent merchant inventory, buy/sell, engine-enforced gold deduction | ⏳ After Day 21 loot |
+| WCD variety second pass | WCD prompt theme-diversity instruction | ⏳ Small patch, any quiet round |
 | Combat UX & Flow Polish | Hit/miss differentiation + miss float + flee-fail pacing | ⏳ Post-Day-23 |
 | Mobile Combat Layout | Stacked portrait layout at narrow viewport (4b deferred) | ⏳ After Combat UX Polish |
 | Day 24 | Multiplayer Foundation | ⏳ Pre-launch |
@@ -190,20 +190,11 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 
 **Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic. Sub-genre expansion deferred to Genre Session.
 
-### Day 21 (commit a56940f — 393/393 tests, /game 117 kB)
-
-See V8.47 trajectory note above for full summary. Key facts for Claude Code reference:
-- `MasterState.floor_loot?: FloorLootEntry[]` — new field, persists across navigation
-- `INVENTORY_CAP = 20` in `lib/game/constants.ts`
-- `currencyKeyFor(genre)` / `currencyLabelFor(genre)` in `lib/game/currency.ts`
-- `LocationObject.type?: "container" | "fixture" | "lore" | "trigger"` — new optional field
-- `ItemType` enum additions: VALUABLE, QUEST_ITEM (stub), STAT_XP
-- `handleVictory` → XP-only + pending FloorLootEntry; no auto-loot
-
 ### Round history (compressed)
 
 | Commit | Round | Rules |
 | --- | --- | --- |
+| 4619a32 | UX patch — revisit suppression, context-aware popup labels, .ew-said #f0c060 | 86-87 |
 | a56940f | Day 21 — 3-layer loot, loot-resolver, FloorLootStrip, container flow, SEARCH REMAINS, currency.ts, constants.ts | 82-85 |
 | ad82300 | WorldBible variety fix — remove biased named examples, uniqueness instruction | (rule 79 applied) |
 | 4fe27e3 | Polish 4b — mobile audit + CodexModal close + ActionBar button sizing | — |
@@ -213,21 +204,22 @@ See V8.47 trajectory note above for full summary. Key facts for Claude Code refe
 | 60501c8 | 20.4.3 — region expansion prompt template fix + splitConflatedRegionSettlement | 77-79 |
 | 24ac19c | Polish 4a — nav grouping/tiers/cross-region BACK/map auto-switch/.ew-said/CSS audit | 72-76 |
 | f17c221 | 20.4.2 — float CSS clip + stagger + sync to feed + codex modal + D&D roll format | 66-71 |
-| c67f2c0 | 20.4.1 — float routing + inventory-Use + flee DC + defeat respawn fix | 62-65 |
-| fc508f3 + 732e944 + bf3871e + 1215bb6 | 20.4 through 20.1 | 43-61 |
+| c67f2c0 + fc508f3 + 732e944 + bf3871e + 1215bb6 | 20.4.1 through 20.1 | 43-65 |
 | abf73e6 + earlier | 20 Prompt 3 + foundation + pre-combat + 19A-19F | 1-42 |
 
 ### Architecture & system status
 
-**Domain 1 (Engine — pure code):** Navigation + nav-cards (rules 72-81) + map-tier.ts + combat system (rules 24-71) + region expansion guard + loot system (rules 83-85): loot-resolver.ts · floor-loot.ts · loot-tables/ · FloorLootStrip · currency.ts · constants.ts.
+**Domain 1 (Engine — pure code):** Navigation + nav-cards (rules 72-81) + map-tier.ts + combat system (rules 24-71) + region expansion guard + loot system (rules 83-85) + revisit suppression (rule 86) + context-aware popup (rule 87).
 
 **Domain 2 (Content Library — frozen):** WCD, WorldBible (+ world_loot_items[]), RegionBible (+ region_loot_items[] + boss_drop_item), NPCs, items, loot tables, bestiary, region enemies, starting equipment.
 
-**AI during gameplay:** Arrival narration ✅ · Dialogue ✅ · Action narration ✅ · Combat narration ✅ · Container search ✅ (templated, zero LLM) · Verbal action ⏳ Day 20.5 · Stealth/avoidance ⏳ Day 20.6.
+**AI during gameplay:** Arrival narration ✅ (first visit only — rule 86) · Dialogue ✅ · Action narration ✅ · Combat narration ✅ · Container search ✅ (templated, zero LLM) · Verbal action ⏳ Day 20.5 · Stealth/avoidance ⏳ Day 20.6.
 
 **Mobile readiness:** A/B/C/E/G/I/J surfaces PASS at 380px. D (combat panel) MAJOR deferred. F/H minor deferred.
 
 ### Known issues
+
+**WCD variety second pass:** WorldBible prompt fix (ad82300) removed biased examples but WCD itself still defaults to honor/oath/covenant themes. WCD prompt needs its own theme-diversity instruction. Small patch, queue for any quiet round.
 
 **Merchant Trading Foundation (post-Day-21):** Existing narrator-only merchant system has no engine-side transaction logic. Dedicated round needed.
 
@@ -326,10 +318,12 @@ See V8.47 trajectory note above for full summary. Key facts for Claude Code refe
 79. **Prompt-template hardcoded structural IDs are a recurring bug class.** Audit `app/api/game/generate-*/route.ts` for `${outline.id}`, `${region.id}` etc. in id positions. (V8.42)
 80. **Nav card dedup at region zone.** DEEPER isAtRegionZone branch checks `backCards[0]?.targetId`; suppresses DEEPER settlement card if it matches BACK destination. Cross-region: both emit. No trail: DEEPER suppressed. (V8.43 defined · V8.44 implemented)
 81. **Map tier auto-switch fires on every node arrival.** `lib/game/map-tier.ts` `chooseTierForNode()`: region zone → tier 2, everything else → tier 1. WorldMap.tsx useEffect calls this on every arrival. (V8.43 defined · V8.44 implemented)
-82. **jest true baseline = 393 (V8.47 correction).** V8.45 reported 762 due to stale `.claude/worktrees/` subtree being double-counted. Fixed in `jest.config.ts` via `testPathIgnorePatterns` + `modulePathIgnorePatterns` excluding `.claude/`. 393 is the authoritative full-suite count going forward. The `npx jest` (no pattern) protocol remains — just the expected number is now 393, not 762. (V8.47)
-83. **Loot never auto-credits.** `handleVictory` pushes XP-only; all item/gold drops go to `MasterState.floor_loot[]` as `FloorLootEntry` (pending until SEARCH REMAINS resolves it). Player must explicitly SEARCH REMAINS (post-combat) or TAKE / TAKE ALL from FloorLootStrip. Gold goes to `player.resources` via `on_take_gold` only. Enables no-gold and no-loot playthroughs by design. (V8.47)
-84. **Container search is engine-resolved, zero LLM calls.** `resolveInteract` detects `LocationObject.type === "container"` → calls `resolveLoot()` → pushes `FloorLootEntry` → templated story beat via `getSearchNarrative()`. Non-container `is_interactable` objects return `INTERACT_NON_CONTAINER` with object-type-specific empty template from `lib/game/container-templates.ts`. Already-searched containers return `CONTAINER_ALREADY_SEARCHED`. Engine guarantees ≥1 container per combat-eligible node at WorldBible/RegionBible apply time. (V8.47)
-85. **Currency and inventory cap are canonical constants.** Currency key/label: `lib/game/currency.ts` → `currencyKeyFor(genre)` / `currencyLabelFor(genre)`. Horror genre currency = "marks". Inventory cap: `lib/game/constants.ts` → `INVENTORY_CAP = 20`. Never hardcode these values elsewhere. (V8.47)
+82. **jest true baseline = 393 (V8.47 correction).** V8.45 reported 762 due to stale `.claude/worktrees/` subtree double-counting. Fixed in `jest.config.ts` via `testPathIgnorePatterns` + `modulePathIgnorePatterns` excluding `.claude/`. 393 is the authoritative full-suite count going forward. (V8.47)
+83. **Loot never auto-credits.** `handleVictory` pushes XP-only; all item/gold drops go to `MasterState.floor_loot[]` as `FloorLootEntry`. Player must explicitly SEARCH REMAINS or TAKE / TAKE ALL from FloorLootStrip. Enables no-gold and no-loot playthroughs. (V8.47)
+84. **Container search is engine-resolved, zero LLM calls.** `resolveInteract` detects `LocationObject.type === "container"` → `resolveLoot()` → `FloorLootEntry` → templated story beat. Non-container objects → `INTERACT_NON_CONTAINER` with type-specific empty template. Engine guarantees ≥1 container per combat-eligible node. (V8.47)
+85. **Currency and inventory cap are canonical constants.** `lib/game/currency.ts` → `currencyKeyFor(genre)` / `currencyLabelFor(genre)`. Horror = "marks". `lib/game/constants.ts` → `INVENTORY_CAP = 20`. Never hardcode. (V8.47)
+86. **Revisit suppression — no re-describing known locations.** On ARRIVING at a node with `discovered === true`: emit one-line "You return to {name}." only — skip cached atmosphere prose AND narrator API call. First visit (discovered=false) still gets full description. Spawn settlement starts `discovered: true` so first MOVE-back suppresses correctly (spawn narrative already covered it). Implemented in useGameLoop.ts cache-hit ARRIVING path. (V8.48)
+87. **Object highlight popup uses context-aware action labels.** `InteractionPopover.tsx`: CONTAINER objects → "Search" primary. Fixture/lore/trigger/undefined ITEM POI in feed → "Examine" primary (never "Pick up" — real loot lives in FloorLootStrip per rule 83). Navigation-like label heuristic (`isNavigationLikeLabel`: bridge/gate/passage/stairs/path/trail/doorway/archway/corridor) → header + Close only; player types custom verb. "Pick up" label NEVER appears for LocationObject interactions. (V8.48)
 
 ---
 
@@ -346,7 +340,7 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint (resol
 | Use | Color | Token |
 | --- | --- | --- |
 | Narrator prose | var(--ink-1) | — |
-| NPC quoted speech | #f4e8c8 italic weight 600 | --hl-said |
+| NPC quoted speech | #f0c060 italic weight 600 (V8.48 updated from #f4e8c8) | --hl-said |
 | Player actions (out-of-combat) | #7ab8c8 teal-blue 12px mono italic | — |
 | Item highlights | #e8c547 yellow | --hl-item |
 | Region highlights | #c4b5fd lavender | --hl-region |

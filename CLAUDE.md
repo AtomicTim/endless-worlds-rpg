@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.51
-**Status:** Combat Rebalance COMPLETE (commit 00b5450) — Vertical Slice Playtest NEXT
+**Version:** 8.52
+**Status:** V8.52 Polish COMPLETE (commit 4091ff3) — Day 23 Main Quest Thread NEXT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/css-containment-audit.md · /docs/mobile-viewport-audit.md · /docs/genre-reference.md · /docs/project-log.md
@@ -75,34 +75,31 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 ### Sequence
 
-1–9. ~~Polish through potion hotfix~~ ✅
-10. ~~Day 22 — Skills + Leveling (7833245)~~ ✅
-10a. ~~Char creation UI fix (9fe5c8d)~~ ✅
-10b. ~~Combat Rebalance (00b5450)~~ ✅
-11. **Vertical slice playtest** ⏳ NEXT
-12. Day 23 — Main Quest Thread
+1–10b. ~~Polish through combat rebalance~~ ✅
+10c. ~~V8.52 Polish — WCD themes, gold tiers, food heals (4091ff3)~~ ✅
+11. ~~Vertical slice playtest~~ ✅ (core loop confirmed working)
+12. **Day 23 — Main Quest Thread** ⏳ NEXT
 13. Merchant Trading Foundation round
-14. WCD variety second pass (small prompt patch)
-15. Combat UX & Flow Polish round (HP timing, hit/miss, flee-fail, death summary)
-16. Mobile Combat Layout round
-17. Day 24 — Multiplayer Foundation
-18. Day 25 — Customization Layer
-19. Genre Session — sub-genre expansion
-20. Day 20.5 — Verbal Action (deferred)
-21. Day 20.6 — Encounter Avoidance / Stealth (deferred)
+14. Combat UX & Flow Polish round (HP timing, hit/miss, flee-fail, death summary)
+15. Mobile Combat Layout round
+16. Day 24 — Multiplayer Foundation
+17. Day 25 — Customization Layer
+18. Genre Session — sub-genre expansion
+19. Day 20.5 — Verbal Action (deferred)
+20. Day 20.6 — Encounter Avoidance / Stealth (deferred)
 
 ### Key open questions
 
-- Vertical slice scope — what constitutes a "complete" playthrough for tuning purposes?
-- XP threshold tuning — revisit after playtest data.
+- XP threshold tuning — revisit after more playtest data.
 - Death stash / recovery mechanic — design decision needed (see project-log.md).
-- WCD variety second pass — WCD prompt needs own theme-diversity instruction.
+- More location node types — wilderness, abandoned villages, workshops (Day 23 scope).
+- Item contextual appropriateness — loot prompt guidance (bundle with Day 23).
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Combat rebalance complete (commit 00b5450, 454/454). Vertical slice playtest is next.
+**Current Phase:** V8.52 Polish complete (4091ff3, 454/454). Day 23 Main Quest Thread is next.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** atomictim/endless-worlds-rpg
 
 | Phase | Title | Status |
@@ -118,16 +115,16 @@ This scenario drives every design decision. If a feature makes that scenario *be
 | Day 22 (7833245) | Archetypes, leveling, 25 classes, LevelUpModal, XP bar, STAT_XP wiring | ✅ Complete |
 | Char creation UI fix (9fe5c8d) | Point-buy removed, dynamic 5-class picker, CLASS_FLAVOR | ✅ Complete |
 | Combat Rebalance (00b5450) | abilityMod formula fix, all 5 bestiaries, bible stat budget guidance | ✅ Complete |
-| **Vertical Slice Playtest** | **Full game start → meaningful session end. Tuning baseline.** | ⏳ **NEXT** |
-| Day 23 | Main Quest Thread | ⏳ Post-playtest |
+| V8.52 Polish (4091ff3) | WCD 12-theme rotation, gold tiers unified, food heals 5 HP | ✅ Complete |
+| Vertical Slice Playtest | Core loop confirmed: combat fun, loot working, level-up firing correctly | ✅ Complete |
+| **Day 23** | **Main Quest Thread + more location types** | ⏳ **NEXT** |
 | Merchant Trading Foundation | Persistent merchant inventory, buy/sell, engine-enforced gold deduction | ⏳ |
-| WCD variety second pass | WCD prompt theme-diversity instruction | ⏳ Small patch |
 | Combat UX & Flow Polish | HP timing + hit/miss + flee-fail + death summary/stash | ⏳ Post-Day-23 |
 | Mobile Combat Layout | Stacked portrait layout at narrow viewport | ⏳ After Combat UX Polish |
 | Day 24 | Multiplayer Foundation | ⏳ Pre-launch |
 | Day 25 | Customization Layer | ⏳ Pre-launch toward end |
 | Genre Session | Sub-genre expansion (see /docs/genre-reference.md) | ⏳ Post-Day-25 |
-| Skills System | Separate skills layer — deferred (see project-log.md) | ⏳ After playtest |
+| Skills System | Separate skills layer — deferred (see project-log.md) | ⏳ Post-playtest |
 | Day 20.5 | Verbal Action System + in-combat equip/unequip | ⏳ Deferred |
 | Day 20.6 | Encounter Avoidance / Stealth | ⏳ Deferred |
 | Map Visual Rework | Dedicated session | ⏳ Deferred |
@@ -140,7 +137,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 **No equip/unequip during combat — INTENTIONAL (rule 63):** Day 20.5 scope item.
 
-**WCD variety second pass:** WCD prompt defaults to honor/oath/covenant themes. Small patch, any quiet round.
+**Item contextual appropriateness:** Food items appearing in dungeon/combat loot. Prompt guidance needed. Day 23 bundle.
 
 ---
 
@@ -237,8 +234,8 @@ This scenario drives every design decision. If a feature makes that scenario *be
 89. **Archetype system lives in `lib/game/archetypes.ts`.** 25 classes (5 per genre). `buildStartingAttributes(background)` sets all stats to STAT_BASE=2; primary +STAT_PRIMARY_BONUS=2; secondary +STAT_SECONDARY_BONUS=1. `getArchetype(background)` returns ArchetypeConfig. (V8.50)
 90. **Level-up flow is post-combat, player-driven.** `handleVictory` sets `pending_level_up=true` on threshold cross. LevelUpModal opens after combat slice clears. Auto-gains (primary+1, secondary+1, HP) + 5-button free stat picker. STAT_XP mid-combat auto-applies to archetype primary. (V8.50)
 91. **jest baseline = 454 (V8.51).** Day 22 added 59 tests (393→452); combat rebalance added 2 dice modifier cases (452→454). 454 is the authoritative count going forward. (V8.50 + V8.51)
-92. **Ability modifier formula calibrated for 2-10 stat range.** Both `abilityMod` (combat-engine.ts) and `getAttributeModifier` (dice.ts) use `Math.floor((score - 2) / 2)`. Score table: 2-3→+0, 4-5→+1, 6-7→+2, 8-9→+3, 10→+4. These two functions MUST always use the same formula — combat modifier and display modifier must never diverge. CharacterSheet pip bar uses `value/2` (min 1) to fill naturally across the 2-10 range. Old D&D formula `floor((score-10)/2)` is permanently superseded. (V8.51)
-93. **Enemy stat budgets enforced at two layers.** (1) Static bestiaries (all 5 genre files): tier-1 agi_mod ≤1, hp_range min ≤8. (2) WorldBible + RegionBible generation prompts include explicit `ENEMY STAT BUDGET BY REGION TIER` block: starting region hp [4,8] agi 0-1 damage 1d4-1d6; first expansion hp [7,14] agi 1-2; deep hp [12,22] agi 2-3. Hard NEVER constraints: starting region agi_mod > 1, hp min > 8, damage > 1d6 are forbidden. JSON skeleton examples in both prompts use tier-1 values so model defaults stay in range. (V8.51)
+92. **Ability modifier formula calibrated for 2-10 stat range.** Both `abilityMod` (combat-engine.ts) and `getAttributeModifier` (dice.ts) use `Math.floor((score - 2) / 2)`. Score table: 2-3→+0, 4-5→+1, 6-7→+2, 8-9→+3, 10→+4. These two functions MUST always use the same formula. CharacterSheet pip bar uses `value/2` (min 1). Old D&D formula permanently superseded. (V8.51)
+93. **Enemy stat budgets enforced at two layers.** (1) Static bestiaries: tier-1 agi_mod ≤1, hp_range min ≤8. (2) WorldBible + RegionBible prompts include ENEMY STAT BUDGET guidance block with NEVER constraints on starting tier. JSON skeleton examples use tier-1 values. (V8.51)
 
 ---
 

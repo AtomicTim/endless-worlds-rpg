@@ -309,35 +309,68 @@ export interface UseItemResult {
 }
 
 export function resolveUseItem({
-  item_id, player, rng = DEFAULT_RNG,
+  item_id, item_effect, player, rng = DEFAULT_RNG,
 }: {
-  item_id: string;
-  player:  { current_hp: number; max_hp: number };
-  rng?:    Rng;
+  item_id:      string;
+  /** V8.49 — Item.effect from the inventory entry. When present and
+   *  effect.heal is a finite number, used as a flat heal amount. This
+   *  is the primary heal path: loot-resolver stamps unique
+   *  crypto.randomUUID() ids on every drop so the legacy
+   *  BASIC_HEALTH_POTION_ID equality check could never match a looted
+   *  potion. Passing the effect object through removes the dependency
+   *  on item id matching. */
+  item_effect?: Record<string, unknown>;
+  player:       { current_hp: number; max_hp: number };
+  rng?:         Rng;
 }): UseItemResult {
-  // Day 20 only resolves the basic health potion. Other consumables
-  // pass through as no-ops; Day 21's Container + Loot system adds
-  // antidotes and buff items.
-  if (item_id !== BASIC_HEALTH_POTION_ID) {
+  // V8.49 path 1 — effect.heal carries a flat heal value. Works for
+  // every health potion regardless of id (starting equipment, world
+  // loot, region loot, boss drops), because the effect field is
+  // populated by the loot table author / starting-equipment author at
+  // construction time.
+  const effectHeal = item_effect?.heal;
+  if (typeof effectHeal === "number" && Number.isFinite(effectHeal) && effectHeal > 0) {
+    const new_hp = Math.min(player.max_hp, player.current_hp + effectHeal);
+    const actual = new_hp - player.current_hp;
     return {
-      healed_amount: 0,
-      new_hp:        player.current_hp,
-      item_consumed: false,
+      healed_amount: actual,
+      new_hp,
+      item_consumed: true,
+      rolls: {
+        // Flat heal — no die notation. Story-feed templates surface the
+        // actual healed amount via damage_die_roll. Omitting damage_die
+        // signals "flat" to the template renderer.
+        damage_die_roll: actual,
+      },
     };
   }
-  // Heal 1d8 + 4, capped at max_hp.
-  const dieRoll = rollDamageDie("1d8", rng);
-  const heal    = dieRoll + 4;
-  const new_hp  = Math.min(player.max_hp, player.current_hp + heal);
-  const actual  = new_hp - player.current_hp;
+
+  // V8.49 path 2 — Day 20 BASIC_HEALTH_POTION_ID fallback for any
+  // starting-equipment potion that was created before effect fields
+  // were normalised. Kept for backwards compatibility; the same 1d8+4
+  // die-roll behaviour as the original implementation.
+  if (item_id === BASIC_HEALTH_POTION_ID) {
+    const dieRoll = rollDamageDie("1d8", rng);
+    const heal    = dieRoll + 4;
+    const new_hp  = Math.min(player.max_hp, player.current_hp + heal);
+    const actual  = new_hp - player.current_hp;
+    return {
+      healed_amount: actual,
+      new_hp,
+      item_consumed: true,
+      rolls: {
+        damage_die:      "1d8",
+        damage_die_roll: dieRoll,
+        // No d20 / target_dc on heals; +4 is a flat bonus, not a STR modifier.
+      },
+    };
+  }
+
+  // Non-healing consumables (Antidote, Trail Rations with effect: {})
+  // and unknown items: no-op. Day 22+ wires their effects in.
   return {
-    healed_amount: actual,
-    new_hp,
-    item_consumed: true,
-    rolls: {
-      damage_die:      "1d8",
-      damage_die_roll: dieRoll,
-      // No d20 / target_dc on heals; +4 is a flat bonus, not a STR modifier.
-    },
+    healed_amount: 0,
+    new_hp:        player.current_hp,
+    item_consumed: false,
   };
 }

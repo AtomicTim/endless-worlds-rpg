@@ -574,8 +574,15 @@ export function executePlayerAction({
         break;
       }
       const result = resolveUseItem({
-        item_id: action.item_id,
-        player:  { current_hp: player.health, max_hp: player.max_health },
+        item_id:     action.item_id,
+        // V8.49 — pass the item's effect through so resolveUseItem can
+        // read effect.heal directly. Without this, looted potions
+        // (which carry crypto.randomUUID() ids from loot-resolver,
+        // never the static BASIC_HEALTH_POTION_ID) silently no-oped
+        // mid-combat with no HP restored and the potion still in
+        // inventory.
+        item_effect: owned.effect,
+        player:      { current_hp: player.health, max_hp: player.max_health },
         rng,
       });
       if (result.item_consumed) {

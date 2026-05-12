@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.48
-**Status:** UX Patch COMPLETE (commit 4619a32) — Day 22 Skills + Leveling NEXT
+**Version:** 8.49
+**Status:** Potion hotfix COMPLETE (commit 0bef82b) — Day 22 Skills + Leveling NEXT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/css-containment-audit.md · /docs/mobile-viewport-audit.md · /docs/genre-reference.md
@@ -89,39 +89,32 @@ Full genre reference in `/docs/genre-reference.md`. Fantasy splits into Light / 
 Existing merchant system is narrator-only with zero engine-side transaction logic.
 *Slot:* After Day 21 loot infrastructure is in play. Dedicated round.
 
-### V8.48 — UX Patch findings + WCD variety second pass needed
+### V8.49 — Potion hotfix root cause
 
-**UX Patch (commit 4619a32):**
+**Root cause (diagnosed pre-patch per V8.40):** `resolveUseItem` in `combat-resolver.ts` was hardcoded to a single id check: `item_id === BASIC_HEALTH_POTION_ID`. Starting equipment potions carry that static id and worked. Looted potions are stamped with `crypto.randomUUID()` by `loot-resolver.ts` — they never matched, causing the function to return `item_consumed: false` / `healed_amount: 0`. Item stayed in inventory; HP unchanged. Out-of-combat use already worked correctly because `logic-resolver.ts` reads `effect.heal` directly (a different code path entirely).
 
-**Revisit suppression:** Cache-hit ARRIVING path now reads `world_graph.nodes[id].discovered` BEFORE the end-of-step-7 flip. Return visit (discovered=true): emits one-line "You return to {name}." only — skips cached prose AND narrator API. Sub-locations start `discovered: false` so first arrival still gets full description. Spawn settlement starts `discovered: true` — first MOVE-back correctly suppresses since spawn narrative already covered it.
+**Fix (commit 0bef82b):** `combat-engine.ts` now threads `owned.effect` through to `resolveUseItem`. The resolver reads `effect.heal` as the primary path, keeping `BASIC_HEALTH_POTION_ID` as a backwards-compat fallback for any pre-normalised starting equipment. Resolution order captured in rule 88.
 
-**Object popup labels (design distinction V8.48):** Clarified the difference between PICK UP (physical item into player inventory from loot strip) and SEARCH (rolling loot from a container). These are different actions and must look different:
-- CONTAINER objects (LocationObject.type="container") → "Search" primary button
-- ITEM POI in story feed → always environmental; real loot lives in FloorLootStrip (rule 83) → "Examine" primary, never "Pick up"
-- Navigation-like labels (bridge/gate/passage/stairs/path/trail/doorway/archway/corridor) → `isNavigationLikeLabel` heuristic → header + Close only; player types custom verb if needed
-- "Pick up" label NEVER appears for LocationObject interactions
+**HP timing deferred:** The HP bar dropping before floating numbers and story text is a separate pacing issue — HP state updates synchronously on combat event processing, before the pacing delays in `projectCombatEventsToFeed` fire. Fix requires HP display to read from "pending state" in the event timeline. Deferred to Combat UX & Flow Polish queue alongside hit/miss differentiation and flee-fail pacing.
 
-**NPC dialogue color:** `--hl-said` updated `#f4e8c8` cream → `#f0c060` warmer golden. `#e8b84b` (darker amber) available as toggle alternative. Italic + weight-600 preserved.
+### V8.48 — UX Patch
 
-**WCD variety second pass (open issue):** The WorldBible prompt fix (ad82300) prevented biased examples from overriding world themes, but the WCD itself still defaults to honor/oath/covenant themes in Fantasy. The WCD prompt needs its own "each world should feel wholly distinct" instruction. Low-priority but needed before the variety fix is truly complete. Queue for a small WCD prompt patch.
+Revisit suppression (rule 86) · Context-aware popup labels (rule 87) · `.ew-said` color `#f4e8c8` → `#f0c060`.
+WCD variety second pass still needed — WCD prompt itself needs theme-diversity instruction.
 
-### V8.47 — Day 21 findings + jest baseline correction
+### V8.47 — Day 21 + jest baseline correction
 
-**Jest baseline correction:** V8.45 reported 762, was wrong due to `.claude/worktrees/` double-counting. Fixed in jest.config.ts. **True baseline = 393.**
-
-**Day 21 architecture:** 5 genre LootPools + 3-layer loot system + loot-resolver.ts + floor-loot.ts + FloorLootStrip + currency.ts + constants.ts. MasterState gains `floor_loot?: FloorLootEntry[]`. handleVictory → XP-only + pending manifest.
+3-layer loot system, loot-resolver, FloorLootStrip, SEARCH REMAINS. jest baseline corrected 762 → **393** (worktrees fix).
 
 ### V8.44 — Polish 4c: pure module extraction applied proactively
 
-`chooseTierForNode()` extracted to `lib/game/map-tier.ts` proactively (rule 71 without waiting for a bug).
+`chooseTierForNode()` extracted to `lib/game/map-tier.ts` proactively.
 
 ### V8.42 — Third recurrence: prompt-template hardcoded ID bug
 
-Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded structural IDs, (3) CSS containment.
-
 ### V8.41 — Workflow + Combat UX Polish Queue
 
-**Combat UX & Flow Polish Queue (post-Day-23):** Hit/miss differentiation · Miss feedback over portrait · Flee-fail → death pacing.
+**Combat UX & Flow Polish Queue (post-Day-23):** Hit/miss differentiation · Miss feedback over portrait · Flee-fail → death pacing · **HP bar timing** (bar drops before floating numbers/story text — V8.49 new addition).
 
 ### V8.38 — Three strategic decisions LOCKED
 
@@ -133,18 +126,19 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 6. ~~Polish 4b (4fe27e3)~~ ✅
 7. ~~Day 21 Container + Loot (a56940f)~~ ✅
 8. ~~UX Patch (4619a32)~~ ✅
-9. **Day 22 — Skills + Leveling** ⏳ NEXT
-10. Vertical slice playtest
-11. Day 23 — Main Quest Thread
-12. Merchant Trading Foundation round
-13. WCD variety second pass (small prompt patch)
-14. Combat UX & Flow Polish round
-15. Mobile Combat Layout round (deferred from 4b)
-16. Day 24 — Multiplayer Foundation
-17. Day 25 — Customization Layer
-18. Genre Session — sub-genre expansion
-19. Day 20.5 — Verbal Action (deferred)
-20. Day 20.6 — Encounter Avoidance / Stealth (deferred)
+9. ~~Potion hotfix (0bef82b)~~ ✅
+10. **Day 22 — Skills + Leveling** ⏳ NEXT
+11. Vertical slice playtest
+12. Day 23 — Main Quest Thread
+13. Merchant Trading Foundation round
+14. WCD variety second pass (small prompt patch)
+15. Combat UX & Flow Polish round (includes HP timing)
+16. Mobile Combat Layout round (deferred from 4b)
+17. Day 24 — Multiplayer Foundation
+18. Day 25 — Customization Layer
+19. Genre Session — sub-genre expansion
+20. Day 20.5 — Verbal Action (deferred)
+21. Day 20.6 — Encounter Avoidance / Stealth (deferred)
 
 ### Open strategic questions
 
@@ -161,7 +155,7 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** UX patch complete (commit 4619a32, 393/393). Day 22 Skills + Leveling is next.
+**Current Phase:** Potion hotfix complete (commit 0bef82b, 393/393). Day 22 Skills + Leveling is next.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** atomictim/endless-worlds-rpg
 
 | Phase | Title | Status |
@@ -174,12 +168,13 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 | Polish era (4a–4b + hotfixes) | Nav grouping/columns/dedup + map tier + display fixes + mobile QA | ✅ Complete |
 | Day 21 (a56940f) | Container + Loot — 3-layer loot architecture, SEARCH REMAINS, FloorLootStrip, containers, loot resolver | ✅ Complete |
 | UX Patch (4619a32) | Revisit suppression, context-aware object popup labels, .ew-said color | ✅ Complete |
+| Potion hotfix (0bef82b) | resolveUseItem now reads effect.heal; looted consumables work in combat | ✅ Complete |
 | **Day 22** | **Skills + Leveling — skill domain foundations, stat-of-your-choice XP, STAT_XP wiring** | ⏳ **NEXT** |
 | Vertical slice playtest | Full game start → win condition | ⏳ Before Day 23 |
 | Day 23 | Main Quest Thread | ⏳ Post-playtest |
 | Merchant Trading Foundation | Persistent merchant inventory, buy/sell, engine-enforced gold deduction | ⏳ After Day 21 loot |
 | WCD variety second pass | WCD prompt theme-diversity instruction | ⏳ Small patch, any quiet round |
-| Combat UX & Flow Polish | Hit/miss differentiation + miss float + flee-fail pacing | ⏳ Post-Day-23 |
+| Combat UX & Flow Polish | Hit/miss diff + miss float + flee-fail pacing + HP bar timing | ⏳ Post-Day-23 |
 | Mobile Combat Layout | Stacked portrait layout at narrow viewport (4b deferred) | ⏳ After Combat UX Polish |
 | Day 24 | Multiplayer Foundation | ⏳ Pre-launch |
 | Day 25 | Customization Layer | ⏳ Pre-launch toward end |
@@ -194,6 +189,7 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 
 | Commit | Round | Rules |
 | --- | --- | --- |
+| 0bef82b | Potion hotfix — resolveUseItem reads effect.heal (primary), BASIC_HEALTH_POTION_ID (fallback) | 88 |
 | 4619a32 | UX patch — revisit suppression, context-aware popup labels, .ew-said #f0c060 | 86-87 |
 | a56940f | Day 21 — 3-layer loot, loot-resolver, FloorLootStrip, container flow, SEARCH REMAINS, currency.ts, constants.ts | 82-85 |
 | ad82300 | WorldBible variety fix — remove biased named examples, uniqueness instruction | (rule 79 applied) |
@@ -209,7 +205,7 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 
 ### Architecture & system status
 
-**Domain 1 (Engine — pure code):** Navigation + nav-cards (rules 72-81) + map-tier.ts + combat system (rules 24-71) + region expansion guard + loot system (rules 83-85) + revisit suppression (rule 86) + context-aware popup (rule 87).
+**Domain 1 (Engine — pure code):** Navigation + nav-cards (rules 72-81) + map-tier.ts + combat system (rules 24-71, 88) + region expansion guard + loot system (rules 83-85) + revisit suppression (rule 86) + context-aware popup (rule 87).
 
 **Domain 2 (Content Library — frozen):** WCD, WorldBible (+ world_loot_items[]), RegionBible (+ region_loot_items[] + boss_drop_item), NPCs, items, loot tables, bestiary, region enemies, starting equipment.
 
@@ -219,19 +215,19 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 
 ### Known issues
 
-**WCD variety second pass:** WorldBible prompt fix (ad82300) removed biased examples but WCD itself still defaults to honor/oath/covenant themes. WCD prompt needs its own theme-diversity instruction. Small patch, queue for any quiet round.
+**HP bar timing — DEFERRED to Combat UX Polish:** HP bar state updates synchronously on combat event processing, before pacing delays for floating numbers and story text fire. Player sees HP drop, then numbers and text appear. Fix: HP display should read from pending state in event timeline rather than raw state. Bundled with hit/miss differentiation and flee-fail pacing.
+
+**WCD variety second pass:** WCD prompt still defaults to honor/oath/covenant themes in Fantasy. Needs its own theme-diversity instruction. Small patch, any quiet round.
 
 **Merchant Trading Foundation (post-Day-21):** Existing narrator-only merchant system has no engine-side transaction logic. Dedicated round needed.
 
 **Mobile Combat Layout — DEFERRED:** Combat panel breaks at 380px with 3+ enemies. Bundle with F/H minor touch target fixes.
 
-**Combat UX & Flow Polish (post-Day-23):** Hit/miss differentiation · miss float · flee-fail pacing.
-
 **Day 20.5 + 20.6 (post-Day-25):** Verbal Action + Encounter Avoidance.
 
 **CSS containment future candidates:** PortraitSlot, StoryFeed tooltips, TradeModal floats, GameLayout rail tooltips, WorldMap edge tooltips.
 
-**Other deferred:** Map visual rework, world-gen perf, NPC color overlap, hub codex, grid_position, behavior dispatch, toSlug bug, combat balance.
+**Other deferred:** Map visual rework, world-gen perf, NPC color overlap, hub codex, grid_position, behavior dispatch, toSlug bug, combat balance, enemy loot post-combat (test deferred until Day 22 XP/leveling — too slow to kill enemies without level-appropriate power).
 
 ---
 
@@ -322,8 +318,9 @@ Audit scope: (1) defensive overchecks in app code, (2) prompt-template hardcoded
 83. **Loot never auto-credits.** `handleVictory` pushes XP-only; all item/gold drops go to `MasterState.floor_loot[]` as `FloorLootEntry`. Player must explicitly SEARCH REMAINS or TAKE / TAKE ALL from FloorLootStrip. Enables no-gold and no-loot playthroughs. (V8.47)
 84. **Container search is engine-resolved, zero LLM calls.** `resolveInteract` detects `LocationObject.type === "container"` → `resolveLoot()` → `FloorLootEntry` → templated story beat. Non-container objects → `INTERACT_NON_CONTAINER` with type-specific empty template. Engine guarantees ≥1 container per combat-eligible node. (V8.47)
 85. **Currency and inventory cap are canonical constants.** `lib/game/currency.ts` → `currencyKeyFor(genre)` / `currencyLabelFor(genre)`. Horror = "marks". `lib/game/constants.ts` → `INVENTORY_CAP = 20`. Never hardcode. (V8.47)
-86. **Revisit suppression — no re-describing known locations.** On ARRIVING at a node with `discovered === true`: emit one-line "You return to {name}." only — skip cached atmosphere prose AND narrator API call. First visit (discovered=false) still gets full description. Spawn settlement starts `discovered: true` so first MOVE-back suppresses correctly (spawn narrative already covered it). Implemented in useGameLoop.ts cache-hit ARRIVING path. (V8.48)
-87. **Object highlight popup uses context-aware action labels.** `InteractionPopover.tsx`: CONTAINER objects → "Search" primary. Fixture/lore/trigger/undefined ITEM POI in feed → "Examine" primary (never "Pick up" — real loot lives in FloorLootStrip per rule 83). Navigation-like label heuristic (`isNavigationLikeLabel`: bridge/gate/passage/stairs/path/trail/doorway/archway/corridor) → header + Close only; player types custom verb. "Pick up" label NEVER appears for LocationObject interactions. (V8.48)
+86. **Revisit suppression — no re-describing known locations.** On ARRIVING at a node with `discovered === true`: emit one-line "You return to {name}." only — skip cached atmosphere prose AND narrator API call. First visit (discovered=false) still gets full description. Spawn settlement starts `discovered: true` so first MOVE-back suppresses correctly. (V8.48)
+87. **Object highlight popup uses context-aware action labels.** `InteractionPopover.tsx`: CONTAINER objects → "Search" primary. Fixture/lore/trigger/undefined ITEM POI in feed → "Examine" primary (never "Pick up" — real loot lives in FloorLootStrip per rule 83). Navigation-like label heuristic (`isNavigationLikeLabel`: bridge/gate/passage/stairs/path/trail/doorway/archway/corridor) → header + Close only. "Pick up" NEVER appears for LocationObject interactions. (V8.48)
+88. **`resolveUseItem` resolves heal by effect, not by id.** Resolution order: (1) `item_effect?.heal` is a finite positive number → flat heal of that amount, `item_consumed: true` — covers all looted consumables. (2) `item_id === BASIC_HEALTH_POTION_ID` → original 1d8+4 die-roll heal, `item_consumed: true` — backwards-compat fallback for pre-normalised starting equipment. (3) Otherwise → no-op (`item_consumed: false`) — Antidote, Trail Rations with `effect: {}` until their effects are wired. `combat-engine.ts` passes `owned.effect` to the resolver. `rolls.damage_die_roll` populated for flat heals; `damage_die` omitted to signal "flat" to the renderer. Out-of-combat use (logic-resolver) already read `effect.heal` directly and was never broken. (V8.49)
 
 ---
 
@@ -340,7 +337,7 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint (resol
 | Use | Color | Token |
 | --- | --- | --- |
 | Narrator prose | var(--ink-1) | — |
-| NPC quoted speech | #f0c060 italic weight 600 (V8.48 updated from #f4e8c8) | --hl-said |
+| NPC quoted speech | #f0c060 italic weight 600 | --hl-said |
 | Player actions (out-of-combat) | #7ab8c8 teal-blue 12px mono italic | — |
 | Item highlights | #e8c547 yellow | --hl-item |
 | Region highlights | #c4b5fd lavender | --hl-region |

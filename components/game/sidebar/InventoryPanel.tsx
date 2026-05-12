@@ -18,6 +18,13 @@ const ITEM_ICONS: Record<ItemType, string> = {
   [ItemType.KEY]:        "🗝",
   [ItemType.LORE]:       "📜",
   [ItemType.CONTAINER]:  "📦",
+  // Day 21 — icons for VALUABLE / QUEST_ITEM / STAT_XP. VALUABLE
+  // shows a gem (it sells for value at merchants). QUEST_ITEM uses
+  // a star — Day 23 main-quest wiring will style this further.
+  // STAT_XP uses a sparkle — Day 22 stat-selection UI consumes it.
+  [ItemType.VALUABLE]:   "💎",
+  [ItemType.QUEST_ITEM]: "✦",
+  [ItemType.STAT_XP]:    "✨",
 };
 
 const RARITY_COLORS: Record<ItemRarity, string> = {

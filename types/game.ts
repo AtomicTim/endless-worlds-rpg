@@ -35,6 +35,14 @@ export enum ItemType {
   KEY        = "KEY",
   LORE       = "LORE",
   CONTAINER  = "CONTAINER",
+  // Day 21 — sellable / quest / stat-XP item kinds. VALUABLE has no
+  // mechanical effect: it converts to gold at merchants (delayed gold).
+  // QUEST_ITEM is a stub category for Day 23's main-quest wiring.
+  // STAT_XP is a collectible that Day 22's stat-selection UI will
+  // consume to bump a chosen attribute.
+  VALUABLE   = "VALUABLE",
+  QUEST_ITEM = "QUEST_ITEM",
+  STAT_XP    = "STAT_XP",
 }
 
 export enum ItemRarity {
@@ -323,6 +331,18 @@ export interface LocationObject {
   /** When true, this object is highlighted in the story feed and
    *  examining it produces a rich AI-narrated response. */
   is_interactable:   boolean;
+  /** Day 21 — INTERACT routing class for is_interactable objects:
+   *  - "container" → INTERACT rolls the loot resolver and drops items
+   *    onto the floor strip. Search-once: subsequent INTERACT returns
+   *    the templated already-searched response.
+   *  - "fixture" / "lore" / "trigger" → INTERACT returns a templated
+   *    empty / informational response with no LLM call and no loot
+   *    roll.
+   *  - Undefined → legacy behavior (INTERACT_SUCCESS, narrator runs).
+   *  The apply-bible normalization passes promote at least one
+   *  is_interactable object in every dungeon node to "container" so
+   *  every combat-eligible room has something to loot. */
+  type?:             "container" | "fixture" | "lore" | "trigger";
   /** Optional item ID if the object contains something. */
   contains_item_id?: string;
   /** Optional lore text revealed when the player examines it. */
@@ -562,6 +582,17 @@ export interface RegionBible {
    *  encounter triggers later, never modified at runtime. Optional
    *  for legacy bibles generated before Day 20. */
   enemies?:             Enemy[];
+
+  // ── Day 21 Loot ──────────────────────────────────────────────────────────
+  /** Day 21 — 3-5 region-themed loot items generated at apply-regional-bible
+   *  time. Layer 3 of the 3-layer loot model (static pool +
+   *  world_loot_items + region_loot_items). Items here only spawn from
+   *  encounters / containers in this region. Optional for legacy bibles. */
+  region_loot_items?:   Item[];
+  /** Day 21 — unique RARE reward for defeating this region's boss.
+   *  Always a weapon or armor that feels like a trophy of the fight.
+   *  Omitted when the region has no boss. */
+  boss_drop_item?:      Item;
 }
 
 export interface WorldBible {
@@ -571,6 +602,11 @@ export interface WorldBible {
   main_quest:       MainQuest;
   /** ISO timestamp. */
   generated_at:     string;
+  /** Day 21 — 6-8 world-themed loot items generated at apply-world-bible
+   *  time. Layer 2 of the 3-layer loot model. Items native to this
+   *  specific world's themes (mostly COMMON, some UNCOMMON, 1 RARE).
+   *  Available everywhere in the world. Optional for legacy bibles. */
+  world_loot_items?: Item[];
 }
 
 // ---------------------------------------------------------------------------
@@ -720,6 +756,56 @@ export interface MasterState {
   /** Last 5 visited node ids, most recent at end. Flee uses the
    *  second-to-last as the rollback target. */
   navigation_trail?:       string[];
+  /** Day 21 — items + gold dropped at world nodes, awaiting player pickup.
+   *  Survives navigation: a player can leave loot behind and return for
+   *  it later. Each entry is keyed by node_id; FloorLootStrip filters
+   *  to the current node when rendering. Empty entries are cleaned up
+   *  by TAKE handlers when both items and gold reach zero. */
+  floor_loot?:             FloorLootEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// Day 21 — Floor Loot
+// ---------------------------------------------------------------------------
+
+/**
+ * One pile of items + gold dropped at a world node. Created on combat
+ * victory (initially with `pending` set — the player must press SEARCH
+ * REMAINS to materialize the loot) or on a container search (filled
+ * immediately by the loot resolver). Persists across navigation: the
+ * player may leave and return.
+ *
+ * Multiplayer schema (Day 24 layering point):
+ *   - `owner` is null until a party member claims the pile.
+ *   - Gold auto-splits between living party members at SEARCH REMAINS
+ *     resolve time; on Day 21 (solo) the full amount goes to the
+ *     player.
+ */
+export interface FloorLootEntry {
+  /** UUID, stamped at entry creation. */
+  id:       string;
+  /** World node id where the loot dropped. FloorLootStrip filters
+   *  to entries matching the player's current node. */
+  node_id:  string;
+  /** Items remaining in the pile. Empties as the player TAKEs them. */
+  items:    Item[];
+  /** Currency remaining in the pile (genre currency key resolved at
+   *  pickup time). 0 once the player has taken the gold. */
+  gold:     number;
+  /** Day 24 — null = unclaimed; populated party-member id when claimed. */
+  owner:    string | null;
+  /** Where the pile came from. Drives the templated narrative beat
+   *  and the FloorLootStrip's "SEARCH REMAINS" vs "[items]" display. */
+  source:   "enemy" | "container";
+  /** When present, the loot has not yet been rolled. FloorLootStrip
+   *  shows a "SEARCH REMAINS" button instead of pills; clicking it
+   *  calls resolveLoot per enemy_loot_ref, fills items + gold, then
+   *  clears `pending`. The refs capture loot_table_id + is_boss so
+   *  resolution doesn't need the bestiary at search time. */
+  pending?: {
+    enemy_instance_ids: string[];
+    enemy_loot_refs:    Array<{ loot_table_id: string; is_boss: boolean }>;
+  };
 }
 
 // ---------------------------------------------------------------------------

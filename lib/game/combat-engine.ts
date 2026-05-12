@@ -1,18 +1,22 @@
-import { ItemRarity, ItemType } from "@/types/game";
+import { ItemType } from "@/types/game";
 import type {
   CombatEnemyInstance,
   CombatEvent,
   CombatState,
   Enemy,
   Genre,
-  Item,
   PlayerState,
   RegionBible,
   WorldBible,
   WorldNode,
 } from "@/types/game";
 import { getGenreBestiary } from "./bestiary";
-import { rollStubDrops, BASIC_HEALTH_POTION_ID } from "./loot/stub-drops";
+// Day 21 — rollStubDrops, makeStubItem, and the BASIC_HEALTH_POTION_ID
+// import are all removed: loot is now resolved on demand by the
+// floor-loot SEARCH REMAINS path through lib/game/loot-resolver.ts.
+// The lib/game/loot/stub-drops module remains for combat-resolver's
+// use_item heal lookup (which imports its own copy of the constant
+// directly).
 import {
   applyDefendDamageReduction,
   resolveAttack,
@@ -445,7 +449,16 @@ export interface PlayerActionResult {
 export type CombatResolutionPayload =
   | {
       kind:           "victory";
-      loot_summary:   { gold: number; items: string[] };
+      /** Day 21 — pending loot refs that the FloorLootStrip's SEARCH
+       *  REMAINS button will resolve into items + gold. Gold no longer
+       *  auto-adds to player resources on victory; items no longer
+       *  auto-add to inventory. The loot drops onto the floor and the
+       *  player claims it. */
+      pending_loot:   {
+        node_id:            string;
+        enemy_instance_ids: string[];
+        enemy_loot_refs:    Array<{ loot_table_id: string; is_boss: boolean }>;
+      };
       xp_awarded:     number;
     }
   | {
@@ -625,7 +638,11 @@ export function executePlayerAction({
       newState:   undefined,
       newPlayer:  victory.newPlayer,
       events:     [...events, ...victory.events],
-      resolution: { kind: "victory", loot_summary: victory.loot_summary, xp_awarded: victory.xp_awarded },
+      resolution: {
+        kind:         "victory",
+        pending_loot: victory.pending_loot,
+        xp_awarded:   victory.xp_awarded,
+      },
     };
   }
 
@@ -962,15 +979,28 @@ export function kickoffCombatIfEnemyFirst({
 
 export interface VictoryResult {
   newPlayer:    PlayerState;
-  loot_summary: { gold: number; items: string[] };
+  /** Day 21 — loot is no longer rolled on victory. The hook layer
+   *  reads this to build a pending FloorLootEntry whose SEARCH REMAINS
+   *  button resolves the real items + gold. */
+  pending_loot: {
+    node_id:            string;
+    enemy_instance_ids: string[];
+    enemy_loot_refs:    Array<{ loot_table_id: string; is_boss: boolean }>;
+  };
   xp_awarded:   number;
   events:       CombatEvent[];
 }
 
 /**
- * Tally XP from defeated enemies and roll stub loot for each.
- * Currency goes into player.resources[currencyKey], items go into
- * player.inventory. Combat dismissed.
+ * Day 21 — tally XP and emit a pending-loot manifest for the dead
+ * enemies. Gold + items DO NOT auto-apply on victory; they're
+ * resolved when the player presses SEARCH REMAINS on the FloorLoot
+ * strip. The CombatEnemyInstance already carries loot_table_id +
+ * is_boss, so the manifest is everything the loot resolver needs.
+ *
+ * `newPlayer` gets XP only — resources and inventory are untouched
+ * to preserve the soulslike "claim your spoils" beat the prompt
+ * requires.
  */
 export function handleVictory({
   state, player, world_genre, rng = DEFAULT_RNG,
@@ -978,40 +1008,33 @@ export function handleVictory({
   state:       CombatState;
   player:      PlayerState;
   world_genre: Genre | string | undefined;
+  /** rng is accepted for signature symmetry with handleDefeat /
+   *  handleFleeSuccess, but unused by Day 21 victory (no rolls happen
+   *  here — loot is rolled at SEARCH REMAINS time with its own rng). */
   rng?:        Rng;
 }): VictoryResult {
-  let totalGold  = 0;
-  let totalXp    = 0;
-  const itemIds: string[] = [];
+  // Reference the param so the unused-args lint stays satisfied
+  // without breaking the soulslike "no loot at victory" contract.
+  void rng;
+  let totalXp = 0;
+  const enemyInstanceIds: string[] = [];
+  const enemyLootRefs: Array<{ loot_table_id: string; is_boss: boolean }> = [];
+
   for (const e of state.enemies) {
     if (e.alive) continue;  // shouldn't happen post-victory, but safe
     totalXp += e.xp_value;
-    const drops = rollStubDrops({
-      id:              e.enemy_id,
-      name:            e.name,
-      description:     e.description,
-      hp_range:        [e.max_hp, e.max_hp],
-      agi_mod:         e.agi_mod,
-      str_mod:         e.str_mod,
-      damage_die:      e.damage_die,
-      armor_bonus:     e.armor_bonus,
-      xp_value:        e.xp_value,
-      loot_table_id:   e.loot_table_id,
-      is_boss:         e.is_boss,
-      behavior_flavor: e.behavior_flavor,
-    }, rng);
-    totalGold += drops.gold;
-    itemIds.push(...drops.items);
+    enemyInstanceIds.push(e.instance_id);
+    enemyLootRefs.push({ loot_table_id: e.loot_table_id, is_boss: e.is_boss });
   }
 
-  // Apply currency + items + XP.
-  const currencyKey = currencyKeyFor(world_genre);
-  const currentBal  = player.resources[currencyKey] ?? 0;
+  // XP only — no resource / inventory mutation. world_genre is kept
+  // in the signature for symmetry with handleDefeat / handleFleeSuccess
+  // and so the hook layer can still introspect it from the result
+  // without re-fetching MasterState.
+  void world_genre;
   const newPlayer: PlayerState = {
     ...player,
-    resources: { ...player.resources, [currencyKey]: currentBal + totalGold },
-    xp:        player.xp + totalXp,
-    inventory: [...player.inventory, ...itemIds.map(makeStubItem)],
+    xp: player.xp + totalXp,
   };
 
   const events: CombatEvent[] = [makeEvent({
@@ -1021,16 +1044,23 @@ export function handleVictory({
     outcome:      null,
     damage_dealt: null,
     weapon_or_item: null,
-    context_note: `xp +${totalXp}, gold +${totalGold}, items: ${itemIds.length === 0 ? "none" : itemIds.join(",")}`,
+    context_note: `xp +${totalXp}, ${enemyInstanceIds.length} enemy(ies) defeated — search remains for loot`,
   })];
 
   // eslint-disable-next-line no-console
-  console.log(`[Combat] Victory! XP +${totalXp}, gold +${totalGold}, items: [${itemIds.join(", ")}]`);
+  console.log(
+    `[Combat] Victory! XP +${totalXp}, ` +
+    `${enemyInstanceIds.length} enemies dropped pending loot.`
+  );
 
   return {
     newPlayer,
-    loot_summary: { gold: totalGold, items: itemIds },
-    xp_awarded:   totalXp,
+    pending_loot: {
+      node_id:            state.origin_node_id,
+      enemy_instance_ids: enemyInstanceIds,
+      enemy_loot_refs:    enemyLootRefs,
+    },
+    xp_awarded: totalXp,
     events,
   };
 }
@@ -1248,34 +1278,6 @@ function playerArmorBonus(player: PlayerState): number {
   return 0;
 }
 
-/**
- * Build a minimal Item row for a stub-loot item id. The Day 21 loot
- * system replaces this with real item rows from the regional loot
- * table; for Day 20 this lets the basic health potion enter the
- * inventory in a usable shape.
- */
-function makeStubItem(itemId: string): Item {
-  if (itemId === BASIC_HEALTH_POTION_ID) {
-    return {
-      id:          BASIC_HEALTH_POTION_ID,
-      name:        "Basic Health Potion",
-      type:        ItemType.CONSUMABLE,
-      rarity:      ItemRarity.COMMON,
-      description: "A small vial of red liquid that restores some health.",
-      effect:      { heal: 8 },
-      quantity:    1,
-      stackable:   true,
-      max_stack:   10,
-    };
-  }
-  // Unknown stub id — treat as a basic loot consumable.
-  return {
-    id:          itemId,
-    name:        itemId.replace(/_/g, " "),
-    type:        ItemType.CONSUMABLE,
-    rarity:      ItemRarity.COMMON,
-    description: "A salvaged item of unclear origin.",
-    quantity:    1,
-    stackable:   true,
-  };
-}
+// Day 21 — makeStubItem removed. Victory no longer stamps loot
+// items inline; the FloorLootStrip's SEARCH REMAINS button resolves
+// real Item rows via loot-resolver instead.

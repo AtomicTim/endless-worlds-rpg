@@ -286,7 +286,31 @@ consistent with the WCD):
       "is_boss": false,
       "behavior_flavor": "[1-3 word phrase]"
     }
-  ]
+  ],
+  "region_loot_items": [
+    {
+      "id": "${outline.id}_item_slug",
+      "name": "[Item Name]",
+      "type": "CONSUMABLE|VALUABLE|LORE|WEAPON|ARMOR",
+      "rarity": "COMMON|UNCOMMON",
+      "description": "[1 sentence — item specific to this region].",
+      "effect": {},
+      "quantity": 1,
+      "stackable": false,
+      "value": 15
+    }
+  ],
+  "boss_drop_item": {
+    "id": "${outline.id}_boss_trophy",
+    "name": "[Unique Boss Item Name]",
+    "type": "WEAPON|ARMOR",
+    "rarity": "RARE",
+    "description": "[1 sentence — this item's significance in the region].",
+    "effect": { "damage_die": "1d10" },
+    "quantity": 1,
+    "stackable": false,
+    "value": 250
+  }
 }
 
 Make everything original and consistent with the WCD.
@@ -333,6 +357,57 @@ The standalone region_location IS combat-eligible. It MUST carry:
 The settlement hub and tavern sub-location are NOT combat-eligible
 — omit encounter_chance/encounter_roster on those (or set chance
 to 0).
+
+DAY 21 LOOT — REGION LOOT ITEMS:
+
+Generate 3-5 region_loot_items specific to this region — items
+found here and nowhere else. They should feel native to the
+region's atmosphere (a salt-plains region drops salt-crusted
+relics; a rust-peaks region drops corroded oddities).
+
+Mix of rarities: mostly COMMON, some UNCOMMON. Vary types:
+CONSUMABLE, VALUABLE, LORE — and optionally one WEAPON or one
+ARMOR scoped to this region's theme. Item id format:
+"${outline.id}_<item_slug>".
+
+Stat fields by type:
+- WEAPON: effect: { "damage_die": "1d4"|"1d6"|"1d8" }, value 25-100.
+- ARMOR:  effect: { "armor_bonus": 1|2 }, value 15-80.
+- CONSUMABLE: effect: { "heal": N } when it heals; {} for utility.
+  Value 5-30. stackable: true.
+- VALUABLE: effect: {}. Value 10-80. stackable: false.
+- LORE:     effect: {}. Value 2-15. stackable: false.
+
+Quantity: 1 for all template entries (resolver stamps per-drop).
+
+DAY 21 LOOT — BOSS DROP:
+
+Generate ONE boss_drop_item per RegionBible — the unique reward
+for defeating the region's boss. Always:
+- type: WEAPON or ARMOR (something the player wears or wields)
+- rarity: "RARE"
+- value: 200-500
+- id format: "${outline.id}_boss_trophy" or similar
+- description references the region / boss explicitly
+
+OMIT boss_drop_item entirely if this region has no boss (no
+enemy with is_boss=true). The field is optional.
+
+DAY 21 LOOT — DUNGEON CONTAINER GUARANTEE:
+
+Every region_location that's combat-eligible (dungeon /
+encounter_chance > 0 / is_boss_room) MUST contain at least one
+Tier 1 object with type "container" (chest, sarcophagus, offering
+bowl, footlocker — pick something thematic). LocationObject gains
+an optional "type" field:
+- "container" — INTERACT rolls loot for the player.
+- "fixture" — decorative; INTERACT returns a templated empty beat.
+- "lore" — INTERACT delivers a tip; templated, no LLM call.
+- "trigger" — drives a flag; reserved for future use.
+
+Non-combat locations (settlement, tavern, market): tag
+is_interactable objects as "fixture" or "lore" so INTERACT skips
+the narrator and returns the templated response.
 
 CRITICAL: Keep total response under 5500 tokens. Be concise.
 Atmosphere: max 2 sentences. NPC fields: 1 sentence each.
@@ -436,6 +511,79 @@ function stripJsonFences(raw: string): string {
     .replace(/^```(?:json)?\n?/i, "")
     .replace(/\n?```$/i, "")
     .trim();
+}
+
+/**
+ * Day 21 — RegionBible normalization for loot + container fields.
+ *
+ * Runs BEFORE validateBible so the validator sees defaulted values.
+ * Mutates in place (returns the same reference) for parity with how
+ * the WorldBible normalization is wired.
+ *
+ * Adds:
+ *   - region_loot_items: [] default when omitted/malformed.
+ *   - boss_drop_item: left undefined when missing (optional schema).
+ *   - LocationObject container promotion: same rule as
+ *     normalizeLocationContainers in the WorldBible route — every
+ *     combat-eligible region_location ends up with at least one
+ *     type:"container" object; non-combat is_interactable objects
+ *     default to "fixture".
+ */
+function normalizeBible(parsed: unknown): unknown {
+  if (!parsed || typeof parsed !== "object") return parsed;
+  const o = parsed as Record<string, unknown>;
+
+  if (!Array.isArray(o.region_loot_items)) {
+    o.region_loot_items = [];
+  }
+
+  // boss_drop_item stays as-is (optional). Drop empty-object placeholders
+  // so the resolver's `if (params.boss_drop_item)` check works as expected.
+  if (
+    o.boss_drop_item &&
+    typeof o.boss_drop_item === "object" &&
+    !Array.isArray(o.boss_drop_item) &&
+    Object.keys(o.boss_drop_item as Record<string, unknown>).length === 0
+  ) {
+    delete o.boss_drop_item;
+  }
+
+  normalizeRegionLocationContainers(o.locations);
+  normalizeRegionLocationContainers(o.region_locations);
+
+  return o;
+}
+
+/**
+ * Day 21 — promote one is_interactable object to type:"container" on
+ * every combat-eligible location, and stamp untagged is_interactable
+ * objects as "fixture" on non-combat locations. Mirrors the
+ * WorldBible route's helper.
+ */
+function normalizeRegionLocationContainers(locs: unknown): void {
+  if (!Array.isArray(locs)) return;
+  for (const raw of locs) {
+    if (!raw || typeof raw !== "object") continue;
+    const loc      = raw as Record<string, unknown>;
+    const isCombat =
+      loc.type === "dungeon" || loc.is_boss_room === true ||
+      (typeof loc.encounter_chance === "number" && (loc.encounter_chance as number) > 0);
+    const objs = Array.isArray(loc.objects) ? (loc.objects as Array<Record<string, unknown>>) : [];
+    if (objs.length === 0) continue;
+
+    const hasContainer = objs.some((o) => o && o.type === "container");
+    if (isCombat && !hasContainer) {
+      const first = objs.find((o) => o && o.is_interactable === true);
+      if (first) first.type = "container";
+    }
+    if (!isCombat) {
+      for (const o of objs) {
+        if (o && o.is_interactable === true && !o.type) {
+          o.type = "fixture";
+        }
+      }
+    }
+  }
 }
 
 function validateBible(parsed: unknown): { ok: true; bible: RegionBible } | { ok: false; error: string } {
@@ -577,6 +725,9 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  // Day 21 — normalize loot defaults + container tags before validation.
+  parsed = normalizeBible(parsed);
 
   const validated = validateBible(parsed);
   if (!validated.ok) {

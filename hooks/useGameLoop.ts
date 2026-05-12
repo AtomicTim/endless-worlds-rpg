@@ -21,6 +21,10 @@ import { rollEncounterWithPlayer, shouldRollEncounter } from "@/lib/game/combat-
 import { consumeForcedEncounter } from "@/hooks/useCombat";
 import { isRegionAlreadyExpanded } from "@/lib/game/region-expansion-guard";
 import { renderRoutineCombatEvent } from "@/lib/game/combat-narration/templates";
+import { resolveLoot } from "@/lib/game/loot-resolver";
+import { getEmptyContainerTemplate, getSearchNarrative } from "@/lib/game/container-templates";
+import { pickRegionLootItemsForNode } from "@/lib/game/floor-loot";
+import type { FloorLootEntry } from "@/types/game";
 import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { DialogueOption, Item, MasterState, ParsedAction, RegionBible, RegionOutline, ResolutionResult, StoredMessage, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
 
@@ -376,7 +380,12 @@ function saveLogEntriesAsync(sessionId: string, logBook: import("@/types/game").
   })();
 }
 
-async function persistState(
+/**
+ * Day 21 — re-exported so `useFloorLoot` (and any future per-action
+ * hooks that mutate MasterState outside of the main game-loop)
+ * can persist + show the same "save failed" feedback line.
+ */
+export async function persistState(
   state: MasterState,
   addMessage: (m: StoryMessage) => void
 ): Promise<void> {
@@ -889,6 +898,83 @@ export function useGameLoop() {
           roll:         resolution.narrative_context.roll,
           outcome_type: resolution.outcome_type,
         });
+      }
+
+      // ── 4a-Day21. Container search short-circuit ───────────────────────────
+      // Day 21 — INTERACT against a Tier 1 LocationObject with a known
+      // type ("container" / "fixture" / "lore" / "trigger") never burns
+      // an LLM call. Container hits resolve loot and drop a FloorLootEntry;
+      // non-containers return a templated empty / lore beat. Fall-through
+      // (object missing or untyped) continues into the narrator path below.
+      if (resolution.outcome_type === "CONTAINER_SEARCH") {
+        const ctxName  = String(resolution.narrative_context?.object_name ?? "the container");
+        const nodeId   = String(
+          resolution.narrative_context?.container_node_id
+          ?? updatedState.world_state.current_node_id
+          ?? updatedState.world_state.current_location_id
+        );
+        const containerId = String(resolution.narrative_context?.container_id ?? "");
+        const lootRes = resolveLoot({
+          loot_table_id:     `container_${containerId}_loot`,
+          is_boss:           false,
+          genre:             updatedState.metadata.genre,
+          world_loot_items:  updatedState.metadata.world_bible?.world_loot_items,
+          region_loot_items: pickRegionLootItemsForNode(updatedState, nodeId),
+        });
+        const entry: FloorLootEntry = {
+          id:      crypto.randomUUID(),
+          node_id: nodeId,
+          items:   lootRes.items,
+          gold:    lootRes.gold,
+          owner:   null,
+          source:  "container",
+        };
+        updatedState = {
+          ...updatedState,
+          floor_loot: [...(updatedState.floor_loot ?? []), entry],
+        };
+        const beat = getSearchNarrative(ctxName, lootRes.items, lootRes.gold, updatedState.metadata.genre);
+        store.addMessage(makeMessage("NARRATIVE", beat));
+        store.setLastNarrativeText(beat);
+        updatedState = persistLogEntry(
+          updatedState,
+          LogEntryType.DISCOVERY,
+          `Searched ${ctxName}: ${lootRes.items.length} items, ${lootRes.gold} gold.`
+        );
+        const stampedContainer: MasterState = {
+          ...updatedState,
+          metadata: { ...updatedState.metadata, last_played: new Date().toISOString() },
+        };
+        store.setMasterState(stampedContainer);
+        await persistState(stampedContainer, store.addMessage);
+        store.setProcessing(false);
+        return;
+      }
+
+      if (
+        resolution.outcome_type === "CONTAINER_ALREADY_SEARCHED" ||
+        resolution.outcome_type === "INTERACT_NON_CONTAINER"
+      ) {
+        const ctxName  = String(resolution.narrative_context?.object_name ?? "it");
+        const ctxType  = typeof resolution.narrative_context?.object_type === "string"
+          ? (resolution.narrative_context.object_type as string)
+          : undefined;
+        const beat = getEmptyContainerTemplate(ctxName, ctxType);
+        store.addMessage(makeMessage("NARRATIVE", beat));
+        store.setLastNarrativeText(beat);
+        updatedState = persistLogEntry(
+          updatedState,
+          LogEntryType.STORY,
+          `Interacted with ${ctxName} — nothing to take.`
+        );
+        const stampedNon: MasterState = {
+          ...updatedState,
+          metadata: { ...updatedState.metadata, last_played: new Date().toISOString() },
+        };
+        store.setMasterState(stampedNon);
+        await persistState(stampedNon, store.addMessage);
+        store.setProcessing(false);
+        return;
       }
 
       // ── 4b. Fast path — inventory management actions skip the Narrator ─────

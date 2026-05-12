@@ -15,6 +15,8 @@ import { WorldMap } from "@/components/game/WorldMap";
 import { NavigationBar } from "@/components/game/NavigationBar";
 import { CombatMode } from "@/components/game/CombatMode";
 import { CodexModal } from "@/components/game/CodexModal";
+import { FloorLootStrip } from "@/components/game/FloorLootStrip";
+import { useFloorLoot } from "@/hooks/useFloorLoot";
 import { AssetCategory, Genre } from "@/types/game";
 import type { MasterState } from "@/types/game";
 import { createClient } from "@/lib/supabase/client";
@@ -56,6 +58,8 @@ export default function GamePage() {
     floatingByActor:  combatFloatingByActor,
     submitCombatAction,
   } = useCombat();
+  // Day 21 — SEARCH REMAINS + TAKE handlers backing the FloorLootStrip.
+  const floorLootHandlers = useFloorLoot();
   const inCombat = activeCombat?.active === true;
 
   // ── Load session on mount ─────────────────────────────────────────────────
@@ -343,6 +347,25 @@ export default function GamePage() {
             />
           ) : (
             <>
+              {/* Day 21 — Floor Loot Strip. Renders between story feed
+                  and nav cards. Hidden during combat (CombatMode swap
+                  above replaces this whole subtree). Auto-unmounts
+                  when no entries match the current node. */}
+              {masterState && (
+                <FloorLootStrip
+                  floor_loot={masterState.floor_loot ?? []}
+                  current_node_id={
+                    masterState.world_state.current_node_id
+                    ?? masterState.world_state.current_location_id
+                  }
+                  genre={masterState.metadata.genre}
+                  player_inventory_count={masterState.player_state.inventory.length}
+                  onSearchRemains={floorLootHandlers.onSearchRemains}
+                  onTake={floorLootHandlers.onTake}
+                  onTakeGold={floorLootHandlers.onTakeGold}
+                  onTakeAll={floorLootHandlers.onTakeAll}
+                />
+              )}
               <NavigationBar
                 masterState={masterState}
                 worldGraph={masterState?.world_graph}

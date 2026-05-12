@@ -273,6 +273,19 @@ Return EXACTLY this JSON structure (fill in the values):
     ],
     "win_condition": "1 sentence"
   },
+  "world_loot_items": [
+    {
+      "id": "<world_slug>_item_slug",
+      "name": "Item Name",
+      "type": "WEAPON|ARMOR|CONSUMABLE|VALUABLE|LORE",
+      "rarity": "COMMON|UNCOMMON|RARE",
+      "description": "1 sentence — what this item is and why it exists in this world.",
+      "effect": {},
+      "quantity": 1,
+      "stackable": false,
+      "value": 20
+    }
+  ],
   "generated_at": "${generatedAt}"
 }
 
@@ -348,7 +361,61 @@ Example combat-tagged location (a dungeon entrance with mixed roster):
   "encounter_chance": 0.7,
   "encounter_roster": ["<genre>_bestiary_enemy", "<genre>_bestiary_enemy", "<region_id>_themed_enemy_id"],
   "is_boss_room": false
-}`;
+}
+
+DAY 21 LOOT — WORLD LOOT ITEMS:
+
+Generate 6-8 world_loot_items at the TOP LEVEL of the bible
+(alongside starting_region / adjacent_regions / main_quest). These
+items feel native to THIS specific world — items a player would
+recognize as belonging to this world's themes, not a generic
+fantasy / cyberpunk / horror setting.
+
+Mix of rarities:
+- Mostly COMMON (4-5 items)
+- Some UNCOMMON (2-3 items)
+- 1 RARE item
+
+Each item must reflect the WCD's atmosphere and world_rules. Vary
+types across the 6-8 entries: mix WEAPON, ARMOR, CONSUMABLE,
+VALUABLE, LORE. Avoid duplicating the obvious "iron sword / health
+potion" defaults — these are world-specific finds, not the genre
+default. Example for a "salt-crusted desert" world: a "Salt-Brined
+Saber" (WEAPON UNCOMMON), a "Sand-Glass Vial" (VALUABLE COMMON),
+a "Salt-Pilgrim's Robe" (ARMOR COMMON), a "Map to the Buried
+Wells" (LORE UNCOMMON), etc.
+
+Item id format: "<world_slug>_<item_slug>". Stat fields by type:
+- WEAPON: effect: { "damage_die": "1d6"|"1d8"|"1d10" } and a value
+  in the 25-300 range scaled to rarity.
+- ARMOR: effect: { "armor_bonus": 1|2|3 } and a value 15-200.
+- CONSUMABLE: effect: { "heal": N } (when it heals) or {} for
+  utility items. Value 5-50.
+- VALUABLE: effect: {} (no mechanical effect). Value 15-150 — these
+  sell for their value at merchants (Day 21 stub).
+- LORE: effect: {}. Value 2-20.
+- stackable: true for CONSUMABLE; false for everything else.
+- quantity: 1 for all template entries (resolver stamps fresh
+  per-drop).
+
+DAY 21 LOOT — DUNGEON CONTAINER GUARANTEE:
+
+Every location with type "dungeon" or is_boss_room=true MUST
+contain at least one Tier 1 object with type "container" (e.g. a
+chest, sarcophagus, ritual offering bowl, footlocker, crate of
+supplies — pick something thematic for the room). LocationObject
+shape gains an optional "type" field:
+- "container" — INTERACT rolls loot for the player.
+- "fixture" — decorative; INTERACT returns a templated empty beat.
+- "lore" — INTERACT delivers a tip; templated, no LLM call.
+- "trigger" — drives a flag; reserved for future use.
+
+For non-dungeon locations (taverns, settlements, shops, shrines),
+mark Tier 1 objects with "type": "fixture" or "lore" so INTERACT
+returns the templated empty/informational response rather than
+burning an LLM call. Containers can also appear in non-dungeon
+locations — but the engine GUARANTEES at least one per dungeon /
+boss room.`;
 }
 
 function stripJsonFences(raw: string): string {
@@ -735,7 +802,68 @@ function normalizeWorldBible(parsed: unknown): unknown {
     }
   }
 
+  // ── Day 21 — world_loot_items ────────────────────────────────────────────
+  // Default to [] when the AI omitted the array. Validation accepts an
+  // empty array — the resolver falls back to the static genre pool.
+  if (!Array.isArray(o.world_loot_items)) {
+    o.world_loot_items = [];
+  }
+
+  // ── Day 21 — container guarantee for dungeon locations ───────────────────
+  // Every "dungeon" / is_boss_room location must surface at least one
+  // is_interactable object with type:"container". If the AI didn't tag
+  // any, promote the FIRST is_interactable object so the player always
+  // has somewhere to find loot. Non-dungeon locations: stamp untagged
+  // is_interactable objects as "fixture" so INTERACT routes to the
+  // templated empty response instead of an LLM call.
+  const sr2 = o.starting_region as Record<string, unknown> | undefined;
+  if (sr2) {
+    normalizeLocationContainers(sr2.locations);
+    normalizeLocationContainers(sr2.region_locations);
+  }
+
   return o;
+}
+
+/**
+ * Day 21 — walk a list of LocationDefinitions and apply the
+ * container-guarantee + fixture-tag rule to each one's objects[].
+ *
+ * Rules:
+ *   - Dungeon / boss_room location: ≥ 1 object with type "container".
+ *     Promote the first is_interactable object if none is tagged.
+ *   - Non-combat / non-dungeon location: untagged is_interactable
+ *     objects default to "fixture" so INTERACT skips the narrator.
+ *   - Existing types are preserved.
+ */
+function normalizeLocationContainers(locs: unknown): void {
+  if (!Array.isArray(locs)) return;
+  for (const raw of locs) {
+    if (!raw || typeof raw !== "object") continue;
+    const loc      = raw as Record<string, unknown>;
+    const isCombat =
+      loc.type === "dungeon" || loc.is_boss_room === true ||
+      (typeof loc.encounter_chance === "number" && (loc.encounter_chance as number) > 0);
+    const objs = Array.isArray(loc.objects) ? (loc.objects as Array<Record<string, unknown>>) : [];
+    if (objs.length === 0) continue;
+
+    const hasContainer = objs.some((o) => o && o.type === "container");
+    if (isCombat && !hasContainer) {
+      const first = objs.find((o) => o && o.is_interactable === true);
+      if (first) first.type = "container";
+    }
+    // Tag untagged is_interactable objects as fixtures (non-combat
+    // floors). Skip combat floors — the first object there is already
+    // a container per the rule above, and the rest can stay untyped
+    // so the narrator still describes them on EXAMINE.
+    if (!isCombat) {
+      for (const o of objs) {
+        if (o && o.is_interactable === true && !o.type) {
+          o.type = "fixture";
+        }
+      }
+    }
+  }
 }
 
 function validateBible(parsed: unknown): { ok: true; bible: WorldBible } | { ok: false; error: string } {

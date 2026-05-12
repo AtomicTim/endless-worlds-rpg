@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.57
-**Status:** Day 23A COMPLETE (commit 5a3e2da, 499/499) — Day 23B Quest Schema + Data Structures NEXT
+**Version:** 8.58
+**Status:** Dungeon UX fixes COMPLETE (commit e97a5a6) — Day 23B Quest Schema NEXT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -65,7 +65,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 **Per-prompt protocols (cumulative):**
 - **V8.40 — Investigation-before-patching.** Validate root-cause hypothesis BEFORE patching.
 - **V8.41 — Origin/main baseline check.** Step 1 of every prompt: `git fetch origin && git log origin/main --oneline -5`.
-- **V8.57 — jest baseline = 499.** See rule 91.
+- **V8.57 — jest baseline = 499.** See rule 91. Verify with `npx jest` after e97a5a6 (no test count in commit report).
 
 ---
 
@@ -76,7 +76,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 ### Sequence
 
 1–11. ~~Polish through vertical slice playtest~~ ✅
-12a–12c. ~~Day 23A — World Structure, dungeons, location variety (all parts)~~ ✅
+12a–12c. ~~Day 23A — World Structure, dungeons, location variety (all parts + fixes)~~ ✅
 13. **Day 23B — Quest Schema + Data Structures** ⏳ NEXT
 14. Day 23C — Quest Discovery + Journal UI
 15. Day 23D — Side Quest Generation
@@ -95,24 +95,21 @@ This scenario drives every design decision. If a feature makes that scenario *be
 - XP threshold tuning — revisit after more playtest data.
 - Death stash / recovery mechanic — design decision needed (see project-log.md).
 - Character creation rework — design questions in project-log.md Day 23.5 section.
-- Nav card peer disappearance after dungeon return — buildCards confirmed clean; if it still reproduces, share master_state.world_graph.nodes dump.
-- Nav card color differentiation for node types — deferred (all non-dungeon region_locations still burnt-copper).
+- Nav card peer disappearance after dungeon return — buildCards confirmed clean; share world_graph.nodes dump if it reproduces.
+- Nav card color differentiation for node types — deferred.
 
 ---
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Day 23A complete (5a3e2da, 499/499). Day 23B Quest Schema is next.
+**Current Phase:** Dungeon UX fixes complete (e97a5a6). Day 23B Quest Schema is next.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** atomictim/endless-worlds-rpg
 
 | Phase | Title | Status |
 | --- | --- | --- |
 | 1–11 | MVP through vertical slice playtest | ✅ Complete |
-| Gen pipeline (43cb43f) | RegionBible dedup, post-apply burst, WB/RB prompt trim | ✅ Complete |
-| Day 23A pt 1 (7424776) | Types, prompts, apply routes, pure helper libs, 30 tests | ✅ Complete |
-| Day 23A pt 1.5 (e6d5c29) | Schema fix: skeleton + enforcement + diagnostic logging | ✅ Complete |
-| Nav card fix (e29a3c0) | nodeTypeLabel helper, typeLabel fallback chain, peer regression tests | ✅ Complete |
-| Day 23A pt 2 (5a3e2da) | useDungeonRuntime, DungeonLockPopover, room cards, 3-tier breadcrumb, 8 tests | ✅ Complete |
+| Gen pipeline + Day 23A (all parts) | World structure, dungeons, location variety, UX fixes | ✅ Complete |
+| Dungeon UX fixes (e97a5a6) | Nav cards, narrator context, key unlock text path, direct-heal | ✅ Complete |
 | **Day 23B** | **Quest schema + WCD archetype + faction web + world intro template** | ⏳ **NEXT** |
 | Day 23C | Quest discovery + Morrowind journal UI | ⏳ |
 | Day 23D | Side quest generation | ⏳ |
@@ -133,9 +130,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 **No equip/unequip during combat — INTENTIONAL (rule 63):** Day 20.5 scope item.
 
-**Nav card peer disappearance after dungeon return — UNRESOLVED:** buildCards confirmed correct. Likely malformed graph node (is_expandable or zone_id). Share master_state.world_graph.nodes if it reproduces.
-
-**Nav card colors — DEFERRED:** All non-dungeon region_locations use burnt-copper. Differentiation discussion pending.
+**Nav card peer disappearance — UNRESOLVED:** buildCards confirmed correct. Likely malformed graph node.
 
 ---
 
@@ -193,55 +188,56 @@ This scenario drives every design decision. If a feature makes that scenario *be
 50. When combat starts with `turn_order[0] !== PLAYER`, the initial enemy phase MUST fire via `kickoffCombat` from useEffect. Tracked via useRef Set. (V8.36)
 51. Inventory detail panel surfaces combat stats: WEAPON Damage, ARMOR Armor (including +0), CONSUMABLE Heal. EQUIPPED pill. (V8.36)
 52. Combat input is button-only when combat is active. submitAction early-bails. INTERIM until Day 20.5. (V8.37)
-53. Use Item is templated only. Format: `"You use <item>. Restored N HP."` (V8.37)
+53. Use Item is templated only. Format: `"You use <item>. Restored N HP."` Out-of-combat healing consumables direct-dispatch via `handleDirectConsumeItem` (no text-box, no narrator). (V8.37 + V8.58)
 54. Crit events render as TWO lines: templated banner first (instant), then LLM crit prose. (V8.37)
 55. `planEventSuppression(events)` pre-scans event batches. When victory present: kill events dropped, last crit before victory has prose suppressed. (V8.37)
 56. Resolution events render as two-line centered block: banner + ≤20-word LLM prose. max_tokens 120. (V8.37)
 57. CombatEvent.rolls field populates on every event with damage/d20/heal outcome. (V8.38)
 58. Inline roll suffix renders subtle parenthetical breakdown via `{primary, rolls}` return shape from templates. (V8.38)
-59. Floating damage numbers fire on hit/crit/heal events ONLY. Routing via explicit `switch(event.type)`: player_attack hosts on `event.target`, enemy_attack/use_item host on `PLAYER_ID`. (V8.38 + V8.39)
-60. Defeat teleport — `last_settlement_hub_id` initialized at game spawn. handleDefeat uses 3-tier fallback chain. Cross-region teleport per soulslike model. (V8.38)
+59. Floating damage numbers fire on hit/crit/heal events ONLY. (V8.38 + V8.39)
+60. Defeat teleport — `last_settlement_hub_id` initialized at game spawn. handleDefeat uses 3-tier fallback chain. (V8.38)
 61. Resolution events (defeat / flee_success) carry destination payload. Victory does NOT get destination line. (V8.38)
 62. `rolls.d20` stores RAW d20 value (1-20). `target_dc` wrapped in `Math.round()` for display. (V8.39)
 63. Inventory Use button during combat routes through `submitCombatAction`. Equip/Unequip/Read/Search/Drop buttons HIDDEN during combat. INTERIM until Day 20.5. (V8.39)
-64. Floating damage entry routing uses explicit `switch(event.type)`. Defensive `player_attack target === PLAYER_ID` guard returns null. (V8.39)
-65. Settlement-hub detection in step 7c-2 uses `is_settlement_node === true` predicate ONLY. Category fallback removed. (V8.39)
-66. Floating damage emission lives INSIDE `projectCombatEventsToFeed` (useCombat), called AFTER pacing sleeps. CombatMode is a pure renderer for `floatingByActor`. (V8.40)
-67. Multi-host floating damage uses `computeFloatStartDelay` pure helper. 300ms increments. `animation-fill-mode: both`. (V8.40)
+64. Floating damage entry routing uses explicit `switch(event.type)`. (V8.39)
+65. Settlement-hub detection in step 7c-2 uses `is_settlement_node === true` predicate ONLY. (V8.39)
+66. Floating damage emission lives INSIDE `projectCombatEventsToFeed` (useCombat), called AFTER pacing sleeps. (V8.40)
+67. Multi-host floating damage uses `computeFloatStartDelay` pure helper. 300ms increments. (V8.40)
 68. Roll display format is D&D-style: `(d20: 17, +2 → 19 vs 12 | 1d6+2)` hits, `(d20: 1)` fumbles, `(d20: 20 | ...)` crits, `(1d8: 4 +4 = 8)` heals. (V8.40)
-69. Codex is rendered as `CodexModal` overlay (z-50, ESC + backdrop + X close). Combat panel remains mounted underneath. (V8.40)
-70. **CSS containment lesson:** `overflow-x/y: auto` on ancestors clips absolutely-positioned children. Use `overflow: visible` on containers hosting absolutely-positioned children extending outside the box. (V8.40)
-71. **Integration tests required for routing helpers and lookup keys.** Unit tests against fake events can pass while real-data wiring is broken. (V8.40)
-72. Nav cards group by movement direction: BACK / DEEPER / PEER / UNDISCOVERED. EXIT folds into BACK. Empty groups omitted. Pure-function `lib/game/nav-cards.ts` owns `buildCards` + `groupCardsByDirection`. NavigationBar renders each group as a row of 140px mini-columns (max 2 cards tall, `chunkArray(cards, 2)`), lone cards bottom-aligned (`justifyContent: flex-end`), group block auto-sizing. `.ew-nav-cols` handles mobile horizontal scroll. (V8.41 grouping · V8.44 column direction · V8.45 mini-col chunking)
-73. Nav card tier color via `tierOfNode`. Region → `--hl-region` lavender · Settlement → `--hl-loc` sky-blue · Sub-location → `--hl-sublocation` mint · Dungeon → `--hl-dungeon` burnt-copper. Background stays neutral. (V8.41)
-74. Cross-region BACK card consults `masterState.navigation_trail[-2]`. If previous node is a different region, BACK targets that region's settlement hub. **Intentional — BACK answers "how do I get back to where I came from?"** (V8.41)
-75. WorldMap cross-region → Region tier (V8.41). Superseded for all arrivals by rule 81. (V8.41 → V8.44)
-76. **Origin/main baseline check:** Claude Code MUST run `git fetch origin && git log origin/main --oneline -5` as step 1 of every prompt. (V8.41)
-77. **RegionBible prompt template MUST distinguish settlement_id from region_id.** Use `settlementSlug = ${outline.id}_settlement`. Include explicit "REGION vs SETTLEMENT IDS" guidance block. (V8.42)
-78. **Apply-regional-bible heal-on-apply:** `splitConflatedRegionSettlement(bible)` detects id collapse, renames settlement id, re-points sub-locations + NPCs + exits. Runs at step 0d. (V8.42)
-79. **Prompt-template hardcoded structural IDs are a recurring bug class.** Audit `app/api/game/generate-*/route.ts` for `${outline.id}`, `${region.id}` etc. in id positions. (V8.42)
-80. **Nav card dedup at region zone.** DEEPER isAtRegionZone branch checks `backCards[0]?.targetId`; suppresses DEEPER settlement card if it matches BACK destination. Cross-region: both emit. No trail: DEEPER suppressed. (V8.43 defined · V8.44 implemented)
-81. **Map tier auto-switch fires on every node arrival.** `lib/game/map-tier.ts` `chooseTierForNode()`: region zone → tier 2, everything else → tier 1. WorldMap.tsx useEffect calls this on every arrival. (V8.43 defined · V8.44 implemented)
-82. **jest baseline history.** 393 → Day 22 +59 → 452 → combat rebalance +2 → 454 → Day 23A pt1 +30 → 484 → nav card fix +7 → 491 → Day 23A pt2 +8 → **499**. See rule 91. (V8.47–V8.57)
-83. **Loot never auto-credits.** `handleVictory` pushes XP-only; all drops go to `MasterState.floor_loot[]`. Player must explicitly SEARCH REMAINS or TAKE / TAKE ALL. (V8.47)
-84. **Container search is engine-resolved, zero LLM calls.** `resolveInteract` detects `type === "container"` → `resolveLoot()` → `FloorLootEntry` → templated beat. Engine guarantees ≥1 container per combat-eligible node. (V8.47)
-85. **Currency and inventory cap are canonical constants.** `lib/game/currency.ts` · `lib/game/constants.ts` → `INVENTORY_CAP = 20`. Never hardcode. (V8.47)
-86. **Revisit suppression.** On ARRIVING at `discovered === true`: emit "You return to {name}." only. Spawn settlement starts `discovered: true`. (V8.48)
-87. **Object highlight popup uses context-aware action labels.** CONTAINER → "Search". ITEM POI → "Examine". Navigation-like labels → Close only. "Pick up" NEVER appears for LocationObject interactions. (V8.48)
-88. **`resolveUseItem` resolves heal by effect, not by id.** (1) `item_effect?.heal` finite positive → flat heal. (2) `BASIC_HEALTH_POTION_ID` → 1d8+4. (3) Otherwise → no-op. (V8.49)
-89. **Archetype system in `lib/game/archetypes.ts`.** 25 classes. `buildStartingAttributes(background)` sets stats: STAT_BASE=2, primary +2, secondary +1. (V8.50)
-90. **Level-up flow is post-combat, player-driven.** LevelUpModal opens after combat slice clears. Auto-gains + 5-button free stat picker. STAT_XP mid-combat auto-applies to archetype primary. (V8.50)
-91. **jest baseline = 499 (V8.57).** Day 23A pt2 added 8 tests (491→499). 499 is the authoritative count going forward. (V8.57)
-92. **Ability modifier formula calibrated for 2-10 stat range.** Both `abilityMod` and `getAttributeModifier` use `Math.floor((score - 2) / 2)`. These MUST always match. CharacterSheet pip bar uses `value/2` (min 1). (V8.51)
-93. **Enemy stat budgets enforced at two layers.** Static bestiaries: tier-1 agi_mod ≤1, hp min ≤8. Bible prompts: ENEMY STAT BUDGET block with NEVER constraints. (V8.51)
-94. **RegionBibleCache in-flight dedup via promise map.** `inFlight` is `Map<string, Promise<RegionBible | null>>`. `awaitRegionalBible` resolves: (1) cache hit; (2) await in-flight promise; (3) null → live fetch. (V8.53)
-95. **Post-apply pregeneration burst.** After `apply-world-bible` succeeds, wizard fires `pregenerateRegionalBible()` for all adjacent_regions (fire-and-forget). WorldBible NOT split — quest coherence requires single creative act. (V8.53)
-96. **Dungeon data layer in two pure modules.** `lib/game/dungeon-validation.ts` wired into both apply routes. `lib/game/dungeon-navigation.ts`: 14 pure functions for all dungeon runtime + UI. (V8.54)
-97. **LLM generation prompt skeleton anchors output count and structure.** Instructions alone cannot override the skeleton. When adding required fields or changing expected counts: (1) update skeleton, (2) add enforcement block, (3) add diagnostic logging. Skeleton is ground truth. (V8.55)
-98. **Nav card type label derives from `node_type` via `nodeTypeLabel()`.** NODE_TYPE_LABEL map: settlement_hub→SETTLEMENT, outpost→OUTPOST, wilderness→WILDERNESS, dungeon→DUNGEON, landmark→LANDMARK, abandoned_settlement→RUINS. `typeLabel()` fallback chain: REGION → nodeTypeLabel(node_type) → SETTLEMENT → category.toUpperCase(). (V8.56)
-99. **Dungeon runtime in `hooks/useDungeonRuntime.ts` — separate hook, mirrors useCombat split.** Not in useGameLoop. Watches current_node_id via useEffect; on dungeon arrival without dungeon_state, calls initDungeonState (dungeon-navigation.ts), marks entrance discovered, emits entrance description as cache-hit-style beat (no LLM). Re-fire guarded by useRef. Also observes combat dismissal; emits "The dungeon falls silent." once per cleared boss room. (V8.57)
-100. **Room navigation semantics.** navigateToRoom validates adjacency + lock state, advances dungeon_state, fires encounter check using room.encounter_chance on FIRST VISIT ONLY (revisit suppression suppresses description AND encounter on cleared rooms). Room descriptions: zero LLM cost (100% savings on dungeon traversal). BACK from entrance → parent region zone. BACK from non-entrance → entrance room. dungeon_state persists across dungeon exits — re-entry resumes with rooms_visited and lock state intact. (V8.57)
-101. **DungeonLockPopover handles all boss room lock interactions.** Clicking locked boss room card opens popover (not navigation): shows DungeonLock.hint + [USE {key_item_name}] when key in inventory + [TRY TO FORCE IT — STR ≥ 6] when raw score ≥ 6 + [CLOSE]. Both paths call dungeon-navigation.ts helpers, flip lock.unlocked: true, emit templated beats. Key item consumed from inventory. STR threshold is raw score ≥ 6 (not modifier). (V8.57)
+69. Codex is rendered as `CodexModal` overlay (z-50, ESC + backdrop + X close). (V8.40)
+70. **CSS containment lesson:** `overflow-x/y: auto` clips absolutely-positioned children. Use `overflow: visible` on containers hosting them. (V8.40)
+71. **Integration tests required for routing helpers and lookup keys.** (V8.40)
+72. Nav cards group by movement direction: BACK / DEEPER / PEER / UNDISCOVERED. Pure-function `lib/game/nav-cards.ts` owns `buildCards` + `groupCardsByDirection`. NavigationBar renders 140px mini-columns (max 2 tall, `chunkArray(cards, 2)`). `.ew-nav-cols` handles mobile scroll. (V8.41–V8.45)
+73. Nav card tier color via `tierOfNode`. Region → lavender · Settlement → sky-blue · Sub-location → mint · Dungeon → burnt-copper. (V8.41)
+74. Cross-region BACK card consults `navigation_trail[-2]`. If previous is different region, targets that region's settlement hub. (V8.41)
+75. WorldMap cross-region → Region tier. Superseded for all arrivals by rule 81. (V8.41 → V8.44)
+76. **Origin/main baseline check:** Claude Code MUST run `git fetch origin && git log origin/main --oneline -5` as step 1. (V8.41)
+77. **RegionBible prompt template MUST distinguish settlement_id from region_id.** (V8.42)
+78. **Apply-regional-bible heal-on-apply:** `splitConflatedRegionSettlement(bible)` runs at step 0d. (V8.42)
+79. **Prompt-template hardcoded structural IDs are a recurring bug class.** Audit `generate-*/route.ts` for `${outline.id}` etc. in id positions. (V8.42)
+80. **Nav card dedup at region zone.** DEEPER suppresses settlement card if it matches BACK destination. (V8.43–V8.44)
+81. **Map tier auto-switch fires on every node arrival.** `chooseTierForNode()`: region zone → tier 2, everything else → tier 1. (V8.43–V8.44)
+82. **jest baseline history.** 393→452→454→484→491→**499** (verify post e97a5a6). See rule 91. (V8.47–V8.57)
+83. **Loot never auto-credits.** All drops go to `MasterState.floor_loot[]`. Player must SEARCH REMAINS or TAKE / TAKE ALL. (V8.47)
+84. **Container search is engine-resolved, zero LLM calls.** Guarantees ≥1 container per combat-eligible node. (V8.47)
+85. **Currency and inventory cap are canonical constants.** `INVENTORY_CAP = 20`. Never hardcode. (V8.47)
+86. **Revisit suppression.** `discovered === true` → emit "You return to {name}." only. (V8.48)
+87. **Object highlight popup context-aware labels.** CONTAINER → "Search". ITEM POI → "Examine". Navigation-like → Close only. (V8.48)
+88. **`resolveUseItem` resolves heal by effect, not by id.** (1) `effect.heal` → flat. (2) BASIC_HEALTH_POTION_ID → 1d8+4. (3) no-op. (V8.49)
+89. **Archetype system in `lib/game/archetypes.ts`.** 25 classes. STAT_BASE=2, primary +2, secondary +1. (V8.50)
+90. **Level-up flow is post-combat, player-driven.** LevelUpModal + 5-button picker. STAT_XP mid-combat auto-applies to primary. (V8.50)
+91. **jest baseline = 499 (V8.57).** Verify after e97a5a6 — no test count in commit report. (V8.57)
+92. **Ability modifier: `Math.floor((score - 2) / 2)`.** Both `abilityMod` and `getAttributeModifier` MUST match. (V8.51)
+93. **Enemy stat budgets: tier-1 agi_mod ≤1, hp min ≤8.** Bible prompts include ENEMY STAT BUDGET block. (V8.51)
+94. **RegionBibleCache in-flight dedup via promise map.** `awaitRegionalBible` resolves: cache hit → await in-flight → null/live. (V8.53)
+95. **Post-apply pregeneration burst.** Wizard fires all adjacent_regions immediately after apply-world-bible. (V8.53)
+96. **Dungeon data layer in two pure modules.** `dungeon-validation.ts` + `dungeon-navigation.ts` (14 pure functions). (V8.54)
+97. **LLM generation prompt skeleton anchors output.** Instructions alone can't override it. Update skeleton + enforcement + logging together. (V8.55)
+98. **Nav card type label via `nodeTypeLabel()`.** settlement_hub→SETTLEMENT, outpost→OUTPOST, wilderness→WILDERNESS, dungeon→DUNGEON, landmark→LANDMARK, abandoned_settlement→RUINS. (V8.56)
+99. **Dungeon runtime in `hooks/useDungeonRuntime.ts`.** Separate hook. Watches current_node_id; initDungeonState on arrival; re-fire guarded by useRef; "The dungeon falls silent." on boss clear. (V8.57)
+100. **Room navigation semantics.** First-visit encounter check; revisit suppresses both description and encounter. Zero LLM cost on dungeon traversal. BACK from entrance → region zone; BACK from non-entrance → entrance. dungeon_state persists across exits. (V8.57)
+101. **DungeonLockPopover.** Clicking locked boss card opens popover: hint + [USE key] (if held) + [FORCE — STR ≥ 6] + Close. Raw STR ≥ 6 threshold. (V8.57)
+102. **Dungeon narrator context rules + key item design. (V8.58)** When inside a dungeon room (dungeon_state.node_id === current_node_id): (1) CURRENT ROOM block (name + description + objects) injected before WORLD ASSETS. (2) Player inventory stripped from narrator context — narrator cannot hint-match gear to sockets. (3) CONNECTED LOCATIONS overridden to adjacent room names only; settlement/region above dungeon not included. (4) Key items (`is_key_item: true`) have NO USE button in inventory — two unlock paths only: text "use [item] on [object]" (logic-resolver validates adjacency → DUNGEON_KEY_USE or DUNGEON_KEY_USE_FAIL) and nav card popover (spatial enforcement via room connection graph). (5) Out-of-combat healing consumables direct-dispatch via `handleDirectConsumeItem` — no text-box population, no narrator round-trip.
 
 ---
 
@@ -249,7 +245,8 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 DIALOGUE: WCD → HARD RULES → RESPONDING CHARACTER → CLOSED CONTEXT → TIER 1 OBJECTS → WORLD ASSETS → SCENE → VERBOSITY
 non-DIALOGUE: WCD → HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → CONNECTED LOCATIONS → WORLD ASSETS → SCENE → VERBOSITY
-COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint (resolutions ≤20 words, crit/kill 2-3 sentences)
+DUNGEON ROOM: WCD → HARD RULES → CURRENT ROOM → OBJECTS IN ROOM → ADJACENT ROOMS → SCENE → VERBOSITY (no inventory, no settlement)
+COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint
 
 ---
 
@@ -311,8 +308,8 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint (resol
 
 Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim reports commit + tests → Claude.ai updates docs → Tim verifies → next prompt.
 
-**Update routing:** New rules or status changes → CLAUDE.md. Trajectory notes, round history, future features, design captures → `/docs/project-log.md`. Quest system design → `/docs/quest-system-spec.md`.
+**Update routing:** New rules or status changes → CLAUDE.md. Trajectory notes, round history, future features → `/docs/project-log.md`. Quest system design → `/docs/quest-system-spec.md`.
 
-**Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` (no pattern) = authoritative full-suite test count. Baseline = 499 (rule 91).**
+**Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` = authoritative full-suite test count. Baseline = 499 (rule 91) — verify after e97a5a6.**
 
 **Authority:** Architecture → /docs/architecture-spec.md · Combat → /docs/combat-spec.md · Quest system → /docs/quest-system-spec.md · Vision/scope → Game Vision · Strategic/sequencing → /docs/project-log.md.

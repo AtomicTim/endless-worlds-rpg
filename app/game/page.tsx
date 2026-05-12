@@ -24,6 +24,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useGameStore, makeMessage } from "@/lib/stores/game-store";
 import { useGameLoop } from "@/hooks/useGameLoop";
 import { useCombat } from "@/hooks/useCombat";
+import { useDungeonRuntime } from "@/hooks/useDungeonRuntime";
 import { getAllWorldAssets, getWorldAssetsForLocation, normalizeLocationId, saveCodexEntry } from "@/lib/game/codex";
 import { formatLocationId } from "@/lib/game/location-formatter";
 
@@ -59,6 +60,11 @@ export default function GamePage() {
     floatingByActor:  combatFloatingByActor,
     submitCombatAction,
   } = useCombat();
+  // Day 23A pt 2 — dungeon-runtime callbacks for the NavigationBar
+  // room cards + locked-room popover. The hook also runs the
+  // dungeon-entry side effect (initialize dungeon_state on arrival)
+  // and the boss-victory beat observer.
+  const dungeon = useDungeonRuntime();
   // Day 21 — SEARCH REMAINS + TAKE handlers backing the FloorLootStrip.
   const floorLootHandlers = useFloorLoot();
   const inCombat = activeCombat?.active === true;
@@ -375,6 +381,15 @@ export default function GamePage() {
                 worldGraph={masterState?.world_graph}
                 onNavigate={(nodeId) => navigateTo(nodeId)}
                 genre={genre}
+                // Day 23A pt 2 — dungeon callbacks. NavigationBar
+                // branches to room-card mode when masterState
+                // .dungeon_state is set.
+                onNavigateRoom={dungeon.navigateToRoom}
+                onUseKeyOnRoom={dungeon.useKeyOnRoom}
+                onForceRoom={dungeon.forceUnlockRoom}
+                canForceUnlock={dungeon.canForceUnlock()}
+                keyItemForRoom={dungeon.keyItemForRoom}
+                strBypassThreshold={dungeon.strBypassThreshold}
               />
               <InputBar
                 ref={inputBarRef}

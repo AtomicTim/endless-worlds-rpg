@@ -1,19 +1,30 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useGameStore } from "@/lib/stores/game-store";
 import {
   buildCards,
   groupCardsByDirection,
+  nodeTypeLabel,
   type Card,
   type CardDirection,
   type CardKind,
   type CardTier,
 } from "@/lib/game/nav-cards";
+import {
+  buildRoomCards,
+  isAtDungeonEntrance,
+  findRoom,
+  type RoomCard,
+} from "@/lib/game/dungeon-navigation";
+import { DungeonLockPopover } from "./DungeonLockPopover";
 import type {
+  DungeonRoom,
   Genre,
+  Item,
   MasterState,
   WorldGraph,
+  WorldNode,
 } from "@/types/game";
 
 /**
@@ -51,6 +62,19 @@ interface Props {
   /** Genre is wired through for legacy reasons; theming now lives in
    *  CSS via [data-genre] on the GameLayout root. */
   genre:       Genre;
+  // Day 23A pt 2 — dungeon-room runtime callbacks. Set by page.tsx
+  // from useDungeonRuntime. When undefined the dungeon UI is disabled
+  // and dungeon nodes fall through to standard graph-node nav. The
+  // callbacks themselves no-op when dungeon_state is missing (defence
+  // in depth — UI should not invoke them in that state anyway).
+  onNavigateRoom?:  (roomId: string) => void;
+  onUseKeyOnRoom?:  (roomId: string) => void;
+  onForceRoom?:     (roomId: string) => void;
+  canForceUnlock?:  boolean;
+  /** Looks up the key item for a locked room — null when not held. */
+  keyItemForRoom?:  (roomId: string) => Item | null;
+  /** STR threshold value, surfaced in the popover label. */
+  strBypassThreshold?: number;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -65,7 +89,13 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return result;
 }
 
-export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
+export function NavigationBar({
+  worldGraph, masterState, onNavigate,
+  onNavigateRoom, onUseKeyOnRoom, onForceRoom,
+  canForceUnlock = false,
+  keyItemForRoom,
+  strBypassThreshold = 6,
+}: Props) {
   // Adjacent region travel — outline id currently being expanded into
   // a full RegionBible. Set when the player clicks a ◇ peer-unknown
   // card; cleared when apply-regional-bible resolves. We disable every
@@ -74,19 +104,55 @@ export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
   // "GENERATING..." so the 5-15s wait reads as intentional.
   const generatingRegionId = useGameStore((s) => s.generatingRegionId);
 
+  // Day 23A pt 2 — when the player is inside a dungeon, swap the
+  // standard region/settlement nav for room cards. dungeon_state is
+  // the canonical signal: set when the runtime initialized + dropped
+  // the player at the entrance; cleared only via explicit reset (the
+  // player exits + walks far enough that the runtime forgets — V8.56
+  // keeps it across re-entries so room discovery sticks).
+  const dungeonState = masterState?.dungeon_state ?? null;
+  const dungeonNode: WorldNode | null = dungeonState && worldGraph?.nodes[dungeonState.node_id]
+    ? worldGraph.nodes[dungeonState.node_id]
+    : null;
+  const inDungeon = !!(dungeonState && dungeonNode);
+
+  // Cards / breadcrumb pick the right branch based on inDungeon.
   const cards = useMemo<Card[]>(
-    () => buildCards(worldGraph, masterState),
-    [worldGraph, masterState]
+    () => (inDungeon ? [] : buildCards(worldGraph, masterState)),
+    [worldGraph, masterState, inDungeon]
   );
 
   const grouped = useMemo(() => groupCardsByDirection(cards), [cards]);
 
-  const breadcrumb = useMemo<string>(
-    () => buildBreadcrumb(worldGraph),
-    [worldGraph]
+  const roomCards = useMemo<RoomCard[]>(
+    () => buildRoomCards(
+      dungeonNode ?? undefined,
+      dungeonState ?? undefined,
+      masterState?.player_state.inventory ?? []
+    ),
+    [dungeonNode, dungeonState, masterState?.player_state.inventory]
   );
 
-  if (cards.length === 0) return null;
+  const breadcrumb = useMemo<string>(
+    () => {
+      if (inDungeon && dungeonNode && dungeonState) {
+        return buildDungeonBreadcrumb(worldGraph, dungeonNode, dungeonState.current_room_id);
+      }
+      return buildBreadcrumb(worldGraph);
+    },
+    [worldGraph, inDungeon, dungeonNode, dungeonState]
+  );
+
+  // Lock popover state. Only one room can be in-focus at a time;
+  // dismiss on background click / ESC / action select.
+  const [lockedRoomId, setLockedRoomId] = useState<string | null>(null);
+  const lockedRoom: DungeonRoom | null = lockedRoomId && dungeonNode
+    ? findRoom(dungeonNode, lockedRoomId)
+    : null;
+
+  // Bail when there's nothing to render in either mode.
+  if (!inDungeon && cards.length === 0) return null;
+  if (inDungeon && !dungeonNode) return null;
 
   // Column order — back first, then deeper / peer / undiscovered.
   // Empty columns are skipped entirely (no whitespace, no label).
@@ -124,11 +190,57 @@ export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
           {breadcrumb}
         </div>
       )}
-      {/* Polish 4c TASK 3 — 4-column layout. Columns are side-by-side with
-          a fixed 156 px width each. On mobile the container scrolls
-          horizontally (hidden scrollbar via .ew-nav-cols). overflow-y is
-          explicitly "visible" to prevent CSS auto-promotion from clipping
-          absolutely-positioned descendants (rule 70). */}
+      {/* Day 23A pt 2 — when the player is inside a dungeon, render the
+          dungeon room cards in place of the standard nav layout. The
+          ROOMS column holds room-to-room moves (entrance → middle →
+          boss + back). A BACK column either exits to the parent region
+          (at entrance) or steps back toward the entrance (anywhere
+          else). The locked-boss-room card opens a popover for the
+          USE-key / STR-bypass actions. */}
+      {inDungeon && dungeonNode && dungeonState && (
+        <div
+          className="ew-nav-cols"
+          style={{
+            display:        "flex",
+            flexDirection:  "row",
+            gap:            8,
+            padding:        "10px 16px 12px",
+            overflowX:      "auto",
+            overflowY:      "visible",
+          }}
+        >
+          {/* BACK column — exit dungeon at entrance, or go to entrance. */}
+          <DungeonBackColumn
+            worldGraph={worldGraph}
+            dungeonNode={dungeonNode}
+            dungeonState={dungeonState}
+            onNavigate={onNavigate}
+            onNavigateRoom={onNavigateRoom}
+          />
+          {/* ROOMS column — connected rooms from the current room. */}
+          <DungeonRoomsColumn
+            roomCards={roomCards}
+            onNavigateRoom={onNavigateRoom}
+            onLockedRoomClick={(roomId) => setLockedRoomId(roomId)}
+          />
+        </div>
+      )}
+
+      {lockedRoom && lockedRoom.lock && (
+        <DungeonLockPopover
+          room={lockedRoom}
+          keyItemName={keyItemForRoom?.(lockedRoom.id)?.name ?? null}
+          canForce={canForceUnlock}
+          strThreshold={strBypassThreshold}
+          onUseKey={() => onUseKeyOnRoom?.(lockedRoom.id)}
+          onForce={() => onForceRoom?.(lockedRoom.id)}
+          onClose={() => setLockedRoomId(null)}
+        />
+      )}
+
+      {/* Standard graph-node nav (region / settlement / sub-location).
+          Mutually exclusive with the dungeon branch above. */}
+      {!inDungeon && (
       <div
         className="ew-nav-cols"
         style={{
@@ -203,8 +315,267 @@ export function NavigationBar({ worldGraph, masterState, onNavigate }: Props) {
           );
         })}
       </div>
+      )}
     </div>
   );
+}
+
+// ── Day 23A pt 2 — Dungeon nav columns ───────────────────────────────────────
+
+/**
+ * BACK column for dungeon mode. The semantics differ from regular
+ * graph nav:
+ *   • At the entrance room → BACK exits the dungeon entirely (regular
+ *     navigateTo to the parent region). dungeon_state PERSISTS — the
+ *     runtime hook clears it lazily on the next non-dungeon arrival,
+ *     OR keeps it so re-entry resumes from the same room. Per spec
+ *     we keep it.
+ *   • From any non-entrance room → BACK steps one room toward the
+ *     entrance (the connected room with room_type "entrance" or the
+ *     player's previous room id from rooms_visited).
+ */
+function DungeonBackColumn({
+  worldGraph,
+  dungeonNode,
+  dungeonState,
+  onNavigate,
+  onNavigateRoom,
+}: {
+  worldGraph:     WorldGraph | undefined;
+  dungeonNode:    WorldNode;
+  dungeonState:   NonNullable<MasterState["dungeon_state"]>;
+  onNavigate:     (nodeId: string) => void;
+  onNavigateRoom?: (roomId: string) => void;
+}) {
+  const atEntrance = isAtDungeonEntrance(dungeonNode, dungeonState);
+  // Resolve the target: parent region node (exit) or the entrance room.
+  let targetId: string | null = null;
+  let label = "";
+  let sublabel = "";
+  if (atEntrance) {
+    // Exit dungeon → go to the dungeon node's zone_id (parent region).
+    const parent = dungeonNode.zone_id && worldGraph?.nodes[dungeonNode.zone_id];
+    if (parent) {
+      targetId = parent.id;
+      label = parent.name.toUpperCase();
+      sublabel = nodeTypeLabel(parent.node_type) ?? "REGION";
+    }
+  } else {
+    // Step back to entrance room.
+    const entrance = (dungeonNode.dungeon_rooms ?? []).find((r) => r.room_type === "entrance");
+    if (entrance) {
+      targetId = entrance.id;
+      label = entrance.name.toUpperCase();
+      sublabel = "ENTRANCE";
+    }
+  }
+  if (!targetId) return null;
+
+  const handleClick = () => {
+    if (atEntrance) onNavigate(targetId!);
+    else onNavigateRoom?.(targetId!);
+  };
+
+  return (
+    <div
+      style={{
+        flexShrink:     0,
+        display:        "flex",
+        flexDirection:  "column",
+        gap:            4,
+        padding:        "8px",
+        border:         "1px solid var(--line-2)",
+        borderRadius:   4,
+      }}
+    >
+      <span
+        style={{
+          fontFamily:    "var(--serif)",
+          fontStyle:     "italic",
+          fontSize:      10,
+          color:         "var(--ink-4)",
+          opacity:       0.7,
+          letterSpacing: "0.04em",
+          marginBottom:  2,
+        }}
+      >
+        back
+      </span>
+      <div style={{ display: "flex", flexDirection: "row", gap: 4 }}>
+        <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 4, width: 140 }}>
+          <DungeonNavCardButton
+            onClick={handleClick}
+            arrow="←"
+            name={label}
+            sublabel={sublabel}
+            color="var(--ink-3)"
+            background="var(--bg-2)"
+            borderColor="var(--line)"
+            borderStyle="solid"
+            dimmed={false}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ROOMS column — connected rooms from the player's current room.
+ * Locked rooms (boss room without the key) get the lock icon and
+ * route to the popover instead of navigating.
+ */
+function DungeonRoomsColumn({
+  roomCards,
+  onNavigateRoom,
+  onLockedRoomClick,
+}: {
+  roomCards:         RoomCard[];
+  onNavigateRoom?:   (roomId: string) => void;
+  onLockedRoomClick: (roomId: string) => void;
+}) {
+  if (roomCards.length === 0) return null;
+  return (
+    <div
+      style={{
+        flexShrink:     0,
+        display:        "flex",
+        flexDirection:  "column",
+        gap:            4,
+        padding:        "8px",
+        border:         "1px solid var(--line-2)",
+        borderRadius:   4,
+      }}
+    >
+      <span
+        style={{
+          fontFamily:    "var(--serif)",
+          fontStyle:     "italic",
+          fontSize:      10,
+          color:         "var(--ink-4)",
+          opacity:       0.7,
+          letterSpacing: "0.04em",
+          marginBottom:  2,
+        }}
+      >
+        rooms
+      </span>
+      <div style={{ display: "flex", flexDirection: "row", gap: 4 }}>
+        <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 4, width: 140 }}>
+          {roomCards.map((card) => {
+            const isLocked = card.locked;
+            const handleClick = () => {
+              if (isLocked) onLockedRoomClick(card.room_id);
+              else onNavigateRoom?.(card.room_id);
+            };
+            // When a key is held the card surfaces key_item_name; we
+            // still route through the popover so the player gets the
+            // explicit USE-key confirmation (matches the "you decide"
+            // beat the prompt requires).
+            const hasKeyButLocked = !!card.key_item_name;
+            const finalClick = hasKeyButLocked
+              ? () => onLockedRoomClick(card.room_id)
+              : handleClick;
+            return (
+              <DungeonNavCardButton
+                key={card.room_id}
+                onClick={finalClick}
+                arrow={isLocked || hasKeyButLocked ? "🔒" : "→"}
+                name={card.name.toUpperCase()}
+                sublabel={card.type_label}
+                color="var(--hl-dungeon)"
+                background={card.visited
+                  ? "color-mix(in srgb, var(--hl-dungeon) 6%, transparent)"
+                  : "color-mix(in srgb, var(--hl-dungeon) 12%, transparent)"}
+                borderColor="var(--hl-dungeon)"
+                borderStyle={isLocked || hasKeyButLocked ? "dashed" : "solid"}
+                dimmed={card.visited && !isLocked && !hasKeyButLocked}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Minimal nav-card button used by both dungeon columns. Mirrors the
+ *  visual language of the standard NavCard without dragging in the
+ *  region/settlement tier-color plumbing. */
+function DungeonNavCardButton({
+  onClick, arrow, name, sublabel,
+  color, background, borderColor, borderStyle, dimmed,
+}: {
+  onClick:     () => void;
+  arrow:       string;
+  name:        string;
+  sublabel:    string;
+  color:       string;
+  background:  string;
+  borderColor: string;
+  borderStyle: "solid" | "dashed";
+  dimmed:      boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-left rounded-sm transition-opacity hover:opacity-80"
+      style={{
+        background,
+        border:      `1px ${borderStyle} ${borderColor}`,
+        padding:     "8px 10px",
+        opacity:     dimmed ? 0.75 : 1,
+        cursor:      "pointer",
+        width:       "100%",
+      }}
+    >
+      <div
+        style={{
+          display:    "flex",
+          alignItems: "center",
+          gap:        6,
+          color,
+          fontFamily: "var(--mono)",
+          fontSize:   11,
+          fontWeight: 700,
+          letterSpacing: "0.04em",
+        }}
+      >
+        <span style={{ fontSize: 13 }}>{arrow}</span>
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+      </div>
+      <div
+        style={{
+          marginTop:    2,
+          fontFamily:   "var(--mono)",
+          fontSize:     9,
+          letterSpacing: "0.2em",
+          color:        "var(--ink-4)",
+        }}
+      >
+        {sublabel}
+      </div>
+    </button>
+  );
+}
+
+// ── Day 23A pt 2 — 3-tier breadcrumb inside a dungeon ───────────────────────
+function buildDungeonBreadcrumb(
+  worldGraph: WorldGraph | undefined,
+  dungeonNode: WorldNode,
+  currentRoomId: string,
+): string {
+  const parts: string[] = [];
+  // Tier 1 — geographic region (parent zone).
+  const parent = dungeonNode.zone_id && worldGraph?.nodes[dungeonNode.zone_id];
+  if (parent) parts.push(parent.name.toUpperCase());
+  // Tier 2 — dungeon itself.
+  parts.push(dungeonNode.name.toUpperCase());
+  // Tier 3 — current room.
+  const room = (dungeonNode.dungeon_rooms ?? []).find((r) => r.id === currentRoomId);
+  if (room) parts.push(room.name.toUpperCase());
+  return parts.join(" › ");
 }
 
 // ── Breadcrumb builder ───────────────────────────────────────────────────────

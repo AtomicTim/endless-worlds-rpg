@@ -110,11 +110,21 @@ export function NavigationBar({
   // the player at the entrance; cleared only via explicit reset (the
   // player exits + walks far enough that the runtime forgets — V8.56
   // keeps it across re-entries so room discovery sticks).
+  //
+  // FIX 1 — guard currentNodeId === dungeonState.node_id. Before this
+  // fix, dungeon_state persisting across exits caused room cards to
+  // render even when the player was back in the region zone. The
+  // breadcrumb condition uses inDungeon so it's fixed automatically.
+  const currentNodeId = worldGraph?.current_node_id ?? null;
   const dungeonState = masterState?.dungeon_state ?? null;
   const dungeonNode: WorldNode | null = dungeonState && worldGraph?.nodes[dungeonState.node_id]
     ? worldGraph.nodes[dungeonState.node_id]
     : null;
-  const inDungeon = !!(dungeonState && dungeonNode);
+  const inDungeon = !!(
+    dungeonState &&
+    dungeonNode &&
+    currentNodeId === dungeonState.node_id
+  );
 
   // Cards / breadcrumb pick the right branch based on inDungeon.
   const cards = useMemo<Card[]>(

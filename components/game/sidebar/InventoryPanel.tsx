@@ -267,6 +267,54 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
     setStatPickerOpen(false);
   }
 
+  // ── FIX 4 — direct consumable heal (out-of-combat only) ─────────────────
+  // Mirrors rule 88 (resolveUseItem heal priority) and the combat-engine
+  // path. Bypasses the text-input / intent-parser so the heal fires
+  // immediately without a narrator call.
+  function handleDirectConsumeItem(item: Item) {
+    if (!masterState) return;
+    if (item.type !== ItemType.CONSUMABLE) return;
+
+    const player = masterState.player_state;
+
+    // Resolve heal amount (mirrors combat-resolver's resolveUseItem).
+    let healAmount = 0;
+    let healDisplay = "0";
+    if (typeof item.effect?.heal === "number" && item.effect.heal > 0) {
+      healAmount = item.effect.heal;
+      healDisplay = String(healAmount);
+    } else if (item.id === BASIC_HEALTH_POTION_ID) {
+      const dieRoll  = Math.floor(Math.random() * 8) + 1;
+      healAmount     = dieRoll + 4;
+      healDisplay    = String(healAmount);
+    } else {
+      // Non-healing consumable — let the narrator handle it.
+      onSubmit?.(`use ${item.name}`);
+      return;
+    }
+
+    const newHp = Math.min(player.max_health, player.health + healAmount);
+
+    const nextQty = (item.quantity ?? 1) - 1;
+    const newInventory = nextQty > 0
+      ? player.inventory.map((i) => (i.id === item.id ? { ...i, quantity: nextQty } : i))
+      : player.inventory.filter((i) => i.id !== item.id);
+
+    setMasterState({
+      ...masterState,
+      player_state: { ...player, health: newHp, inventory: newInventory },
+    });
+
+    addMessage(
+      makeMessage("SYSTEM", `You use ${item.name}. Restored ${healDisplay} HP.`, {
+        outcome_type: "USE_ITEM_CONSUMED",
+        direct_consume: true,
+        item_name: item.name,
+      })
+    );
+    setSelectedId(null);
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
@@ -525,7 +573,12 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
                   </button>
                 )}
 
-              {selectedItem.type === ItemType.CONSUMABLE && onSubmit && (
+              {/* FIX 4 — key items never show a USE button (text path or
+                  nav-card popover are the only paths per FIX 3). Healing
+                  consumables direct-dispatch out of combat. Other
+                  consumables (buffs) still fall back to onSubmit → narrator. */}
+              {selectedItem.type === ItemType.CONSUMABLE &&
+               !selectedItem.is_key_item && (
                 <button
                   className="flex-1 rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-opacity disabled:opacity-40"
                   style={{ backgroundColor: "var(--color-primary)", color: "#000" }}
@@ -533,19 +586,18 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
                   onClick={() => {
                     // Day 20.4.1 TASK 2 — when combat is active, route
                     // through useCombat.submitCombatAction so the
-                    // engine consumes a turn properly. The
-                    // useGameLoop.submitAction path would hit the
-                    // V8.37 "Combat input is disabled" gate and the
-                    // potion would never be consumed.
+                    // engine consumes a turn properly.
+                    // FIX 4 — out of combat, direct-dispatch so the heal
+                    // fires instantly without a narrator round-trip.
                     if (inCombat) {
                       void submitCombatAction({
                         action:  "use_item",
                         item_id: selectedItem.id,
                       });
+                      setSelectedId(null);
                     } else {
-                      onSubmit(`use ${selectedItem.name}`);
+                      handleDirectConsumeItem(selectedItem);
                     }
-                    setSelectedId(null);
                   }}
                 >
                   Use

@@ -600,6 +600,69 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
     };
   }
 
+  // ── DUNGEON KEY ITEM — text-path unlock (FIX 3) ───────────────────────────
+  // Text path: "use [key] on [hatch]" or just "use [key]". When the item is
+  // a dungeon key (is_key_item + unlocks_node), check whether the player is
+  // standing in a dungeon room that is adjacent to the locked room this key
+  // opens. If yes: consume item, return DUNGEON_KEY_USE (game loop flips the
+  // lock + emits templated beat). If no: return DUNGEON_KEY_USE_FAIL.
+  // Both outcome_types are handled in the game loop without a narrator call.
+  if (item.is_key_item === true && item.unlocks_node) {
+    const ds         = state.dungeon_state;
+    const graph      = state.world_graph;
+    const curNodeId  = graph?.current_node_id ?? state.world_state.current_node_id;
+
+    if (ds && ds.node_id === curNodeId && graph) {
+      const dungeonNode  = graph.nodes[ds.node_id];
+      const currentRoom  = (dungeonNode?.dungeon_rooms ?? [])
+        .find((r) => r.id === ds.current_room_id);
+      const targetRoomId = item.unlocks_node;
+
+      // Room must be adjacent to the current room AND still locked.
+      const adjacentRoom = currentRoom
+        ? (dungeonNode?.dungeon_rooms ?? []).find(
+            (r) => r.id === targetRoomId &&
+                   currentRoom.connections.includes(r.id)
+          )
+        : undefined;
+
+      if (adjacentRoom?.lock && !adjacentRoom.lock.unlocked) {
+        const qty = (item.quantity ?? 1) - 1;
+        const newInventory = qty > 0
+          ? state.player_state.inventory.map((i) =>
+              i.id === item.id ? { ...i, quantity: qty } : i
+            )
+          : state.player_state.inventory.filter((i) => i.id !== item.id);
+        return {
+          success:      true,
+          outcome_type: "DUNGEON_KEY_USE",
+          state_delta:  {
+            player_state: { ...state.player_state, inventory: newInventory },
+            world_state:  PRESENT,
+          },
+          narrative_context: {
+            item_id:       item.id,
+            item_name:     item.name,
+            room_id:       adjacentRoom.id,
+            key_item_name: adjacentRoom.lock.key_item_name,
+          },
+        };
+      }
+    }
+
+    // Not adjacent to a matching unlocked lock — wrong room, already open,
+    // or not in a dungeon at all.
+    return {
+      success:      false,
+      outcome_type: "DUNGEON_KEY_USE_FAIL",
+      state_delta:  { world_state: PRESENT },
+      narrative_context: {
+        item_id:   item.id,
+        item_name: item.name,
+      },
+    };
+  }
+
   // ── CONSUMABLE ───────────────────────────────────────────────────────────────
   if (item.type === ItemType.CONSUMABLE) {
     const newQty    = item.quantity - 1;

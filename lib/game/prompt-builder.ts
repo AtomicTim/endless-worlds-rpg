@@ -652,6 +652,21 @@ export function buildNarratorUserPrompt(
 ): string {
   void wcd;
   const { metadata, player_state, world_state, log_book } = state;
+
+  // FIX 2 — detect when the player is inside a dungeon room so the narrator
+  // receives room context (2A), no inventory hints (2B), and room-scoped
+  // connected locations (2C).
+  const _currentGraphNodeId = state.world_graph?.current_node_id ?? state.world_state.current_node_id ?? "";
+  const _ds = state.dungeon_state;
+  const isInsideDungeon = !!(
+    _ds && _ds.node_id && _ds.node_id === _currentGraphNodeId
+  );
+  const dungeonRoomNode = isInsideDungeon
+    ? (state.world_graph?.nodes[_ds!.node_id] ?? null)
+    : null;
+  const currentDungeonRoom = dungeonRoomNode && _ds
+    ? ((dungeonRoomNode.dungeon_rooms ?? []).find((r) => r.id === _ds!.current_room_id) ?? null)
+    : null;
   const { name, background, attributes, health, max_health, sanity, max_sanity } = player_state;
 
   const recentLog = log_book.entries
@@ -845,6 +860,30 @@ export function buildNarratorUserPrompt(
     }
   }
 
+  // ── FIX 2A — CURRENT ROOM block (dungeon only) ────────────────────────────
+  // Gives the narrator the room's name, description, and objects instead of
+  // the dungeon node's graph assets (which describe the dungeon exterior +
+  // connections to the region zone). The standard ESTABLISHED WORLD ASSETS
+  // block still follows — it provides genre/faction/lore context.
+  const dungeonRoomLines: string[] = [];
+  if (isInsideDungeon && currentDungeonRoom) {
+    dungeonRoomLines.push(
+      "══════════════════════════════",
+      `CURRENT ROOM: ${currentDungeonRoom.name}`,
+      currentDungeonRoom.description || "(no description recorded)",
+    );
+    const roomObjs = (currentDungeonRoom.objects ?? []) as Array<{ name?: string; description?: string }>;
+    if (roomObjs.length > 0) {
+      dungeonRoomLines.push("OBJECTS IN THIS ROOM:");
+      for (const obj of roomObjs) {
+        if (obj.name) {
+          dungeonRoomLines.push(`- ${obj.name}${obj.description ? `: ${obj.description}` : ""}`);
+        }
+      }
+    }
+    dungeonRoomLines.push("══════════════════════════════");
+  }
+
   // ── Scene context block ────────────────────────────────────────────────────
   const sceneLines: string[] = [];
   if (isArriving) {
@@ -868,6 +907,9 @@ export function buildNarratorUserPrompt(
     ...headerLines,
     ...(worldFactLines.length > 0 ? ["", ...worldFactLines] : []),
     ...(npcPresentLines.length > 0 ? ["", ...npcPresentLines] : []),
+    // FIX 2A — room block before world assets so the narrator reads the
+    // immediate room context first, then the broader world lore.
+    ...(dungeonRoomLines.length > 0 ? ["", ...dungeonRoomLines] : []),
     ...(assetsBlock ? ["", assetsBlock] : []),
     ...(tier1Lines.length > 0 ? ["", ...tier1Lines] : []),
     ...(sceneLines.length > 0 ? ["", ...sceneLines] : []),
@@ -885,10 +927,15 @@ export function buildNarratorUserPrompt(
     `- Background: ${background}`,
     `- HP: ${health}/${max_health}${sanityLine}`,
     `- Attributes: STR ${attributes.strength}, AGI ${attributes.agility}, CHA ${attributes.charisma}, INT ${attributes.intelligence}, PER ${attributes.perception}`,
-    "",
-    "EQUIPPED LOADOUT:",
-    `- Weapon: ${weaponLine}`,
-    `- Armor: ${armorLine}`,
+    // FIX 2B — strip EQUIPPED LOADOUT inside a dungeon room. Knowing the
+    // player's gear lets the narrator hint "its markings match the sword
+    // you carry" — that inference belongs to the player, not the narrator.
+    ...(isInsideDungeon ? [] : [
+      "",
+      "EQUIPPED LOADOUT:",
+      `- Weapon: ${weaponLine}`,
+      `- Armor: ${armorLine}`,
+    ]),
     "",
     `ACTIVE WORLD FLAGS (most recent 10): ${flagSummary}`,
     "",
@@ -1068,6 +1115,14 @@ export function buildNarratorUserPrompt(
             `- ${node.name} (${cat}, to the ${compass(node)})`
           );
         }
+      }
+    } else if (isInsideDungeon && currentDungeonRoom) {
+      // FIX 2C — inside a dungeon room, connected locations are only the
+      // adjacent rooms. Do NOT expose the graph connections (region zone,
+      // settlement) — the narrator has no business naming the world above.
+      for (const connId of currentDungeonRoom.connections) {
+        const room = (dungeonRoomNode?.dungeon_rooms ?? []).find((r) => r.id === connId);
+        if (room) connectedLines.push(`- ${room.name}`);
       }
     } else {
       for (const connId of currentNode.connections) {

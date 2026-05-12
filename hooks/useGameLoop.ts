@@ -24,6 +24,7 @@ import { renderRoutineCombatEvent } from "@/lib/game/combat-narration/templates"
 import { resolveLoot } from "@/lib/game/loot-resolver";
 import { getEmptyContainerTemplate, getSearchNarrative } from "@/lib/game/container-templates";
 import { pickRegionLootItemsForNode } from "@/lib/game/floor-loot";
+import { markRoomUnlocked } from "@/lib/game/dungeon-navigation";
 import type { FloorLootEntry } from "@/types/game";
 import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { DialogueOption, Item, MasterState, ParsedAction, RegionBible, RegionOutline, ResolutionResult, StoredMessage, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
@@ -973,6 +974,51 @@ export function useGameLoop() {
         };
         store.setMasterState(stampedNon);
         await persistState(stampedNon, store.addMessage);
+        store.setProcessing(false);
+        return;
+      }
+
+      // ── 4a-Dungeon. FIX 3 — dungeon key item text-path unlock ─────────────
+      // resolveUseItem detects is_key_item on adjacent locked rooms and
+      // returns DUNGEON_KEY_USE (success) or DUNGEON_KEY_USE_FAIL. Both
+      // are fully templated — no narrator call. Success also flips
+      // lock.unlocked on the world_graph (state_delta can't carry that).
+      if (
+        resolution.outcome_type === "DUNGEON_KEY_USE" ||
+        resolution.outcome_type === "DUNGEON_KEY_USE_FAIL"
+      ) {
+        if (resolution.success) {
+          const roomId   = String(resolution.narrative_context.room_id ?? "");
+          const keyName  = String(resolution.narrative_context.item_name ?? "the key");
+          const ds2      = updatedState.dungeon_state;
+          const graph2   = updatedState.world_graph;
+          if (ds2 && graph2 && roomId) {
+            const dn2 = graph2.nodes[ds2.node_id];
+            if (dn2) {
+              const unlocked2 = markRoomUnlocked(dn2, roomId);
+              updatedState = {
+                ...updatedState,
+                world_graph: { ...graph2, nodes: { ...graph2.nodes, [dn2.id]: unlocked2 } },
+              };
+            }
+          }
+          const beat = `You fit the ${keyName} into the socket. The mechanism turns.`;
+          store.addMessage(makeMessage("NARRATIVE", beat));
+          store.setLastNarrativeText(beat);
+          updatedState = persistLogEntry(updatedState, LogEntryType.STORY, beat);
+        } else {
+          const keyName = String(resolution.narrative_context.item_name ?? "the key");
+          const beat = `There's no lock here that the ${keyName} will open.`;
+          store.addMessage(makeMessage("NARRATIVE", beat));
+          store.setLastNarrativeText(beat);
+          updatedState = persistLogEntry(updatedState, LogEntryType.STORY, beat);
+        }
+        const stamped4dk: MasterState = {
+          ...updatedState,
+          metadata: { ...updatedState.metadata, last_played: new Date().toISOString() },
+        };
+        store.setMasterState(stamped4dk);
+        await persistState(stamped4dk, store.addMessage);
         store.setProcessing(false);
         return;
       }

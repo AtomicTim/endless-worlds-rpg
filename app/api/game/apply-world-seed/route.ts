@@ -249,12 +249,28 @@ export async function POST(request: NextRequest) {
 
   // ── 5. Patch master_state with seed + graph + starting location ────────────
   // Day 19A — also persist the WCD into metadata when supplied.
+  // Day 23.5A — hoist species + damage_type_aliases from the WCD to
+  // metadata top-level so the character creation UI (23.5B) and the
+  // narrator's combat copy can read them without going through
+  // metadata.world_consistency. Defaults to empty arrays when the WCD
+  // didn't emit them (legacy WCDs / failure paths).
+  const speciesFromWcd  = wcd?.species ?? [];
+  const aliasesFromWcd  = wcd?.damage_type_aliases ?? [];
+  console.log(
+    `[apply-world-seed] species stored: ${speciesFromWcd.length} entries`
+  );
+  console.log(
+    `[apply-world-seed] damage_type_aliases stored: ${aliasesFromWcd.length} entries`
+  );
+
   const patched: MasterState = {
     ...current,
     metadata: {
       ...current.metadata,
       world_seed: worldSeed,
       ...(wcd ? { world_consistency: wcd } : {}),
+      species:             speciesFromWcd,
+      damage_type_aliases: aliasesFromWcd,
     },
     world_state: {
       ...current.world_state,

@@ -1112,6 +1112,20 @@ export async function POST(request: NextRequest) {
   }
 
   // ── 5. Patch master_state ──────────────────────────────────────────────────
+  // Day 23.5A — hoist species + damage_type_aliases from the WCD onto
+  // metadata top-level. The 23.5B character creation UI reads from
+  // metadata.species; storing them only inside metadata.world_consistency
+  // would force every consumer to know about the WCD's nested shape.
+  // Defaults to empty arrays when the WCD didn't emit them.
+  const speciesFromWcd  = wcdNarrowed.species ?? [];
+  const aliasesFromWcd  = wcdNarrowed.damage_type_aliases ?? [];
+  console.log(
+    `[apply-world-bible] species stored: ${speciesFromWcd.length} entries`
+  );
+  console.log(
+    `[apply-world-bible] damage_type_aliases stored: ${aliasesFromWcd.length} entries`
+  );
+
   const patched: MasterState = {
     ...current,
     metadata: {
@@ -1125,6 +1139,9 @@ export async function POST(request: NextRequest) {
       // Day 23B — pre-resolved opening intro. The game loop's new-game
       // preamble reads this and falls back to the legacy line when empty.
       ...(worldIntro ? { world_intro: worldIntro } : {}),
+      // Day 23.5A — species + damage type aliases promoted to top level.
+      species:             speciesFromWcd,
+      damage_type_aliases: aliasesFromWcd,
     },
     world_state: {
       ...current.world_state,

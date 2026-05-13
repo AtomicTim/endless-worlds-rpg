@@ -136,6 +136,153 @@ function buildUserPrompt(body: Required<Omit<RequestBody, "creation_choices">> &
     '    "finale_type": "confrontation"',
     '  }',
     "",
+    // ── Day 23.5A — Species + damage type aliases ─────────────────────────
+    "SPECIES (generate 3-4 total):",
+    "",
+    "UNIQUENESS REQUIREMENT — critical:",
+    "Every species must emerge directly from THIS WCD — specifically",
+    "from world_name, atmosphere, world_rules, and the world's",
+    "unique threats and history. Two different worlds must produce",
+    "genuinely different species even within the same genre. A world",
+    "built around metallic veins and resonance must produce species",
+    "shaped by that, not by a different world's forests or ruins.",
+    "",
+    "FORBIDDEN archetypes for world-specific species (recurring",
+    "over-generated types to avoid):",
+    "- Fantasy: plant/nature-touched folk, shadow elf variants,",
+    "  stone dwarf variants, fey-touched bloodlines, dragonborn,",
+    "  chosen bloodline races",
+    "- Cyberpunk: generic chrome humans, hive-mind corporate workers,",
+    "  generic androids or synths",
+    "- Horror: half-undead lineages, blessed/cursed bloodlines,",
+    "  generic vampire-adjacent or werewolf-adjacent types",
+    "- Space Opera: grey aliens, reptilian warrior races,",
+    "  hive-mind insectoids",
+    "- Post-Apoc: generic ghouls, standard super-mutants,",
+    "  generic telepathic psychics",
+    "",
+    "ANCHOR SPECIES — generate these for every world:",
+    "",
+    "1. Human (id: \"human\", is_anchor: true, every genre):",
+    "   stat_modifiers: {} (humans are the baseline — no modifiers)",
+    "   passive_traits: exactly 1 entry, effect_type \"flavor_only\",",
+    "     describing human adaptability in THIS world's social",
+    "     context. The description must be specific to the WCD",
+    "     above — not a generic \"humans are versatile\" template.",
+    "   npc_disposition_seed: 0",
+    "",
+    "2. Genre-common second anchor (is_anchor: true):",
+    "   FANTASY: Choose Elf (if WCD has ancient/mystical/arcane/",
+    "     forest themes) OR Dwarf (if WCD has underground/craft/",
+    "     durability/mining/industrial themes). Pick based on the",
+    "     WCD — do not default to Elf every time.",
+    "     Elf: stat_modifiers {\"agility\": 1, \"strength\": -1}",
+    "     Dwarf: stat_modifiers {\"strength\": 1, \"agility\": -1}",
+    "     1 passive trait max.",
+    "   CYBERPUNK: Augmented (heavily modified human)",
+    "     stat_modifiers {\"strength\": 1, \"agility\": 1, \"intelligence\": -1}",
+    "     1 passive trait: effect_type \"combat_passive\" or",
+    "     \"environmental\" — tech-interface or physical enhancement.",
+    "   HORROR: NO second anchor. Horror requires human",
+    "     vulnerability — adding powerful second species undermines",
+    "     the genre. Generate 2 world-specific species instead.",
+    "   SPACE OPERA: 1 alien type fitting THIS WCD's specific",
+    "     stellar environment and world_rules.",
+    "     Must have at least 1 negative modifier alongside any positive.",
+    "     1 passive trait: environmental or biological adaptation.",
+    "   POST-APOC: 1 Mutant type adapted to THIS WCD's specific",
+    "     environmental hazard (read world_rules for the hazard).",
+    "     stat_modifiers derived from the adaptation — radiation",
+    "     world: {\"strength\": 1, \"intelligence\": -1}, toxic world:",
+    "     {\"strength\": 1, \"perception\": -1}, heat world:",
+    "     {\"strength\": 1, \"agility\": -1}. Match hazard to modifier.",
+    "     1 passive trait: resistance or environmental matching hazard.",
+    "",
+    "WORLD-SPECIFIC SPECIES (1-2 additional; 2 for Horror):",
+    "Ask: what long-term environmental or historical pressure",
+    "UNIQUE TO THIS WCD would produce a distinct people?",
+    "The answer must come from world_name, atmosphere, world_rules,",
+    "and threats — not from genre conventions.",
+    "",
+    "GENRE AESTHETIC CONSTRAINTS for world-specific species",
+    "(these are hard limits — violating them breaks genre):",
+    "FANTASY:",
+    "  Natural or magical origin only.",
+    "  No technology, cybernetics, mutations, or corporate history.",
+    "CYBERPUNK:",
+    "  Technological or corporate-cultural origin only.",
+    "  No magic, mystical powers, nature aesthetics, or",
+    "  woodland/arcane references.",
+    "HORROR:",
+    "  Psychological or physical warping from THIS world's specific",
+    "  horror source. Emphasize cost and vulnerability.",
+    "  No heroic framing, no power fantasy, no chosen-one aesthetics.",
+    "  Both world-specific species should feel like something went",
+    "  wrong, not like something became stronger.",
+    "SPACE OPERA:",
+    "  Biological adaptation to THIS world's specific stellar or",
+    "  environmental conditions. Scientifically plausible.",
+    "  No magic, mysticism, or fantasy aesthetics.",
+    "POST-APOC:",
+    "  Survival adaptation to THIS world's specific documented hazard.",
+    "  Adaptation must match the hazard type — do not apply",
+    "  radiation adaptations to a toxin world or vice versa.",
+    "",
+    "Valid stat keys (use these EXACT strings — no abbreviations):",
+    "  strength · agility · charisma · intelligence · perception",
+    "",
+    "Species JSON shape (ALL fields required):",
+    "{",
+    '  "id": "<world_slug_or_anchor_id>",',
+    '  "name": "<name derived from WCD, not a generic archetype>",',
+    '  "description": "<2-3 sentences from WCD atmosphere>",',
+    '  "lore_notes": "<1 sentence: how others in this world see them>",',
+    '  "is_anchor": <true|false>,',
+    '  "stat_modifiers": {"<stat_key>": <integer>},',
+    '  "skill_affinities": [],',
+    '  "resistances": {},',
+    '  "vulnerabilities": {},',
+    '  "passive_traits": [',
+    "    {",
+    '      "id": "<species_id>_<trait_slug>",',
+    '      "label": "<2-3 word trait name>",',
+    '      "description": "<1 sentence, player-facing>",',
+    '      "effect_type": "<TraitEffectType>",',
+    '      "effect_data": {}',
+    "    }",
+    "  ],",
+    '  "environmental_flags": [],',
+    '  "npc_disposition_seed": <integer -15 to 15>',
+    "}",
+    "",
+    "Constraints:",
+    "- passive_traits: MAX 2 per species, MAX 1 for anchor species",
+    "- npc_disposition_seed: 0 = neutral/common, +5 to +10 =",
+    "  trusted or revered, -5 to -15 = feared or persecuted",
+    "- stat_modifiers: world-specific species MUST include at least",
+    "  1 negative — meaningful tradeoffs, not pure buffs",
+    "- Human always has stat_modifiers: {}",
+    "- Use effect_type \"flavor_only\" for traits whose mechanical",
+    "  systems are not yet built",
+    "",
+    "DAMAGE TYPE ALIASES:",
+    "",
+    "Emit damage_type_aliases[]. Default to [] for most worlds.",
+    "Only generate 1-2 aliases when the WCD's world_rules or",
+    "atmosphere strongly imply a renamed damage type for this",
+    "specific world (e.g. a world where corruption manifests as a",
+    "spreading silver mold might alias \"poison\" → \"silver bloom\").",
+    "",
+    "Schema for each entry:",
+    "{",
+    '  "canonical_type": "<one of: physical|fire|cold|poison|arcane|',
+    '                     holy|shadow|electric|thermal|toxic|emp|',
+    '                     viral|psychic|corruption|void|plasma|',
+    '                     radiation|sonic|acid>",',
+    '  "world_name": "<world-specific display name>",',
+    '  "description": "<1 sentence>"',
+    "}",
+    "",
     "Make it feel original and specific to this genre and character. Avoid generic clichés. Be creative and unexpected.",
   ].join("\n");
 }
@@ -153,6 +300,38 @@ const VALID_ARCHETYPES = new Set([
 ]);
 const VALID_FACTION_ROLES = new Set(["defenders", "exploiters", "deniers"]);
 const VALID_FINALE_TYPES = new Set(["confrontation", "choice", "discovery"]);
+
+// Day 23.5A — species + damage-type normalization tables.
+const VALID_STAT_KEYS = new Set([
+  "strength", "agility", "charisma", "intelligence", "perception",
+]);
+const VALID_TRAIT_EFFECT_TYPES = new Set([
+  "resistance", "skill_boost", "combat_passive",
+  "environmental", "social", "regeneration", "flavor_only",
+]);
+const VALID_ENVIRONMENTAL_FLAGS = new Set([
+  "water_breathing", "heat_adapted", "cold_adapted",
+  "dark_vision", "toxin_immune", "radiation_resistant", "void_adapted",
+]);
+const VALID_DAMAGE_TYPES = new Set([
+  "physical", "fire", "cold", "poison", "arcane", "holy", "shadow",
+  "electric", "thermal", "toxic", "emp", "viral",
+  "psychic", "corruption", "void",
+  "plasma", "radiation", "sonic",
+  "acid",
+]);
+/** Maps common abbreviations the model emits despite the prompt asking
+ *  for full lowercase names. Keys are the abbreviations, values are the
+ *  canonical StatKey. CON has no equivalent in the 5-stat system; we
+ *  drop it (the species loses the CON modifier) rather than mapping it
+ *  arbitrarily. */
+const STAT_ABBREVIATIONS: Record<string, string> = {
+  STR: "strength", str: "strength",
+  AGI: "agility",  agi: "agility",
+  CHA: "charisma", cha: "charisma",
+  INT: "intelligence", int: "intelligence",
+  PER: "perception",   per: "perception",
+};
 
 function stripJsonFences(raw: string): string {
   return raw
@@ -342,6 +521,102 @@ function normalizeWcd(parsed: unknown): unknown {
       return faction;
     });
   }
+
+  // Day 23.5A — species normalization. Coerce object-shaped inputs to
+  // arrays, slug-default missing ids, fill required scalar fields with
+  // safe defaults, and remap stat_modifier abbreviations to canonical
+  // stat keys. Returned in canonical Species shape so the validator
+  // below has a stable target.
+  if (!Array.isArray(o.species)) {
+    const coerced = coerceToArray(o.species);
+    if (coerced) {
+      o.species = coerced;
+    } else {
+      o.species = [];
+    }
+  }
+  o.species = (o.species as unknown[]).map((s, idx) => {
+    if (!s || typeof s !== "object") return s;
+    const sp = { ...(s as Record<string, unknown>) };
+
+    if (typeof sp.name !== "string" || !(sp.name as string).trim()) {
+      sp.name = `Species ${idx + 1}`;
+    }
+    if (typeof sp.id !== "string" || !(sp.id as string).trim()) {
+      sp.id = (sp.name as string).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    }
+    if (typeof sp.description !== "string") sp.description = "";
+    if (typeof sp.lore_notes  !== "string") sp.lore_notes  = "";
+    if (typeof sp.is_anchor   !== "boolean") sp.is_anchor   = false;
+
+    // stat_modifiers — remap abbreviations + drop unknown keys.
+    const rawMods = (sp.stat_modifiers && typeof sp.stat_modifiers === "object")
+      ? (sp.stat_modifiers as Record<string, unknown>)
+      : {};
+    const cleanedMods: Record<string, number> = {};
+    for (const [rawKey, rawVal] of Object.entries(rawMods)) {
+      const mapped = STAT_ABBREVIATIONS[rawKey] ?? rawKey.toLowerCase();
+      if (!VALID_STAT_KEYS.has(mapped)) continue;
+      if (typeof rawVal !== "number" || !Number.isFinite(rawVal)) continue;
+      cleanedMods[mapped] = Math.trunc(rawVal);
+    }
+    sp.stat_modifiers = cleanedMods;
+
+    if (!Array.isArray(sp.skill_affinities))   sp.skill_affinities   = [];
+    if (!sp.resistances     || typeof sp.resistances     !== "object") sp.resistances     = {};
+    if (!sp.vulnerabilities || typeof sp.vulnerabilities !== "object") sp.vulnerabilities = {};
+    if (!Array.isArray(sp.passive_traits))     sp.passive_traits     = [];
+    sp.passive_traits = (sp.passive_traits as unknown[]).map((t, tIdx) => {
+      if (!t || typeof t !== "object") return t;
+      const tr = { ...(t as Record<string, unknown>) };
+      if (typeof tr.label === "string" && tr.label && (typeof tr.id !== "string" || !(tr.id as string).trim())) {
+        tr.id = `${sp.id}_${(tr.label as string).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`;
+      }
+      if (typeof tr.id !== "string" || !(tr.id as string).trim()) {
+        tr.id = `${sp.id}_trait_${tIdx + 1}`;
+      }
+      if (typeof tr.label       !== "string") tr.label       = "Trait";
+      if (typeof tr.description !== "string") tr.description = "";
+      if (typeof tr.effect_type !== "string" || !VALID_TRAIT_EFFECT_TYPES.has(tr.effect_type as string)) {
+        tr.effect_type = "flavor_only";
+      }
+      if (!tr.effect_data || typeof tr.effect_data !== "object") tr.effect_data = {};
+      return tr;
+    });
+    if (!Array.isArray(sp.environmental_flags)) sp.environmental_flags = [];
+    sp.environmental_flags = (sp.environmental_flags as unknown[])
+      .filter((f) => typeof f === "string" && VALID_ENVIRONMENTAL_FLAGS.has(f as string));
+    if (typeof sp.npc_disposition_seed !== "number" || !Number.isFinite(sp.npc_disposition_seed)) {
+      sp.npc_disposition_seed = 0;
+    } else {
+      const n = Math.trunc(sp.npc_disposition_seed as number);
+      sp.npc_disposition_seed = Math.max(-15, Math.min(15, n));
+    }
+
+    return sp;
+  });
+
+  // damage_type_aliases normalization. Default to [] when missing; drop
+  // entries whose canonical_type isn't in the canonical set.
+  if (!Array.isArray(o.damage_type_aliases)) {
+    o.damage_type_aliases = [];
+  }
+  o.damage_type_aliases = (o.damage_type_aliases as unknown[])
+    .filter((a) => {
+      if (!a || typeof a !== "object") return false;
+      const al = a as Record<string, unknown>;
+      return (
+        typeof al.canonical_type === "string" &&
+        VALID_DAMAGE_TYPES.has(al.canonical_type as string) &&
+        typeof al.world_name === "string" &&
+        (al.world_name as string).trim().length > 0
+      );
+    })
+    .map((a) => {
+      const al = { ...(a as Record<string, unknown>) };
+      if (typeof al.description !== "string") al.description = "";
+      return al;
+    });
 
   // Ensure grid_size
   if (typeof o.grid_size !== "number") {
@@ -552,5 +827,16 @@ export async function POST(request: NextRequest) {
   } else {
     console.log(`[WCD] Generated: ${validated.wcd.world_name} | main_quest: <missing — WB will run with default>`);
   }
+  // Day 23.5A — species + damage_type_aliases data point. Surfaces at the
+  // WCD layer so a missing/empty species array is visible immediately
+  // (the character creation UI in 23.5B reads from metadata.species and
+  // breaks silently when empty).
+  const speciesCount   = validated.wcd.species?.length ?? 0;
+  const aliasCount     = validated.wcd.damage_type_aliases?.length ?? 0;
+  const speciesNames   = (validated.wcd.species ?? []).map((s) => s.name).join(", ");
+  console.log(
+    `[WCD] Species count: ${speciesCount}, damage_type_aliases: ${aliasCount}` +
+    (speciesCount > 0 ? ` | species: ${speciesNames}` : "")
+  );
   return NextResponse.json({ wcd: validated.wcd });
 }

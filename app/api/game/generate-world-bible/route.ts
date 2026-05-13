@@ -54,10 +54,31 @@ function buildUserPrompt(
     )),
     "═══════════════════════════════════════════════════════════════",
   ].join("\n");
+
+  // Day 23.5A — Species context block. Pulls the WCD's established
+  // species[] (3-4 entries) into the WorldBible prompt so NPCs can
+  // optionally carry species_id and disposition_modifiers.toward_species.
+  // Intentionally minimal (3-5 lines per spec) — do NOT restructure
+  // the rest of the WorldBible prompt.
+  const wcdSpecies = wcd.species ?? [];
+  const wcdSpeciesBlock = wcdSpecies.length > 0
+    ? [
+        "",
+        "SPECIES (from WCD — established, do not regenerate):",
+        ...wcdSpecies.map((s) => `  - ${s.name} (${s.id})`),
+        "",
+        "NPCs may optionally carry:",
+        "  species_id: one of the above ids (or omit)",
+        "  disposition_modifiers.toward_species: small integer",
+        "    modifiers (±5 to ±15) where world history implies",
+        "    species tension. Use sparingly.",
+      ].join("\n")
+    : "";
   // Skeleton-based prompt: showing the model the exact JSON shape (with
   // every required key) is the single most reliable way to keep it from
   // wandering into alias names / nested wrappers / missing fields.
   return `${wcdBlock}
+${wcdSpeciesBlock}
 
 ${wcdMqBlock}
 

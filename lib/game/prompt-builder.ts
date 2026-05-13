@@ -195,6 +195,71 @@ export function formatWcdBlock(wcd: WorldConsistencyDocument | undefined): strin
   return lines.join("\n");
 }
 
+/**
+ * Day 23.5C — Format the player's character profile (species, gender,
+ * appearance, origin, motivation) as a compact narrator context block.
+ *
+ * Returns "" when player_state.character_profile is absent (old saves
+ * that predate 23.5). The caller unconditionally concatenates so this
+ * must be empty-string-safe — never null.
+ *
+ * Block format:
+ *   ═══ PLAYER CHARACTER ═══
+ *   Species: {species.name} — {species.lore_notes}
+ *   Gender: {gender}
+ *   Appearance: {appearance.summary}
+ *   Origin: {origin.label} — {origin.description}
+ *   Motivation: {motivation}   (omitted entirely if empty)
+ *   ════════════════════════
+ */
+export function formatPlayerCharacterBlock(state: MasterState): string {
+  const profile = state.player_state.character_profile;
+  if (!profile) return "";
+
+  const lines: string[] = ["═══ PLAYER CHARACTER ═══"];
+
+  // Species — look up in metadata.species by id. When the metadata
+  // species list is missing or the id doesn't match, skip the species
+  // line silently and still emit the rest.
+  const species = (state.metadata.species ?? []).find(
+    (s) => s.id === profile.species_id
+  );
+  if (species) {
+    const lore = species.lore_notes?.trim();
+    lines.push(
+      lore
+        ? `Species: ${species.name} — ${lore}`
+        : `Species: ${species.name}`,
+    );
+  }
+
+  lines.push(`Gender: ${profile.gender}`);
+
+  const appearanceSummary = profile.appearance?.summary?.trim();
+  if (appearanceSummary) {
+    lines.push(`Appearance: ${appearanceSummary}`);
+  }
+
+  const originLabel = profile.origin?.label?.trim();
+  const originDesc  = profile.origin?.description?.trim();
+  if (originLabel) {
+    lines.push(
+      originDesc
+        ? `Origin: ${originLabel} — ${originDesc}`
+        : `Origin: ${originLabel}`,
+    );
+  }
+
+  const motivation = profile.motivation?.trim();
+  if (motivation) {
+    lines.push(`Motivation: ${motivation}`);
+  }
+
+  lines.push("════════════════════════");
+  console.log("[prompt-builder] PLAYER CHARACTER block injected");
+  return lines.join("\n");
+}
+
 // FIX 6 — Concrete, measurable sentence caps so the three modes
 // produce visibly different output. Also overrides the earlier
 // RESPONSE LENGTH tiers in the system prompt — the verbosity block
@@ -246,7 +311,16 @@ export function buildNarratorSystemPrompt(
   // visually separated.
   const wcdPrefix = wcd ? `${formatWcdBlock(wcd)}\n\n` : "";
 
-  return `${wcdPrefix}YOUR ROLE AND HARD RULES — READ BEFORE ANYTHING ELSE
+  // Day 23.5C — PLAYER CHARACTER block. Lives between WCD and HARD RULES
+  // so the narrator anchors on who the player is before reading the rules.
+  // Silently omitted when character_profile is absent (old saves predating
+  // 23.5). Combat narration uses a different system prompt and doesn't
+  // receive this block (per spec).
+  const playerCharacterBlock = formatPlayerCharacterBlock(state);
+  const playerCharacterPrefix =
+    playerCharacterBlock.length > 0 ? `${playerCharacterBlock}\n\n` : "";
+
+  return `${wcdPrefix}${playerCharacterPrefix}YOUR ROLE AND HARD RULES — READ BEFORE ANYTHING ELSE
 ═══════════════════════════════════════════════════════════════
 
 A — YOUR THREE JOBS:

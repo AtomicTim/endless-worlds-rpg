@@ -135,6 +135,12 @@ function npcToAsset(npc: NPCDefinition, sessionId: string): WorldAsset {
       ...(npc.quest_seed && npc.quest_seed.trim()
         ? { quest_seed: npc.quest_seed.trim() }
         : {}),
+      // Day 23.5C — mirror disposition_modifiers so seedNpcRegistry
+      // can apply species-tension trust seeds without round-tripping
+      // back through the region bible.
+      ...(npc.disposition_modifiers
+        ? { disposition_modifiers: npc.disposition_modifiers }
+        : {}),
     },
     significance:        npc.quest_relevance === "key" ? "MAJOR" : "NOTABLE",
     first_seen_location: npc.home_location_id,

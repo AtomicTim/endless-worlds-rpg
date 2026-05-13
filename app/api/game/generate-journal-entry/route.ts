@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type { Json } from "@/types/database";
+import type { MasterState, PlayerCharacterProfile, Species } from "@/types/game";
 
 /**
  * Day 23C — generate a short first-person diary entry for a discovered
@@ -32,10 +34,49 @@ const SYSTEM_PROMPT =
   "the character felt, what they noticed, what crystallized for them. " +
   "Respond with ONLY the entry text. No headers, no markdown, no quotes.";
 
-function buildUserPrompt(body: Required<Omit<RequestBody, "session_id">>): string {
+/**
+ * Day 23.5C — when a character profile is loaded from master_state,
+ * build the CHARACTER VOICE block that colors the diary entry voice.
+ * Returns "" when profile is absent (old saves predating 23.5).
+ */
+function buildCharacterVoiceBlock(
+  profile:     PlayerCharacterProfile | null | undefined,
+  species:     Species[] | null | undefined,
+  playerClass: string,
+): string {
+  if (!profile) return "";
+  const speciesName =
+    (species ?? []).find((s) => s.id === profile.species_id)?.name ?? "Human";
+  const originLabel = profile.origin?.label?.trim() ?? "";
+  const appearance  = profile.appearance?.summary?.trim() ?? "";
+  const motivation  = profile.motivation?.trim() ?? "";
+
+  const lines: string[] = [
+    "CHARACTER VOICE:",
+    `${speciesName} ${playerClass}.${originLabel ? ` Origin: ${originLabel}.` : ""}`,
+  ];
+  if (appearance) lines.push(appearance);
+  if (motivation) lines.push(`Motivation: ${motivation}`);
+  lines.push(
+    "",
+    "Write the diary entry in a voice consistent with this character's",
+    "background and perspective. A Tideborn Curse-Breaker writes differently",
+    "than a Human Herald. Let species, origin, and motivation color the tone",
+    "— but do not describe the character in third person. The journal is",
+    "first person, written by this character.",
+  );
+  return lines.join("\n");
+}
+
+function buildUserPrompt(
+  body:        Required<Omit<RequestBody, "session_id">>,
+  voiceBlock:  string,
+): string {
   return [
     `World: ${body.world_name}`,
     `Character: ${body.player_name}, a ${body.player_class}`,
+    ...(voiceBlock ? ["", voiceBlock] : []),
+    "",
     `Main quest: "${body.quest_title}"`,
     `Quest archetype (internal — never mention by name): ${body.archetype}`,
     "",
@@ -91,9 +132,34 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const userPrompt = buildUserPrompt({
-    quest_title, breadcrumb_content, world_name, player_name, player_class, archetype,
-  });
+  // Day 23.5C — load master_state to pick up character_profile +
+  // metadata.species for the CHARACTER VOICE block. Failures are
+  // non-fatal: an empty voice block means the prompt falls back to
+  // pre-23.5 behavior (just name + class).
+  let voiceBlock = "";
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: row } = await (supabase.from("game_sessions") as any)
+      .select("master_state")
+      .eq("id", session_id)
+      .eq("user_id", user.id)
+      .single() as { data: { master_state: Json } | null; error: unknown };
+    if (row?.master_state) {
+      const state = row.master_state as unknown as MasterState;
+      voiceBlock = buildCharacterVoiceBlock(
+        state.player_state.character_profile ?? null,
+        state.metadata.species,
+        player_class,
+      );
+    }
+  } catch (err) {
+    console.warn("[JournalEntry] master_state lookup for voice block failed:", err);
+  }
+
+  const userPrompt = buildUserPrompt(
+    { quest_title, breadcrumb_content, world_name, player_name, player_class, archetype },
+    voiceBlock,
+  );
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

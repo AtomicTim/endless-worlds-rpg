@@ -8,6 +8,7 @@ import {
   type MasterState,
   type NPCMemory,
   type StateDelta,
+  type WorldAsset,
 } from "@/types/game";
 
 export function updateHealth(state: MasterState, delta: number): MasterState {
@@ -124,6 +125,44 @@ export function addNpcToCurrentNode(state: MasterState, npcAssetId: string): Mas
 }
 
 /**
+ * Day 23.5C — compute the first-encounter trust score for an NPC based
+ * on the player's species and the NPC's species disposition modifiers.
+ *
+ *   effective = base (50)
+ *               + species.npc_disposition_seed   (player's species seed)
+ *               + npc.toward_species[species_id] (NPC's per-species modifier)
+ *
+ * Both terms guard to 0 when character_profile / species data is absent
+ * (old saves), and the result is clamped to 0..100. Exported so future
+ * systems (e.g. faction trust seeds) can reuse the same clamp.
+ */
+export function computeInitialTrust(
+  state: MasterState,
+  npcAsset?: WorldAsset | null
+): number {
+  const base = 50;
+  const profile  = state.player_state.character_profile;
+  const speciesId = profile?.species_id ?? "";
+
+  // Player's own species seed — applies to every NPC.
+  const speciesSeed = (state.metadata.species ?? []).find(
+    (s) => s.id === speciesId
+  )?.npc_disposition_seed ?? 0;
+
+  // NPC's per-species modifier — applies only when the player's species
+  // matches a key in this NPC's toward_species table.
+  const towardSpecies =
+    npcAsset?.constitution.disposition_modifiers?.toward_species;
+  const npcModifier =
+    speciesId && towardSpecies && typeof towardSpecies[speciesId] === "number"
+      ? towardSpecies[speciesId]
+      : 0;
+
+  const raw = base + speciesSeed + npcModifier;
+  return Math.max(0, Math.min(100, raw));
+}
+
+/**
  * Seed a missing npc_registry entry with neutral defaults so subsequent
  * lookups (trust changes, dialogue modal disposition, resolver difficulty)
  * always find a record. No-op if the key already exists — never overwrites.
@@ -131,14 +170,20 @@ export function addNpcToCurrentNode(state: MasterState, npcAssetId: string): Mas
  * Used when an NPC exists in locationAssets / world_assets but was never
  * inserted into the registry (e.g. introduced through codex_entries only,
  * or saved via an older code path that pre-dated registry seeding).
+ *
+ * Day 23.5C — when `npcAsset` is provided, the initial trust_score is
+ * computed via computeInitialTrust() instead of the flat 50 default.
+ * Callers without an asset (legacy paths) get the old behavior.
  */
 export function seedNpcRegistry(
   state: MasterState,
   key: string,
   fallbackName?: string,
-  fallbackRole?: string
+  fallbackRole?: string,
+  npcAsset?: WorldAsset | null
 ): MasterState {
   if (state.npc_registry[key]) return state;
+  const initialTrust = npcAsset ? computeInitialTrust(state, npcAsset) : 50;
   return {
     ...state,
     npc_registry: {
@@ -149,7 +194,7 @@ export function seedNpcRegistry(
         name:                fallbackName ?? key,
         role:                fallbackRole ?? "Unknown",
         relationship_status: "neutral",
-        trust_score:         50,
+        trust_score:         initialTrust,
         memory_snippets:     [],
         last_interaction:    new Date().toISOString(),
       },

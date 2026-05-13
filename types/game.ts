@@ -1715,6 +1715,16 @@ export interface WorldAssetConstitution {
 
   // CHARACTER — true name (may differ from placeholder display name)
   true_name?: string;
+
+  /** Day 23.5C — mirrored from NPCDefinition.disposition_modifiers so the
+   *  trust-seed pipeline (state-utils.seedNpcRegistry) can read it without
+   *  re-loading the world bible. Same shape as NPCDefinition's field; both
+   *  sub-records are optional so apply-*-bible can write a partial mirror
+   *  when only one axis is populated. */
+  disposition_modifiers?: {
+    toward_species?:  Record<string, number>;
+    toward_factions?: Record<string, number>;
+  };
 }
 
 export interface WorldAsset {

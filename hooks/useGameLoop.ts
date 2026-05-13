@@ -2758,7 +2758,10 @@ export function useGameLoop() {
               updatedState,
               key,
               matchingAsset?.name ?? tc.npc_key,
-              matchingAsset?.constitution.role
+              matchingAsset?.constitution.role,
+              // Day 23.5C — pass the asset so the species disposition
+              // seed + per-NPC species modifier feed the initial trust.
+              matchingAsset ?? null,
             );
           }
           updatedState = updateNPCTrust(updatedState, key, tc.delta);
@@ -2892,7 +2895,9 @@ export function useGameLoop() {
               updatedState,
               npcRegistryKey,
               npcName,
-              matchingAsset?.constitution.role
+              matchingAsset?.constitution.role,
+              // Day 23.5C — species-aware initial trust seed.
+              matchingAsset ?? null,
             );
             console.log(`[GameLoop/7g] Seeded npc_registry entry for ${npcName} → ${npcRegistryKey}`);
 

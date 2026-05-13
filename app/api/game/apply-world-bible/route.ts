@@ -233,6 +233,13 @@ function npcToAsset(npc: NPCDefinition, sessionId: string): WorldAsset {
       ...(npc.quest_seed && npc.quest_seed.trim()
         ? { quest_seed: npc.quest_seed.trim() }
         : {}),
+      // Day 23.5C — mirror disposition_modifiers so the trust-seed
+      // pipeline (state-utils.seedNpcRegistry) can read it without
+      // re-loading the world bible. Skipped when absent so non-tense
+      // NPCs don't carry empty modifier maps.
+      ...(npc.disposition_modifiers
+        ? { disposition_modifiers: npc.disposition_modifiers }
+        : {}),
     },
     significance:        npc.quest_relevance === "key" ? "MAJOR" : "NOTABLE",
     first_seen_location: npc.home_location_id,
@@ -1092,10 +1099,16 @@ export async function POST(request: NextRequest) {
   // main_quest field) — quest_threads stays undefined, world_intro stays
   // empty, and the game falls back to the legacy preamble.
   const questThreads = initializeQuestThreads(bibleNarrowed);
+  // Day 23.5C — also resolve {motivation} from the character profile.
+  // When the save-character-profile route has already written the
+  // profile (the wizard fires it before apply-world-bible runs the
+  // RegionBible burst in 23.5B), this picks up the player's stated
+  // motivation. Empty motivation → placeholder replaced with "".
   const worldIntro   = resolveWorldIntro(
     bibleNarrowed.main_quest?.world_intro_template,
     current.player_state.name,
-    current.player_state.background
+    current.player_state.background,
+    current.player_state.character_profile?.motivation,
   );
 
   // Diagnostic per spec — surfaces archetype + breadcrumb count + finale

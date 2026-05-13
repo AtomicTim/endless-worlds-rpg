@@ -95,23 +95,27 @@ export function initializeQuestThreads(bible: WorldBible): QuestThreads | null {
 }
 
 /**
- * Substitute the `{name}` and `{class}` placeholders in the WorldBible's
- * world_intro_template with the player's actual character. Returns "" when
- * the template is missing/empty; callers fall back to the legacy "Your
- * adventure begins..." preamble (rule 42).
+ * Substitute the `{name}`, `{class}`, and `{motivation}` placeholders in
+ * the WorldBible's world_intro_template with the player's actual values.
+ * Returns "" when the template is missing/empty; callers fall back to the
+ * legacy "Your adventure begins..." preamble (rule 42).
  *
- * Future placeholders ({backstory}, {motivation}) land in Day 23.5 when
- * character creation rework adds those fields.
+ * Day 23.5C — `{motivation}` resolves from
+ * master_state.player_state.character_profile.motivation. Empty motivation
+ * (player skipped the step) replaces the placeholder with "". Template
+ * authors are responsible for any grammar issues that result.
  */
 export function resolveWorldIntro(
   template:    string | undefined,
   playerName:  string,
-  playerClass: string
+  playerClass: string,
+  motivation?: string,
 ): string {
   if (typeof template !== "string" || !template.trim()) return "";
   return template
     .replace(/\{name\}/g, playerName)
-    .replace(/\{class\}/g, playerClass);
+    .replace(/\{class\}/g, playerClass)
+    .replace(/\{motivation\}/g, motivation ?? "");
 }
 
 /**

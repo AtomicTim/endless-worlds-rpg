@@ -1240,12 +1240,12 @@ function validateBible(parsed: unknown): { ok: true; bible: WorldBible } | { ok:
 // The Day 20 comment was right — WorldBible runs near the 8K
 // boundary on rich worlds.
 //
-// 8000 gives room for current output plus headroom for growth
+// 10000 gives room for current output plus headroom for growth
 // (e.g. Day 23.5 species generation). If logs ever show
-// output_tokens approaching 8000 we raise again; for now the
+// output_tokens approaching 10000 we raise again; for now the
 // instrumentation will confirm it sits comfortably below.
 const WB_MODEL      = "claude-sonnet-4-5";
-const WB_MAX_TOKENS = 8000;
+const WB_MAX_TOKENS = 10000;
 
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
   const promptTokens = Math.ceil((SYSTEM_PROMPT.length + userPrompt.length) / 4);

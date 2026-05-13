@@ -46,6 +46,8 @@ function buildPrompt(
     "- Specific to the species, class, and world above — not generic.",
     "- Written in first person, but no \"I\" required.",
     "",
+    "Maximum 100 characters. One sentence only.",
+    "",
     'Output JSON ONLY: { "motivation": "<one sentence>" }',
   ]
     .filter((s) => s.length > 0)
@@ -113,7 +115,10 @@ export async function POST(request: NextRequest) {
   }
 
   const m = (parsed as { motivation?: unknown })?.motivation;
-  const motivation = typeof m === "string" ? m.trim().slice(0, 240) : "";
+  // 23.5C+2 hotfix — hard-truncate to 120 chars to match the UI cap
+  // on the motivation textarea (the haiku prompt asks for ≤100 chars
+  // but the model occasionally overshoots).
+  const motivation = typeof m === "string" ? m.trim().slice(0, 120).trim() : "";
   if (motivation.length < 4) {
     return NextResponse.json({ error: "Empty motivation" }, { status: 500 });
   }

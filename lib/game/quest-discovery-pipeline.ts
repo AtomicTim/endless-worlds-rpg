@@ -228,23 +228,47 @@ export function useDeferredQuestReveal(): void {
   const pendingAct1      = useGameStore((s) => s.pendingAct1Reveal);
   const setPendingAct1   = useGameStore((s) => s.setPendingAct1Reveal);
   const prevNpcRef       = useRef<string | null>(null);
+  // 23.5C+2 hotfix (FIX 4) — fire latch + previous-pending tracker.
+  // The latch (act1RevealFiredRef) prevents any second call to
+  // runActOneDiscovery for the same discovery event, even if the
+  // open→close transition somehow fires twice. Reset only when
+  // pendingAct1 transitions false → true (a new discovery event).
+  const prevPendingRef   = useRef(false);
+  const act1RevealFiredRef = useRef(false);
+
+  // Reset the fire latch when a fresh discovery event arrives.
+  useEffect(() => {
+    if (!prevPendingRef.current && pendingAct1) {
+      act1RevealFiredRef.current = false;
+    }
+    prevPendingRef.current = pendingAct1;
+  }, [pendingAct1]);
 
   useEffect(() => {
     const wasOpen = prevNpcRef.current !== null;
     const isClosed = currentNpc === null;
     prevNpcRef.current = currentNpc;
 
-    // Fire on the transition from "dialogue open" → "dialogue closed"
-    // while pendingAct1Reveal is set. setPendingAct1Reveal(false) runs
-    // FIRST so a quick re-render can't double-fire the pipeline.
-    if (wasOpen && isClosed && pendingAct1) {
+    // 23.5C+2 (FIX 4) — strict gate. All four must hold:
+    //   CHANGE A: dialogue panel is currently closed (currentNpc === null)
+    //   wasOpen + isClosed: this render is the close transition
+    //   pendingAct1: a discovery event is in flight
+    //   !firedRef: we haven't already fired for this event
+    if (
+      currentNpc === null &&
+      wasOpen &&
+      isClosed &&
+      pendingAct1 &&
+      !act1RevealFiredRef.current
+    ) {
+      // CHANGE C — latch the fire BEFORE the (deferred) call so any
+      // re-entry during the 2500ms wait sees the gate closed.
+      act1RevealFiredRef.current = true;
+      // CHANGE B — clear pendingAct1 BEFORE scheduling runActOne
+      // (was already first in the previous code; kept explicit per spec).
       setPendingAct1(false);
-      // V8.65 — 2500ms idle gap, not the previous 250ms close-animation
-      // pause. The longer pause gives the player time to feel like they
-      // walked away from the conversation before the revelation arrives.
-      // Going straight from "dialogue closed" to "cinematic backdrop"
-      // read as a popup, not a moment. The 2.5s settles the player into
-      // the post-dialogue silence first.
+      // V8.65 — 2500ms idle gap so the revelation lands AFTER the
+      // post-dialogue silence rather than during the close animation.
       setTimeout(() => {
         runActOneDiscovery({ trigger: "dialogue" });
       }, 2500);

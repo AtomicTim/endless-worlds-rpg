@@ -84,6 +84,13 @@ function buildPrompt(
     "  gold bonus: 15-25 gold.",
     "- appearance.descriptors: exactly 3 short trait phrases.",
     "- appearance.summary: 1 sentence.",
+    "  IMPORTANT: appearance.summary must NEVER include the character's",
+    "  name — even though `name` is in the same JSON object. Write it",
+    "  as an objective physical description that works for any name:",
+    "    GOOD: 'A lean woman with faint glowing marks along her collarbone.'",
+    "    BAD:  'Kess is a lean woman with faint glowing marks...'",
+    "  The summary must be name-agnostic — the player can change their",
+    "  name independently of the appearance.",
     "- motivation: 1 sentence — why this character is here, what they want.",
     "- origin.description: 1-2 sentences.",
     "- origin.label: 2-3 words.",
@@ -172,8 +179,20 @@ function normalizeCharacter(
     .filter((d): d is string => typeof d === "string")
     .map((d) => d.trim())
     .filter((d) => d.length > 0);
-  const summary =
+  let summary =
     typeof appearanceRaw.summary === "string" ? appearanceRaw.summary.trim() : "";
+  // Defense-in-depth — even with the explicit prompt rule, the model can
+  // slip the character's name into the summary when it generates name and
+  // appearance in the same JSON. Strip a leading "<Name> is " / "<Name>, "
+  // pattern when present so the saved summary stays name-agnostic.
+  if (name && summary.toLowerCase().startsWith(name.toLowerCase())) {
+    const rest = summary.slice(name.length).trimStart();
+    summary = rest
+      .replace(/^(is|was|appears|stands|stood|seems|seemed|looks|looked)\s+/i, "")
+      .replace(/^[,–—-]\s*/, "")
+      .replace(/^\s*[a-z]/, (m) => m.toUpperCase())
+      .trim();
+  }
   if (descriptors.length === 0 || !summary) return null;
 
   const motivation = typeof o.motivation === "string" ? o.motivation.trim() : "";

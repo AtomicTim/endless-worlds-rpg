@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.64
-**Status:** Pre-23D fixes COMPLETE (6d1f05f, 552/552) — Day 23D Side Quest Generation NEXT
+**Version:** 8.65
+**Status:** Pre-23D fixes COMPLETE (0c532e2, 552/552) — Day 23D Side Quest Generation NEXT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -27,7 +27,7 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 **Per-prompt protocols:**
 - **V8.40** — Investigation-before-patching.
 - **V8.41** — Origin/main baseline check: `git fetch origin && git log origin/main --oneline -5` as step 1.
-- **V8.64** — jest baseline = 552. See rule 91.
+- **V8.65** — jest baseline = 552. See rule 91.
 
 ---
 
@@ -49,19 +49,19 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 
 ## Current Status
 
-**Phase:** Pre-23D fixes complete (6d1f05f, 552/552). Day 23D NEXT.
+**Phase:** Pre-23D fixes complete (0c532e2, 552/552). Day 23D NEXT.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** AtomicTim/endless-worlds-rpg
 
 | Phase | Status |
 | --- | --- |
 | Gen pipeline + Day 23A–23C (all parts + fixes) | ✅ |
-| Pre-23D fixes — modal hold, deferred reveal, WCD diversity (6d1f05f) | ✅ |
+| Pre-23D fixes — modal timing, codex race, journal tokens (0c532e2) | ✅ |
 | **Day 23D — Side Quest Generation** | ⏳ **NEXT** |
 | Day 23.5 Character creation rework | ⏳ |
 | Merchant Trading / Combat UX / Mobile Layout | ⏳ |
 | Day 24 Multiplayer / Day 25 Customization | ⏳ Pre-launch |
 
-**Known issues:** HP bar timing (deferred) · No equip during combat (intentional, rule 63) · Nav card peer disappearance (unresolved) · Nav card color differentiation for non-dungeon region_locations (deferred) · Journal diary entry presumptuousness (deferred to 23.5 character creation rework).
+**Known issues:** HP bar timing (deferred) · No equip during combat (intentional, rule 63) · Nav card peer disappearance (unresolved) · Nav card color differentiation for non-dungeon region_locations (deferred) · Journal diary entry presumptuousness (deferred to 23.5).
 
 ---
 
@@ -148,7 +148,7 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 79. **Prompt-template hardcoded IDs are a recurring bug class.** (V8.42)
 80. **Nav card dedup at region zone.** DEEPER suppresses settlement if matches BACK. (V8.43–44)
 81. **Map tier auto-switch on every arrival.** Region zone → tier 2, else → tier 1. (V8.43–44)
-82. **jest baseline history.** 393→…→542→552→**552** (pre-23D fixes: no new tests). See rule 91. (V8.47–V8.64)
+82. **jest baseline history.** 393→…→542→552→**552** (pre-23D fixes: no new tests). See rule 91. (V8.47–V8.65)
 83. **Loot never auto-credits.** All drops go to floor_loot[]. (V8.47)
 84. **Container search is engine-resolved, zero LLM calls.** (V8.47)
 85. **Currency + inventory cap canonical.** INVENTORY_CAP = 20. (V8.47)
@@ -157,7 +157,7 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 88. **resolveUseItem resolves heal by effect, not id.** (V8.49)
 89. **Archetype system in archetypes.ts.** 25 classes. STAT_BASE=2, primary +2, secondary +1. (V8.50)
 90. **Level-up post-combat, player-driven.** LevelUpModal + 5-button picker. (V8.50)
-91. **jest baseline = 552 (V8.64).** No new tests in pre-23D fixes (prompt/timing/animation only). 552 is authoritative. (V8.64)
+91. **jest baseline = 552 (V8.65).** Baseline unchanged through pre-23D fixes. 552 is authoritative. (V8.65)
 92. **Ability modifier: floor((score-2)/2).** (V8.51)
 93. **Enemy stat budgets: tier-1 agi_mod ≤1, hp min ≤8.** (V8.51)
 94. **RegionBibleCache in-flight dedup via Map<string, Promise>.** (V8.53)
@@ -170,7 +170,7 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 101. **DungeonLockPopover.** Locked boss card → hint + [USE key when held] + [FORCE STR ≥ 6] + Close. (V8.57)
 102. **Dungeon narrator context.** CURRENT ROOM injected, inventory stripped, adjacent rooms only. Key items: text path or popover. Out-of-combat healing: direct-dispatch. (V8.58)
 103. **Quest schema types.** QuestArchetype (6), FinaleType, QuestStatus, QuestFaction, QuestBreadcrumb, QuestResolution, MainQuest, SideQuest, QuestEntry, QuestThreads. MasterState.quest_threads? + Metadata.world_intro? added. (V8.59)
-104. **WCD generates main quest seed; WorldBible expands it.** 4 breadcrumbs + 2 resolutions + world_intro_template. initializeQuestThreads at apply time. WCD archetype: explicit equal-weight roll across all 6. Finale: no archetype-affinity table; pick most surprising for this world. Theme: volcanic/lava/ash/cinder flagged OVERUSED (≤1 in 6). (V8.59+64)
+104. **WCD generates main quest seed; WorldBible expands it.** 4 breadcrumbs + 2 resolutions + world_intro_template. initializeQuestThreads at apply time. WCD archetype: explicit equal-weight roll across all 6. Finale: no archetype-affinity table. Theme: volcanic/lava/ash/cinder flagged OVERUSED (≤1 in 6). (V8.59+64)
 105. **World intro template + RegionBible breadcrumb seeding.** {name}/{class} → metadata.world_intro. RegionBible receives first unanchored breadcrumb; apply-regional-bible stamps anchor_location_id. (V8.59)
 106. **Dungeon encounter guards.** (A) isDungeonNode → skip step 7c-3. (B) combatBlocksDungeonEntry → bail useDungeonRuntime when combat active. (V8.60)
 107. **Narrator items_acquired permanently blocked.** acceptNarratorItemsAcquired() → always []. (V8.61)
@@ -179,8 +179,9 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 110. **World intro display.** ew-world-intro NARRATIVE beat + "Your adventure begins." Fires once on empty recent_messages. (V8.62)
 111. **Act 1 breadcrumb discovery.** quest-discovery.ts pure helpers. Two triggers (DIALOGUE + boss clear). breadcrumb.discovered is cross-trigger interlock. patchQuestThreads persists. (V8.62)
 112. **Sub-location node_type fix.** Only is_settlement_node:true gets node_type:"settlement_hub". Sub-locations omit node_type. typeLabel() defensive guard. (V8.63)
-113. **Quest discovery pipeline.** scheduleActOneDiscovery (boss-clear path: 1200ms). Dialogue path: pendingAct1Reveal flag set at DIALOGUE step 9; useDeferredQuestReveal hook watches currentDialogueNpc non-null→null transition → 250ms → runActOneDiscovery. QuestRevealModal: persistent hold (X / backdrop / Escape to dismiss), X button fades in with text, backdrop stopPropagation on prose area. QUEST_REVEAL CustomEvent for future audio. Acts 2/3: delayed ✦ beat only. (V8.63+64)
-114. **JournalModal + journal entry generation.** z-50, 4 tabs. JOURNAL button between CODEX and SAVE. Main Quest: title + status + threat + discovered breadcrumbs by ACT + diary entries. /api/game/generate-journal-entry (haiku, 150 tokens). LogEntryType.QUEST added. Side Quests tab: empty-state shell. (V8.63)
+113. **Quest discovery pipeline.** Boss-clear path: scheduleActOneDiscovery 1200ms. Dialogue path: pendingAct1Reveal flag → useDeferredQuestReveal watches currentDialogueNpc non-null→null → **2500ms** → runActOneDiscovery. QuestRevealModal: persistent hold (X / backdrop / Escape), X fades in with text, stopPropagation on prose. QUEST_REVEAL CustomEvent. Acts 2/3: delayed ✦ beat only. (V8.63+64+65)
+114. **JournalModal + journal entry generation.** z-50, 4 tabs. JOURNAL between CODEX and SAVE. Main Quest: title + status + threat + breadcrumbs by ACT + diary entries. /api/game/generate-journal-entry (haiku, **200 tokens**). LogEntryType.QUEST. Side Quests tab: empty-state shell. (V8.63+65)
+115. **Codex concurrent-write race guard.** lib/game/codex.ts maintains a module-scoped `Set<string>` keyed by `sessionId:entryId`. Claimed synchronously at function entry — second concurrent caller sees `created: false` and skips the feed beat. Both calls still issue their DB upserts (idempotent). Set clears on page reload; DB pre-check handles revisit case. Prevents duplicate "✦ X added to codex" beats when steps 7b and 7g fire concurrently on the same DIALOGUE turn. (V8.65)
 
 ---
 

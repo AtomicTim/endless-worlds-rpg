@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.73
-**Status:** Day 23.5C complete (23c1514, 567/567) — 23.5D world intro cinematic modal next
+**Version:** 8.74
+**Status:** Gen quality hotfix f737c54 complete (567/567) — 23.5D world intro cinematic modal next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -39,41 +39,43 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 ### Sequence
 
 1–15. ~~Through Day 23D + hotfixes~~ ✅
-15b–e. ~~Gen speed audit + Day 23.5A/B/C~~ ✅
+15b–e. ~~Gen speed audit + Day 23.5A/B/C + gen quality hotfix~~ ✅
 15f. **Day 23.5D — World intro cinematic modal** ⏳ NEXT
 16–18. Merchant Trading · Combat UX Polish · Mobile Combat Layout
 19. Day 24 — Multiplayer Foundation
 20. Day 25 — Customization Layer
-21+. Genre Session · UI Overhaul · Verbal Action · Stealth (deferred)
+21+. Genre Session (incl. world structure per-genre) · UI Overhaul · Verbal Action · Stealth (deferred)
 
 ---
 
 ## Current Status
 
-**Phase:** Day 23.5 complete (A+B+hotfix+C). Character creation, narrator context, trust formula all wired. 23.5D is a focused UI polish prompt.
+**Phase:** All 23.5 work complete. Gen quality hotfix landed. 23.5D is the final piece before Merchant Trading.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** AtomicTim/endless-worlds-rpg
 
 | Phase | Status |
 | --- | --- |
-| Gen pipeline + Day 23A–23D (all parts + fixes) | ✅ |
-| Day 23.5A — Types + WCD species + storage (6c137aa) | ✅ |
-| Day 23.5B — Character creation UI + hotfix (eb6df59 + 4d0cc98) | ✅ |
-| Day 23.5C — Narrator + trust integration (23c1514) | ✅ |
+| Day 23.5A–C + hotfixes | ✅ |
+| Gen quality hotfix f737c54 | ✅ |
 | **Day 23.5D — World intro cinematic modal** | ⏳ NEXT |
 | Merchant Trading / Combat UX / Mobile Layout | ⏳ |
 | Day 24 Multiplayer / Day 25 Customization | ⏳ |
 
 **Known issues:** HP bar timing (deferred) · No equip during combat (intentional, rule 63) · Nav card peer disappearance (unresolved) · Nav card color differentiation for non-dungeon region_locations (deferred).
 
-### Day 23.5C — Narrator + trust integration (23c1514, 567/567, tsc clean)
+**Deferred design discussion:** World structure per-genre. Cyberpunk/Post-Apoc/Horror are Earth-based — the "world with named regions" model doesn't fit. Genre Session (Day 21+) to address this properly.
 
-**PART 1 — PLAYER CHARACTER narrator block:** `formatPlayerCharacterBlock(state)` helper in `lib/game/prompt-builder.ts`. Injected once in `buildNarratorSystemPrompt` between WCD prefix and HARD RULES. DIALOGUE/non-DIALOGUE/DUNGEON ROOM all share the same system prompt — one injection covers all three. COMBAT (`/api/game/narrate-combat`) never calls `buildNarratorSystemPrompt` — block naturally absent. Returns `""` when `character_profile` missing; omits Motivation/Species/Origin lines when inputs are empty.
+### Gen quality hotfix (f737c54, 567/567, tsc clean)
 
-**PART 2 — Trust formula:** `computeInitialTrust(state, npcAsset)` helper in `state-utils`. Sums `50 + species.npc_disposition_seed + npc.disposition_modifiers.toward_species[player_species_id]`, clamped 0–100. Both terms degrade to 0 when `character_profile` / species data absent. `seedNpcRegistry` gains optional 5th `npcAsset` param; both `useGameLoop.ts` callers (lines 2757 + 2891) pass the already-resolved `matchingAsset`. `WorldAssetConstitution` extended with `disposition_modifiers?`; both `npcToAsset` functions mirror it from `NPCDefinition` when present.
+**FIX 1 — world_name per-genre scope:** world_name = name of entire game world (planet/continent/reality). Per-genre guidance: Fantasy = invented world name; Post-Apoc = remnant Earth territory; Horror = isolated location/community; Cyberpunk = future city/corporate zone name; Space Opera = planet/system name. Hard MUST-NOT list: settlement names, document titles, geographic features.
 
-**PART 3 — {motivation} resolution:** `resolveWorldIntro` in `lib/game/quest-threads.ts` gains optional 4th `motivation` param + `{motivation}` replace pass. `apply-world-bible` passes `current.player_state.character_profile?.motivation` at the existing call site.
+**FIX 2 — Species stat_modifiers cap:** Exactly 2 entries max, each exactly ±1. One positive, one negative. Cyberpunk Augmented anchor rewritten to conform. normalizeWcd defense-in-depth: clamps entries to ±1, caps to 2, drops extras silently.
 
-**PART 4 — Journal CHARACTER VOICE:** `generate-journal-entry` route loads `master_state` via Supabase client, reads `character_profile` + `metadata.species`, emits CHARACTER VOICE block before Main quest line. Includes per-spec instruction about writing in this character's voice without third-person. Missing profile → empty block → pre-23.5 behavior preserved; lookup failure logged + skipped.
+**FIX 3 — Disposition seed commitment:** COMMITMENT RULE added. If lore_notes describes fear/persecution → seed ≤ -8. If revered/trusted → seed ≥ +8. If neutral → seed = 0. Forbids tension-laden lore with near-zero seeds.
+
+**FIX 4 — NPC name WCD-anchoring:** WorldBible + RegionBible NPC skeletons replaced with `"<NPC name derived from WCD cultural context>"` placeholders. Both prompts gain WCD-anchored naming instruction: names derive from world's cultural/geographic/atmospheric context, not generic naming pools.
+
+**FIX 5 — WorldBible background fire root cause fixed:** generate-world-bible was requiring non-empty character_name/character_class — 400-ing the background call from /game/new which passes "". Validation now only requires genre + wcd. Logs: `[WB] generating with character context` (foreground) vs `[WB_BACKGROUND] generating without character context` (background). {name}/{class} resolution confirmed in apply-world-bible only.
 
 ---
 
@@ -89,11 +91,11 @@ Replaces the current `ew-world-intro` NARRATIVE beat in the story feed entirely.
 - Subtle radial vignette on dark background
 - "Click anywhere to begin..." hint at bottom (small, muted, pulse animation)
 
-**Distinct from quest reveal modal:** Quest reveal = header + X button + amber accent = functional. World intro = no chrome = cinematic. Separate component, different z-index, slow fade-in animation (not slide).
+**Distinct from quest reveal modal:** Quest reveal = header + X button + amber accent = functional. World intro = no chrome = cinematic.
 
-**Trigger:** `metadata.world_intro` is set AND `recent_messages === 0`. After dismiss: fire the "Your adventure begins." SYSTEM beat (currently in preamble — move to post-dismiss). Never fires again in the session (dismissed state in local React state, not persisted — refreshing the game page at the start would re-show it, which is fine).
+**Trigger:** `metadata.world_intro` is set AND `recent_messages === 0`. After dismiss: fire "Your adventure begins." SYSTEM beat.
 
-**Old saves (no world_intro):** Modal never shows. Existing "Your adventure begins." preamble behavior unchanged.
+**Old saves (no world_intro):** Modal never shows. Existing preamble behavior unchanged.
 
 ---
 
@@ -140,7 +142,7 @@ Replaces the current `ew-world-intro` NARRATIVE beat in the story feed entirely.
 39. CombatMode bottom-strip swap when `combat?.active === true`. (V8.34)
 40. Each combatant row reserves ~128px portrait slot. (V8.34)
 41. Bestiary codex entries write on combat_start, deduplicated by enemy.id. (V8.34)
-42. **World intro cinematic modal** fires on first game load when `metadata.world_intro` is set + `recent_messages === 0`. Dismissed by click/key. "Your adventure begins." SYSTEM beat fires post-dismiss. Old saves: modal never shows. (V8.73)
+42. **World intro cinematic modal** fires on first game load when `metadata.world_intro` set + `recent_messages === 0`. Dismissed by click/key. "Your adventure begins." fires post-dismiss. Old saves: modal never shows. (V8.73+74)
 43. Starting equipment in `lib/game/starting-equipment.ts`. (V8.35)
 44. Starting weapon: equipped + damage_die. Starting armor: equipped + armor_bonus. (V8.35)
 45. combat_start templated, not LLM-narrated. (V8.35)
@@ -224,7 +226,7 @@ Replaces the current `ew-world-intro` NARRATIVE beat in the story feed entirely.
 123. **RegionBible burst confirmed parallel.** (V8.68)
 124. **No token cap changes without output_tokens data.** (V8.69)
 125. **Species generated in WCD.** Fantasy can skip Elf/Dwarf anchor for oceanic/urban/desert worlds. (V8.70+72)
-126. **Species schema.** Full schema in types/game.ts. PassiveTrait max 2. (V8.70)
+126. **Species schema.** Full schema in types/game.ts. PassiveTrait max 2. stat_modifiers: exactly ±1, max 2 entries. (V8.70+74)
 127. **PlayerCharacterProfile schema.** species_id + gender + origin + appearance + motivation. (V8.70+71)
 128. **NPCDefinition extended.** species_id? + disposition_modifiers? + min_trust_to_recruit? (V8.70)
 129. **WorldBible species context block.** 3-5 lines injected. (V8.70)
@@ -237,11 +239,16 @@ Replaces the current `ew-world-intro` NARRATIVE beat in the story feed entirely.
 136. **Appearance generation: gender-aware cache.** Gender toggle on appearance step only. (V8.71+72)
 137. **Motivation step UX.** "I came to this world to…". Skip: "Play as a blank slate". Randomize. Character summary card. (V8.72)
 138. **Random mode.** Full coherent character, lands on name step. (V8.71)
-139. **WorldBible fires in background after WCD completes.** worldBibleResultRef + worldBiblePromiseRef. (V8.72)
-140. **PLAYER CHARACTER narrator block.** `formatPlayerCharacterBlock(state)` in prompt-builder. Injected between WCD and HARD RULES in buildNarratorSystemPrompt. COMBAT exempt. Old saves: block omitted. (V8.73)
-141. **Trust formula: computeInitialTrust(state, npcAsset).** 50 + species.npc_disposition_seed + npc.disposition_modifiers.toward_species[id], clamped 0–100. Wired in seedNpcRegistry (5th param). Both npcToAsset functions mirror disposition_modifiers. (V8.73)
-142. **{motivation} resolved in world_intro_template.** resolveWorldIntro gains 4th motivation param. apply-world-bible passes character_profile.motivation. (V8.73)
-143. **Journal CHARACTER VOICE block.** generate-journal-entry loads master_state, builds species+class+origin+appearance+motivation block. Missing profile → block omitted. (V8.73)
+139. **WorldBible fires in background after WCD completes.** worldBibleResultRef + worldBiblePromiseRef. Root cause of 400 fixed (character_name/class now optional in route). (V8.72+74)
+140. **PLAYER CHARACTER narrator block.** `formatPlayerCharacterBlock(state)` in prompt-builder. Between WCD and HARD RULES. COMBAT exempt. Old saves: block omitted. (V8.73)
+141. **Trust formula: computeInitialTrust(state, npcAsset).** 50 + species.npc_disposition_seed + npc.disposition_modifiers, clamped 0–100. (V8.73)
+142. **{motivation} resolved in world_intro_template.** (V8.73)
+143. **Journal CHARACTER VOICE block.** generate-journal-entry loads master_state, builds character voice context. (V8.73)
+144. **world_name = entire game world.** Per-genre scope: Fantasy=invented world; Post-Apoc=remnant Earth territory; Horror=isolated location; Cyberpunk=future city/corporate zone; Space Opera=planet/system. NOT a settlement, document title, or geographic feature. (V8.74)
+145. **Species stat_modifiers: exactly ±1, max 2 entries.** One +1, one -1. normalizeWcd clamps defensively. (V8.74)
+146. **Disposition seed COMMITMENT RULE.** Feared/persecuted lore → seed ≤ -8. Revered → seed ≥ +8. Neutral → seed = 0. Lore and seed must agree. (V8.74)
+147. **NPC names WCD-anchored.** Skeleton placeholders `<NPC name derived from WCD cultural context>`. Naming instruction in both WorldBible + RegionBible prompts. (V8.74)
+148. **WorldBible background validation fix.** generate-world-bible now only requires genre + wcd. character_name/class optional. Background call logs [WB_BACKGROUND]. (V8.74)
 
 ---
 

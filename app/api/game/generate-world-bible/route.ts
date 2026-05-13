@@ -1233,14 +1233,19 @@ function validateBible(parsed: unknown): { ok: true; bible: WorldBible } | { ok:
   return { ok: true, bible: parsed as WorldBible };
 }
 
-// V8.68 — OPT 2: max_tokens reduced 10000 → 3000 per the optimization
-// audit. The Day 20 comment noted "WorldBible already runs near the
-// 8 K boundary on rich worlds" — at 3000 the model will be forced to
-// emit a tighter response. Instrumentation surfaces output_tokens so
-// truncation (output_tokens === max_tokens) is visible in logs and we
-// can revisit if generation starts failing.
+// V8.69 — restore WorldBible max_tokens to a working ceiling.
+// V8.68's OPT 2 reduced 10000 → 3000; instrumentation confirmed
+// WB output truncates at exactly 3000 tokens, parse fails, the
+// route retries once, fails again, returns 500 after ~105 seconds.
+// The Day 20 comment was right — WorldBible runs near the 8K
+// boundary on rich worlds.
+//
+// 8000 gives room for current output plus headroom for growth
+// (e.g. Day 23.5 species generation). If logs ever show
+// output_tokens approaching 8000 we raise again; for now the
+// instrumentation will confirm it sits comfortably below.
 const WB_MODEL      = "claude-sonnet-4-5";
-const WB_MAX_TOKENS = 3000;
+const WB_MAX_TOKENS = 8000;
 
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
   const promptTokens = Math.ceil((SYSTEM_PROMPT.length + userPrompt.length) / 4);
@@ -1265,7 +1270,7 @@ async function callClaude(client: Anthropic, userPrompt: string): Promise<string
 
 export async function POST(request: NextRequest) {
   console.log("[GEN_TIMING] generate-world-bible called");
-  console.log(`[GEN_TIMING] generate-world-bible max_tokens reduced to ${WB_MAX_TOKENS}`);
+  console.log(`[GEN_TIMING] generate-world-bible max_tokens: ${WB_MAX_TOKENS}`);
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {

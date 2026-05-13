@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.74
-**Status:** Gen quality hotfix f737c54 complete (567/567) — 23.5D world intro cinematic modal next
+**Version:** 8.75
+**Status:** Day 23.5D complete (c7b0a79, 567/567) — quest modal double-fire hotfix next, then Merchant Trading
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -39,9 +39,10 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 ### Sequence
 
 1–15. ~~Through Day 23D + hotfixes~~ ✅
-15b–e. ~~Gen speed audit + Day 23.5A/B/C + gen quality hotfix~~ ✅
-15f. **Day 23.5D — World intro cinematic modal** ⏳ NEXT
-16–18. Merchant Trading · Combat UX Polish · Mobile Combat Layout
+15b–f. ~~Gen speed audit + Day 23.5A–D + quality hotfixes~~ ✅
+15g. Quest modal double-fire hotfix ⏳ NEXT
+16. Merchant Trading
+17–18. Combat UX Polish · Mobile Combat Layout
 19. Day 24 — Multiplayer Foundation
 20. Day 25 — Customization Layer
 21+. Genre Session (incl. world structure per-genre) · UI Overhaul · Verbal Action · Stealth (deferred)
@@ -50,52 +51,52 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 
 ## Current Status
 
-**Phase:** All 23.5 work complete. Gen quality hotfix landed. 23.5D is the final piece before Merchant Trading.
+**Phase:** Full Day 23.5 arc complete. World intro cinematic modal live. Quest modal double-fire is a known bug to fix before Merchant Trading.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** AtomicTim/endless-worlds-rpg
 
 | Phase | Status |
 | --- | --- |
-| Day 23.5A–C + hotfixes | ✅ |
-| Gen quality hotfix f737c54 | ✅ |
-| **Day 23.5D — World intro cinematic modal** | ⏳ NEXT |
-| Merchant Trading / Combat UX / Mobile Layout | ⏳ |
+| Day 23.5A–D + all hotfixes | ✅ |
+| **Quest modal double-fire hotfix** | ⏳ NEXT |
+| Merchant Trading | ⏳ |
+| Combat UX Polish / Mobile Layout | ⏳ |
 | Day 24 Multiplayer / Day 25 Customization | ⏳ |
 
-**Known issues:** HP bar timing (deferred) · No equip during combat (intentional, rule 63) · Nav card peer disappearance (unresolved) · Nav card color differentiation for non-dungeon region_locations (deferred).
+**Known issues:** Quest modal double-fire (fires during dialogue + again on NPC dismiss — see rule 149) · HP bar timing (deferred) · No equip during combat (intentional, rule 63) · Nav card peer disappearance (unresolved) · Nav card color differentiation for non-dungeon region_locations (deferred).
 
-**Deferred design discussion:** World structure per-genre. Cyberpunk/Post-Apoc/Horror are Earth-based — the "world with named regions" model doesn't fit. Genre Session (Day 21+) to address this properly.
+**Deferred design discussions:** World structure per-genre (Cyberpunk/Post-Apoc/Horror are Earth-based — "world with named regions" model doesn't fully fit) · Side quest discovery rework (dialogue option with quest marker) · NPC species display in dialogue modal / sidebar.
 
-### Gen quality hotfix (f737c54, 567/567, tsc clean)
+### Day 23.5D — World intro cinematic modal (c7b0a79, 567/567, tsc clean)
 
-**FIX 1 — world_name per-genre scope:** world_name = name of entire game world (planet/continent/reality). Per-genre guidance: Fantasy = invented world name; Post-Apoc = remnant Earth territory; Horror = isolated location/community; Cyberpunk = future city/corporate zone name; Space Opera = planet/system name. Hard MUST-NOT list: settlement names, document titles, geographic features.
+**PART 1 — components/WorldIntroModal.tsx:** Full-screen overlay z-60 replacing in-feed NARRATIVE world_intro beat. No close button/header — click anywhere or any key dismisses. Radial-vignette black backdrop. Three-stage opacity-only fade cascade: overlay 0–800ms → world name (text-glow, primary color, font-mono) 800–1000ms → prose (ew-serif ew-world-intro italic, 0.85 opacity) + "Click anywhere to begin..." (animate-pulse) 1200–1600ms. All timeouts cleared on unmount; keydown listener removed on unmount. genre prop accepted for API contract; theming via CSS vars.
 
-**FIX 2 — Species stat_modifiers cap:** Exactly 2 entries max, each exactly ±1. One positive, one negative. Cyberpunk Augmented anchor rewritten to conform. normalizeWcd defense-in-depth: clamps entries to ±1, caps to 2, drops extras silently.
-
-**FIX 3 — Disposition seed commitment:** COMMITMENT RULE added. If lore_notes describes fear/persecution → seed ≤ -8. If revered/trusted → seed ≥ +8. If neutral → seed = 0. Forbids tension-laden lore with near-zero seeds.
-
-**FIX 4 — NPC name WCD-anchoring:** WorldBible + RegionBible NPC skeletons replaced with `"<NPC name derived from WCD cultural context>"` placeholders. Both prompts gain WCD-anchored naming instruction: names derive from world's cultural/geographic/atmospheric context, not generic naming pools.
-
-**FIX 5 — WorldBible background fire root cause fixed:** generate-world-bible was requiring non-empty character_name/character_class — 400-ing the background call from /game/new which passes "". Validation now only requires genre + wcd. Logs: `[WB] generating with character context` (foreground) vs `[WB_BACKGROUND] generating without character context` (background). {name}/{class} resolution confirmed in apply-world-bible only.
+**PART 2 — app/game/page.tsx:** showWorldIntroModal state + worldIntroShownRef synchronous latch. Fresh-game preamble forks at recentMsgs.length === 0: (A) new games with world_intro → SYSTEM "You are…" fires, modal opens, "Your adventure begins." deferred to handleWorldIntroDismiss; (B) legacy saves without world_intro → SYSTEM "You are…" + "Your adventure begins." fire immediately as before. worldName resolves from metadata.world_consistency?.world_name with world_seed fallback.
 
 ---
 
-## Day 23.5D — World Intro Cinematic Modal (NEXT)
+## Quest Modal Double-Fire (known bug — fix before Merchant Trading)
 
-Replaces the current `ew-world-intro` NARRATIVE beat in the story feed entirely.
+**Symptoms:** Quest reveal modal fires DURING active NPC dialogue (currentDialogueNpc is non-null), then fires AGAIN when dialogue is closed.
 
-**Design:** Full-screen cinematic overlay, fades in on first game load (`recent_messages === 0`). Dismissed by clicking anywhere or pressing any key — no close button, no X. Like a book opening, not a notification.
+**Root cause:** `pendingAct1Reveal` flag is not being checked against `currentDialogueNpc` state before scheduling. The `useDeferredQuestReveal` hook's null-transition trigger fires the modal without first verifying dialogue has fully closed.
 
-**Contents:**
-- World name: large, centered, genre primary color, text-glow
-- World intro prose: italic serif, centered, max-width readable, pre-wrap
-- Subtle radial vignette on dark background
-- "Click anywhere to begin..." hint at bottom (small, muted, pulse animation)
+**Fix:** In `useDeferredQuestReveal` (or wherever `pendingAct1Reveal` is consumed):
+1. Guard: only run `runActOneDiscovery` when `currentDialogueNpc === null`
+2. Ensure `pendingAct1Reveal` is cleared BEFORE calling `runActOneDiscovery` (not after) to prevent re-trigger
+3. Add a ref-based latch (similar to worldIntroShownRef) so `runActOneDiscovery` can only fire once per breadcrumb discovery event
 
-**Distinct from quest reveal modal:** Quest reveal = header + X button + amber accent = functional. World intro = no chrome = cinematic.
+---
 
-**Trigger:** `metadata.world_intro` is set AND `recent_messages === 0`. After dismiss: fire "Your adventure begins." SYSTEM beat.
+## Day 23.5 Complete — Full Arc Summary
 
-**Old saves (no world_intro):** Modal never shows. Existing preamble behavior unchanged.
+| Sub-phase | Commit | What shipped |
+|---|---|---|
+| 23.5A | 6c137aa | Species types, WCD generation, apply-world-seed storage |
+| 23.5B | eb6df59 | 7-step character creation wizard, WorldForgingScreen, 3 modes |
+| 23.5B hotfix | 4d0cc98 | Screen timing, gender cache, motivation UX, bg WorldBible |
+| 23.5C | 23c1514 | Narrator PLAYER CHARACTER block, trust formula, journal voice |
+| Gen quality | f737c54 | World name guidance, species stat cap, disposition seeds, NPC names, WB bg fire |
+| 23.5D | c7b0a79 | World intro cinematic modal |
 
 ---
 
@@ -142,7 +143,7 @@ Replaces the current `ew-world-intro` NARRATIVE beat in the story feed entirely.
 39. CombatMode bottom-strip swap when `combat?.active === true`. (V8.34)
 40. Each combatant row reserves ~128px portrait slot. (V8.34)
 41. Bestiary codex entries write on combat_start, deduplicated by enemy.id. (V8.34)
-42. **World intro cinematic modal** fires on first game load when `metadata.world_intro` set + `recent_messages === 0`. Dismissed by click/key. "Your adventure begins." fires post-dismiss. Old saves: modal never shows. (V8.73+74)
+42. **World intro cinematic modal** (WorldIntroModal component) fires on first game load when `metadata.world_intro` set + `recentMsgs.length === 0`. Dismissed by click/key. "Your adventure begins." deferred to post-dismiss. Old saves without world_intro: immediate SYSTEM beats as before. (V8.75)
 43. Starting equipment in `lib/game/starting-equipment.ts`. (V8.35)
 44. Starting weapon: equipped + damage_die. Starting armor: equipped + armor_bonus. (V8.35)
 45. combat_start templated, not LLM-narrated. (V8.35)
@@ -210,11 +211,11 @@ Replaces the current `ew-world-intro` NARRATIVE beat in the story feed entirely.
 107. **Narrator items_acquired permanently blocked.** (V8.61)
 108. **Dungeon lock hint must not name the key item.** (V8.61)
 109. **Region zone node spawns discovered: false.** (V8.62)
-110. **World intro cinematic modal (23.5D).** Full-screen fade-in, dismissed by click/key, fires "Your adventure begins." after dismiss. Old saves: falls through to existing preamble. (V8.73)
+110. **World intro cinematic modal** — see rule 42. (V8.75)
 111. **Act 1 breadcrumb discovery.** Two triggers: DIALOGUE + boss clear. (V8.62)
 112. **Sub-location node_type fix.** (V8.63)
-113. **Quest discovery pipeline.** Boss-clear 1200ms. Dialogue: pendingAct1Reveal → 2500ms. QuestRevealModal: persistent hold. (V8.63+64+65)
-114. **JournalModal + journal entry generation.** 4 tabs. haiku 200 tokens. CHARACTER VOICE block from character_profile. (V8.63+65+66+73)
+113. **Quest discovery pipeline.** Boss-clear 1200ms. Dialogue: pendingAct1Reveal → useDeferredQuestReveal null-transition → 2500ms. QuestRevealModal: persistent hold. Acts 2/3: delayed ✦ beat only. ⚠️ Double-fire bug: modal fires during active dialogue + again on dismiss. Fix pending. (V8.63+64+65+75)
+114. **JournalModal + journal entry generation.** 4 tabs. haiku 200 tokens. CHARACTER VOICE block. (V8.63+65+66+73)
 115. **Codex concurrent-write race guard.** (V8.65)
 116. **Side quest generation (Day 23D).** Synchronous in apply-regional-bible. (V8.66)
 117. **Region zone + settlement spawn discovered: false.** (V8.67)
@@ -239,16 +240,17 @@ Replaces the current `ew-world-intro` NARRATIVE beat in the story feed entirely.
 136. **Appearance generation: gender-aware cache.** Gender toggle on appearance step only. (V8.71+72)
 137. **Motivation step UX.** "I came to this world to…". Skip: "Play as a blank slate". Randomize. Character summary card. (V8.72)
 138. **Random mode.** Full coherent character, lands on name step. (V8.71)
-139. **WorldBible fires in background after WCD completes.** worldBibleResultRef + worldBiblePromiseRef. Root cause of 400 fixed (character_name/class now optional in route). (V8.72+74)
-140. **PLAYER CHARACTER narrator block.** `formatPlayerCharacterBlock(state)` in prompt-builder. Between WCD and HARD RULES. COMBAT exempt. Old saves: block omitted. (V8.73)
-141. **Trust formula: computeInitialTrust(state, npcAsset).** 50 + species.npc_disposition_seed + npc.disposition_modifiers, clamped 0–100. (V8.73)
+139. **WorldBible fires in background after WCD completes.** Root cause of 400 fixed. (V8.72+74)
+140. **PLAYER CHARACTER narrator block.** formatPlayerCharacterBlock(state). Between WCD and HARD RULES. COMBAT exempt. (V8.73)
+141. **Trust formula: computeInitialTrust(state, npcAsset).** 50 + species.npc_disposition_seed + disposition_modifiers, clamped 0–100. (V8.73)
 142. **{motivation} resolved in world_intro_template.** (V8.73)
-143. **Journal CHARACTER VOICE block.** generate-journal-entry loads master_state, builds character voice context. (V8.73)
-144. **world_name = entire game world.** Per-genre scope: Fantasy=invented world; Post-Apoc=remnant Earth territory; Horror=isolated location; Cyberpunk=future city/corporate zone; Space Opera=planet/system. NOT a settlement, document title, or geographic feature. (V8.74)
-145. **Species stat_modifiers: exactly ±1, max 2 entries.** One +1, one -1. normalizeWcd clamps defensively. (V8.74)
-146. **Disposition seed COMMITMENT RULE.** Feared/persecuted lore → seed ≤ -8. Revered → seed ≥ +8. Neutral → seed = 0. Lore and seed must agree. (V8.74)
-147. **NPC names WCD-anchored.** Skeleton placeholders `<NPC name derived from WCD cultural context>`. Naming instruction in both WorldBible + RegionBible prompts. (V8.74)
-148. **WorldBible background validation fix.** generate-world-bible now only requires genre + wcd. character_name/class optional. Background call logs [WB_BACKGROUND]. (V8.74)
+143. **Journal CHARACTER VOICE block.** (V8.73)
+144. **world_name = entire game world.** Per-genre scope rules. NOT settlement/document/feature. (V8.74)
+145. **Species stat_modifiers: exactly ±1, max 2 entries.** normalizeWcd clamps defensively. (V8.74)
+146. **Disposition seed COMMITMENT RULE.** Feared → ≤-8. Revered → ≥+8. Neutral → 0. (V8.74)
+147. **NPC names WCD-anchored.** Skeleton placeholders. Naming instruction in WB + RegionBible. (V8.74)
+148. **WorldBible background validation fix.** Only requires genre + wcd. Logs [WB_BACKGROUND]. (V8.74)
+149. **Quest modal double-fire bug.** QuestRevealModal fires during active dialogue (currentDialogueNpc non-null) then again on dialogue close. Fix: guard useDeferredQuestReveal to only run when currentDialogueNpc === null; clear pendingAct1Reveal before calling runActOneDiscovery; add ref latch. (V8.75 — pending fix)
 
 ---
 
@@ -282,7 +284,7 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint
 | Dungeon | #b45309 burnt-copper | --hl-dungeon |
 | NPC highlights | var(--accent) orange | — |
 | Level-up beat | --hl-pass green (centered) | — |
-| World intro | cinematic modal — no story feed beat (23.5D) | — |
+| World intro | WorldIntroModal cinematic overlay (no story feed beat) | — |
 | Main quest discovery | ✦ amber/gold serif italic 13px | var(--accent) |
 | Side quest discovery | 11px serif italic accent 0.9 opacity, immediate | — |
 | Quest reveal modal | persistent overlay, X/backdrop/Escape | — |

@@ -434,17 +434,37 @@ function validateWcd(parsed: unknown): { ok: true; wcd: WorldConsistencyDocument
   return { ok: true, wcd: parsed as WorldConsistencyDocument };
 }
 
+// V8.68 — instrumentation + OPT 1 (haiku model).
+// WCD output is a structured JSON seed — short, constrained, no
+// creative prose. Haiku handles it well and is ~5× faster than
+// Sonnet for this size. Switched here; the prompt body itself
+// (archetype + faction + theme guidance) is unchanged.
+const WCD_MODEL = "claude-haiku-4-5-20251001";
+
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
+  const promptTokens = Math.ceil((SYSTEM_PROMPT.length + userPrompt.length) / 4);
+  console.log(
+    `[GEN_TIMING] generate-wcd start — model: ${WCD_MODEL}, prompt_tokens: ${promptTokens}`
+  );
+  const startedAt = Date.now();
   const message = await client.messages.create({
-    model:      "claude-sonnet-4-5",
+    model:      WCD_MODEL,
     max_tokens: 2000,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });
-  return message.content[0]?.type === "text" ? message.content[0].text : "";
+  const text = message.content[0]?.type === "text" ? message.content[0].text : "";
+  const outputTokens = message.usage?.output_tokens ?? Math.ceil(text.length / 4);
+  const elapsed = Date.now() - startedAt;
+  console.log(
+    `[GEN_TIMING] generate-wcd complete — elapsed: ${elapsed}ms, output_tokens: ${outputTokens}`
+  );
+  return text;
 }
 
 export async function POST(request: NextRequest) {
+  console.log("[GEN_TIMING] generate-wcd called");
+  console.log("[GEN_TIMING] generate-wcd using haiku model");
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {

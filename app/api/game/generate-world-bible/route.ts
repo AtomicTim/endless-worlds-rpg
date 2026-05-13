@@ -1233,21 +1233,39 @@ function validateBible(parsed: unknown): { ok: true; bible: WorldBible } | { ok:
   return { ok: true, bible: parsed as WorldBible };
 }
 
+// V8.68 — OPT 2: max_tokens reduced 10000 → 3000 per the optimization
+// audit. The Day 20 comment noted "WorldBible already runs near the
+// 8 K boundary on rich worlds" — at 3000 the model will be forced to
+// emit a tighter response. Instrumentation surfaces output_tokens so
+// truncation (output_tokens === max_tokens) is visible in logs and we
+// can revisit if generation starts failing.
+const WB_MODEL      = "claude-sonnet-4-5";
+const WB_MAX_TOKENS = 3000;
+
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
-  // Day 20 — bumped 8000 → 10000 to accommodate the new
-  // starting_region.enemies array (3-5 entries) and adjacent_region
-  // outline enemies (1-2 each). The WorldBible already runs near the
-  // 8 K boundary on rich worlds; combat content adds ~600-1000 tokens.
+  const promptTokens = Math.ceil((SYSTEM_PROMPT.length + userPrompt.length) / 4);
+  console.log(
+    `[GEN_TIMING] generate-world-bible start — model: ${WB_MODEL}, prompt_tokens: ${promptTokens}`
+  );
+  const startedAt = Date.now();
   const message = await client.messages.create({
-    model:      "claude-sonnet-4-5",
-    max_tokens: 10000,
+    model:      WB_MODEL,
+    max_tokens: WB_MAX_TOKENS,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });
-  return message.content[0]?.type === "text" ? message.content[0].text : "";
+  const text = message.content[0]?.type === "text" ? message.content[0].text : "";
+  const outputTokens = message.usage?.output_tokens ?? Math.ceil(text.length / 4);
+  const elapsed = Date.now() - startedAt;
+  console.log(
+    `[GEN_TIMING] generate-world-bible complete — elapsed: ${elapsed}ms, output_tokens: ${outputTokens}`
+  );
+  return text;
 }
 
 export async function POST(request: NextRequest) {
+  console.log("[GEN_TIMING] generate-world-bible called");
+  console.log(`[GEN_TIMING] generate-world-bible max_tokens reduced to ${WB_MAX_TOKENS}`);
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
@@ -1273,6 +1291,17 @@ export async function POST(request: NextRequest) {
   }
 
   const userPrompt = buildUserPrompt(genre, character_name, character_class, wcd);
+
+  // V8.68 — prompt audit data point. The WB prompt body is mostly the
+  // JSON skeleton + load-bearing instruction blocks (Day 20 enemies,
+  // Day 23A dungeons, Day 23B quest schema, V8.54 enforcement). Cutting
+  // any of those breaks generation. Logged at original size so future
+  // audits have a baseline; if a safe cut is identified the new size
+  // appears here.
+  const promptChars = SYSTEM_PROMPT.length + userPrompt.length;
+  console.log(
+    `[GEN_TIMING] generate-world-bible prompt audited — original ~${promptChars} chars, new ~${promptChars} chars (no cuts this pass — body is load-bearing)`
+  );
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

@@ -838,26 +838,41 @@ function validateBible(parsed: unknown): { ok: true; bible: RegionBible } | { ok
   return { ok: true, bible: parsed as RegionBible };
 }
 
+// V8.68 — OPT 3: max_tokens reduced 7000 → 1500 per the optimization
+// audit. The stub fallback in the POST handler catches truncation;
+// instrumentation surfaces output_tokens so we can see if regions
+// regularly hit the cap.
+const RB_MODEL      = "claude-haiku-4-5-20251001";
+const RB_MAX_TOKENS = 1500;
+
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
   // Architecture spec ("Model Selection"): RegionBible generation runs on
   // haiku because the outline already locks the region's identity. Quality
   // from a simpler prompt is acceptable; speed matters more here than for
   // WCD/WorldBible/narration.
-  //
-  // Day 20 — bumped 6000 → 7000 to give the haiku headroom for the
-  // 3-5 enemy entries added at combat-spec §6.5. The stub fallback in
-  // the POST handler still catches any remaining truncation.
-  console.log("[RegionBible] Using haiku model");
+  const promptTokens = Math.ceil((SYSTEM_PROMPT.length + userPrompt.length) / 4);
+  console.log(
+    `[GEN_TIMING] generate-regional-bible start — model: ${RB_MODEL}, prompt_tokens: ${promptTokens}`
+  );
+  const startedAt = Date.now();
   const message = await client.messages.create({
-    model:      "claude-haiku-4-5-20251001",
-    max_tokens: 7000,
+    model:      RB_MODEL,
+    max_tokens: RB_MAX_TOKENS,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });
-  return message.content[0]?.type === "text" ? message.content[0].text : "";
+  const text = message.content[0]?.type === "text" ? message.content[0].text : "";
+  const outputTokens = message.usage?.output_tokens ?? Math.ceil(text.length / 4);
+  const elapsed = Date.now() - startedAt;
+  console.log(
+    `[GEN_TIMING] generate-regional-bible complete — elapsed: ${elapsed}ms, output_tokens: ${outputTokens}`
+  );
+  return text;
 }
 
 export async function POST(request: NextRequest) {
+  console.log("[GEN_TIMING] generate-regional-bible called");
+  console.log(`[GEN_TIMING] generate-regional-bible max_tokens reduced to ${RB_MAX_TOKENS}`);
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {

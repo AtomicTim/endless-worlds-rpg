@@ -396,6 +396,14 @@ export default function NewGamePage() {
         console.log(
           `[wizard] Fired background pre-generation for ${adjacentRegions.length} adjacent region(s).`
         );
+        // V8.68 — OPT 4 verification log. pregenerateRegionalBible is
+        // fire-and-forget (registers an in-flight promise and returns
+        // void), and forEach doesn't await. Calls dispatch back-to-back
+        // and each region's HTTP request flies in parallel — already
+        // parallel, no Promise.all conversion needed.
+        console.log(
+          `[GEN_TIMING] RegionBible burst — ${adjacentRegions.length} regions, firing in parallel (already parallel via fire-and-forget; no change needed)`
+        );
       }
 
       // ── Step 5: brief beat before the player drops into the game. ──────────

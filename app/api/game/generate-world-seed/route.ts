@@ -153,6 +153,7 @@ interface RequestBody {
 }
 
 export async function POST(request: NextRequest) {
+  console.log("[GEN_TIMING] generate-world-seed called");
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
@@ -177,13 +178,24 @@ export async function POST(request: NextRequest) {
   // Day 19A — when a WCD is supplied, prepend it to the user prompt so the
   // seed generation respects landmarks, factions, and world rules.
   const wcdPrefix = wcd ? `${formatWcdBlock(wcd)}\n\n` : "";
-  const userPrompt = wcdPrefix + buildUserPrompt(genre, characterName, characterBackground);
+  const systemPrompt = buildSystemPrompt(genre);
+  const userPrompt   = wcdPrefix + buildUserPrompt(genre, characterName, characterBackground);
+
+  // V8.68 — instrumentation. generate-world-seed is the legacy
+  // pre-Day-19B path; only triggered if some fallback flow still
+  // invokes it. The logs surface that case if it happens.
+  const WS_MODEL = "claude-sonnet-4-5";
+  const promptTokens = Math.ceil((systemPrompt.length + userPrompt.length) / 4);
+  console.log(
+    `[GEN_TIMING] generate-world-seed start — model: ${WS_MODEL}, prompt_tokens: ${promptTokens}`
+  );
 
   try {
+    const startedAt = Date.now();
     const message = await anthropic.messages.create({
-      model:      "claude-sonnet-4-5",
+      model:      WS_MODEL,
       max_tokens: 4096,
-      system:     buildSystemPrompt(genre),
+      system:     systemPrompt,
       messages: [
         { role: "user", content: userPrompt },
       ],
@@ -191,6 +203,11 @@ export async function POST(request: NextRequest) {
 
     const rawText =
       message.content[0]?.type === "text" ? message.content[0].text : "";
+    const outputTokens = message.usage?.output_tokens ?? Math.ceil(rawText.length / 4);
+    const elapsed = Date.now() - startedAt;
+    console.log(
+      `[GEN_TIMING] generate-world-seed complete — elapsed: ${elapsed}ms, output_tokens: ${outputTokens}`
+    );
     const cleaned = stripJsonFences(rawText);
 
     let parsed: unknown;

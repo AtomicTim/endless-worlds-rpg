@@ -70,6 +70,10 @@ export enum LogEntryType {
   DISCOVERY = "DISCOVERY",
   DIALOGUE  = "DIALOGUE",
   SYSTEM    = "SYSTEM",
+  /** Day 23C — quest breadcrumb discovery + side-quest milestones.
+   *  Log Book renders these with a "QUEST" tag prefix; the Journal
+   *  modal owns the richer presentation. */
+  QUEST     = "QUEST",
 }
 
 // ---------------------------------------------------------------------------
@@ -732,6 +736,12 @@ export interface MainQuest {
   /** Set at climax when the player commits to a resolution. */
   active_resolution_id?: "resolution_a" | "resolution_b";
   status:                QuestStatus;
+  /** Day 23C — LLM-generated diary entries written when a breadcrumb is
+   *  discovered. Each entry's `quest_id` field stores the breadcrumb_id
+   *  it belongs to (overloaded to associate entry → breadcrumb without a
+   *  separate field). Rendered below the breadcrumb in the journal Main
+   *  Quest tab. Optional so legacy saves load cleanly. */
+  journal_entries?:      QuestEntry[];
 }
 
 export interface QuestEntry {

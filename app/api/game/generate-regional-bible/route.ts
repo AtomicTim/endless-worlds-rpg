@@ -499,6 +499,20 @@ Every node MUST carry a "node_type" from this fixed set:
   • settlement_hub | outpost | wilderness | dungeon | landmark
   • abandoned_settlement
 
+NODE_TYPE ASSIGNMENT — CRITICAL:
+  • ONLY the location where is_settlement_node: true receives
+    node_type: "settlement_hub". Exactly one entry in locations[]
+    carries both flags.
+  • ALL sub-locations inside the settlement (tavern, inn, shop,
+    smithy, shrine) MUST NOT have node_type set — OMIT the field.
+    Their nav-card label derives from their "type" field instead.
+  • EVERY entry in region_locations gets node_type set to one of
+    {dungeon, landmark, wilderness, outpost, abandoned_settlement}
+    matching the location's character.
+
+Pre-fix bug: setting node_type: "settlement_hub" on sub-locations
+collapses every sub-location's nav card label to "SETTLEMENT".
+
 REGION TYPE GUIDANCE — match this region's mix:
   settled   — 1 settlement_hub + 1-2 dungeons + 1-2 landmark/wilderness
   frontier  — 0-1 outposts + 1-2 dungeons + 1-2 wilderness/landmarks

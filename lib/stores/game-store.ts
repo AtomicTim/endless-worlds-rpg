@@ -82,6 +82,21 @@ interface GameStore {
    *  The /game/codex route still exists for direct URL access. */
   codexModalOpen:         boolean;
 
+  // ── Day 23C — Journal modal + quest-reveal cinematic ───────────────────────
+  /** Whether the Journal modal overlay is currently open. Same pattern as
+   *  codexModalOpen — opens on top of /game without unmounting anything. */
+  journalModalOpen:       boolean;
+  /** Set when an Act 1 breadcrumb discovery has been triggered and the
+   *  cinematic reveal should play. QuestRevealModal subscribes to this;
+   *  when non-null it fades in, holds the breadcrumb content, fades out,
+   *  then clears itself. Null = no reveal pending. Only Act 1 sets this;
+   *  acts 2/3 land directly in the feed without a modal. */
+  pendingQuestReveal:     {
+    breadcrumb_id: string;
+    content:       string;
+    act:           1 | 2 | 3 | "climax";
+  } | null;
+
   // ── FIX (UX Round 4) — Trade panel ─────────────────────────────────────────
   /** True when the player has explicitly requested the trade panel via
    *  the merchant trade button. Independent of currentTradeItems so the
@@ -141,6 +156,13 @@ interface GameStore {
   toggleCodexModal:        () => void;
   /** Day 20.4.2 TASK 4 — imperative open/close for the Codex modal. */
   setCodexModalOpen:       (open: boolean) => void;
+  /** Day 23C — Journal modal toggle (same pattern as Codex). */
+  toggleJournalModal:      () => void;
+  setJournalModalOpen:     (open: boolean) => void;
+  /** Day 23C — open / clear the pending quest-reveal cinematic. The
+   *  reveal pipeline writes when an Act 1 breadcrumb is discovered;
+   *  QuestRevealModal clears when its animation cycle completes. */
+  setPendingQuestReveal:   (reveal: GameStore["pendingQuestReveal"]) => void;
   /** FIX 7 — record that the player examined a Tier 1 object so the
    *  next EXAMINE on the same target short-circuits to a canned
    *  response. Key should be the canonical landmark name (lowercased). */
@@ -198,6 +220,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   verbosity:              loadVerbosity(),
   mapPanelOpen:           false,
   codexModalOpen:         false,
+  journalModalOpen:       false,
+  pendingQuestReveal:     null,
   tradeOpen:              false,
   examinedObjects:        [],
   generatingRegionId:     null,
@@ -308,6 +332,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setMapPanelOpen: (open) => set({ mapPanelOpen: open }),
   toggleCodexModal:  () => set((s) => ({ codexModalOpen: !s.codexModalOpen })),
   setCodexModalOpen: (open) => set({ codexModalOpen: open }),
+  toggleJournalModal:   () => set((s) => ({ journalModalOpen: !s.journalModalOpen })),
+  setJournalModalOpen:  (open) => set({ journalModalOpen: open }),
+  setPendingQuestReveal: (reveal) => set({ pendingQuestReveal: reveal }),
   markObjectExamined: (objectKey) =>
     set((s) => {
       const key = objectKey.trim().toLowerCase();
@@ -341,6 +368,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastNarrativeText:      null,
       mapPanelOpen:           false,
       codexModalOpen:         false,
+      journalModalOpen:       false,
+      pendingQuestReveal:     null,
       examinedObjects:        [],
       generatingRegionId:     null,
     });

@@ -55,6 +55,15 @@ const ENTRY_STYLES: Record<LogEntryType, EntryStyle> = {
     italic:    true,
     smallText: true,
   },
+  // Day 23C — QUEST entries surface main / side quest breadcrumbs in the
+  // Log Book with a ✦ prefix and accent color. Richer presentation lives
+  // in the Journal modal; this is the chronological feed marker.
+  [LogEntryType.QUEST]: {
+    prefix:    "✦ ",
+    color:     "var(--color-accent)",
+    italic:    true,
+    smallText: false,
+  },
 };
 
 // ── LogBook ───────────────────────────────────────────────────────────────────

@@ -529,9 +529,22 @@ Every node has a "node_type" from this fixed set (case-sensitive):
   • dungeon             — Dangerous multi-room structure (see DUNGEON STRUCTURE)
   • landmark            — Ruin / monument / sacred site; lore-rich; light encounter
   • abandoned_settlement — Ruined former settlement; survivors or haunts
-Set node_type on the settlement node ("settlement_hub"), every
-sub-location ("settlement_hub" — they live inside it), and every
-region_location.
+
+NODE_TYPE ASSIGNMENT — CRITICAL:
+  • ONLY the location where is_settlement_node: true receives
+    node_type: "settlement_hub". Exactly one entry in
+    starting_region.locations carries both flags.
+  • ALL sub-locations (tavern, inn, shop, smithy, shrine,
+    market_stall, etc.) MUST NOT have node_type set — OMIT the
+    field entirely on sub-locations. Their card label is derived
+    from their "type" field instead (TAVERN / SHOP / SMITHY / etc.).
+  • EVERY entry in starting_region.region_locations gets node_type
+    set to one of {dungeon, landmark, wilderness, outpost,
+    abandoned_settlement} matching the location's character.
+
+Pre-fix bug: setting node_type: "settlement_hub" on sub-locations
+made every sub-location's nav card render "SETTLEMENT" instead of
+"TAVERN" / "SHOP" / etc. That's the symptom this rule prevents.
 
 The starting region is ALWAYS region_type "settled". It MUST have
 2-3 entries in starting_region.region_locations: at LEAST one

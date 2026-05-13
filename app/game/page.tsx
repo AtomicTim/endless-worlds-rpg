@@ -15,7 +15,9 @@ import { WorldMap } from "@/components/game/WorldMap";
 import { NavigationBar } from "@/components/game/NavigationBar";
 import { CombatMode } from "@/components/game/CombatMode";
 import { CodexModal } from "@/components/game/CodexModal";
+import { JournalModal } from "@/components/game/JournalModal";
 import { LevelUpModal } from "@/components/game/LevelUpModal";
+import { QuestRevealModal } from "@/components/game/QuestRevealModal";
 import { FloorLootStrip } from "@/components/game/FloorLootStrip";
 import { useFloorLoot } from "@/hooks/useFloorLoot";
 import { AssetCategory, Genre } from "@/types/game";
@@ -352,6 +354,13 @@ export default function GamePage() {
               /game without changing routes, so combat / dialogue stay
               mounted while the player consults the codex. */}
           <CodexModal />
+          {/* Day 23C — Journal modal overlay. Same overlay pattern as
+              Codex. JOURNAL button in GameLayout toggles it. */}
+          <JournalModal />
+          {/* Day 23C — Act 1 cinematic. Mounts at z-60 so it sits above
+              every other modal. Self-clears when its animation cycle
+              completes; pointer-events: none so it never blocks input. */}
+          <QuestRevealModal />
           {/* Day 22 — Level-up modal. Opens when player_state
               .pending_level_up=true AND combat is no longer active. */}
           <LevelUpModal />

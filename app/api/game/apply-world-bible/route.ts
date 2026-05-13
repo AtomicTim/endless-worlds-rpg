@@ -884,7 +884,14 @@ export async function POST(request: NextRequest) {
       npc_ids:       [],
       item_ids:      [],
       asset_id:      `location_${geographicRegionId}`,
-      discovered:    true,
+      // FIX 0 (V8.62) — region zone spawns undiscovered.
+      // Pre-fix this was `true`, which caused the first walk
+      // from the starting settlement to the surrounding region
+      // zone to trigger revisit suppression (rule 86) and emit
+      // "You return to {name}." instead of the full atmosphere
+      // description. Only the starting settlement itself spawns
+      // discovered (see step 4a: `discovered: loc.is_settlement_node`).
+      discovered:    false,
       map_position:  bibleNarrowed.starting_region.grid_centre,
       // Day 23A — the starting region is ALWAYS "settled" by spec
       // (per quest-system-spec.md). Adjacent_regions vary; their

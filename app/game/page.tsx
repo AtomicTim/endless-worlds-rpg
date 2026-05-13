@@ -163,16 +163,30 @@ export default function GamePage() {
           });
         }
       } else {
-        // V8.34 (Prompt 3 Task 7) — fresh session preamble. Replaces the
-        // generic "Resuming your adventure" head that was firing on
-        // brand-new games. Two short lines: a SYSTEM divider for the
-        // opening beat + a soft prompt for the player's first input.
+        // V8.34 (Prompt 3 Task 7) + Day 23B pt 2 (TASK 1) — fresh-session
+        // preamble. Three beats:
+        //   1. SYSTEM "You are {name}, a {class} in the {World}." divider.
+        //   2. NARRATIVE world_intro (cinematic, second-person, 3 parts)
+        //      when metadata.world_intro is set. Old saves without an
+        //      intro skip this beat — rule 42 fallback holds.
+        //   3. SYSTEM "Your adventure begins. What will you do first?"
+        //      soft prompt — unchanged.
         const worldName    = WORLD_NAMES[state.metadata.genre] ?? "World";
         const locationName = formatLocationId(state.world_state.current_location_id);
         store.addMessage(makeMessage("SYSTEM",
           `You are ${state.player_state.name}, a ${state.player_state.background} in the ${worldName}. ` +
           `Your adventure begins at ${locationName}.`
         ));
+        const intro = state.metadata.world_intro;
+        if (typeof intro === "string" && intro.trim().length > 0) {
+          // Day 23B pt 2 — cinematic world intro beat. StoryFeed renders
+          // it with distinct italic-serif styling via the world_intro
+          // metadata flag. Fires exactly once per new game (recent_
+          // messages.length === 0 branch).
+          store.addMessage(makeMessage("NARRATIVE", intro.trim(), {
+            world_intro: true,
+          }));
+        }
         store.addMessage(makeMessage("SYSTEM",
           "Your adventure begins. What will you do first?",
           { isFreshGamePreamble: true }

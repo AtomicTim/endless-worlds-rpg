@@ -19,6 +19,12 @@ import {
   playerHasKeyFor,
 } from "@/lib/game/dungeon-navigation";
 import { rollEncounterWithPlayer } from "@/lib/game/combat-engine";
+import {
+  findActOneBreadcrumb,
+  markActOneDiscovered,
+  shouldTriggerBossClearDiscovery,
+} from "@/lib/game/quest-discovery";
+import { saveQuestThreadsAsync } from "@/hooks/useGameLoop";
 
 /**
  * Day 23A part 2 — dungeon runtime hook.
@@ -355,7 +361,37 @@ export function useDungeonRuntime() {
         room_id:         room.id,
       })
     );
-  }, [masterState, addMessage]);
+
+    // Day 23B pt 2 — TRIGGER B: first dungeon boss clear discovers the
+    // Act 1 breadcrumb. Fires after the templated "The dungeon falls
+    // silent." beat so the discovery reveal lands second, framing the
+    // breadcrumb as a realization. Idempotent — markActOneDiscovered
+    // returns null if the breadcrumb is already discovered (which
+    // happens when the player had an NPC conversation first via
+    // TRIGGER A).
+    if (shouldTriggerBossClearDiscovery(masterState)) {
+      const updatedQt = markActOneDiscovered(masterState.quest_threads);
+      const act1      = findActOneBreadcrumb(masterState.quest_threads);
+      if (updatedQt && act1) {
+        setMasterState({
+          ...masterState,
+          quest_threads: updatedQt,
+        });
+        addMessage(
+          makeMessage("SYSTEM", act1.content, {
+            quest_discovery: true,
+            breadcrumb_id:   act1.id,
+            act:             1,
+            trigger:         "boss_clear",
+          })
+        );
+        saveQuestThreadsAsync(masterState.metadata.session_id, updatedQt);
+        console.log(
+          `[DungeonRuntime/boss-clear] Act 1 breadcrumb discovered via boss clear (${room.id}).`
+        );
+      }
+    }
+  }, [masterState, addMessage, setMasterState]);
 
   // ── UI-facing helpers ──────────────────────────────────────────────────────
 

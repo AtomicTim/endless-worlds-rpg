@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.66
-**Status:** Day 23D COMPLETE (8f63843, 567/567) — Day 23.5 Character Creation Rework NEXT
+**Version:** 8.67
+**Status:** Hotfix 73b6035 complete (567/567) — Day 23.5 Character Creation design in progress
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -33,12 +33,12 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 
 ## Trajectory
 
-> Full notes, round history, future features in `/docs/project-log.md`. Quest spec in `/docs/quest-system-spec.md`. Quest source taxonomy in Drive: "quest-source-taxonomy".
+> Full notes, round history, future features in `/docs/project-log.md`. Quest spec in `/docs/quest-system-spec.md`. Quest source taxonomy in Drive: "quest-source-taxonomy". Character creation design in Drive: "day-23-5-character-creation-design-spec".
 
 ### Sequence
 
-1–15. ~~Through Day 23D~~ ✅
-15a. **Day 23.5 — Character Creation Rework** ⏳ NEXT
+1–15. ~~Through Day 23D + hotfixes~~ ✅
+15a. **Day 23.5 — Character Creation Rework** ⏳ NEXT (design in progress)
 16–18. Merchant Trading · Combat UX Polish · Mobile Combat Layout
 19. Day 24 — Multiplayer Foundation
 20. Day 25 — Customization Layer
@@ -48,17 +48,46 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 
 ## Current Status
 
-**Phase:** Day 23D complete (8f63843, 567/567). Day 23 fully shipped. Day 23.5 NEXT.
+**Phase:** Hotfix 73b6035 complete (567/567). Day 23.5 design in progress — prompt not yet written.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** AtomicTim/endless-worlds-rpg
 
 | Phase | Status |
 | --- | --- |
 | Gen pipeline + Day 23A–23D (all parts + fixes) | ✅ |
-| **Day 23.5 — Character Creation Rework** | ⏳ **NEXT** |
+| Hotfix 73b6035 — region spawn discovered flags + quest seed narrator injection | ✅ |
+| **Day 23.5 — Character Creation Rework** | ⏳ Design in progress |
 | Merchant Trading / Combat UX / Mobile Layout | ⏳ |
 | Day 24 Multiplayer / Day 25 Customization | ⏳ Pre-launch |
 
 **Known issues:** HP bar timing (deferred) · No equip during combat (intentional, rule 63) · Nav card peer disappearance (unresolved) · Nav card color differentiation for non-dungeon region_locations (deferred).
+
+### Hotfix 73b6035 — Region spawn flags + quest seed narrator injection (567/567, tsc clean)
+
+**Fix 1 — Region spawn discovered: false (rule 109 sibling for adjacent regions)**
+`apply-regional-bible/route.ts`: region zone node + settlement node both spawn with `discovered: false`. Previously spawned `discovered: true`, tripping rule 86 revisit suppression on first cross-region entry — emitting "You return to {name}" instead of full atmosphere prose. Rule 12 (end-of-step-7) flips to `true` on actual arrival. Second visit correctly suppresses. World map renders dim outlines for `discovered: false` — correct.
+
+**Fix 2 — Quest seed threaded into narrator DIALOGUE context**
+Three-piece plumbing: (1) `WorldAssetConstitution` gains `quest_hook?: boolean` + `quest_seed?: string`. (2) `apply-world-bible` + `apply-regional-bible` `npcToAsset` mirrors these fields from NPCDefinition into asset constitution. (3) `prompt-builder.ts` ACTIVE NPC block appends SITUATION sub-block when `quest_hook === true` + `quest_seed` has content — instructs narrator to surface situation naturally in NPC's voice, not as mission briefing.
+
+---
+
+## Day 23.5 — Character Creation Design (in progress)
+
+See Drive doc: "day-23-5-character-creation-design-spec" for full spec.
+
+**Decisions made:**
+- Three modes: Random / Quick Guided / Custom — all produce same PlayerCharacter object
+- Origin → starting item/gold bonus ONLY (no stats — class owns stat identity)
+- Species → Skyrim-style unique modifiers (resistances, skill affinities, passive traits, environmental flags) — NOT a simple +1 stat
+- Species schema declared now, future systems (combat elemental, skills, environmental) plug in without rework
+- NPC disposition has real downstream consequences: merchant prices, dialogue gating, info quality, follower recruitment threshold
+- Species generate during WCD/WorldBible (contextually appropriate to world) — not hardcoded
+- 1-2 passive traits per species max
+- 23.5 scope: narrator context injection + trust score cold-start. Merchant price formula deferred to trading session.
+
+**Still designing:**
+- Status effects / damage type constants vs. WCD-generated — how many are fixed per genre, how many are world-specific
+- World generation and character creation flow / timing — world must generate before species options appear; UX for this TBD
 
 ---
 
@@ -145,7 +174,7 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 79. **Prompt-template hardcoded IDs are a recurring bug class.** (V8.42)
 80. **Nav card dedup at region zone.** DEEPER suppresses settlement if matches BACK. (V8.43–44)
 81. **Map tier auto-switch on every arrival.** Region zone → tier 2, else → tier 1. (V8.43–44)
-82. **jest baseline history.** 393→…→552→**567** (+15 Day 23D). See rule 91. (V8.47–V8.66)
+82. **jest baseline history.** 393→…→552→567 (+15 Day 23D). See rule 91. (V8.47–V8.66)
 83. **Loot never auto-credits.** All drops go to floor_loot[]. (V8.47)
 84. **Container search is engine-resolved, zero LLM calls.** (V8.47)
 85. **Currency + inventory cap canonical.** INVENTORY_CAP = 20. (V8.47)
@@ -180,6 +209,8 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 114. **JournalModal + journal entry generation.** 4 tabs. JOURNAL between CODEX and SAVE. /api/game/generate-journal-entry (haiku, 200 tokens). LogEntryType.QUEST. Side Quests tab populated in 23D. (V8.63+65+66)
 115. **Codex concurrent-write race guard.** Module-scoped Set<string> keyed by sessionId:entryId. Synchronous claim prevents duplicate feed beats when steps 7b+7g fire concurrently. Both upserts still issue (idempotent). Clears on reload. (V8.65)
 116. **Side quest generation (Day 23D).** NPCDefinition gains quest_hook? + quest_seed?. SideQuest gains giver_name, region_id, discovery_trigger (QuestDiscoveryTrigger union — npc_dialogue/npc_rumor + 4 reserved), completion_condition, reward_hint, discovered. lib/game/side-quest-generator.ts: filterQuestHookNpcs, generateSideQuests (haiku, 800 tokens), mergeSideQuests (id-keyed dedup preserves progress). apply-regional-bible calls generator synchronously (atomic with master_state write — no fire-and-forget Vercel risk). Discovery: findUndiscoveredSideQuestForNpc + markSideQuestDiscovered in quest-discovery.ts; fires immediate side_quest_discovery SYSTEM beat (no modal, no delay — 11px serif italic accent 0.9 opacity). Journal SideQuestsTab: groups by status, hides undiscovered, count badge uses discovered only. (V8.66)
+117. **Region zone + settlement spawn discovered: false.** apply-regional-bible sets both to false at spawn time. Rule 12 flips on actual arrival. Prevents rule 86 revisit suppression on first cross-region entry. (V8.67)
+118. **Quest seed in narrator DIALOGUE context.** NPCDefinition quest_hook/quest_seed mirrored into WorldAssetConstitution. prompt-builder ACTIVE NPC block appends SITUATION sub-block for quest-hook NPCs. Narrator surfaces situation naturally, not as mission briefing. (V8.67)
 
 ---
 

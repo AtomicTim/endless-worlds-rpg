@@ -239,12 +239,15 @@ export function useDeferredQuestReveal(): void {
     // FIRST so a quick re-render can't double-fire the pipeline.
     if (wasOpen && isClosed && pendingAct1) {
       setPendingAct1(false);
-      // Small idle pause so the dialogue panel's close animation
-      // (if any) gets out of the way before the cinematic backdrop
-      // covers the screen.
+      // V8.65 — 2500ms idle gap, not the previous 250ms close-animation
+      // pause. The longer pause gives the player time to feel like they
+      // walked away from the conversation before the revelation arrives.
+      // Going straight from "dialogue closed" to "cinematic backdrop"
+      // read as a popup, not a moment. The 2.5s settles the player into
+      // the post-dialogue silence first.
       setTimeout(() => {
         runActOneDiscovery({ trigger: "dialogue" });
-      }, 250);
+      }, 2500);
     }
   }, [currentNpc, pendingAct1, setPendingAct1]);
 }

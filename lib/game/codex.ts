@@ -240,6 +240,23 @@ export async function saveWorldAsset(
 // from generation. Display names are written once and never change.
 
 /**
+ * V8.65 — in-memory dedup set, keyed by `sessionId:entryId`. Marked
+ * SYNCHRONOUSLY at the top of saveCodexEntry so two concurrent calls
+ * for the same entry can't both pass the async pre-check and return
+ * `created: true`. The set is module-scoped and clears on page reload,
+ * which is correct — fresh page → fresh `created` reporting (the DB
+ * pre-check then catches duplicate writes against the persisted row).
+ *
+ * Symptom this guards: "✦ Vessa Thornquist added to codex" appearing
+ * TWICE in the story feed after one DIALOGUE action — step 7b (narrator
+ * codex_entries) and step 7g (NPC interaction) both fire saveCodexEntry
+ * concurrently; pre-V8.65 both races saw `alreadyExists = false`
+ * because neither upsert had committed yet, so both returned
+ * `{ created: true }` and both callsites emitted the beat.
+ */
+const codexCreatedThisSession = new Set<string>();
+
+/**
  * Upsert a codex entry. Codex rows are also write-once per (session, entry).
  * Logs errors, never throws.
  *
@@ -248,25 +265,44 @@ export async function saveWorldAsset(
  * write a no-op on conflict; we detect that by pre-checking whether
  * the row exists. Falls back to `created: true` (the safe default
  * that surfaces the notification) on any unexpected error.
+ *
+ * V8.65 — synchronous in-memory dedup prevents two concurrent calls
+ * for the same entry from both reporting `created: true`. The first
+ * caller wins; the second sees `created: false` immediately and skips
+ * the beat. The DB upsert still runs in both paths so a flaky network
+ * on the first call doesn't lose the persisted row.
  */
 export async function saveCodexEntry(
   sessionId: string,
   entry: CodexEntry
 ): Promise<{ created: boolean }> {
+  const entryId  = normalizeAssetId(entry.category, entry.name);
+  const cacheKey = `${sessionId}:${entryId}`;
+
+  // V8.65 race guard. Synchronous: a concurrent second caller hitting
+  // this check before the async pre-check resolves sees the cached
+  // entry and bails out of the "created" path. Still issues the upsert
+  // below so the data write doesn't depend on the first caller's
+  // network luck.
+  const alreadyClaimedThisSession = codexCreatedThisSession.has(cacheKey);
+  if (!alreadyClaimedThisSession) {
+    codexCreatedThisSession.add(cacheKey);
+  }
+
   try {
     const supabase = createClient();
-    const entryId  = normalizeAssetId(entry.category, entry.name);
 
     // Pre-check existence so we can tell the caller whether this is
-    // genuinely new. Cheaper than relying on a postgres RETURNING
-    // signal we'd need to thread through the supabase-js builder.
+    // genuinely new IN THE DB. The synchronous cache above handles the
+    // race; the DB pre-check handles the page-reload case where the
+    // entry already persisted from a previous session.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: existing } = await (supabase.from("codex") as any)
       .select("entry_id")
       .eq("session_id", sessionId)
       .eq("entry_id", entryId)
       .maybeSingle() as { data: { entry_id: string } | null };
-    const alreadyExists = !!existing;
+    const alreadyExistsInDb = !!existing;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase.from("codex") as any).upsert(
@@ -284,10 +320,17 @@ export async function saveCodexEntry(
     if (error) {
       console.error("[saveCodexEntry]", error);
     }
-    return { created: !alreadyExists };
+    // created: true iff (a) the DB row didn't already exist AND (b) this
+    // is the first call for this entry in the current page session.
+    // The cache catches the race; the DB check catches reload + revisit.
+    return { created: !alreadyExistsInDb && !alreadyClaimedThisSession };
   } catch (err) {
     console.error("[saveCodexEntry] unexpected", err);
-    return { created: true };
+    // Defensive fallback: emit the beat only if no prior call claimed
+    // this entry. Without this guard, an error mid-dedup could still
+    // double-fire because the synchronous cache marked the entry but
+    // the catch path used to ignore it.
+    return { created: !alreadyClaimedThisSession };
   }
 }
 

@@ -56,9 +56,13 @@ function buildUserPrompt(body: Required<Omit<RequestBody, "session_id">>): strin
 }
 
 async function callClaude(client: Anthropic, prompt: string): Promise<string> {
+  // V8.65 — bumped 150 → 200. Playtest showed 4-sentence diary entries
+  // hitting the cap mid-clause around 685 chars (~145 tokens for haiku).
+  // 200 gives ~20% headroom so the model can land the final sentence
+  // cleanly without inflating the average response length.
   const message = await client.messages.create({
     model:      "claude-haiku-4-5-20251001",
-    max_tokens: 150,
+    max_tokens: 200,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: prompt }],
   });

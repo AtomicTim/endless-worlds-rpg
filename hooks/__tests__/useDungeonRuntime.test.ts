@@ -20,11 +20,12 @@
 import {
   STR_BYPASS_THRESHOLD,
   bossClearBeat,
+  combatBlocksDungeonEntry,
   forceUnlockBeat,
   roomArrivalBeat,
   useKeyBeat,
 } from "@/hooks/useDungeonRuntime";
-import type { DungeonRoom } from "@/types/game";
+import type { CombatState, DungeonRoom, MasterState } from "@/types/game";
 
 function makeRoom(overrides: Partial<DungeonRoom> & { id: string; room_type: DungeonRoom["room_type"] }): DungeonRoom {
   return {
@@ -100,5 +101,41 @@ describe("forceUnlockBeat / bossClearBeat", () => {
   });
   it("bossClearBeat is the post-victory templated line", () => {
     expect(bossClearBeat()).toBe("The dungeon falls silent.");
+  });
+});
+
+// ── GUARD B regression — dungeon auto-entry deferred when combat active ──────
+//
+// Symptom we're guarding against: arriving at a dungeon node WHILE combat is
+// already active (e.g. forced encounter, cached combat slice on reload) ran
+// the auto-entry useEffect, which mutated world_graph + dungeon_state. That
+// mutation collided with useCombat's reactive subscription and froze the UI
+// — displayPhase pill stuck on ENEMY TURN, buttons unresponsive.
+//
+// combatBlocksDungeonEntry is the pure predicate the effect reads; if this
+// returns true at the top of the effect, no mutation happens this tick.
+describe("combatBlocksDungeonEntry", () => {
+  function makeState(combatActive: boolean | undefined): MasterState {
+    const combat = combatActive === undefined
+      ? undefined
+      : ({ active: combatActive } as unknown as CombatState);
+    return { combat } as unknown as MasterState;
+  }
+
+  it("returns true when state is null/undefined (defensive)", () => {
+    expect(combatBlocksDungeonEntry(null)).toBe(true);
+    expect(combatBlocksDungeonEntry(undefined)).toBe(true);
+  });
+
+  it("returns true when combat.active === true (the freeze case)", () => {
+    expect(combatBlocksDungeonEntry(makeState(true))).toBe(true);
+  });
+
+  it("returns false when combat slice is absent (out of combat)", () => {
+    expect(combatBlocksDungeonEntry(makeState(undefined))).toBe(false);
+  });
+
+  it("returns false when combat.active === false (combat just resolved)", () => {
+    expect(combatBlocksDungeonEntry(makeState(false))).toBe(false);
   });
 });

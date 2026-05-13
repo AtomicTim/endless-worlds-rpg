@@ -24,7 +24,7 @@ import { renderRoutineCombatEvent } from "@/lib/game/combat-narration/templates"
 import { resolveLoot } from "@/lib/game/loot-resolver";
 import { getEmptyContainerTemplate, getSearchNarrative } from "@/lib/game/container-templates";
 import { pickRegionLootItemsForNode } from "@/lib/game/floor-loot";
-import { markRoomUnlocked } from "@/lib/game/dungeon-navigation";
+import { isDungeonNode, markRoomUnlocked } from "@/lib/game/dungeon-navigation";
 import type { FloorLootEntry } from "@/types/game";
 import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { DialogueOption, Item, MasterState, ParsedAction, RegionBible, RegionOutline, ResolutionResult, StoredMessage, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
@@ -2587,7 +2587,16 @@ export function useGameLoop() {
         // enemies without rolling. Splices a CombatState into
         // master_state on success — the UI in Prompt 3 reacts to
         // combat?.active === true and takes over the action bar.
-        if (arrivedNode) {
+        //
+        // GUARD A — encounters at dungeon nodes are SKIPPED here.
+        // Dungeons use per-room encounter rolls fired by
+        // useDungeonRuntime.navigateToRoom on first visit (rule 100).
+        // Firing at node level would double-trigger (node + entrance
+        // room) and corrupt useCombat state by colliding with
+        // useDungeonRuntime's auto-entry mutation. Skip cleanly here.
+        if (arrivedNode && isDungeonNode(arrivedNode)) {
+          // intentional no-op — per-room encounters via useDungeonRuntime
+        } else if (arrivedNode) {
           const forced = consumeForcedEncounter();
           const willTry = forced !== null || shouldRollEncounter(arrivedNode, updatedState.combat);
           if (willTry) {

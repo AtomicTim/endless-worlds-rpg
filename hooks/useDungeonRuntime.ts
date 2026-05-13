@@ -72,6 +72,22 @@ function bossClearBeat(): string {
  *  score (not modifier) per spec. */
 const STR_BYPASS_THRESHOLD = 6;
 
+/**
+ * GUARD B (rule 100 corollary) — does the current MasterState block
+ * dungeon auto-entry? Returns true when combat is active or the state
+ * is null/undefined. The auto-entry useEffect reads this before
+ * mutating world_graph + dungeon_state; mid-combat mutation collides
+ * with useCombat's reactive subscription and freezes the UI.
+ *
+ * Pure + exported so the regression has a pinned test target.
+ */
+export function combatBlocksDungeonEntry(
+  state: MasterState | null | undefined
+): boolean {
+  if (!state) return true;
+  return state.combat?.active === true;
+}
+
 export function useDungeonRuntime() {
   const masterState    = useGameStore((s) => s.masterState);
   const setMasterState = useGameStore((s) => s.setMasterState);
@@ -92,6 +108,13 @@ export function useDungeonRuntime() {
 
   useEffect(() => {
     if (!masterState) return;
+    // GUARD B — do not initialize dungeon_state while combat is active.
+    // Combat takes precedence: mutating world_graph / dungeon_state here
+    // mid-fight collides with useCombat's reactive subscription and
+    // freezes the UI (displayPhase pill stuck on ENEMY TURN, buttons
+    // unresponsive). The effect re-runs once combat resolves (master_state
+    // changes), at which point this guard releases and entry proceeds.
+    if (combatBlocksDungeonEntry(masterState)) return;
     const graph = masterState.world_graph;
     const currentNodeId = graph?.current_node_id ?? masterState.world_state.current_node_id;
     if (!graph || !currentNodeId) return;

@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.76
-**Status:** Hotfix 94810ec complete (567/567) — Merchant Trading next
+**Version:** 8.77
+**Status:** Major design session complete (2026-05-13) — ready to begin implementation arc
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -34,71 +34,167 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 
 ## Trajectory
 
-> Full notes, round history, future features in `/docs/project-log.md`. Quest spec in `/docs/quest-system-spec.md`. Quest source taxonomy in Drive: "quest-source-taxonomy". Character creation design in Drive: "day-23-5-character-creation-design-spec-v2". World theme taxonomy in Drive: "world-theme-taxonomy".
+> Full notes in `/docs/project-log.md`. Drive design docs index below. Quest spec in `/docs/quest-system-spec.md`.
+
+### Drive Design Documents
+- "quest-source-taxonomy" — side quest sources
+- "day-23-5-character-creation-design-spec-v2" — character creation
+- "world-theme-taxonomy" — 54 themes, Genre Session implementation
+- "economy-and-progression-design-spec" — economy baseline, merchant design, item tiers
+- "status-effects-and-abilities-design-spec-v2" — status effects, damage types, abilities
+- "professions-perks-and-ability-acquisition-spec-v2" — professions (20 levels), perks, ability acquisition
+- "design-session-master-summary-2026-05-13" — **FULL SESSION SUMMARY + BUILD ORDER**
 
 ### Sequence
 
 1–15. ~~Through Day 23D + hotfixes~~ ✅
 15b–g. ~~Gen speed audit + Day 23.5A–D + quality hotfixes~~ ✅
-16. **Merchant Trading** ⏳ NEXT
+16. **Implementation Arc** ⏳ NEXT — see build order below
 17–18. Combat UX Polish · Mobile Combat Layout
 19. Day 24 — Multiplayer Foundation
-20. Day 25 — Customization Layer
-21+. **Genre Session** (world theme taxonomy implementation + world structure per-genre + code-driven theme selection) · UI Overhaul · Verbal Action · Stealth (deferred)
+20. Day 25 — Customization Layer (Professions, Guilds, Perks full implementation)
+21+. **Genre Session** · UI Overhaul · Verbal Action · Stealth (deferred)
 
 ---
 
 ## Current Status
 
-**Phase:** All pre-Merchant Trading work complete. Hotfix 94810ec closed the last known bugs. Ready for Merchant Trading design.
+**Phase:** Design session complete. Six systems designed and documented. Beginning implementation arc.
+**Last commit:** 8fb1ad3 (CLAUDE.md v8.76, hotfix 94810ec logged)
+**jest baseline:** 567 (authoritative, rule 91)
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** AtomicTim/endless-worlds-rpg
 
 | Phase | Status |
 | --- | --- |
-| Day 23.5A–D + all hotfixes | ✅ |
-| Gen quality hotfix 94810ec | ✅ |
-| **Merchant Trading** | ⏳ NEXT |
-| Combat UX Polish / Mobile Layout | ⏳ |
-| Day 24 Multiplayer / Day 25 Customization | ⏳ |
+| Day 23.5A–D + all hotfixes + 94810ec | ✅ |
+| **Design session — 6 systems** | ✅ COMPLETE |
+| Status Effects (combat) | ⏳ BUILD NEXT |
+| Item Effects Expansion | ⏳ |
+| Death Penalty + Inn Rest | ⏳ |
+| Merchant Trading | ⏳ |
+| Abilities System | ⏳ |
+| Perks System | ⏳ |
+| Professions System | ⏳ Day 25 scope |
 
-**Known issues:** HP bar timing (deferred) · No equip during combat (intentional, rule 63) · Nav card peer disappearance (unresolved) · Nav card color differentiation for non-dungeon region_locations (deferred) · World intro prose style preference (atmospheric vs factual — deferred to Genre Session) · NPC species display in dialogue modal / sidebar (deferred).
+---
 
-**Deferred design discussions:** World structure per-genre · Side quest discovery rework · Code-driven theme selection (Genre Session).
+## Design Session Decisions (V8.77) — Full index
 
-### Hotfix 94810ec (567/567, tsc clean)
+### DEATH PENALTY (locked)
+- Gold loss: 10% of current gold, cap 50, floor 0
+- HP on spawn: Math.floor(max_health * 0.75) — 75%, not 100%
+- XP: preserved (existing rule 31)
+- Items: not lost
+- Inn Rest: innkeeper NPC dialogue → "Rest" option → 10 gold → HP to max_health
+- Horror: 75% HP only, no gold penalty (Marks deferred to Genre Session)
 
-**FIX 1 — Maritime theme cap (TEMPORARY — will be replaced by code-driven theme taxonomy in Genre Session):** Added maritime/coastal/tidal/aquatic/drowned/submerged/oceanic to OVERUSED block in WCD prompt, same 1-in-6 cap as volcanic. Added inline parenthetical on "tidal" in the elemental forces theme list. Note: this is a prompt-based band-aid. The correct fix is `lib/game/world-themes.ts` with `rollWorldTheme()` — code owns selection, LLM owns execution. See Drive: "world-theme-taxonomy".
+### ECONOMY BASELINE (locked)
+- Starting gold: Fantasy 10 · Cyberpunk 500 · Post-Apoc 25 caps + resources · Space Opera 100 SU
+- Enemy drops: Tier 1 = 2-5g · Tier 2 = 6-12g · Boss = 15-30g
+- Item price tiers: Common consumable 8-15g · Uncommon 20-40g · Common weapon 30-60g · Uncommon weapon 80-150g
+- Starting equipment sell value = 0
 
-**FIX 2 — Motivation char limit:** Haiku prompt now has "Maximum 100 characters. One sentence only." Server-side `slice(0, 120).trim()` truncation added.
+### MERCHANT TRADING (architecture locked)
+- Inventory seeded at WorldBible/RegionBible time — never narrator-generated
+- Trust-based pricing: 0-40 = +25% · 41-60 = base · 61-80 = −10% · 81-100 = −20%
+- Speciality-filtered selling; VALUABLE items sell to any merchant
+- Quest completion gates (QuestCompletionCondition.type === "item") must be enforced mechanically
 
-**FIX 3 — Appearance summary name-agnostic:** Both `generate-appearance-options` and `generate-random-character` got GOOD/BAD rule: summary must never include the character's name. Defense-in-depth in `generate-random-character.normalizeCharacter`: strips leading `<Name> is/was/appears/seems/stands/looks/...` pattern from summary.
+### STATUS EFFECTS (designed — see Drive doc)
+- 5 ailments: POISONED (1d4/3r AGI12) · BURNING (1d6/2r AGI14) · CHILLED (−2atk/2r STR11) · WEAKENED (−3STR/2r STR10) · FRIGHTENED (−2all/2r CHA12)
+- 3 buffs: FORTIFIED (+3 armor/3r) · HASTENED (+3 atk/2r) · FOCUSED (+3 INT-PER/2r)
+- One-curse limit. Boss resistance (1 tick max, 2-round immunity after).
+- Save mechanic: d20 + stat vs DC at END of player turn — same pattern as combat.
+- World aliases via WCD.status_effect_aliases (only when thematically compelling).
 
-**FIX 4 — Quest modal double-fire:** Three-part fix in `useDeferredQuestReveal`: (A) strict `currentDialogueNpc === null` gate added; (B) `setPendingAct1Reveal(false)` confirmed before setTimeout; (C) `act1RevealFiredRef` latch added, resets only on `false → true` transition of pendingAct1Reveal via `prevPendingRef` in dedicated useEffect.
+### DAMAGE TYPES (designed — extends existing)
+- Enemy gains primary_damage_type?: DamageType
+- Item new fields: on_hit_status (RARE+ weapons) · damage_resistances (UNCOMMON+ armor) · status_immunities (UNCOMMON+ armor) · apply_status + damage (throwable consumables)
+
+### ABILITIES (designed — see Drive doc)
+- ~125 hardcoded templates (25 classes × 4 active + 1 passive). Engine owns mechanics.
+- LLM generates flavor names/descriptions per ability per world at WCD time.
+- Slots: 1 at start · 2 at level 3 · 3 at level 6 · 4 at level 9
+- Base 2 charges; stat scaling (+1 charge per 2 stat levels); level 5 = +1 charge on Slot 1
+- Balance: 2 damage · 1 heal · 1 utility per class
+- 5th combat button → ability panel. Attunement (ability swap) at settlements/Inn Rest.
+- Acquisition: class (hardcoded) · lore item (WCD-seeded, teaches_ability field) · NPC (trust 70+)
+
+### PERKS (designed)
+- ~20 in pool. Unlock every 3 combat levels. Choose 1 from 3 options. Permanent. Universal.
+- Categories: Combat · Status · Ability · World
+
+### PROFESSIONS (designed — see Drive doc)
+- 3 for MVP: Alchemy · Smithing · Lore (genre-variant names)
+- 20 levels each. Tiers: Novice (1-5) · Apprentice (6-10) · Journeyman (11-15) · Expert (16-19) · Master (20)
+- Advance by DOING. Level 5 reachable in 30-45 min focused session. Master = long-term prestige.
+- No carryover between worlds. MATERIAL added as new ItemType. Material nodes in RegionBible.
+- Guilds: Day 25+ scope (fits naturally with Day 24 multiplayer).
+
+### HORROR GENRE (deferred — Genre Session)
+- Sanity: declared stub (initialized 100/100, items reference it, combat does not drain it)
+- Marks: inconsistent codebase (currency.ts says "marks"; state-factory initializes empty {}; useGameLoop excludes Horror from GENRE_CURRENCY_KEY)
+- Full Horror design: Genre Session. All five Horror-specific systems need a dedicated pass.
+
+---
+
+## Comprehensive Build Order (from design session)
+
+PRE-MERCHANT TRADING:
+  1. StatusEffectId, ActiveStatusEffect → types/game.ts
+  2. on_hit_status, damage_resistances, status_immunities, apply_status, damage → Item type
+  3. primary_damage_type, status_effect: {id, chance}, can_weaken → Enemy type
+  4. player_status_effects → CombatState; status_effects → CombatEnemyInstance
+  5. Status tick, save roll, application → combat-resolver.ts
+  6. Extend resolveUseItem: cure_status + apply_status + damage burst
+  7. CombatEvent types: status_applied, status_tick, status_saved, status_expired
+  8. Story feed templates for status events
+  9. WCD: status_effect_aliases + ability flavor name generation
+  10. WB/RB prompts: status_effect + primary_damage_type on enemies
+  11. Enemy gold drops calibrated in loot-resolver.ts
+
+MERCHANT TRADING:
+  12. NPCDefinition.merchant_inventory: Item[]
+  13. WB/RB prompt: threat-countermeasure seeding
+  14. openTrade() reads world_asset, not narrator
+  15. Trust-based pricing in buyItem()
+  16. Speciality-filtered selling in sellItem()
+  17. Trade modal updated
+
+DEATH PENALTY + INN REST:
+  18. handleDefeat: 10% gold (cap 50), spawn at 75% HP
+  19. Inn rest: dialogue type "rest" → 10g → HP to max
+
+QUEST GATES:
+  20. QuestCompletionCondition.type === "item" mechanically enforced
+
+ABILITIES:
+  21. AbilityTemplate type + lib/game/abilities.ts
+  22. teaches_ability, teaches_profession on Item
+  23. Ability combat UI: 5th button + panel
+  24. Attunement UI at settlement/rest points
+  25. NPC teaches_ability dialogue + RegionBible seeding
+
+PERKS:
+  26. Perk type + 20-perk pool (lib/game/perks.ts)
+  27. LevelUpModal Perk selection step (every 3 combat levels)
+
+PROFESSIONS (Day 25 scope):
+  28. MATERIAL → ItemType enum
+  29. ProfessionId + PlayerState.professions
+  30. RegionBible material_nodes
+  31. Craft-via-dialogue flow
+  32. Profession XP + milestone system
+  33. Character sheet profession panel
+
+GUILDS: Post-Day 25.
 
 ---
 
 ## World Theme Taxonomy — Design Complete
 
-See Drive doc: "world-theme-taxonomy" for full spec.
-
-**Architecture decision:** Code owns SELECTION, LLM owns EXECUTION.
-- `lib/game/world-themes.ts` defines WorldTheme[] taxonomy (54 themes across 5 genres)
-- `rollWorldTheme(genre, recentThemes)` uses Math.random() — true randomness, not LLM prediction
-- Theme injected into WCD prompt as an ASSIGNED parameter — LLM executes, does not choose
-- Tracks last 3 themes per user in Supabase profile to prevent immediate repeats
-- Unlocks future Custom World Creator: players pick theme + archetype + modifiers
-
-**Fantasy themes (14):** ancient_forest_kingdom · necromancer_domain · dragon_ruled_territory · haunted_battlefield · wild_magic_zone · fallen_empire_ruins · divine_war_aftermath · plague_ravaged_kingdom · frozen_tundra_frontier · desert_trade_empire · underground_realm · arcane_bureaucracy · coastal_pirate_haven(capped) · mountain_fortress_world
-
-**Cyberpunk (10):** corporate_district_wars · ai_emergence · bio_augmentation_underground · data_sovereignty_conflict · orbital_class_war · neon_theocracy · post_revolution_ruins · clone_labor_uprising · retrofuturist_decay · megacity_infrastructure_collapse
-
-**Horror (10):** small_town_wrongness · deep_sea_station · epidemic_horror · cult_territory · military_experiment · folklore_made_real · body_horror_transformation · psychic_contamination · haunted_institution · ancient_entity_return
-
-**Space Opera (10):** dying_star_evacuation · first_contact_conflict · precursor_ruins · generation_ship_politics · wormhole_gate_politics · corporate_terraforming_colony · galactic_empire_fracture · rogue_ai_ship · uplift_conflict · pirate_republic
-
-**Post-Apoc (10):** nuclear_wasteland · flooded_ruins · endless_winter · plague_aftermath · tech_regression · corporate_bunker_emergence · superstorm_earth · jungle_reclamation · warlord_kingdoms · vault_emergence
-
-Implementation: Genre Session prompt. Replaces WCD theme-selection instructions entirely.
+See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Genre Session.
+`lib/game/world-themes.ts` + `rollWorldTheme()` replaces all WCD theme-selection instructions.
 
 ---
 
@@ -253,17 +349,25 @@ Implementation: Genre Session prompt. Replaces WCD theme-selection instructions 
 147. **NPC names WCD-anchored.** Skeleton placeholders. (V8.74)
 148. **WorldBible background validation fix.** Only requires genre + wcd. (V8.74)
 149. **Quest modal double-fire fixed.** currentDialogueNpc === null gate + act1RevealFiredRef latch. (V8.76)
-150. **Maritime theme prompt cap (TEMPORARY).** Band-aid until Genre Session implements code-driven rollWorldTheme(). (V8.76)
+150. **Maritime theme prompt cap (TEMPORARY).** Band-aid until Genre Session. (V8.76)
 151. **Motivation char limit enforced.** Prompt + server-side slice(0,120). (V8.76)
 152. **Appearance summary name-agnostic.** Prompt rule + normalizeCharacter regex strip. (V8.76)
-153. **Code-driven world theme taxonomy designed.** 54 themes across 5 genres in Drive: "world-theme-taxonomy". Implementation: Genre Session. lib/game/world-themes.ts + rollWorldTheme() replaces all WCD theme-selection instructions. (V8.76)
+153. **World theme taxonomy designed.** 54 themes in Drive: "world-theme-taxonomy". Genre Session implementation. (V8.76)
+154. **Death penalty designed.** 10% gold (cap 50) + 75% HP spawn + Inn Rest (10g). Horror: 75% HP only. (V8.77)
+155. **Economy baseline designed.** Price tiers, enemy gold drops, merchant seeding rules. Drive: "economy-and-progression-design-spec". (V8.77)
+156. **Merchant trading architecture designed.** World-asset-backed inventory, trust pricing, speciality selling. Drive doc. (V8.77)
+157. **Status effects designed.** 5 ailments + 3 buffs, one-curse limit, save mechanic, world aliases. Drive: "status-effects-and-abilities-design-spec-v2". (V8.77)
+158. **Damage type system designed.** primary_damage_type on enemies; resistances/immunities/on_hit_status on items. Drive doc. (V8.77)
+159. **Abilities system designed.** ~125 templates + LLM flavor; 4 slots + 1 passive; charges scale with stats; attunement; 3 acquisition paths. Drive doc. (V8.77)
+160. **Perks system designed.** ~20 pool, every 3 levels, 4 categories. Renamed from "skills (combat)". (V8.77)
+161. **Professions system designed.** 3 professions, 20 levels, RuneScape-inspired pacing, MATERIAL item type, no world carryover. Drive: "professions-perks-and-ability-acquisition-spec-v2". (V8.77)
+162. **Horror genre deferred.** Sanity = declared stub. Marks = codebase inconsistency. Full design: Genre Session. (V8.77)
+163. **Comprehensive build order.** 33 steps. Drive: "design-session-master-summary-2026-05-13". (V8.77)
 
 ---
 
 ## Side Quest Source Taxonomy
-See Drive doc "quest-source-taxonomy" for full spec.
-**23D scope (done):** NPC direct ask + NPC rumor.
-**Post-23D:** Dungeon objects, boss drops, shrines, environmental, item-as-hook.
+See Drive: "quest-source-taxonomy". 23D scope done: NPC direct ask + NPC rumor. Post-23D: objects, boss drops, shrines, environmental, item-as-hook.
 
 ---
 
@@ -290,7 +394,7 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint
 | Dungeon | #b45309 burnt-copper | --hl-dungeon |
 | NPC highlights | var(--accent) orange | — |
 | Level-up beat | --hl-pass green (centered) | — |
-| World intro | WorldIntroModal cinematic overlay (no story feed beat) | — |
+| World intro | WorldIntroModal cinematic overlay | — |
 | Main quest discovery | ✦ amber/gold serif italic 13px | var(--accent) |
 | Side quest discovery | 11px serif italic accent 0.9 opacity, immediate | — |
 | Quest reveal modal | persistent overlay, X/backdrop/Escape | — |

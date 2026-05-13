@@ -332,7 +332,7 @@ consistent with the WCD):
           "objects": [],
           "lock": {
             "type": "key",
-            "hint": "[1-2 sentence description of the sealed door + why it is locked]",
+            "hint": "[1-2 sentences describing the sealed door + the KIND of object that would open it (a seal, a key, a token, a glyph). NEVER name the key object directly — the player must discover its name by finding it. GOOD: 'A ceremonial lock shaped to receive an official seal of office.' BAD: 'Requires the Warden's Seal.']",
             "key_item_id": "${regionLocSlug}_middle_key_object",
             "key_item_name": "[Story-Named Key Object Name]",
             "unlocked": false
@@ -519,8 +519,14 @@ is_key_item: true, unlocks_node: "{dungeon_id}_boss". The key-object
 name must be specific to the dungeon (e.g. "The Warden's Seal",
 "The Cracked Signet Ring") — never a generic "iron key".
 Room 3 boss    — encounter_chance 1.0; objects: []; lock object with
-type "key", hint string, key_item_id matching the middle-room key
-object id, key_item_name matching its name, unlocked: false.
+type "key", key_item_id matching the middle-room key object id,
+key_item_name matching its name, unlocked: false. The lock's HINT
+must describe the door + the KIND of object that opens it (a seal,
+a key, a token, a glyph) WITHOUT naming the key object directly.
+The player should discover the key item's name by finding it, not
+by reading the lock hint. GOOD: "A ceremonial lock shaped to
+receive an official seal of office." BAD: "Requires the Warden's
+Seal."
 
 DAY 23A — LOOT CONTEXT GUIDANCE
 Dungeon / combat drop tables: weapons, armor, valuables, healing

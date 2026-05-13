@@ -25,8 +25,9 @@ import { resolveLoot } from "@/lib/game/loot-resolver";
 import { getEmptyContainerTemplate, getSearchNarrative } from "@/lib/game/container-templates";
 import { pickRegionLootItemsForNode } from "@/lib/game/floor-loot";
 import { isDungeonNode, markRoomUnlocked } from "@/lib/game/dungeon-navigation";
+import { acceptNarratorItemsAcquired } from "@/lib/game/narrator-guards";
 import type { FloorLootEntry } from "@/types/game";
-import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
+import { ActionType, AssetCategory, Genre, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { DialogueOption, Item, MasterState, ParsedAction, RegionBible, RegionOutline, ResolutionResult, StoredMessage, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
 
 const MAX_INPUT_LENGTH  = 500;
@@ -296,13 +297,6 @@ function outcomeToLogType(outcomeType: string): LogEntryType {
   }
   return LogEntryType.STORY;
 }
-
-const RARITY_LABELS: Record<ItemRarity, string> = {
-  [ItemRarity.COMMON]:    "Common",
-  [ItemRarity.UNCOMMON]:  "Uncommon",
-  [ItemRarity.RARE]:      "Rare",
-  [ItemRarity.LEGENDARY]: "Legendary",
-};
 
 /**
  * Adds a log entry to masterState AND syncs it to the Zustand persistedLogEntries
@@ -3100,40 +3094,36 @@ export function useGameLoop() {
       }
 
       // ── 8. Merge new NPCs into registry ────────────────────────────────────
-      // 8b. Add any items the narrator granted — guarded against management actions.
-      const isLoreAction =
-        parsedAction.action_type === ActionType.USE_ITEM &&
-        (() => {
-          const lookup = (parsedAction.item_used ?? parsedAction.primary_target ?? "").trim().toLowerCase();
-          const item = updatedState.player_state.inventory.find(
-            (i) => i.id === lookup || i.name.toLowerCase() === lookup
-          );
-          return item?.type === ItemType.LORE;
-        })();
-      const isMgmtIntent = /\b(equip|unequip|drop|read)\b/i.test(parsedAction.inferred_intent);
-
+      // 8b. Narrator items_acquired — HARD-IGNORED (FIX 1, rule 107).
+      //
+      // acceptNarratorItemsAcquired returns [] unconditionally. The narrator
+      // is not authorized to grant items; only resolveLoot (containers),
+      // handleVictory (combat drops), and buyItem (merchant) may. The
+      // accepted-items array always being empty means the for-loop below
+      // is structurally dead code — kept as the canonical "this is where
+      // narrator items would have landed" anchor so future audits find
+      // rule 107 immediately. A diagnostic warn fires when the narrator
+      // tried to grant something, so prompt tuning is visible.
       if (
-        !isLoreAction &&
-        !isMgmtIntent &&
         narratorResponse.items_acquired &&
         narratorResponse.items_acquired.length > 0
       ) {
-        for (const item of narratorResponse.items_acquired) {
-          updatedState = addToInventory(updatedState, item);
-          store.addMessage(
-            makeMessage(
-              "SYSTEM",
-              `[ ${item.rarity} item added to pack: ${item.name} ]`
-            )
-          );
-          // DISCOVERY log entry per item acquired.
-          const rarityLabel = RARITY_LABELS[item.rarity] ?? item.rarity;
-          updatedState = persistLogEntry(
-            updatedState,
-            LogEntryType.DISCOVERY,
-            `Found: ${item.name} (${rarityLabel})`
-          );
-        }
+        console.warn(
+          "[GameLoop/8b] narrator emitted items_acquired — ignoring per rule 107. " +
+          "Items must come from containers (resolveLoot) or combat (floor_loot).",
+          {
+            count: narratorResponse.items_acquired.length,
+            names: narratorResponse.items_acquired.map((i) => i.name),
+          }
+        );
+      }
+      const acceptedItems = acceptNarratorItemsAcquired(narratorResponse.items_acquired);
+      for (const item of acceptedItems) {
+        // Unreachable while acceptNarratorItemsAcquired returns []. Kept
+        // as the structural inventory-grant anchor so the rule is one
+        // edit away from being relaxed in a future round, AND so static
+        // analyzers see the import is not dead.
+        updatedState = addToInventory(updatedState, item);
       }
 
       // (new_npcs handling moved to step 7b-2 — Issues J + D + N.)

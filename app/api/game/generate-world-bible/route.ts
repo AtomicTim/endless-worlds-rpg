@@ -247,7 +247,7 @@ Return EXACTLY this JSON structure (fill in the values):
             "objects": [],
             "lock": {
               "type": "key",
-              "hint": "1-2 sentences describing the sealed door + why it is locked.",
+              "hint": "1-2 sentences describing the sealed door and the SHAPE of what would open it (a seal, a key, a token, a glyph) WITHOUT naming the specific item. NEVER mention the key object's name.",
               "key_item_id": "middle_key_object_slug",
               "key_item_name": "The Story-Named Key Object",
               "unlocked": false
@@ -580,7 +580,15 @@ Room 3 — boss (room_type "boss", encounter_chance 1.0):
   • connections: ["{dungeon_id}_middle"]
   • lock: {
       "type": "key",
-      "hint": "1-2 sentence description of the sealed door",
+      "hint": "1-2 sentences describing the door + the KIND of object
+              that would open it (a seal, a key, a token, a glyph).
+              NEVER name the key object directly. The player should
+              learn its name by finding the object, not by reading the
+              lock hint. Example GOOD: 'A ceremonial lock, its socket
+              shaped to receive an official seal of office. Whatever
+              this chamber holds, it was not meant to be opened
+              without authority.' Example BAD: 'This door requires
+              the Warden's Seal to unlock.'",
       "key_item_id": "{middle-room key-object id}",
       "key_item_name": "{the key-object's display name}",
       "unlocked": false

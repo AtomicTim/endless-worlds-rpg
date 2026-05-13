@@ -27,7 +27,6 @@ import { pickRegionLootItemsForNode } from "@/lib/game/floor-loot";
 import { isDungeonNode, markRoomUnlocked } from "@/lib/game/dungeon-navigation";
 import { acceptNarratorItemsAcquired } from "@/lib/game/narrator-guards";
 import { shouldTriggerDialogueDiscovery } from "@/lib/game/quest-discovery";
-import { scheduleActOneDiscovery } from "@/lib/game/quest-discovery-pipeline";
 import type { FloorLootEntry } from "@/types/game";
 import { ActionType, AssetCategory, Genre, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { DialogueOption, Item, MasterState, ParsedAction, RegionBible, RegionOutline, ResolutionResult, StoredMessage, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
@@ -3195,23 +3194,20 @@ export function useGameLoop() {
           ?? firstSentence;
         updatedState = persistLogEntry(updatedState, LogEntryType.DIALOGUE, `${npcLabel}${quotedText}`);
 
-        // Day 23C TRIGGER A — first successful NPC conversation discovers
-        // the Act 1 breadcrumb after a 1200ms delay so the moment lands as
-        // its own dramatic beat, not synchronously with the NPC response.
-        // shouldTriggerDialogueDiscovery is the gate at SCHEDULE time;
-        // scheduleActOneDiscovery re-checks against the freshest state
-        // before mutating to handle the case where another trigger or
-        // action lands in the 1.2s window. Pipeline owns the state
-        // mutation, ✦ feed beat, QUEST log entry, journal-entry POST,
-        // and quest_threads persist. TRIGGER B (boss clear) lives in
-        // useDungeonRuntime.
+        // V8.64 TRIGGER A — first successful NPC conversation flags the
+        // Act 1 breadcrumb for deferred discovery. The pipeline waits
+        // until the dialogue panel closes (currentDialogueNpc → null)
+        // so the revelation moment lands AFTER the conversation, not
+        // during it. useDeferredQuestReveal observes the close signal
+        // and fires runActOneDiscovery — which mutates state, emits the
+        // ✦ feed beat, opens the modal, writes the QUEST log entry,
+        // and POSTs the journal entry. TRIGGER B (boss clear) lives in
+        // useDungeonRuntime and uses the immediate 1200ms-delay path
+        // since there's no dialogue panel to wait on.
         if (resolution.success && shouldTriggerDialogueDiscovery(updatedState)) {
-          scheduleActOneDiscovery({
-            trigger: "dialogue",
-            npcName: parsedAction.primary_target ?? null,
-          });
+          store.setPendingAct1Reveal(true);
           console.log(
-            `[GameLoop/9-quest] Act 1 discovery scheduled via NPC dialogue (${parsedAction.primary_target ?? "unknown"}) — fires in 1200ms.`
+            `[GameLoop/9-quest] Act 1 discovery deferred via NPC dialogue (${parsedAction.primary_target ?? "unknown"}) — fires on dialogue close.`
           );
         }
       } else {

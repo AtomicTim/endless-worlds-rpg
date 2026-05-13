@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { useGameStore } from "@/lib/stores/game-store";
 
 /**
@@ -8,9 +9,11 @@ import { useGameStore } from "@/lib/stores/game-store";
  *
  * Subscribes to `pendingQuestReveal` in the game store. When non-null:
  *   1. Backdrop fades in (300ms)
- *   2. After 400ms, breadcrumb content fades in (italic serif, larger)
- *   3. Holds for 2500ms after text is visible
- *   4. Fades out (400ms), clears pendingQuestReveal
+ *   2. After 400ms, breadcrumb content + X button fade in
+ *   3. HOLD indefinitely — player dismisses via X click, backdrop
+ *      click, or Escape. There is no auto-dismiss timer.
+ *   4. Fades out (300ms) on dismiss, clears pendingQuestReveal.
+ *
  * The ✦ beat that lands in the story feed in parallel is the permanent
  * record; this overlay is the once-per-discovery dramatic moment.
  *
@@ -26,28 +29,27 @@ const PHASE = {
   BACKDROP_FADE_IN: 300,
   TEXT_DELAY:       400, // after backdrop starts
   TEXT_FADE_IN:     600,
-  HOLD:             2500,
-  FADE_OUT:         400,
+  FADE_OUT:         300,
 } as const;
 
 type Phase = "idle" | "fadeIn" | "textIn" | "hold" | "fadeOut";
 
 export function QuestRevealModal() {
-  const reveal     = useGameStore((s) => s.pendingQuestReveal);
+  const reveal      = useGameStore((s) => s.pendingQuestReveal);
   const clearReveal = useGameStore((s) => s.setPendingQuestReveal);
   const [phase, setPhase] = useState<Phase>("idle");
 
-  // Drive the animation timeline whenever a new reveal arrives. Each
-  // setTimeout call is tracked so cleanup cancels the in-flight cycle
-  // if the player navigates away mid-animation.
+  // ── Animation timeline ─────────────────────────────────────────────────────
+  //
+  // V8.64 — the hold phase persists until the user dismisses, so we
+  // only schedule the fade-in steps. The fadeOut → idle → clear path
+  // is driven by the dismiss handler below.
   useEffect(() => {
     if (!reveal) {
       setPhase("idle");
       return;
     }
     setPhase("fadeIn");
-    // Emit audio event for future Howler.js wiring. No-op until audio
-    // system lands; safe to dispatch into the void.
     try {
       window.dispatchEvent(new CustomEvent("QUEST_REVEAL", {
         detail: { breadcrumb_id: reveal.breadcrumb_id, act: reveal.act },
@@ -62,22 +64,35 @@ export function QuestRevealModal() {
       () => setPhase("hold"),
       PHASE.TEXT_DELAY + PHASE.TEXT_FADE_IN
     ));
-    timeouts.push(window.setTimeout(
-      () => setPhase("fadeOut"),
-      PHASE.TEXT_DELAY + PHASE.TEXT_FADE_IN + PHASE.HOLD
-    ));
-    timeouts.push(window.setTimeout(
-      () => {
-        setPhase("idle");
-        clearReveal(null);
-      },
-      PHASE.TEXT_DELAY + PHASE.TEXT_FADE_IN + PHASE.HOLD + PHASE.FADE_OUT
-    ));
 
     return () => {
       for (const id of timeouts) window.clearTimeout(id);
     };
-  }, [reveal, clearReveal]);
+  }, [reveal]);
+
+  // ── Dismiss handler ────────────────────────────────────────────────────────
+  //
+  // Triggered by X click, backdrop click, or Escape. Runs the 300ms
+  // fade-out then clears the reveal so the next discovery can re-trigger.
+  function dismiss() {
+    if (phase === "fadeOut" || phase === "idle") return;
+    setPhase("fadeOut");
+    window.setTimeout(() => {
+      setPhase("idle");
+      clearReveal(null);
+    }, PHASE.FADE_OUT);
+  }
+
+  // Escape key closes only when we're past the fade-in (text visible).
+  useEffect(() => {
+    if (phase !== "textIn" && phase !== "hold") return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") dismiss();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   if (!reveal || phase === "idle") return null;
 
@@ -87,6 +102,7 @@ export function QuestRevealModal() {
     0.78;
 
   const textVisible = phase === "textIn" || phase === "hold";
+  const xVisible    = textVisible;
 
   return (
     <div
@@ -94,6 +110,7 @@ export function QuestRevealModal() {
       aria-label="Quest reveal"
       aria-modal="true"
       className="fixed inset-0 z-[60] flex items-center justify-center"
+      onClick={dismiss}
       style={{
         background: `rgba(0, 0, 0, ${backdropOpacity})`,
         transition: `background ${
@@ -101,11 +118,28 @@ export function QuestRevealModal() {
           phase === "fadeOut" ? PHASE.FADE_OUT :
           0
         }ms ease-in-out`,
-        pointerEvents: "none", // cinematic only — no interaction
       }}
     >
+      {/* Close button — top-right, mirrors CodexModal chrome. */}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); dismiss(); }}
+        aria-label="Close reveal"
+        className="absolute right-5 top-5 rounded-sm p-1 transition-opacity hover:opacity-80"
+        style={{
+          color:      "var(--ink-2)",
+          opacity:    xVisible ? 0.85 : 0,
+          transition: `opacity ${PHASE.TEXT_FADE_IN}ms ease-out`,
+        }}
+      >
+        <X className="size-4" />
+      </button>
+
       <div
         className="ew-serif px-6 text-center"
+        // Text area is also clickable — stopPropagation so a click on
+        // the content itself doesn't dismiss (only X / backdrop do).
+        onClick={(e) => e.stopPropagation()}
         style={{
           maxWidth:   "640px",
           fontSize:   22,
@@ -116,6 +150,7 @@ export function QuestRevealModal() {
           opacity:    textVisible ? 1 : 0,
           transform:  textVisible ? "translateY(0)" : "translateY(8px)",
           transition: `opacity ${PHASE.TEXT_FADE_IN}ms ease-out, transform ${PHASE.TEXT_FADE_IN}ms ease-out`,
+          cursor:     "default",
         }}
       >
         <div

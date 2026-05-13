@@ -27,6 +27,7 @@ import { useGameStore, makeMessage } from "@/lib/stores/game-store";
 import { useGameLoop } from "@/hooks/useGameLoop";
 import { useCombat } from "@/hooks/useCombat";
 import { useDungeonRuntime } from "@/hooks/useDungeonRuntime";
+import { useDeferredQuestReveal } from "@/lib/game/quest-discovery-pipeline";
 import { getAllWorldAssets, getWorldAssetsForLocation, normalizeLocationId, saveCodexEntry } from "@/lib/game/codex";
 import { formatLocationId } from "@/lib/game/location-formatter";
 
@@ -67,6 +68,10 @@ export default function GamePage() {
   // dungeon-entry side effect (initialize dungeon_state on arrival)
   // and the boss-victory beat observer.
   const dungeon = useDungeonRuntime();
+  // V8.64 — defer Act 1 quest reveal until the dialogue panel closes.
+  // The hook watches currentDialogueNpc → null transitions; when
+  // pendingAct1Reveal is set, it runs the discovery pipeline once.
+  useDeferredQuestReveal();
   // Day 21 — SEARCH REMAINS + TAKE handlers backing the FloorLootStrip.
   const floorLootHandlers = useFloorLoot();
   const inCombat = activeCombat?.active === true;

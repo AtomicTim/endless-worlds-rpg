@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useGameStore, makeMessage } from "@/lib/stores/game-store";
 import { addLogEntry } from "@/lib/game/state-utils";
 import { saveQuestThreadsAsync } from "@/hooks/useGameLoop";
@@ -200,4 +201,50 @@ export function runActOneDiscovery({ trigger, npcName, roomId }: SchedulePipelin
       console.warn("[QuestDiscovery] journal-entry generation threw:", err);
     }
   })();
+}
+
+// ── V8.64 deferred reveal hook ───────────────────────────────────────────────
+
+/**
+ * useDeferredQuestReveal — fires the Act 1 discovery pipeline when the
+ * dialogue panel closes AFTER a successful NPC conversation that flagged
+ * `pendingAct1Reveal: true`.
+ *
+ * Why deferred: firing the cinematic modal mid-conversation is jarring —
+ * the player is still reading the NPC's response. By waiting for
+ * currentDialogueNpc to transition from a non-null name back to null
+ * (the player closed the dialogue panel), the reveal lands naturally
+ * after they've finished the conversation.
+ *
+ * Boss-clear trigger is unaffected: it uses scheduleActOneDiscovery's
+ * 1200ms delay path since there's no dialogue panel to wait on.
+ *
+ * Mount once in GamePage. Idempotent: the pendingAct1Reveal flag is
+ * cleared immediately after the pipeline runs so re-renders can't
+ * fire it twice.
+ */
+export function useDeferredQuestReveal(): void {
+  const currentNpc       = useGameStore((s) => s.currentDialogueNpc);
+  const pendingAct1      = useGameStore((s) => s.pendingAct1Reveal);
+  const setPendingAct1   = useGameStore((s) => s.setPendingAct1Reveal);
+  const prevNpcRef       = useRef<string | null>(null);
+
+  useEffect(() => {
+    const wasOpen = prevNpcRef.current !== null;
+    const isClosed = currentNpc === null;
+    prevNpcRef.current = currentNpc;
+
+    // Fire on the transition from "dialogue open" → "dialogue closed"
+    // while pendingAct1Reveal is set. setPendingAct1Reveal(false) runs
+    // FIRST so a quick re-render can't double-fire the pipeline.
+    if (wasOpen && isClosed && pendingAct1) {
+      setPendingAct1(false);
+      // Small idle pause so the dialogue panel's close animation
+      // (if any) gets out of the way before the cinematic backdrop
+      // covers the screen.
+      setTimeout(() => {
+        runActOneDiscovery({ trigger: "dialogue" });
+      }, 250);
+    }
+  }, [currentNpc, pendingAct1, setPendingAct1]);
 }

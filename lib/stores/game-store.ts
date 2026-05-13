@@ -96,6 +96,16 @@ interface GameStore {
     content:       string;
     act:           1 | 2 | 3 | "climax";
   } | null;
+  /** V8.64 — ephemeral flag: an Act 1 discovery TRIGGERED during a
+   *  dialogue session, deferred until the player exits dialogue. The
+   *  whole pipeline (state mutation, ✦ feed beat, modal) is held while
+   *  the dialogue panel is open so the revelation doesn't land
+   *  mid-conversation. useDeferredQuestReveal watches
+   *  currentDialogueNpc → null transitions and fires runActOneDiscovery
+   *  when this flag is set, then clears it. Lost on session reload
+   *  (acceptable — next NPC convo re-triggers since the breadcrumb's
+   *  discovered field hasn't been flipped yet). */
+  pendingAct1Reveal:      boolean;
 
   // ── FIX (UX Round 4) — Trade panel ─────────────────────────────────────────
   /** True when the player has explicitly requested the trade panel via
@@ -163,6 +173,8 @@ interface GameStore {
    *  reveal pipeline writes when an Act 1 breadcrumb is discovered;
    *  QuestRevealModal clears when its animation cycle completes. */
   setPendingQuestReveal:   (reveal: GameStore["pendingQuestReveal"]) => void;
+  /** V8.64 — toggle the deferred Act 1 reveal flag. */
+  setPendingAct1Reveal:    (pending: boolean) => void;
   /** FIX 7 — record that the player examined a Tier 1 object so the
    *  next EXAMINE on the same target short-circuits to a canned
    *  response. Key should be the canonical landmark name (lowercased). */
@@ -222,6 +234,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   codexModalOpen:         false,
   journalModalOpen:       false,
   pendingQuestReveal:     null,
+  pendingAct1Reveal:      false,
   tradeOpen:              false,
   examinedObjects:        [],
   generatingRegionId:     null,
@@ -335,6 +348,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   toggleJournalModal:   () => set((s) => ({ journalModalOpen: !s.journalModalOpen })),
   setJournalModalOpen:  (open) => set({ journalModalOpen: open }),
   setPendingQuestReveal: (reveal) => set({ pendingQuestReveal: reveal }),
+  setPendingAct1Reveal:  (pending) => set({ pendingAct1Reveal: pending }),
   markObjectExamined: (objectKey) =>
     set((s) => {
       const key = objectKey.trim().toLowerCase();
@@ -370,6 +384,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       codexModalOpen:         false,
       journalModalOpen:       false,
       pendingQuestReveal:     null,
+      pendingAct1Reveal:      false,
       examinedObjects:        [],
       generatingRegionId:     null,
     });

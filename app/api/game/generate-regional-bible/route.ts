@@ -838,12 +838,17 @@ function validateBible(parsed: unknown): { ok: true; bible: RegionBible } | { ok
   return { ok: true, bible: parsed as RegionBible };
 }
 
-// V8.68 — OPT 3: max_tokens reduced 7000 → 1500 per the optimization
-// audit. The stub fallback in the POST handler catches truncation;
-// instrumentation surfaces output_tokens so we can see if regions
-// regularly hit the cap.
+// V8.69 — restore RegionBible max_tokens to a working ceiling.
+// V8.68's OPT 3 reduced 7000 → 1500; instrumentation confirmed all
+// 3 adjacent-region RegionBibles truncate at exactly 1500 and
+// return stub fallbacks, leaving every region the player can travel
+// to with no real content. Stub fallback ≠ acceptable — it's a
+// degradation, not a feature.
+//
+// 7000 was the Day 20 value (bumped from 6000 to give haiku
+// headroom for the 3-5 enemies in combat-spec §6.5). Restoring it.
 const RB_MODEL      = "claude-haiku-4-5-20251001";
-const RB_MAX_TOKENS = 1500;
+const RB_MAX_TOKENS = 7000;
 
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
   // Architecture spec ("Model Selection"): RegionBible generation runs on
@@ -872,7 +877,7 @@ async function callClaude(client: Anthropic, userPrompt: string): Promise<string
 
 export async function POST(request: NextRequest) {
   console.log("[GEN_TIMING] generate-regional-bible called");
-  console.log(`[GEN_TIMING] generate-regional-bible max_tokens reduced to ${RB_MAX_TOKENS}`);
+  console.log(`[GEN_TIMING] generate-regional-bible max_tokens: ${RB_MAX_TOKENS}`);
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {

@@ -18,12 +18,36 @@ const SYSTEM_PROMPT =
   "will be constrained by these facts. Respond ONLY with valid JSON matching " +
   "the schema exactly. No markdown, no code fences, no explanation. Pure JSON only.";
 
-function buildUserPrompt(body: Required<Omit<RequestBody, "creation_choices">> & { creation_choices?: string }): string {
+function buildUserPrompt(body: {
+  genre:             Genre;
+  character_name?:   string;
+  character_class?:  string;
+  creation_choices?: string;
+}): string {
   const ccLine = body.creation_choices
     ? `\nAdditional context: ${body.creation_choices}`
     : "";
+  // Day 23.5B — character_name / character_class are now optional. The
+  // new wizard fires WCD on genre select (before name/class are chosen)
+  // so the WCD generates world identity (species, atmosphere, factions)
+  // from genre alone. The world_intro_template {name}/{class} placeholders
+  // resolve later in apply-world-bible from the character profile.
+  const hasName  = !!body.character_name  && body.character_name.trim().length  > 0;
+  const hasClass = !!body.character_class && body.character_class.trim().length > 0;
+  const characterLine =
+    hasName && hasClass
+      ? `Character: ${body.character_name}, a ${body.character_class}.`
+      : hasName
+        ? `Character: ${body.character_name}.`
+        : hasClass
+          ? `Character class: ${body.character_class}.`
+          : "";
+  const headerLine =
+    `Generate a World Consistency Document for a ${body.genre} RPG.` +
+    (characterLine ? ` ${characterLine}` : "") +
+    ccLine;
   return [
-    `Generate a World Consistency Document for a ${body.genre} RPG. Character: ${body.character_name}, a ${body.character_class}.${ccLine}`,
+    headerLine,
     "",
     "Requirements:",
     "- world_name: a unique evocative name for this world (not Earth)",
@@ -760,9 +784,9 @@ export async function POST(request: NextRequest) {
   }
 
   const { genre, character_name, character_class, creation_choices } = body;
-  if (!genre || !character_name || !character_class) {
+  if (!genre) {
     return NextResponse.json(
-      { error: "Missing required fields: genre, character_name, character_class" },
+      { error: "Missing required field: genre" },
       { status: 400 }
     );
   }
@@ -770,6 +794,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid genre" }, { status: 400 });
   }
 
+  // Day 23.5B — character_name / character_class are now optional. The
+  // new wizard fires WCD on genre select. buildUserPrompt omits the
+  // character line when neither field is provided.
   const userPrompt = buildUserPrompt({
     genre,
     character_name,

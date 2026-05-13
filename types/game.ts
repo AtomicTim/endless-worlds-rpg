@@ -260,6 +260,9 @@ export interface AppearanceProfile {
  *  for biographical references. */
 export interface PlayerCharacterProfile {
   species_id: string;
+  /** Day 23.5B — feeds narrator pronoun context so NPCs and prose
+   *  refer to the player correctly. */
+  gender:     "male" | "female";
   origin:     OriginChoice;
   appearance: AppearanceProfile;
   motivation: string;

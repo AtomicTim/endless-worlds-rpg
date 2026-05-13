@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Genre } from "@/types/game";
 import type {
@@ -298,6 +298,26 @@ export default function NewGamePage() {
   const [creationMode, setCreationMode]           = useState<CreationMode>("guided");
   const [randomCharLoading, setRandomCharLoading] = useState(false);
   const [randomNameLoading, setRandomNameLoading] = useState(false);
+  // Day 23.5B hotfix — motivation randomize loading.
+  const [randomMotivationLoading, setRandomMotivationLoading] = useState(false);
+
+  // Day 23.5B hotfix (FIX 3B) — cache appearance options per gender so
+  // toggling male/female on the appearance step never re-generates an
+  // already-loaded gender. Burns one haiku call per gender, max.
+  const [appearanceByGender, setAppearanceByGender] = useState<
+    Record<"male" | "female", AppearanceProfile[]>
+  >({ male: [], female: [] });
+
+  // Day 23.5B hotfix (FIX 5) — fire WorldBible in the background as
+  // soon as WCD completes. handleSubmit reads the cached result.
+  // worldBiblePromiseRef: the in-flight fetch promise so handleSubmit
+  //   can await it when the player clicks Begin Adventure before
+  //   generation finishes.
+  // worldBibleResultRef: filled in by the background fetch's .then()
+  //   once the bible JSON parses successfully. Null on failure → the
+  //   submit chain falls back to re-firing generate-world-bible.
+  const worldBibleResultRef  = useRef<{ bible: WorldBible } | null>(null);
+  const worldBiblePromiseRef = useRef<Promise<void> | null>(null);
 
   const genre      = GENRES.find((g) => g.id === selectedGenre) ?? null;
   const worldNameFallback = genre?.worldName ?? "this world";
@@ -342,11 +362,24 @@ export default function NewGamePage() {
       });
   }, [selectedBackground, selectedGenre, stage, wcdWorldName, originOptions.length, originLoading]);
 
-  // Appearance generation — fires when appearance step shown and no options yet.
+  // Day 23.5B hotfix (FIX 3B) — Appearance generation with per-gender
+  // cache. Fires when:
+  //   1. appearance step is shown OR
+  //   2. gender toggles on the appearance step
+  // and there are no cached options for the current gender. If the
+  // current gender already has cached options, swap them in without
+  // a network call.
   useEffect(() => {
     if (stage !== "appearance") return;
     if (!selectedGenre || !selectedBackground) return;
-    if (appearanceOptions.length > 0 || appearanceLoading) return;
+
+    // Cache hit → swap immediately.
+    const cached = appearanceByGender[gender];
+    if (cached.length > 0) {
+      setAppearanceOptions(cached);
+      return;
+    }
+    if (appearanceLoading) return;
 
     setAppearanceLoading(true);
     fetch("/api/game/generate-appearance-options", {
@@ -361,15 +394,21 @@ export default function NewGamePage() {
     })
       .then((res) => res.json())
       .then((data: { options?: AppearanceProfile[]; error?: string }) => {
-        const opts = data.options ?? [];
-        setAppearanceOptions(opts.length > 0 ? opts : GENERIC_APPEARANCE_FALLBACKS);
+        const raw = data.options ?? [];
+        const opts = raw.length > 0 ? raw : GENERIC_APPEARANCE_FALLBACKS;
+        setAppearanceOptions(opts);
+        setAppearanceByGender((prev) => ({ ...prev, [gender]: opts }));
         setAppearanceLoading(false);
       })
       .catch(() => {
         setAppearanceOptions(GENERIC_APPEARANCE_FALLBACKS);
+        setAppearanceByGender((prev) => ({
+          ...prev,
+          [gender]: GENERIC_APPEARANCE_FALLBACKS,
+        }));
         setAppearanceLoading(false);
       });
-  }, [stage, selectedGenre, selectedBackground, selectedSpeciesId, gender, appearanceOptions.length, appearanceLoading]);
+  }, [stage, selectedGenre, selectedBackground, selectedSpeciesId, gender, appearanceByGender, appearanceLoading]);
 
   // ── Navigation ─────────────────────────────────────────────────────────────
 
@@ -392,6 +431,11 @@ export default function NewGamePage() {
     setWcd(null);
     setWcdWorldName(null);
     setSpeciesOptions([]);
+    // Day 23.5B hotfix (FIX 5) — clear any prior background WorldBible
+    // result; a new genre means a new world.
+    worldBibleResultRef.current  = null;
+    worldBiblePromiseRef.current = null;
+
     fetch("/api/game/generate-wcd", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
@@ -404,6 +448,45 @@ export default function NewGamePage() {
           setWcdWorldName(data.wcd.world_name ?? null);
           setSpeciesOptions(data.wcd.species ?? []);
           setWcdStatus("complete");
+
+          // Day 23.5B hotfix (FIX 5) — kick off WorldBible generation in
+          // the background while the player walks through species →
+          // class → origin → appearance → name → motivation. Empty
+          // character_name / character_class are fine: the WB prompt
+          // omits the Character line when both are blank, and
+          // world_intro_template {name}/{class} resolution happens in
+          // apply-world-bible from master_state.player_state. Cached
+          // result is consumed by handleSubmit; failures fall through
+          // to a synchronous re-run there.
+          const wcdSnapshot = data.wcd;
+          worldBiblePromiseRef.current = fetch(
+            "/api/game/generate-world-bible",
+            {
+              method:  "POST",
+              headers: { "Content-Type": "application/json" },
+              body:    JSON.stringify({
+                genre:           g,
+                character_name:  "",
+                character_class: "",
+                wcd:             wcdSnapshot,
+              }),
+            },
+          )
+            .then((res) => res.json())
+            .then((bibleData: { bible?: WorldBible; error?: string }) => {
+              if (bibleData.bible) {
+                worldBibleResultRef.current = { bible: bibleData.bible };
+                console.log("[wizard] Background WorldBible ready.");
+              } else {
+                console.warn(
+                  "[wizard] Background WorldBible returned no bible:",
+                  bibleData.error,
+                );
+              }
+            })
+            .catch((err) => {
+              console.warn("[wizard] Background WorldBible threw:", err);
+            });
         } else {
           setSubmitError("World generation failed. Please try again.");
           setStage("genre");
@@ -454,7 +537,12 @@ export default function NewGamePage() {
       setOriginOptions([]);
       setSelectedOrigin(null);
       setAppearanceOptions([]);
+      setAppearanceByGender({ male: [], female: [] });
       setSelectedAppearance(null);
+      // Day 23.5B hotfix (FIX 5) — drop the background WorldBible so
+      // the next genre choice doesn't pull in a stale bible.
+      worldBibleResultRef.current  = null;
+      worldBiblePromiseRef.current = null;
       return;
     }
   }
@@ -477,11 +565,10 @@ export default function NewGamePage() {
   function handleGenderSelect(g: "male" | "female") {
     if (g === gender) return;
     setGender(g);
-    // Force appearance regen on next visit if we'd already loaded options.
-    if (appearanceOptions.length > 0) {
-      setAppearanceOptions([]);
-      setSelectedAppearance(null);
-    }
+    // Day 23.5B hotfix (FIX 3B) — selection clears (it was gender-specific)
+    // but cached options for both genders are preserved. The appearance
+    // useEffect picks up the new gender; cache hits avoid the LLM call.
+    setSelectedAppearance(null);
   }
 
   // ── Random character (RANDOM mode) ─────────────────────────────────────────
@@ -560,6 +647,35 @@ export default function NewGamePage() {
     }
   }
 
+  // ── Random motivation ──────────────────────────────────────────────────────
+  // Day 23.5B hotfix (FIX 4B) — Randomize button on the motivation step.
+
+  async function handleRandomMotivation() {
+    if (!selectedGenre || !selectedBackground || !selectedSpeciesId) return;
+    setRandomMotivationLoading(true);
+    try {
+      const res = await fetch("/api/game/generate-random-motivation", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          genre:          selectedGenre,
+          wcd_world_name: wcdWorldName ?? "",
+          species_id:     selectedSpeciesId,
+          class_id:       selectedBackground,
+          origin_label:   selectedOrigin?.label ?? "",
+        }),
+      });
+      const data = (await res.json()) as { motivation?: string; error?: string };
+      if (data.motivation) {
+        setMotivation(data.motivation.slice(0, 120));
+      }
+    } catch {
+      // silent — leave motivation as-is
+    } finally {
+      setRandomMotivationLoading(false);
+    }
+  }
+
   // ── Submit ─────────────────────────────────────────────────────────────────
 
   async function handleSubmit() {
@@ -634,28 +750,56 @@ export default function NewGamePage() {
       }
 
       // ── WorldBible ──
+      // Day 23.5B hotfix (FIX 5) — three paths:
+      //   1. background fetch already finished → instant.
+      //   2. background fetch still in flight   → await it.
+      //   3. background fetch never ran or failed → synchronous retry.
+      // {name}/{class} resolution happens in apply-world-bible from
+      // master_state.player_state, so the background fetch's empty
+      // character_name/class values don't matter here.
       setLoadingMessage("Crafting your world...");
       let bible: WorldBible | undefined;
-      try {
-        const bibleRes = await fetch("/api/game/generate-world-bible", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({
-            genre:           selectedGenre,
-            character_name:  characterName.trim(),
-            character_class: selectedBackground,
-            wcd:             wcdLocal,
-          }),
-        });
-        if (bibleRes.ok) {
-          const data = (await bibleRes.json()) as { bible?: WorldBible };
-          bible = data.bible;
-        } else {
-          const data = (await bibleRes.json()) as { error?: string };
-          console.warn("[wizard] generate-world-bible failed:", data.error);
+
+      if (worldBibleResultRef.current?.bible) {
+        bible = worldBibleResultRef.current.bible;
+        console.log("[wizard] Using background WorldBible result.");
+      } else if (worldBiblePromiseRef.current) {
+        setLoadingMessage("Almost there — finishing your world...");
+        try {
+          await worldBiblePromiseRef.current;
+        } catch {
+          // promise itself never rejects (handled in fireWcd), but be safe
         }
-      } catch (err) {
-        console.warn("[wizard] generate-world-bible threw:", err);
+        bible = worldBibleResultRef.current?.bible;
+        if (bible) {
+          console.log("[wizard] Background WorldBible resolved during wait.");
+        }
+      }
+
+      if (!bible) {
+        // Fallback — background fetch never started or failed.
+        setLoadingMessage("Crafting your world...");
+        try {
+          const bibleRes = await fetch("/api/game/generate-world-bible", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({
+              genre:           selectedGenre,
+              character_name:  characterName.trim(),
+              character_class: selectedBackground,
+              wcd:             wcdLocal,
+            }),
+          });
+          if (bibleRes.ok) {
+            const data = (await bibleRes.json()) as { bible?: WorldBible };
+            bible = data.bible;
+          } else {
+            const data = (await bibleRes.json()) as { error?: string };
+            console.warn("[wizard] generate-world-bible failed:", data.error);
+          }
+        } catch (err) {
+          console.warn("[wizard] generate-world-bible threw:", err);
+        }
       }
 
       if (!bible) {
@@ -914,7 +1058,16 @@ export default function NewGamePage() {
                   return (
                     <button
                       key={sp.id}
-                      onClick={() => setSelectedSpeciesId(sp.id)}
+                      onClick={() => {
+                        // Day 23.5B hotfix (FIX 3B) — species change
+                        // invalidates per-gender appearance cache.
+                        if (selectedSpeciesId !== sp.id) {
+                          setAppearanceByGender({ male: [], female: [] });
+                          setAppearanceOptions([]);
+                          setSelectedAppearance(null);
+                        }
+                        setSelectedSpeciesId(sp.id);
+                      }}
                       className="text-left p-5 rounded border transition-all duration-150 hover:scale-[1.02] active:scale-[0.99] flex flex-col"
                       style={cardStyle(isSelected)}
                     >
@@ -978,10 +1131,16 @@ export default function NewGamePage() {
                   <button
                     key={bgId}
                     onClick={() => {
-                      // Reset origin selections on class change.
+                      // Reset origin + appearance selections on class change.
+                      // Day 23.5B hotfix (FIX 3B) — class also invalidates
+                      // the per-gender appearance cache (descriptors are
+                      // class-specific).
                       if (selectedBackground !== bgId) {
                         setOriginOptions([]);
                         setSelectedOrigin(null);
+                        setAppearanceByGender({ male: [], female: [] });
+                        setAppearanceOptions([]);
+                        setSelectedAppearance(null);
                       }
                       setSelectedBackground(bgId);
                     }}
@@ -1216,29 +1375,8 @@ export default function NewGamePage() {
             </p>
 
             <div className="max-w-md mx-auto">
-              {/* Gender toggle */}
-              <div className="flex items-center justify-center gap-2 mb-6">
-                {(["male", "female"] as const).map((g) => {
-                  const isSelected = gender === g;
-                  return (
-                    <button
-                      key={g}
-                      onClick={() => handleGenderSelect(g)}
-                      className="px-3 py-1.5 rounded border text-xs font-bold tracking-widest transition-all"
-                      style={{
-                        borderColor: isSelected ? "var(--color-primary)" : "var(--color-border)",
-                        color:       isSelected ? "var(--color-primary)" : "var(--color-muted)",
-                        backgroundColor: isSelected
-                          ? "color-mix(in srgb, var(--color-primary) 8%, transparent)"
-                          : "transparent",
-                      }}
-                    >
-                      {g === "male" ? "♂ Male" : "♀ Female"}
-                    </button>
-                  );
-                })}
-              </div>
-
+              {/* Day 23.5B hotfix (FIX 3A) — gender toggle removed from
+                  the name step. Gender lives on the appearance step only. */}
               <label
                 htmlFor="char-name"
                 className="block text-xs uppercase tracking-widest mb-2"
@@ -1319,9 +1457,50 @@ export default function NewGamePage() {
               style={{ color: "var(--color-primary)" }}>
               What Drives You?
             </h1>
-            <p className="text-center text-sm mb-8" style={{ color: "var(--color-muted)" }}>
+            <p className="text-center text-sm mb-6" style={{ color: "var(--color-muted)" }}>
               Why are you in {wcdWorldName ?? worldNameFallback}? What do you want?
             </p>
+
+            {/* Day 23.5B hotfix (FIX 4C) — character summary card.
+                Display-only — shows the player who they've built so
+                far so the motivation lands with the right context. */}
+            <div
+              className="max-w-md mx-auto mb-6 p-3 rounded border text-xs leading-relaxed"
+              style={{
+                borderColor:     "var(--color-border)",
+                backgroundColor: "color-mix(in srgb, var(--color-border) 25%, transparent)",
+                color:           "var(--color-muted)",
+              }}
+            >
+              <div className="font-bold" style={{ color: "var(--color-text)" }}>
+                {(() => {
+                  const speciesName =
+                    effectiveSpecies.find((s) => s.id === selectedSpeciesId)?.name
+                    ?? "Unknown";
+                  const className = selectedBackground
+                    ? formatClassName(selectedBackground)
+                    : "Adventurer";
+                  return `${speciesName} ${className}`;
+                })()}
+                {selectedOrigin && (
+                  <span style={{ color: "var(--color-muted)" }}>
+                    {"  ·  "}{selectedOrigin.label}
+                  </span>
+                )}
+              </div>
+              {selectedAppearance?.summary && (
+                <div className="italic mt-1">
+                  &ldquo;{selectedAppearance.summary.length > 60
+                    ? `${selectedAppearance.summary.slice(0, 57).trim()}...`
+                    : selectedAppearance.summary}&rdquo;
+                </div>
+              )}
+              {characterName.trim() && (
+                <div className="mt-1" style={{ color: "var(--color-primary)" }}>
+                  {characterName.trim()}
+                </div>
+              )}
+            </div>
 
             <div className="max-w-md mx-auto">
               <textarea
@@ -1329,28 +1508,42 @@ export default function NewGamePage() {
                 onChange={(e) => setMotivation(e.target.value.slice(0, 120))}
                 rows={3}
                 maxLength={120}
-                placeholder="In one sentence, who were you before this adventure..."
+                placeholder="I came to this world to..."
                 className="w-full px-4 py-3 rounded border bg-transparent text-sm outline-none"
                 style={{
                   borderColor: "var(--color-border)",
                   color:       "var(--color-text)",
                 }}
               />
-              <div className="flex items-center justify-between mt-1">
+              <div className="flex items-center justify-between mt-1 gap-3">
                 <button
                   onClick={() => { setMotivation(""); handleSubmit(); }}
-                  className="text-xs underline"
+                  className="text-xs underline whitespace-nowrap"
                   style={{ color: "var(--color-muted)" }}
                   disabled={isLoading}
                 >
-                  Skip
+                  Play as a blank slate
                 </button>
-                <span
-                  className="text-xs"
-                  style={{ color: motivation.length >= 100 ? "#ef4444" : "var(--color-muted)" }}
-                >
-                  {motivation.length}/120
-                </span>
+                <div className="flex items-center gap-3 ml-auto">
+                  <button
+                    onClick={handleRandomMotivation}
+                    disabled={randomMotivationLoading || isLoading}
+                    className="text-xs font-bold tracking-widest"
+                    style={{
+                      color:  "var(--color-accent)",
+                      cursor: randomMotivationLoading ? "wait" : "pointer",
+                      opacity: randomMotivationLoading ? 0.5 : 1,
+                    }}
+                  >
+                    {randomMotivationLoading ? "..." : "✦ Randomize →"}
+                  </button>
+                  <span
+                    className="text-xs"
+                    style={{ color: motivation.length >= 100 ? "#ef4444" : "var(--color-muted)" }}
+                  >
+                    {motivation.length}/120
+                  </span>
+                </div>
               </div>
             </div>
 

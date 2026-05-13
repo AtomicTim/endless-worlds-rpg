@@ -77,13 +77,30 @@ function buildUserPrompt(
   // Skeleton-based prompt: showing the model the exact JSON shape (with
   // every required key) is the single most reliable way to keep it from
   // wandering into alias names / nested wrappers / missing fields.
+  // Day 23.5B hotfix — character_name / character_class may be empty when
+  // generate-world-bible is fired in the background right after WCD
+  // completes (before the player has picked a name/class). The actual
+  // {name}/{class} substitution into world_intro_template happens in
+  // apply-world-bible using master_state.player_state.name + .background.
+  // For the bible prompt itself, the Character line is only theming
+  // context — omit it cleanly when both fields are blank so the model
+  // doesn't see "Character: , a .".
+  const hasName  = name.trim().length  > 0;
+  const hasClass = klass.trim().length > 0;
+  const characterLine =
+    hasName && hasClass
+      ? `Character: ${name}, a ${klass}.`
+      : hasName
+        ? `Character: ${name}.`
+        : hasClass
+          ? `Character class: ${klass}.`
+          : "";
   return `${wcdBlock}
 ${wcdSpeciesBlock}
 
 ${wcdMqBlock}
 
-Generate a WorldBible JSON for a ${genre} RPG.
-Character: ${name}, a ${klass}.
+Generate a WorldBible JSON for a ${genre} RPG.${characterLine ? `\n${characterLine}` : ""}
 
 UNIQUENESS REQUIREMENT: Every element of this world — its names, themes, enemy
 types, and location aesthetics — must emerge from the WCD above and feel wholly

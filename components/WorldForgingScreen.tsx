@@ -11,12 +11,14 @@ import { Genre } from "@/types/game";
  * the wait feel like watching the world come into existence.
  *
  * Stage progression:
- *   1. mount → fade in stage 1 message
- *   2. +8s   → cross-fade to stage 2 message
+ *   1. mount → fade in stage 1 message (with blinking cursor)
+ *   2. +8s   → cross-fade to stage 2 message (with blinking cursor)
+ *      — UNLESS worldName has already arrived, in which case the
+ *        stage 1→2 transition is skipped and we go straight to stage 3.
  *   3. when worldName arrives (status === "complete"):
  *        cross-fade to stage 3, 1200ms pause, typewriter
  *        types the world name 80ms/char, blink cursor, pause,
- *        then fade in stage 4 and call onComplete() after 800ms.
+ *        then fade in stage 4 and call onComplete() after 2500ms.
  *
  * All animation is CSS transitions + setTimeout. All timeouts are
  * tracked and cleared on unmount.
@@ -68,7 +70,10 @@ const STAGE_1_TO_2_DELAY  = 8000;
 const STAGE_2_TO_3_PAUSE  = 1200;
 const TYPEWRITER_INTERVAL = 80;
 const POST_TYPE_PAUSE     = 1500;
-const STAGE_4_TO_DONE     = 800;
+// Day 23.5B hotfix — extended from 800ms so the final transition
+// message ("Your fate awaits.", "Jack in.", etc.) stays readable
+// before the screen unmounts.
+const STAGE_4_TO_DONE     = 2500;
 
 export default function WorldForgingScreen({
   genre,
@@ -86,7 +91,9 @@ export default function WorldForgingScreen({
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const intervalsRef = useRef<ReturnType<typeof setInterval>[]>([]);
   // Latch the "we've already started the worldName sequence" so a
-  // worldName change can't restart the typewriter mid-way.
+  // worldName change can't restart the typewriter mid-way AND so the
+  // stage 1→2 timer can skip its update when the world has already
+  // arrived.
   const startedRef = useRef(false);
 
   function addTimeout(fn: () => void, ms: number) {
@@ -100,9 +107,16 @@ export default function WorldForgingScreen({
     return id;
   }
 
-  // Stage 1 → 2 (after 8s).
+  // Stage 1 → 2 (after 8s). If worldName has already arrived (started
+  // latch set), skip the stage 2 message entirely — the worldName
+  // effect already advanced us to stage 3.
   useEffect(() => {
-    addTimeout(() => setStage((prev) => (prev < 2 ? 2 : prev)), STAGE_1_TO_2_DELAY);
+    addTimeout(() => {
+      setStage((prev) => {
+        if (startedRef.current) return prev; // worldName arrived first
+        return prev < 2 ? 2 : prev;
+      });
+    }, STAGE_1_TO_2_DELAY);
     return () => {
       timeoutsRef.current.forEach(clearTimeout);
       intervalsRef.current.forEach(clearInterval);
@@ -135,7 +149,8 @@ export default function WorldForgingScreen({
           clearInterval(id);
           // Cursor blinks briefly after last char, then fades.
           addTimeout(() => setShowCursor(false), 700);
-          // After a pause, swap to stage 4 and call onComplete.
+          // After a pause, swap to stage 4 and call onComplete after
+          // STAGE_4_TO_DONE so the final message stays readable.
           addTimeout(() => setStage(4), POST_TYPE_PAUSE);
           addTimeout(() => onComplete(), POST_TYPE_PAUSE + STAGE_4_TO_DONE);
         }
@@ -155,6 +170,11 @@ export default function WorldForgingScreen({
   // The world name + cursor block is only visible during stages 3-4.
   const showWorldName = stage >= 3 && (typed.length > 0 || showCursor);
 
+  // Blinking activity cursor — visible during stages 1-2 to signal
+  // that the world is still being forged. Hidden once we transition
+  // to the worldName typewriter (stage 3+).
+  const showActivityCursor = stage <= 2;
+
   return (
     <div
       className="fixed inset-0 flex items-center justify-center px-6"
@@ -171,7 +191,16 @@ export default function WorldForgingScreen({
             animation:  "ew-forging-fade-in 800ms ease-out forwards",
           }}
         >
-          {stageMessage}
+          <span>{stageMessage}</span>
+          {showActivityCursor && (
+            <span
+              className="ew-forging-blink ml-2 inline-block"
+              aria-hidden="true"
+              style={{ color: "var(--color-primary)" }}
+            >
+              ▋
+            </span>
+          )}
         </div>
 
         {/* World name reveal — types in letter by letter. */}
@@ -199,6 +228,13 @@ export default function WorldForgingScreen({
         @keyframes ew-forging-fade-in {
           0%   { opacity: 0; }
           100% { opacity: 1; }
+        }
+        @keyframes ew-forging-blink-kf {
+          0%, 100% { opacity: 1; }
+          50%      { opacity: 0; }
+        }
+        .ew-forging-blink {
+          animation: ew-forging-blink-kf 1s ease-in-out infinite;
         }
       `}</style>
     </div>

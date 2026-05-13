@@ -586,6 +586,17 @@ export interface NPCDefinition {
    *  apply-regional-bible reads this marker and stamps the breadcrumb's
    *  anchor_location_id to the NPC's home_location_id. */
   quest_breadcrumb_id?: string;
+  /** Day 23D — true when this NPC is a side-quest hook. The RegionBible
+   *  prompt asks generators to mark 1-2 NPCs per region with this flag
+   *  + a quest_seed sentence. generate-side-quests reads these markers
+   *  to expand them into full SideQuest objects. */
+  quest_hook?:       boolean;
+  /** Day 23D — 1-sentence seed describing what this NPC needs/wants,
+   *  embedded in their situation. Only meaningful when quest_hook is
+   *  true. Should read as a situation, not a mission ("She's been
+   *  waiting three weeks for a shipment that never arrived" — NOT
+   *  "She wants the player to retrieve the shipment"). */
+  quest_seed?:       string;
   is_merchant?:      boolean;
   /** What the merchant sells. */
   speciality?:       string;
@@ -756,13 +767,62 @@ export interface QuestEntry {
   tagged:    boolean;
 }
 
+/** Day 23D — how a side quest is surfaced to the player when they meet
+ *  the source. "npc_dialogue" = the NPC asks directly. "npc_rumor" = the
+ *  NPC mentions a situation without asking for help. The Journal entry
+ *  and discovery beat read identically; the difference is purely how
+ *  the generator framed the NPC's voice. Post-23D adds object_examine,
+ *  lore_read, environmental, item_pickup per the source taxonomy. */
+export type QuestDiscoveryTrigger =
+  | "npc_dialogue"
+  | "npc_rumor"
+  | "object_examine"
+  | "lore_read"
+  | "environmental"
+  | "item_pickup";
+
+/** Day 23D — machine-readable completion target. The runtime doesn't
+ *  consume this in 23D scope (no completion logic yet), but the field is
+ *  generated so the post-23D completion engine has structured anchors
+ *  instead of LLM-prose-only objectives. */
+export interface QuestCompletionCondition {
+  type:      "item" | "location" | "enemy_defeated" | "npc_return";
+  /** Item id, location id, enemy id, or NPC id depending on type. */
+  target_id: string;
+}
+
 export interface SideQuest {
   id:                string;
   title:             string;
   status:            QuestStatus;
+  /** Day 23D — see QuestDiscoveryTrigger. 23D scope: npc_dialogue +
+   *  npc_rumor only. The other values are reserved for post-23D
+   *  expansion per the source taxonomy. */
   source_type:       "npc" | "environment";
   /** NPC id or LocationObject id that started this quest. */
   source_id:         string;
+  /** Day 23D — display name of the quest giver. NPC source_type only;
+   *  environment quests leave this undefined and the journal renders
+   *  the source LocationObject name instead. */
+  giver_name?:       string;
+  /** Day 23D — RegionBible region id this quest was generated in.
+   *  Drives the "Region" badge in the journal so the player can scan
+   *  quests by where they belong. */
+  region_id?:        string;
+  /** Day 23D — how this quest is delivered to the player. Decided by
+   *  the generator based on the NPC's quest_seed wording. */
+  discovery_trigger?: QuestDiscoveryTrigger;
+  /** Day 23D — structured completion target. Optional for legacy data
+   *  and future generators that only emit prose objectives. */
+  completion_condition?: QuestCompletionCondition;
+  /** Day 23D — 1-sentence hint at what the player gets for finishing.
+   *  Surfaced in the journal only when set. */
+  reward_hint?:      string;
+  /** Day 23D — false until the player meets the quest-giver. The
+   *  Journal hides undiscovered quests so the list grows organically.
+   *  Defaults to false; useGameLoop's DIALOGUE trigger flips it true
+   *  on the first successful conversation with source_id. */
+  discovered?:       boolean;
   /** Directional, never a map pin. Shown at the top of the side-quest
    *  section of the journal. */
   current_objective: string;

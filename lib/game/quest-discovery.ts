@@ -107,3 +107,48 @@ export function shouldTriggerBossClearDiscovery(
   if (!state) return false;
   return isActOneAwaitingDiscovery(state.quest_threads);
 }
+
+// ── Day 23D — Side quest discovery ──────────────────────────────────────────
+
+import type { SideQuest } from "@/types/game";
+
+/**
+ * Find an undiscovered side quest whose source_id matches the given NPC
+ * id. Returns null when no match — meaning the conversation doesn't
+ * trigger a discovery this turn. The lookup is O(n) over side_quests;
+ * for the ~10-50 quest ceiling of a long playthrough that's fine.
+ *
+ * Pure: never mutates input.
+ */
+export function findUndiscoveredSideQuestForNpc(
+  qt:    import("@/types/game").QuestThreads | undefined | null,
+  npcId: string | null | undefined,
+): SideQuest | null {
+  if (!qt || !npcId) return null;
+  const quests = qt.side_quests ?? [];
+  return quests.find(
+    (q) => q.source_id === npcId && q.discovered !== true,
+  ) ?? null;
+}
+
+/**
+ * Returns updated quest_threads with the named side quest's discovered
+ * field flipped to true. Null when:
+ *   • no quest_threads
+ *   • no quest matches questId
+ *   • the quest is already discovered (idempotency signal)
+ * Pure: never mutates input.
+ */
+export function markSideQuestDiscovered(
+  qt:      import("@/types/game").QuestThreads | undefined | null,
+  questId: string,
+): import("@/types/game").QuestThreads | null {
+  if (!qt) return null;
+  const quests = qt.side_quests ?? [];
+  const idx = quests.findIndex((q) => q.id === questId);
+  if (idx === -1) return null;
+  if (quests[idx].discovered === true) return null;
+  const updated = quests.slice();
+  updated[idx] = { ...updated[idx], discovered: true };
+  return { ...qt, side_quests: updated };
+}

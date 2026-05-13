@@ -131,8 +131,12 @@ export function JournalModal() {
           >
             {TABS.map((t) => {
               const isActive = tab === t.id;
+              // V8.66 — SIDE QUESTS badge counts only DISCOVERED quests
+              // (rule 116). Undiscovered quests exist in state from the
+              // moment their region is applied but aren't visible until
+              // the player meets the giver.
               const badge =
-                t.id === "side"      ? sideQuests.length :
+                t.id === "side"      ? sideQuests.filter((q) => q.discovered === true).length :
                 t.id === "completed" ? completedIds.length :
                 t.id === "failed"    ? failedIds.length :
                 0;
@@ -341,8 +345,22 @@ function BreadcrumbBlock({
 
 // ── Side Quests tab ──────────────────────────────────────────────────────────
 
+/**
+ * V8.66 (Day 23D) — Side quests group by status (active → completed →
+ * failed) and hide undiscovered quests entirely. A quest exists in
+ * quest_threads.side_quests the moment its region is applied, but the
+ * player doesn't see it until they speak to the giver — that matches
+ * the spec's "discovered organically" principle (rule 116).
+ */
+const STATUS_ORDER: Array<{ status: SideQuest["status"]; heading: string }> = [
+  { status: "active",    heading: "ACTIVE"    },
+  { status: "completed", heading: "COMPLETED" },
+  { status: "failed",    heading: "FAILED"    },
+];
+
 function SideQuestsTab({ sideQuests }: { sideQuests: SideQuest[] }) {
-  if (sideQuests.length === 0) {
+  const visible = sideQuests.filter((q) => q.discovered === true);
+  if (visible.length === 0) {
     return (
       <p className="ew-serif italic" style={{ color: "var(--color-muted)", fontSize: 13 }}>
         No side quests recorded yet.
@@ -350,42 +368,143 @@ function SideQuestsTab({ sideQuests }: { sideQuests: SideQuest[] }) {
     );
   }
   return (
-    <ul className="flex flex-col gap-3">
-      {sideQuests.map((q) => (
-        <li
-          key={q.id}
-          className="flex flex-col gap-1.5 rounded-sm p-3"
-          style={{ border: "1px solid var(--line-2)" }}
-        >
-          <header className="flex items-center justify-between gap-3">
-            <span
-              className="ew-serif"
-              style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-1)" }}
+    <div className="flex flex-col gap-6">
+      {STATUS_ORDER.map(({ status, heading }) => {
+        const group = visible.filter((q) => q.status === status);
+        if (group.length === 0) return null;
+        return (
+          <section key={status} className="flex flex-col gap-3">
+            <div
+              className="ew-mono"
+              style={{
+                fontSize:      10,
+                letterSpacing: "0.32em",
+                color:         STATUS_COLOR[status] ?? "var(--accent)",
+                borderBottom:  "1px solid var(--line-2)",
+                paddingBottom: 4,
+              }}
             >
-              {q.title}
-            </span>
+              {heading}
+            </div>
+            <ul className="flex flex-col gap-3">
+              {group.map((q) => <SideQuestBlock key={q.id} quest={q} />)}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function SideQuestBlock({ quest }: { quest: SideQuest }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasEntries = quest.entries.length > 0;
+  return (
+    <li
+      className="flex flex-col gap-2 rounded-sm p-3"
+      style={{ border: "1px solid var(--line-2)" }}
+    >
+      <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <span
+          className="ew-serif"
+          style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-1)" }}
+        >
+          {quest.title}
+        </span>
+        <div className="flex items-center gap-2">
+          {quest.region_id && (
             <span
               style={{
                 fontSize:      9,
                 padding:       "1px 6px",
-                border:        `1px solid ${STATUS_COLOR[q.status] ?? "var(--ink-3)"}`,
-                color:         STATUS_COLOR[q.status] ?? "var(--ink-3)",
+                border:        "1px solid var(--line-2)",
+                color:         "var(--ink-3)",
                 fontFamily:    "var(--mono)",
-                letterSpacing: "0.2em",
+                letterSpacing: "0.18em",
               }}
+              title={`Region: ${quest.region_id}`}
             >
-              {STATUS_LABEL[q.status] ?? q.status.toUpperCase()}
+              {quest.region_id.toUpperCase()}
             </span>
-          </header>
-          <p
-            className="ew-serif italic"
-            style={{ fontSize: 12, color: "var(--ink-3)" }}
+          )}
+          <span
+            style={{
+              fontSize:      9,
+              padding:       "1px 6px",
+              border:        `1px solid ${STATUS_COLOR[quest.status] ?? "var(--ink-3)"}`,
+              color:         STATUS_COLOR[quest.status] ?? "var(--ink-3)",
+              fontFamily:    "var(--mono)",
+              letterSpacing: "0.2em",
+            }}
           >
-            {q.current_objective}
-          </p>
-        </li>
-      ))}
-    </ul>
+            {STATUS_LABEL[quest.status] ?? quest.status.toUpperCase()}
+          </span>
+        </div>
+      </header>
+      {quest.giver_name && (
+        <p
+          className="ew-serif italic"
+          style={{ fontSize: 11, color: "var(--ink-4)" }}
+        >
+          {quest.giver_name}
+        </p>
+      )}
+      <p
+        className="ew-serif italic"
+        style={{ fontSize: 13, color: "var(--ink-2)", lineHeight: 1.55 }}
+      >
+        {quest.current_objective}
+      </p>
+      {quest.reward_hint && (
+        <p
+          className="ew-serif"
+          style={{
+            fontSize:   11,
+            color:      "var(--ink-3)",
+            fontStyle:  "italic",
+            opacity:    0.85,
+          }}
+        >
+          Reward: {quest.reward_hint}
+        </p>
+      )}
+      {hasEntries && (
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="self-start"
+            style={{
+              fontSize:      10,
+              letterSpacing: "0.18em",
+              color:         "var(--ink-3)",
+              fontFamily:    "var(--mono)",
+            }}
+          >
+            {expanded ? "▾ HIDE ENTRIES" : `▸ ${quest.entries.length} ENTR${quest.entries.length === 1 ? "Y" : "IES"}`}
+          </button>
+          {expanded && (
+            <div className="flex flex-col gap-1.5">
+              {quest.entries.map((e) => (
+                <p
+                  key={e.id}
+                  className="ew-serif italic"
+                  style={{
+                    fontSize:    12,
+                    color:       "var(--ink-2)",
+                    lineHeight:  1.55,
+                    paddingLeft: 12,
+                    borderLeft:  "1px solid var(--line-2)",
+                  }}
+                >
+                  {e.text}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
 

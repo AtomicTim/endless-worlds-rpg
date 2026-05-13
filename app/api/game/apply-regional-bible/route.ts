@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { AssetCategory, Genre, LocationStatus } from "@/types/game";
 import type { Json } from "@/types/database";
@@ -23,6 +24,12 @@ import {
   deriveNodeType,
   validateDungeonRooms,
 } from "@/lib/game/dungeon-validation";
+import {
+  filterQuestHookNpcs,
+  generateSideQuests,
+  mergeSideQuests,
+  type SideQuestGenerationContext,
+} from "@/lib/game/side-quest-generator";
 
 /**
  * Day 19D — Apply a freshly-generated RegionBible to a session.
@@ -1074,7 +1081,7 @@ export async function POST(request: NextRequest) {
     currentMasterState.quest_threads,
     bibleNarrowed
   );
-  const nextQuestThreads = anchorResult.threads;
+  let nextQuestThreads = anchorResult.threads;
   for (const a of anchorResult.anchored) {
     // act lives on the breadcrumb itself — look it up off the runtime
     // shape so the log line matches the quest spec format exactly.
@@ -1085,14 +1092,63 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // ── Day 23D — Side quest generation (V8.66) ───────────────────────────────
+  // Synchronous (NOT fire-and-forget) so the freshly-generated quests land
+  // in the SAME master_state write below — atomic with the rest of the
+  // bible apply. The haiku call adds ~1-2s to a 5-15s expansion, which the
+  // player is already waiting on. Idempotency rides on mergeSideQuests'
+  // id dedup: re-applying the same RegionBible never duplicates a quest.
+  //
+  // Errors are swallowed inside generateSideQuests (returns [] on any
+  // failure) so a flaky haiku call never blocks region expansion.
+  const hookNpcs = filterQuestHookNpcs(bibleNarrowed.npcs ?? []);
+  if (hookNpcs.length > 0) {
+    const wcd  = currentMasterState.metadata.world_consistency;
+    const mq   = currentMasterState.quest_threads?.main_quest;
+    const ctx: SideQuestGenerationContext = {
+      world_name:         wcd?.world_name ?? "this world",
+      archetype:          mq?.archetype ?? "ancient_awakening",
+      threat_description: mq?.threat_description ?? "an unresolved threat",
+      genre:              currentMasterState.metadata.genre ?? Genre.FANTASY,
+      tone:               currentMasterState.metadata.tone  ?? "grounded",
+    };
+    const client     = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const freshQuests = await generateSideQuests({
+      npcs:     bibleNarrowed.npcs,
+      regionId: bibleNarrowed.id,
+      ctx,
+      client,
+    });
+    if (freshQuests.length > 0) {
+      const existingThreads = nextQuestThreads ?? currentMasterState.quest_threads ?? {
+        side_quests:         [],
+        faction_alignment:   {},
+        completed_quest_ids: [],
+        failed_quest_ids:    [],
+      };
+      const mergedSideQuests = mergeSideQuests(
+        existingThreads.side_quests ?? [],
+        freshQuests
+      );
+      nextQuestThreads = { ...existingThreads, side_quests: mergedSideQuests };
+    }
+    // Diagnostic per spec — surfaces generated quest count + hook NPC
+    // count on every region application. {N} of 0 is normal when the AI
+    // skipped quest_hook on all NPCs OR when haiku returned a parse-fail.
+    console.log(
+      `[apply-regional-bible] side_quests: ${freshQuests.length} generated for ${bibleNarrowed.id} ` +
+      `(${hookNpcs.length} quest NPC${hookNpcs.length === 1 ? "" : "s"})`
+    );
+  }
+
   const patchedMasterState: MasterState = {
     ...currentMasterState,
     metadata: {
       ...currentMasterState.metadata,
       region_bibles: nextRegionBibles,
     },
-    // Day 23B — write back the breadcrumb anchor stamps (or pass through
-    // unchanged when no markers were found).
+    // Day 23B — write back the breadcrumb anchor stamps + side quest
+    // appends. nextQuestThreads carries both mutations when either fired.
     ...(nextQuestThreads ? { quest_threads: nextQuestThreads } : {}),
     world_state: {
       ...currentMasterState.world_state,
@@ -1140,5 +1196,11 @@ export async function POST(request: NextRequest) {
     updated_world_graph: updatedWorldGraph,
     location_count:      bibleNarrowed.locations.length,
     npc_count:           bibleNarrowed.npcs.length,
+    /** Day 23D — return the updated quest_threads so the client can
+     *  mirror the server's breadcrumb anchoring + side-quest appends
+     *  into its local masterState immediately, rather than waiting on
+     *  a reload to pick up the DB write. Undefined when no mutation
+     *  fired (no breadcrumb match AND no quest_hook NPCs). */
+    quest_threads:       nextQuestThreads,
   });
 }

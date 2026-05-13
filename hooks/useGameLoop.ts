@@ -26,7 +26,11 @@ import { getEmptyContainerTemplate, getSearchNarrative } from "@/lib/game/contai
 import { pickRegionLootItemsForNode } from "@/lib/game/floor-loot";
 import { isDungeonNode, markRoomUnlocked } from "@/lib/game/dungeon-navigation";
 import { acceptNarratorItemsAcquired } from "@/lib/game/narrator-guards";
-import { shouldTriggerDialogueDiscovery } from "@/lib/game/quest-discovery";
+import {
+  findUndiscoveredSideQuestForNpc,
+  markSideQuestDiscovered,
+  shouldTriggerDialogueDiscovery,
+} from "@/lib/game/quest-discovery";
 import type { FloorLootEntry } from "@/types/game";
 import { ActionType, AssetCategory, Genre, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { DialogueOption, Item, MasterState, ParsedAction, RegionBible, RegionOutline, ResolutionResult, StoredMessage, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
@@ -1448,6 +1452,9 @@ export function useGameLoop() {
                   starting_node_id?:    string;
                   region_zone_id?:      string;
                   updated_world_graph?: WorldGraph;
+                  /** Day 23D — server's authoritative quest_threads after
+                   *  applying breadcrumb anchors + side-quest appends. */
+                  quest_threads?:       import("@/types/game").QuestThreads;
                 };
                 if (applied.starting_node_id && applied.updated_world_graph) {
                   // Architecture CHANGE 1 — land at the geographic region
@@ -1485,6 +1492,14 @@ export function useGameLoop() {
                       location_status: LocationStatus.ARRIVING,
                     },
                     world_graph: newGraph,
+                    // Day 23D — mirror the server's updated quest_threads
+                    // (breadcrumb anchors + side-quest appends). Without
+                    // this, the local masterState would lag the DB until
+                    // reload and the DIALOGUE discovery trigger would
+                    // never see the new side_quests.
+                    ...(applied.quest_threads
+                      ? { quest_threads: applied.quest_threads }
+                      : {}),
                   };
                   // Refresh locationAssets for the new region zone so
                   // later steps (narrator, highlight) see real Tier 1 data.
@@ -3209,6 +3224,59 @@ export function useGameLoop() {
           console.log(
             `[GameLoop/9-quest] Act 1 discovery deferred via NPC dialogue (${parsedAction.primary_target ?? "unknown"}) — fires on dialogue close.`
           );
+        }
+
+        // Day 23D — Side quest discovery (V8.66). Independent from the
+        // Act 1 main quest trigger above. Resolves the active NPC's
+        // asset id from locationAssets (matching by case-insensitive
+        // name), then asks the pure helper whether any undiscovered
+        // side_quest has source_id === that asset id. If yes: mark
+        // discovered, emit a ✦ side_quest_discovery beat IMMEDIATELY
+        // (no defer, no modal — rule 116), write a QUEST log entry,
+        // persist via saveQuestThreadsAsync. Idempotent — the helper
+        // returns null when the quest is already discovered.
+        if (resolution.success && parsedAction.primary_target) {
+          const npcName = parsedAction.primary_target.toLowerCase();
+          const npcAsset = useGameStore.getState().locationAssets.find(
+            (a) =>
+              a.category === AssetCategory.CHARACTER &&
+              a.name.toLowerCase() === npcName,
+          );
+          const npcId = npcAsset?.id ?? null;
+          if (npcId) {
+            const undiscovered = findUndiscoveredSideQuestForNpc(
+              updatedState.quest_threads, npcId,
+            );
+            if (undiscovered) {
+              const nextQt = markSideQuestDiscovered(
+                updatedState.quest_threads, undiscovered.id,
+              );
+              if (nextQt) {
+                updatedState = { ...updatedState, quest_threads: nextQt };
+                updatedState = persistLogEntry(
+                  updatedState,
+                  LogEntryType.QUEST,
+                  `QUEST — ${undiscovered.title}: ${undiscovered.current_objective}`,
+                );
+                store.addMessage(
+                  makeMessage(
+                    "SYSTEM",
+                    `${undiscovered.title} — ${undiscovered.current_objective}`,
+                    {
+                      side_quest_discovery: true,
+                      quest_id:             undiscovered.id,
+                      source_id:            undiscovered.source_id,
+                      region_id:            undiscovered.region_id ?? null,
+                    },
+                  ),
+                );
+                saveQuestThreadsAsync(updatedState.metadata.session_id, nextQt);
+                console.log(
+                  `[GameLoop/9-quest] Side quest discovered: ${undiscovered.title} (npc: ${parsedAction.primary_target}).`
+                );
+              }
+            }
+          }
         }
       } else {
         // STORY entry: use narrator's log_summary when present, else first sentence.

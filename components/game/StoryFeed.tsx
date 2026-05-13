@@ -344,6 +344,30 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
           );
         }
 
+        // Day 23D — side quest discovery beat. Smaller than the main
+        // quest reveal (rule 116) — same amber/gold + ✦ prefix so the
+        // player recognizes the family, but quiet enough to read as
+        // "a new direction" rather than "a revelation". Fires on the
+        // FIRST successful conversation with the quest giver; the
+        // discovered flag on the SideQuest ensures it never re-fires.
+        if (metadata?.side_quest_discovery === true) {
+          return (
+            <div
+              className="message-enter ew-serif ew-side-quest-discovery"
+              style={{
+                fontSize:    11,
+                fontStyle:   "italic",
+                color:       "var(--accent)",
+                margin:      "6px 0",
+                lineHeight:  1.45,
+                opacity:     0.9,
+              }}
+            >
+              ✦ {content}
+            </div>
+          );
+        }
+
         // Codex-add notification — small mono line with accent diamond.
         if (content.includes("added to codex")) {
           return (

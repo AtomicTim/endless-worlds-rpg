@@ -259,7 +259,9 @@ consistent with the WCD):
       "role": "innkeeper",
       "personality": "[1 sentence]",
       "knowledge": [{"topic": "[3-5 word label]", "content": "[Full WCD-consistent sentence]"}],
-      "default_trust": 50
+      "default_trust": 50,
+      "quest_hook": true,
+      "quest_seed": "[1 sentence describing what this NPC needs or is waiting for — embed it in their situation. GOOD: 'She's been waiting three weeks for a shipment of medicines that never arrived from the eastern pass.' BAD: 'She wants the player to retrieve medicines.']"
     },
     {
       "id": "character_${npc2Slug}",
@@ -277,7 +279,9 @@ consistent with the WCD):
       "role": "explorer",
       "personality": "[1 sentence — give them a reason to be at this remote spot]",
       "knowledge": [{"topic": "[3-5 word label]", "content": "[WCD-consistent fact specific to this site]"}],
-      "default_trust": 50
+      "default_trust": 50,
+      "quest_hook": true,
+      "quest_seed": "[1 sentence describing the situation that needs help — written as a problem in their world, not a quest. The remoteness of the location should inform what they need.]"
     }
   ],
   "region_locations": [
@@ -436,6 +440,33 @@ array must be objects of shape {topic, content}. The topic is a
 "Roads east"); content is the full WCD-consistent sentence the
 NPC reveals on a passed stat check. Generate 1-2 entries per NPC.
 Do NOT emit plain strings — always {topic, content}.
+
+DAY 23D — SIDE QUEST HOOKS (V8.66):
+Of the 3 NPCs you generate, 1-2 should carry quest_hook: true with
+a quest_seed sentence. The skeleton shows npc1 (innkeeper, in the
+settlement) and npc3 (explorer, at the standalone region location)
+as the hook carriers — keep that pattern but write seeds that
+fit each NPC's situation.
+
+Seed rules (rule 116):
+  - 1 sentence describing what they NEED or are WAITING for.
+  - Written as a SITUATION embedded in their life, NOT a mission.
+    GOOD: "He has been searching for his sister's grave for two
+           seasons and is convinced it lies somewhere in the
+           barrow north of here."
+    BAD:  "He wants the player to find his sister's grave."
+  - The seed must feel native to the region. A settlement
+    innkeeper's seed differs from a remote-explorer's seed.
+  - DO NOT mention "the player" or "you" in the seed.
+
+The seed is the GENERATOR's input — a separate
+/api/game/generate-side-quests call expands it into a full
+SideQuest object with title, objective, completion_condition,
+and reward_hint. Keep the seed tight and evocative; the
+generator handles the rest.
+
+Non-quest NPCs (npc2 in the skeleton): omit quest_hook and
+quest_seed entirely. Do not include them as false / null.
 
 DAY 20 COMBAT — REGION ENEMIES & ENCOUNTER TAGGING:
 

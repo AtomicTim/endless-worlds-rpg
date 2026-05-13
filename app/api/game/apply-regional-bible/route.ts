@@ -126,6 +126,15 @@ function npcToAsset(npc: NPCDefinition, sessionId: string): WorldAsset {
       ...(npc.faction_id ? { faction: npc.faction_id } : {}),
       knowledge:       knowledgeItems,
       notes,
+      // V8.67 — mirror quest_hook + quest_seed onto the asset's
+      // constitution so the narrator DIALOGUE prompt can detect this
+      // NPC as a quest carrier without re-reading the region bible.
+      // Omit fields when absent so non-quest NPCs don't carry empty
+      // quest metadata.
+      ...(npc.quest_hook === true            ? { quest_hook: true }            : {}),
+      ...(npc.quest_seed && npc.quest_seed.trim()
+        ? { quest_seed: npc.quest_seed.trim() }
+        : {}),
     },
     significance:        npc.quest_relevance === "key" ? "MAJOR" : "NOTABLE",
     first_seen_location: npc.home_location_id,
@@ -616,9 +625,21 @@ export async function POST(request: NextRequest) {
       npc_ids:            finalNpcIds,
       item_ids:           loc.objects.map((o) => `item_${o.id}`),
       asset_id:           `location_${loc.id}`,
-      // The settlement node is what the player just crossed into — mark it
-      // discovered so the world map renders it without delay.
-      discovered:         loc.is_settlement_node,
+      // V8.67 (FIX 1) — every node in a freshly-applied adjacent region
+      // spawns discovered: false, including the settlement node. The
+      // player lands at the region zone first (Architecture CHANGE 1)
+      // and walks INTO the settlement; that first walk should emit the
+      // full atmosphere description, not the "You return to {name}."
+      // revisit beat (rule 86). End-of-step-7 (rule 12) flips
+      // discovered: true on actual arrival.
+      //
+      // Pre-fix this read `loc.is_settlement_node`, which made the
+      // settlement spawn discovered: true and tripped revisit
+      // suppression on first cross-region entry to the settlement.
+      // The world-map renderer is fine with discovered: false — it
+      // shows the node as dim outline until the player visits, which
+      // accurately reflects the state.
+      discovered:         false,
       map_position:       loc.grid_position,
       // CHANGE 2 — flag the settlement node so NavigationBar's parent
       // search succeeds. Sub-locations and standalone zones carry false.
@@ -917,7 +938,14 @@ export async function POST(request: NextRequest) {
       npc_ids:       [],
       item_ids:      [],
       asset_id:      `location_${bibleNarrowed.id}`,
-      discovered:    true,
+      // V8.67 (FIX 1) — region zone spawns undiscovered. Same fix as
+      // rule 109 (apply-world-bible) but for adjacent-region expansion.
+      // The player lands here as their first beat in the new region;
+      // pre-fix the discovered: true flag tripped rule 86 revisit
+      // suppression so the first arrival emitted "You return to {name}"
+      // instead of the full atmosphere description. End-of-step-7
+      // (rule 12) flips discovered: true on actual arrival.
+      discovered:    false,
       map_position:  adjustedPos,
     };
     // Day 20.4.3 — diagnostic log on region zone creation. Pairs with

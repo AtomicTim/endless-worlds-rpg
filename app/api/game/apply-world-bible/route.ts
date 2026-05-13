@@ -227,6 +227,12 @@ function npcToAsset(npc: NPCDefinition, sessionId: string): WorldAsset {
       ...(npc.faction_id ? { faction: npc.faction_id } : {}),
       knowledge:       knowledgeItems,
       notes,
+      // V8.67 — mirror quest_hook + quest_seed so prompt-builder can
+      // surface a SITUATION block when the player talks to a hook NPC.
+      ...(npc.quest_hook === true            ? { quest_hook: true }            : {}),
+      ...(npc.quest_seed && npc.quest_seed.trim()
+        ? { quest_seed: npc.quest_seed.trim() }
+        : {}),
     },
     significance:        npc.quest_relevance === "key" ? "MAJOR" : "NOTABLE",
     first_seen_location: npc.home_location_id,

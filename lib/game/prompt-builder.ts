@@ -1055,6 +1055,43 @@ export function buildNarratorUserPrompt(
           "═════════════════════════════════════════════════════",
         ];
         prompt += `\n${npcLines.join("\n")}`;
+
+        // V8.67 — SITUATION block. When the NPC carries a quest_seed
+        // (mirrored from NPCDefinition by apply-*-bible's npcToAsset),
+        // hand the narrator the seed sentence and instruct them to
+        // surface it naturally — as something weighing on the NPC, not
+        // a mission briefing. Without this block, the narrator
+        // free-associates from the NPC's personality + knowledge and
+        // never mentions the situation that drives their side-quest.
+        //
+        // Pre-fix symptom: Kessian Thorne's quest fired when the
+        // player talked to him about quicksilver sickness, but Kessian
+        // never mentioned his missing daughter — because the narrator
+        // didn't know about that thread.
+        //
+        // Only injects when quest_hook is true AND quest_seed has
+        // content. Non-quest NPCs and quest NPCs without a seed
+        // (legacy / partial data) get the normal ACTIVE NPC block
+        // alone.
+        const questHook = c.quest_hook === true;
+        const questSeed = typeof c.quest_seed === "string" ? c.quest_seed.trim() : "";
+        if (questHook && questSeed.length > 0) {
+          const situationLines: string[] = [
+            "",
+            "═══ SITUATION (quest-hook NPC — surface naturally) ═══",
+            `"${questSeed}"`,
+            "",
+            "This NPC is worried about or dealing with this situation.",
+            "They may bring it up in conversation — not as a mission",
+            "briefing, but as something weighing on them. Reference",
+            "obliquely when the player's question is adjacent; reveal",
+            "more directly only when the player asks about it or earns",
+            "the NPC's trust. Never put the literal sentence above into",
+            "the NPC's mouth — paraphrase it in their voice.",
+            "═════════════════════════════════════════════════════",
+          ];
+          prompt += `\n${situationLines.join("\n")}`;
+        }
       }
     }
   }

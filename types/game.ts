@@ -1503,6 +1503,16 @@ export interface WorldAssetConstitution {
    *  the code-built dialogue option list (knowledge probes the player
    *  may ask the NPC about). */
   knowledge?:            NPCKnowledgeItem[];
+  /** V8.67 (Day 23D) — mirrored from NPCDefinition.quest_hook so the
+   *  narrator DIALOGUE prompt can detect quest-hook NPCs without
+   *  reading the region bible. Truthy only when the NPC is a side-
+   *  quest source. */
+  quest_hook?:           boolean;
+  /** V8.67 (Day 23D) — mirrored from NPCDefinition.quest_seed. The
+   *  1-sentence "situation" the narrator threads through the NPC's
+   *  dialogue when they're a quest hook. Read by prompt-builder's
+   *  ACTIVE NPC block under a SITUATION sub-section. */
+  quest_seed?:           string;
 
   // FACTION fields
   ideology?:               string;

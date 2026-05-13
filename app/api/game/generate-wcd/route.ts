@@ -434,12 +434,17 @@ function validateWcd(parsed: unknown): { ok: true; wcd: WorldConsistencyDocument
   return { ok: true, wcd: parsed as WorldConsistencyDocument };
 }
 
-// V8.68 — instrumentation + OPT 1 (haiku model).
-// WCD output is a structured JSON seed — short, constrained, no
-// creative prose. Haiku handles it well and is ~5× faster than
-// Sonnet for this size. Switched here; the prompt body itself
-// (archetype + faction + theme guidance) is unchanged.
-const WCD_MODEL = "claude-haiku-4-5-20251001";
+// V8.69 — revert to sonnet + raise max_tokens to 4000.
+// V8.68 switched the model to haiku and left max_tokens at 2000.
+// Haiku truncated the WCD JSON before it finished emitting all
+// required fields (factions[], main_quest seed, world_rules), so
+// every new-game creation 500'd at the WCD layer.
+//
+// Sonnet handles the structured WCD output cleanly. 4000 tokens
+// gives headroom for future schema additions (e.g. Day 23.5
+// species generation) without hitting the cap again.
+const WCD_MODEL      = "claude-sonnet-4-5";
+const WCD_MAX_TOKENS = 4000;
 
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
   const promptTokens = Math.ceil((SYSTEM_PROMPT.length + userPrompt.length) / 4);
@@ -449,7 +454,7 @@ async function callClaude(client: Anthropic, userPrompt: string): Promise<string
   const startedAt = Date.now();
   const message = await client.messages.create({
     model:      WCD_MODEL,
-    max_tokens: 2000,
+    max_tokens: WCD_MAX_TOKENS,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });
@@ -464,7 +469,8 @@ async function callClaude(client: Anthropic, userPrompt: string): Promise<string
 
 export async function POST(request: NextRequest) {
   console.log("[GEN_TIMING] generate-wcd called");
-  console.log("[GEN_TIMING] generate-wcd using haiku model");
+  console.log("[GEN_TIMING] generate-wcd using sonnet model");
+  console.log(`[GEN_TIMING] generate-wcd max_tokens: ${WCD_MAX_TOKENS}`);
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {

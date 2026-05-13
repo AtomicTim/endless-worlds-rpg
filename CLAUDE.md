@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
 **Version:** 8.59
-**Status:** Day 23B Part 1 COMPLETE (commit f12c642, 510/510) — verify generation then dispatch Part 2
+**Status:** Day 23B Part 1 COMPLETE (commit d06db6f, 510/510) — verify generation then dispatch Part 2
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -77,7 +77,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 1–11. ~~Polish through vertical slice playtest~~ ✅
 12a–12c. ~~Day 23A — World Structure, dungeons, location variety (all parts + fixes)~~ ✅
-13a. ~~Day 23B Part 1 — Quest data foundation (f12c642)~~ ✅
+13a. ~~Day 23B Part 1 — Quest data foundation (d06db6f)~~ ✅
 13b. **Day 23B Part 2 — Quest discovery + world intro display** ⏳ NEXT (after generation verified)
 14. Day 23C — Morrowind Journal UI
 15. Day 23D — Side Quest Generation
@@ -103,15 +103,15 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Day 23B pt1 complete (f12c642, 510/510). Generate a world and confirm `main_quest: {archetype}, 4 breadcrumbs` in server console before dispatching Part 2.
-**Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** atomictim/endless-worlds-rpg
+**Current Phase:** Day 23B pt1 complete (d06db6f, 510/510). Generate a world and confirm `main_quest: {archetype}, 4 breadcrumbs` in server console before dispatching Part 2.
+**Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** AtomicTim/endless-worlds-rpg
 
 | Phase | Title | Status |
 | --- | --- | --- |
 | 1–11 | MVP through vertical slice playtest | ✅ Complete |
 | Gen pipeline + Day 23A (all parts) | World structure, dungeons, location variety, UX fixes | ✅ Complete |
-| Dungeon UX fixes (e97a5a6) | Nav cards, narrator context, key unlock text path, direct-heal | ✅ Complete |
-| Day 23B pt 1 (f12c642) | Quest types, WCD archetype, WorldBible quest schema, world intro template, RegionBible breadcrumb context | ✅ Complete |
+| Dungeon UX fixes (54c5895) | Nav cards, narrator context, key unlock text path, direct-heal | ✅ Complete |
+| Day 23B pt 1 (d06db6f) | Quest types, WCD archetype, WorldBible quest schema, world intro template, RegionBible breadcrumb context | ✅ Complete |
 | **Day 23B pt 2** | **Quest discovery triggers, world intro display, Act 1 breadcrumb wiring** | ⏳ **NEXT** |
 | Day 23C | Morrowind journal UI | ⏳ |
 | Day 23D | Side quest generation | ⏳ |
@@ -240,9 +240,9 @@ This scenario drives every design decision. If a feature makes that scenario *be
 100. **Room navigation semantics.** First-visit encounter; revisit suppresses description + encounter. Zero LLM cost. BACK from entrance → region zone; BACK from non-entrance → entrance. dungeon_state persists. (V8.57)
 101. **DungeonLockPopover.** Locked boss card → popover: hint + [USE key] + [FORCE STR ≥ 6] + Close. (V8.57)
 102. **Dungeon narrator context.** Inside dungeon: CURRENT ROOM injected, inventory stripped, connected locations = adjacent rooms only. Key items: NO USE button — text path (DUNGEON_KEY_USE) or nav card popover only. Out-of-combat healing: direct-dispatch. (V8.58)
-103. **Quest schema types in `types/game.ts`. (V8.59)** QuestArchetype (6 values: ancient_awakening, power_vacuum, corruption, forbidden_knowledge, sacrifice, the_return), FinaleType, QuestStatus, QuestFaction, QuestBreadcrumb, QuestResolution, MainQuest, SideQuest, QuestEntry, QuestThreads. MasterState.quest_threads? and Metadata.world_intro? added. LocationObject + NPCDefinition gained quest_breadcrumb_id?. Legacy MainQuest fields (antagonist_name/opening_hook/win_condition) replaced. WorldBible.main_quest now includes world_intro_template.
-104. **WCD generates main quest seed; WorldBible expands it. (V8.59)** WCD: archetype (1 of 6), threat_description, 2-3 factions (defenders/exploiters/deniers), finale_type. WorldBible receives MAIN QUEST SEED context block, emits: title, 4 breadcrumbs (act 1 fixed, acts 2/3 floating, climax fixed), 2 resolutions, world_intro_template. ENFORCEMENT REMINDER enforces shape (rule 97 pattern). apply-world-bible calls initializeQuestThreads(bible), logs: `[apply-world-bible] main_quest: {archetype}, {N} breadcrumbs, finale: {finale_type}, factions: {N}, intro length: {N}`.
-105. **World intro template + RegionBible breadcrumb seeding. (V8.59)** world_intro_template: 3-part second-person intro (world now / who you are / opening moment). Uses {name}/{class} placeholders. resolveWorldIntro(template, name, class) swaps placeholders at apply time → stored in metadata.world_intro. Display deferred to 23B pt2 (rule 42 still active). RegionBible receives first unanchored act-2/3 breadcrumb as ACTIVE QUEST CONTEXT. apply-regional-bible scans NPCs + location objects + dungeon room objects for quest_breadcrumb_id markers → stamps anchor_location_id (never overwrites existing). Log: `[apply-regional-bible] breadcrumb act{N} anchored to {location_id}`.
+103. **Quest schema types in `types/game.ts`. (V8.59)** QuestArchetype (6 values: ancient_awakening, power_vacuum, corruption, forbidden_knowledge, sacrifice, the_return), FinaleType, QuestStatus, QuestFaction, QuestBreadcrumb, QuestResolution, MainQuest, SideQuest, QuestEntry, QuestThreads. MasterState.quest_threads? and Metadata.world_intro? added. LocationObject + NPCDefinition gained quest_breadcrumb_id?. Legacy MainQuest fields replaced. WorldBible.main_quest now includes world_intro_template.
+104. **WCD generates main quest seed; WorldBible expands it. (V8.59)** WCD: archetype (1 of 6), threat_description, 2-3 factions (defenders/exploiters/deniers), finale_type. WorldBible emits: title, 4 breadcrumbs (act 1 fixed, acts 2/3 floating, climax fixed), 2 resolutions, world_intro_template. apply-world-bible calls initializeQuestThreads(bible), logs: `[apply-world-bible] main_quest: {archetype}, {N} breadcrumbs, finale: {finale_type}, factions: {N}, intro length: {N}`.
+105. **World intro template + RegionBible breadcrumb seeding. (V8.59)** world_intro_template: 3-part second-person (world now / who you are / opening moment). Uses {name}/{class} placeholders. resolveWorldIntro stores resolved text in metadata.world_intro. Display deferred to 23B pt2. RegionBible receives first unanchored act-2/3 breadcrumb; apply-regional-bible stamps anchor_location_id on match.
 
 ---
 
@@ -275,7 +275,7 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint
 | Encounter banner | #f4a07a light coral | --combat-encounter-banner |
 | Roll detail suffix | 10px dim mono 0.6 opacity (D&D format) | --combat-roll-detail |
 | Floating damage | 28px (36px crit) mono bold, 1100ms fade, staggered | — |
-| Resolution destination | 12px italic serif 0.75 opus | --combat-resolution-destination |
+| Resolution destination | 12px italic serif 0.75 opacity | --combat-resolution-destination |
 
 ---
 
@@ -316,5 +316,7 @@ Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim rep
 **Update routing:** New rules or status changes → CLAUDE.md. Trajectory notes, round history, future features → `/docs/project-log.md`. Quest system design → `/docs/quest-system-spec.md`.
 
 **Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` = authoritative full-suite test count. Baseline = 510 (rule 91).**
+
+**Note:** Remote URL updated to `https://github.com/AtomicTim/endless-worlds-rpg.git` (capitalized). Run `git remote set-url origin https://github.com/AtomicTim/endless-worlds-rpg.git` to silence redirect warnings.
 
 **Authority:** Architecture → /docs/architecture-spec.md · Combat → /docs/combat-spec.md · Quest system → /docs/quest-system-spec.md · Vision/scope → Game Vision · Strategic/sequencing → /docs/project-log.md.

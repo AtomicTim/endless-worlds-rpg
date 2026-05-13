@@ -1,142 +1,76 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.60
-**Status:** Dungeon combat freeze FIXED (fb5bd9c, 514/514) — Day 23B Part 2 NEXT
+**Version:** 8.61
+**Status:** Narrator item guard + lock hint COMPLETE (442e62a, 520/520) — Day 23B Part 2 NEXT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
 
 ---
 
-## 🎮 Game Vision
-
-The north-star scenario this entire project is being built for:
+## Game Vision
 
 > **Tim and his wife (or a friend) are sitting in the living room on a Saturday night. One of them says "let's play." Both pull out phones, tap a website, pick a genre, name a character. Within a couple minutes they're in a brand-new world neither has seen before — a quest waiting, NPCs to meet, dungeons to crawl, lore to discover. They play for an hour or two and walk away having had a real D&D-style adventure.**
 
-This scenario drives every design decision. If a feature makes that scenario *better*, it's worth building. If it doesn't, it's polish or scope creep.
+Design principles: Pickup-friendly · Mobile-first viewport · Multiple play styles · Procedural variety > authored depth · Multiplayer-aware (Day 24) · Customization-aware (Day 25) · D&D narration is the soul · Death must matter.
 
-### What this game IS
-
-- **A pickup D&D-style RPG.** Sit down, play in a few minutes, walk away when you're done.
-- **Procedurally generated every game.** No two playthroughs share a world.
-- **AI-narrated with D&D-style prose.** Descriptions that hit home like a good DM.
-- **CRPG-depth mechanics.** Real stat checks, inventory, leveling, gear, combat math.
-- **Multiple play styles supported simultaneously.** Long quest, speedrun, exploration, settlement-grind, lifestyle/job-grind (eventual), mixed.
-- **Mobile-first accessible.** The phone in your pocket IS the game console.
-- **Multiplayer (PRE-LAUNCH per V8.38).** Two phones, one shared world. Active requirement.
-- **User-customizable worlds (PRE-LAUNCH per V8.38).** User-supplied theme prompts beyond fixed genre presets.
-
-### What this game IS NOT
-
-- **Not Baldur's Gate.** Complexity in narrative and growth, not interface.
-- **Not a CYOA tool.** Real mechanics matter.
-- **Not a long-term single-character commitment.** Replayability from NEW playthroughs.
-- **Not a tabletop replacement.** Complements physical D&D.
-- **Not a hardcore strategy game.** Dramatic narrative beats with mechanical weight, not min-maxing.
-
-### Competitive positioning
-
-> **"Baldur's Gate depth without Baldur's Gate overhead. D&D feel without needing a DM."**
-
-### Design principles
-
-1. **Pickup-friendly.** Time from "let's play" to "playing" must stay short.
-2. **Mobile-first viewport.** Every UI verified on phone-width before desktop polish.
-3. **Multiple play styles supported.** No system forces one playstyle.
-4. **Procedural variety > authored depth.** Lean on AI for breadth, code for reliability.
-5. **Multiplayer-aware architecture (PRE-LAUNCH).** Day 21-23 actively support party-of-N. Day 24 wires the multiplayer layer.
-6. **Customization-aware architecture (PRE-LAUNCH).** Day 25 wires the customization layer.
-7. **D&D-style narration is the soul.**
-8. **Death must matter.** HP, currency, XP rollback. Settlements are deliberate checkpoints.
+**Positioning:** "Baldur's Gate depth without Baldur's Gate overhead. D&D feel without needing a DM."
 
 ---
 
-## 🎯 Project Roles & Working Mode
+## Project Roles
 
-**Vision & Creative Direction:** Tim (the user). First-time game developer.
-
-**Senior Engineering / Tech Direction:** Claude.ai. Translates vision into architecture, flags scope/risk/feasibility, pushes back on premature/risky/scope-drifting decisions. Defers to creative-director call on vision.
-
-**Implementation:** Claude Code (local Sonnet agent).
+**Vision:** Tim. **Engineering/Architecture:** Claude.ai. **Implementation:** Claude Code.
 
 **Decision flow:** Tim describes → Claude.ai assesses → Tim decides → Claude.ai writes prompt → Claude Code implements → Tim verifies → Claude.ai updates CLAUDE.md.
 
-**Per-prompt protocols (cumulative):**
-- **V8.40 — Investigation-before-patching.** Validate root-cause hypothesis BEFORE patching.
-- **V8.41 — Origin/main baseline check.** Step 1 of every prompt: `git fetch origin && git log origin/main --oneline -5`.
-- **V8.60 — jest baseline = 514.** See rule 91.
+**Per-prompt protocols:**
+- **V8.40** — Investigation-before-patching.
+- **V8.41** — Origin/main baseline check: `git fetch origin && git log origin/main --oneline -5` as step 1.
+- **V8.61** — jest baseline = 520. See rule 91.
 
 ---
 
-## 📋 Strategic Trajectory Notes
+## Trajectory
 
-> **Full trajectory notes, round history, future feature ideas, and open questions live in `/docs/project-log.md`.** Quest system design spec lives in `/docs/quest-system-spec.md`. This section is a summary only.
+> Full notes, round history, future features in `/docs/project-log.md`. Quest spec in `/docs/quest-system-spec.md`.
 
 ### Sequence
 
-1–11. ~~Polish through vertical slice playtest~~ ✅
-12a–12c. ~~Day 23A — World Structure, dungeons, location variety (all parts + fixes)~~ ✅
-13a. ~~Day 23B Part 1 — Quest data foundation (d06db6f)~~ ✅
+1–13a. ~~Through Day 23B Part 1~~ ✅
 13b. **Day 23B Part 2 — World intro display + quest discovery + region spawn fix** ⏳ NEXT
 14. Day 23C — Morrowind Journal UI
-15. Day 23D — Side Quest Generation
-15a. Day 23.5 — Character Creation Rework
-16. Merchant Trading Foundation round
-17. Combat UX & Flow Polish round
-18. Mobile Combat Layout round
+15. Day 23D — Side Quest Generation · 15a. Day 23.5 — Character Creation Rework
+16–18. Merchant Trading · Combat UX Polish · Mobile Combat Layout
 19. Day 24 — Multiplayer Foundation
 20. Day 25 — Customization Layer
-21. Genre Session — sub-genre expansion
-22. Day 20.5 — Verbal Action (deferred)
-23. Day 20.6 — Encounter Avoidance / Stealth (deferred)
-
-### Key open questions
-
-- XP threshold tuning — revisit after more playtest data.
-- Death stash / recovery mechanic — design decision needed (see project-log.md).
-- Character creation rework — design questions in project-log.md Day 23.5 section.
-- Nav card peer disappearance after dungeon return — share world_graph.nodes dump if it reproduces.
-- Nav card color differentiation for node types — deferred.
+21+. Genre Session · Day 20.5 Verbal Action · Day 20.6 Stealth (deferred)
 
 ---
 
-## 🔄 Current Status (Read This First)
+## Current Status
 
-**Current Phase:** Dungeon combat freeze fixed (fb5bd9c, 514/514). Day 23B Part 2 is next.
+**Phase:** Narrator item guard + lock hint fix complete (442e62a, 520/520). Day 23B pt2 NEXT.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** AtomicTim/endless-worlds-rpg
 
-| Phase | Title | Status |
-| --- | --- | --- |
-| 1–11 | MVP through vertical slice playtest | ✅ Complete |
-| Gen pipeline + Day 23A (all parts) | World structure, dungeons, location variety, UX fixes | ✅ Complete |
-| Day 23B pt 1 (d06db6f) | Quest types, WCD archetype, WorldBible quest schema, world intro template, RegionBible breadcrumb context | ✅ Complete |
-| Dungeon combat freeze fix (fb5bd9c) | isDungeonNode guard in step 7c-3 + combatBlocksDungeonEntry in useDungeonRuntime | ✅ Complete |
-| **Day 23B pt 2** | **Region spawn fix + world intro display + Act 1 breadcrumb discovery** | ⏳ **NEXT** |
-| Day 23C | Morrowind journal UI | ⏳ |
-| Day 23D | Side quest generation | ⏳ |
-| Day 23.5 | Character creation rework | ⏳ |
-| Merchant Trading Foundation | Persistent merchant inventory, buy/sell | ⏳ |
-| Combat UX & Flow Polish | HP timing + hit/miss + flee-fail + death summary/stash | ⏳ Post-Day-23 |
-| Mobile Combat Layout | Stacked portrait layout at narrow viewport | ⏳ |
-| Day 24 | Multiplayer Foundation | ⏳ Pre-launch |
-| Day 25 | Customization Layer | ⏳ Pre-launch toward end |
-| Genre Session | Sub-genre expansion | ⏳ Post-Day-25 |
-| Skills System / Verbal Action / Stealth | Deferred systems | ⏳ Deferred |
+| Phase | Status |
+| --- | --- |
+| Gen pipeline + Day 23A (all parts + fixes) | ✅ |
+| Day 23B pt 1 — Quest data foundation (d06db6f) | ✅ |
+| Dungeon combat freeze fix (fb5bd9c) | ✅ |
+| Narrator item guard + lock hint (442e62a) | ✅ |
+| **Day 23B pt 2 — region spawn + world intro + Act 1 breadcrumb** | ⏳ **NEXT** |
+| Day 23C Morrowind journal UI | ⏳ |
+| Day 23D Side quest generation | ⏳ |
+| Day 23.5 Character creation rework | ⏳ |
+| Merchant Trading / Combat UX / Mobile Layout | ⏳ |
+| Day 24 Multiplayer / Day 25 Customization | ⏳ Pre-launch |
 
-**Active genres:** Fantasy, Cyberpunk, Horror/Lovecraftian, Space Opera, Post-Apocalyptic. 5 classes per genre (25 total).
-
-### Known issues
-
-**HP bar timing — DEFERRED:** Bundled with Combat UX Polish.
-
-**No equip/unequip during combat — INTENTIONAL (rule 63):** Day 20.5 scope item.
-
-**Nav card peer disappearance — UNRESOLVED:** buildCards confirmed correct. Likely malformed graph node.
+**Known issues:** HP bar timing (deferred) · No equip during combat (intentional, rule 63) · Nav card peer disappearance (unresolved, share world_graph.nodes if reproduces).
 
 ---
 
-## ⚡ FOUNDATIONAL RULES
+## FOUNDATIONAL RULES
 
 1. World Assets Are Permanent. Write-once.
 2. Navigation Is Nav Bar Only. Map is visual only.
@@ -148,102 +82,104 @@ This scenario drives every design decision. If a feature makes that scenario *be
 8. WCD Is Absolute Law.
 9. Failed Checks = Evasion Only.
 10. Highlights Are Exact Tier 1 Matches.
-11. Highlight clicks resolve display-name → node id before navigateTo. (V8.26)
-12. Every successful arrival flips `discovered = true` at end of step 7. (V8.26)
-13. Cache hit on ARRIVING synthesizes a `narratorResponse` and falls through. (V8.27)
+11. Highlight clicks resolve display-name → node id. (V8.26)
+12. Every successful arrival flips `discovered = true`. (V8.26)
+13. Cache hit on ARRIVING synthesizes response, skips narrator API. (V8.27)
 14. Map description sourcing: World/Region/Local — no cross-tier bleed. (V8.27)
-15. Region zone assets always populate both `constitution.physical_description` AND `constitution.atmosphere` from same source prose. (V8.28)
-16. Collision-check loops over expandable node positions must guard each entry with `isValidPos`. (V8.28)
-17. Story feed location highlights are tier-aware: region (lavender), location (sky-blue), landmark (mint). (V8.29, V8.30)
-18. Region zone D2 card builder iterates adjacent_regions/connections without filtering by stripped links. (V8.29 + V8.30)
-19. Span dispatch in StoryFeed separates `key` from spread props before JSX. (V8.29)
-20. Region tier description resolves from parent region zone asset for any node in that region. (V8.30)
-21. Map tier defaults to Local on initial mount for any non-region-zone node. (V8.30)
-22. New region creation always wires the origin region symmetrically into adjacent-region connections. (V8.30)
-23. RegionBible parse failure must never block the player. (V8.30)
-24. Enemy entries follow the Enemy interface. Validation is warn-don't-500. (V8.31)
-25. Encounter rosters reference enemy ids resolved via 4-layer fall-through. Unresolvable ids scrubbed at apply time. (V8.31)
-26. metadata.region_bibles accumulates expanded RegionBibles by id. (V8.31)
-27. Combat system design defers to /docs/combat-spec.md. Spec FIRST, code SECOND. (V8.31)
-28. Combat math lives in `/lib/game/combat-resolver.ts`. Pure functions, RNG injected. (V8.32)
-29. Combat turn loop lives in `/lib/game/combat-engine.ts`. Defeat / victory / flee dismiss the combat state slice entirely. (V8.32)
-30. last_settlement_hub_id and navigation_trail update on every successful arrival in step 7c-2. INITIALIZED AT GAME SPAWN in apply-world-bible. (V8.32 + V8.38)
-31. pre_combat_xp captured at encounter start. Defeat handler restores player.xp = pre_combat_xp. (V8.32)
-32. Encounter trigger is in step 7c-3 — SKIPPED for dungeon nodes (rule 106). (V8.32 + V8.60)
-33. Enemy behavior on Day 20 is hardcoded "attack the player" regardless of behavior_flavor field. (V8.32)
-34. Returning to a region whose bible is in metadata.region_bibles AND whose graph node is discovered is GRAPH_NAVIGATE, not WORLD_EXPLORE. (V8.33)
+15. Region zone assets populate both `physical_description` AND `atmosphere` from same prose. (V8.28)
+16. Collision-check loops guard each entry with `isValidPos`. (V8.28)
+17. Story feed location highlights tier-aware: region (lavender), location (sky-blue), landmark (mint). (V8.29–30)
+18. Region zone D2 card builder iterates adjacent_regions/connections without filtering stripped links. (V8.29–30)
+19. Span dispatch separates `key` from spread props. (V8.29)
+20. Region tier description resolves from parent region zone asset. (V8.30)
+21. Map tier defaults to Local on initial mount for non-region-zone nodes. (V8.30)
+22. New region creation wires origin region symmetrically. (V8.30)
+23. RegionBible parse failure never blocks the player. (V8.30)
+24. Enemy entries follow Enemy interface. Validation is warn-don't-500. (V8.31)
+25. Encounter rosters resolved via 4-layer fall-through; unknown ids scrubbed at apply time. (V8.31)
+26. metadata.region_bibles accumulates RegionBibles by id. (V8.31)
+27. Combat system design defers to /docs/combat-spec.md. (V8.31)
+28. Combat math in `/lib/game/combat-resolver.ts`. Pure functions, RNG injected. (V8.32)
+29. Combat turn loop in `/lib/game/combat-engine.ts`. Defeat/victory/flee dismiss combat slice. (V8.32)
+30. last_settlement_hub_id + navigation_trail update on every arrival. Initialized at game spawn. (V8.32+38)
+31. pre_combat_xp captured at encounter start. Defeat restores xp. (V8.32)
+32. Encounter trigger in step 7c-3 — SKIPPED for dungeon nodes (rule 106). (V8.32+60)
+33. Enemy behavior hardcoded "attack" regardless of behavior_flavor. (V8.32)
+34. GRAPH_NAVIGATE for regions already in metadata.region_bibles with discovered node. (V8.33)
 35. apply-regional-bible is idempotent: skipped: true when redundant. (V8.33)
 36. mergeNodePreservingDiscovered preserves discovered: true on re-apply. (V8.33)
-37. arrivedAt in step 7c reads from updatedState (post-reclassification). (V8.33)
-38. Combat narration is selective: routine events templated; dramatic events call /api/game/narrate-combat. (V8.34, refined V8.35 + V8.37)
-39. CombatMode is the bottom-strip swap when `master_state.combat?.active === true`. (V8.34)
-40. Each combatant row reserves a portrait slot (~128px). (V8.34)
-41. Bestiary codex entries write on `combat_start`, deduplicated by enemy.id. (V8.34)
-42. New game preamble: `recent_messages.length === 0` triggers world intro if `metadata.world_intro` is set, else "Your adventure begins. What will you do first?" World intro display wired in Day 23B pt2. (V8.34 + V8.59)
-43. Starting equipment lives in `lib/game/starting-equipment.ts` as separate module. (V8.35)
-44. Every starting weapon ships with `equipped: true` AND `effect.damage_die`. Every starting armor ships with `equipped: true` AND `effect.armor_bonus`. (V8.35)
-45. `combat_start` is templated, not LLM-narrated. (V8.35)
-46. `player_turn_start` and `enemy_phase_start` events emitted by combat-engine at phase transitions. (V8.35)
-47. Pacing delays: 800ms before enemy_phase_start, 800ms before player_turn_start, 500ms between successive distinct enemy actors. (V8.35)
-48. CombatMode header pill `displayPhase` is decoupled from `combat.current_turn_index` and flips ahead of feed. (V8.35)
-49. Enemy-turn loop is shared via `advanceUntilPlayerTurnOrEnd`. Single source of truth. (V8.36)
-50. When combat starts with `turn_order[0] !== PLAYER`, the initial enemy phase MUST fire via `kickoffCombat` from useEffect. Tracked via useRef Set. (V8.36)
-51. Inventory detail panel surfaces combat stats: WEAPON Damage, ARMOR Armor (including +0), CONSUMABLE Heal. EQUIPPED pill. (V8.36)
-52. Combat input is button-only when combat is active. submitAction early-bails. INTERIM until Day 20.5. (V8.37)
-53. Use Item is templated only. Format: `"You use <item>. Restored N HP."` Out-of-combat healing consumables direct-dispatch via `handleDirectConsumeItem`. (V8.37 + V8.58)
-54. Crit events render as TWO lines: templated banner first (instant), then LLM crit prose. (V8.37)
-55. `planEventSuppression(events)` pre-scans event batches. When victory present: kill events dropped, last crit before victory has prose suppressed. (V8.37)
-56. Resolution events render as two-line centered block: banner + ≤20-word LLM prose. max_tokens 120. (V8.37)
-57. CombatEvent.rolls field populates on every event with damage/d20/heal outcome. (V8.38)
-58. Inline roll suffix renders subtle parenthetical breakdown via `{primary, rolls}` return shape from templates. (V8.38)
-59. Floating damage numbers fire on hit/crit/heal events ONLY. (V8.38 + V8.39)
-60. Defeat teleport — `last_settlement_hub_id` initialized at game spawn. handleDefeat uses 3-tier fallback chain. (V8.38)
-61. Resolution events (defeat / flee_success) carry destination payload. Victory does NOT get destination line. (V8.38)
-62. `rolls.d20` stores RAW d20 value (1-20). `target_dc` wrapped in `Math.round()` for display. (V8.39)
-63. Inventory Use button during combat routes through `submitCombatAction`. Equip/Unequip/Read/Search/Drop buttons HIDDEN during combat. INTERIM until Day 20.5. (V8.39)
-64. Floating damage entry routing uses explicit `switch(event.type)`. (V8.39)
-65. Settlement-hub detection in step 7c-2 uses `is_settlement_node === true` predicate ONLY. (V8.39)
-66. Floating damage emission lives INSIDE `projectCombatEventsToFeed` (useCombat), called AFTER pacing sleeps. (V8.40)
-67. Multi-host floating damage uses `computeFloatStartDelay` pure helper. 300ms increments. (V8.40)
-68. Roll display format is D&D-style: `(d20: 17, +2 → 19 vs 12 | 1d6+2)` hits, `(d20: 1)` fumbles, `(d20: 20 | ...)` crits, `(1d8: 4 +4 = 8)` heals. (V8.40)
-69. Codex is rendered as `CodexModal` overlay (z-50, ESC + backdrop + X close). (V8.40)
-70. **CSS containment lesson:** `overflow-x/y: auto` clips absolutely-positioned children. Use `overflow: visible` on containers hosting them. (V8.40)
-71. **Integration tests required for routing helpers and lookup keys.** (V8.40)
-72. Nav cards group by movement direction: BACK / DEEPER / PEER / UNDISCOVERED. Pure-function `lib/game/nav-cards.ts` owns `buildCards` + `groupCardsByDirection`. 140px mini-columns (max 2 tall). (V8.41–V8.45)
-73. Nav card tier color via `tierOfNode`. Region → lavender · Settlement → sky-blue · Sub-location → mint · Dungeon → burnt-copper. (V8.41)
+37. arrivedAt in step 7c reads from updatedState. (V8.33)
+38. Combat narration selective: routine templated; dramatic calls /api/game/narrate-combat. (V8.34–37)
+39. CombatMode bottom-strip swap when `combat?.active === true`. (V8.34)
+40. Each combatant row reserves ~128px portrait slot. (V8.34)
+41. Bestiary codex entries write on combat_start, deduplicated by enemy.id. (V8.34)
+42. New game preamble: world intro if `metadata.world_intro` set, else "Your adventure begins." Display wired in 23B pt2. (V8.34+59)
+43. Starting equipment in `lib/game/starting-equipment.ts`. (V8.35)
+44. Starting weapon: equipped + damage_die. Starting armor: equipped + armor_bonus. (V8.35)
+45. combat_start templated, not LLM-narrated. (V8.35)
+46. player_turn_start + enemy_phase_start emitted at phase transitions. (V8.35)
+47. Pacing: 800ms before enemy_phase_start, 800ms before player_turn_start, 500ms between distinct enemy actors. (V8.35)
+48. CombatMode displayPhase decoupled from turn_index, flips ahead of feed. (V8.35)
+49. advanceUntilPlayerTurnOrEnd single source of truth for enemy turn loop. (V8.36)
+50. kickoffCombat fires initial enemy phase from useEffect when turn_order[0] !== PLAYER. Tracked via useRef. (V8.36)
+51. Inventory detail: WEAPON Damage, ARMOR Armor (+0 shown), CONSUMABLE Heal. EQUIPPED pill. (V8.36)
+52. Combat input button-only. INTERIM until Day 20.5. (V8.37)
+53. Use Item templated: "You use {item}. Restored N HP." Out-of-combat: direct-dispatch via handleDirectConsumeItem. (V8.37+58)
+54. Crit: two lines — templated banner instant, then LLM prose. (V8.37)
+55. planEventSuppression pre-scans batches. Victory: kill events dropped, last crit prose suppressed. (V8.37)
+56. Resolution events: two-line centered block, ≤20-word LLM prose, max_tokens 120. (V8.37)
+57. CombatEvent.rolls on every event. (V8.38)
+58. Inline roll suffix: `{primary, rolls}` return shape. (V8.38)
+59. Floating damage: hit/crit/heal only. player_attack on event.target, enemy_attack/use_item on PLAYER_ID. (V8.38–39)
+60. Defeat teleport: last_settlement_hub_id initialized at spawn; 3-tier fallback. (V8.38)
+61. Defeat/flee carry destination payload. Victory does not. (V8.38)
+62. rolls.d20 stores raw 1-20. target_dc wrapped in Math.round(). (V8.39)
+63. Inventory during combat: USE routes submitCombatAction; Equip/Unequip/Read/Drop hidden. INTERIM. (V8.39)
+64. Floating damage routing uses explicit switch(event.type). (V8.39)
+65. Settlement-hub detection: is_settlement_node === true predicate only. (V8.39)
+66. Floating damage emitted inside projectCombatEventsToFeed, after pacing sleeps. (V8.40)
+67. computeFloatStartDelay: 300ms increments, animation-fill-mode: both. (V8.40)
+68. Roll display D&D-style: hits/fumbles/crits/heals formats. (V8.40)
+69. Codex: CodexModal overlay z-50, ESC + backdrop + X. (V8.40)
+70. **CSS containment:** overflow auto clips absolutely-positioned children. Use overflow visible on hosting containers. (V8.40)
+71. **Integration tests required for routing helpers.** Unit tests against fake events can pass while real-data wiring is broken. (V8.40)
+72. Nav cards: BACK/DEEPER/PEER/UNDISCOVERED groups. buildCards + groupCardsByDirection in nav-cards.ts. 140px mini-columns, max 2 tall. (V8.41–45)
+73. Nav card tier color: region lavender · settlement sky-blue · sub-location mint · dungeon burnt-copper. (V8.41)
 74. Cross-region BACK targets previous region's settlement hub. (V8.41)
-75. WorldMap cross-region → Region tier. Superseded by rule 81. (V8.41 → V8.44)
-76. **Origin/main baseline check:** Claude Code MUST run `git fetch origin && git log origin/main --oneline -5` as step 1. (V8.41)
-77. **RegionBible prompt template MUST distinguish settlement_id from region_id.** (V8.42)
-78. **Apply-regional-bible heal-on-apply:** `splitConflatedRegionSettlement(bible)` runs at step 0d. (V8.42)
-79. **Prompt-template hardcoded structural IDs are a recurring bug class.** (V8.42)
-80. **Nav card dedup at region zone.** DEEPER suppresses settlement card if it matches BACK destination. (V8.43–V8.44)
-81. **Map tier auto-switch fires on every node arrival.** Region zone → tier 2, everything else → tier 1. (V8.43–V8.44)
-82. **jest baseline history.** 393→452→454→484→491→499→510→**514** (+4 dungeon combat guards). See rule 91. (V8.47–V8.60)
-83. **Loot never auto-credits.** All drops go to `MasterState.floor_loot[]`. (V8.47)
-84. **Container search is engine-resolved, zero LLM calls.** (V8.47)
-85. **Currency and inventory cap are canonical constants.** `INVENTORY_CAP = 20`. (V8.47)
-86. **Revisit suppression.** `discovered === true` → "You return to {name}." only. (V8.48)
-87. **Object highlight popup context-aware labels.** CONTAINER → "Search". ITEM POI → "Examine". (V8.48)
-88. **`resolveUseItem` resolves heal by effect, not by id.** (V8.49)
-89. **Archetype system in `lib/game/archetypes.ts`.** 25 classes. STAT_BASE=2, primary +2, secondary +1. (V8.50)
-90. **Level-up flow is post-combat, player-driven.** LevelUpModal + 5-button picker. (V8.50)
-91. **jest baseline = 514 (V8.60).** Dungeon combat fix added 4 tests (510→514). 514 is the authoritative count going forward. (V8.60)
-92. **Ability modifier: `Math.floor((score - 2) / 2)`.** Both `abilityMod` and `getAttributeModifier` MUST match. (V8.51)
+75. WorldMap cross-region → Region tier. Superseded by rule 81. (V8.41→44)
+76. **Origin/main baseline check** as step 1 of every prompt. (V8.41)
+77. **RegionBible prompt MUST distinguish settlement_id from region_id.** (V8.42)
+78. **Apply-regional-bible: splitConflatedRegionSettlement at step 0d.** (V8.42)
+79. **Prompt-template hardcoded IDs are a recurring bug class.** (V8.42)
+80. **Nav card dedup at region zone.** DEEPER suppresses settlement if matches BACK. (V8.43–44)
+81. **Map tier auto-switch on every arrival.** Region zone → tier 2, else → tier 1. (V8.43–44)
+82. **jest baseline history.** 393→452→454→484→491→499→510→514→**520**. See rule 91. (V8.47–V8.61)
+83. **Loot never auto-credits.** All drops go to floor_loot[]. Player must SEARCH REMAINS or TAKE. (V8.47)
+84. **Container search is engine-resolved, zero LLM calls.** ≥1 container per combat-eligible node. (V8.47)
+85. **Currency + inventory cap canonical.** INVENTORY_CAP = 20. (V8.47)
+86. **Revisit suppression.** discovered: true → "You return to {name}." only. (V8.48)
+87. **Object popup context-aware labels.** CONTAINER → "Search". ITEM POI → "Examine". (V8.48)
+88. **resolveUseItem resolves heal by effect, not id.** effect.heal → flat; BASIC_HEALTH_POTION_ID → 1d8+4; else no-op. (V8.49)
+89. **Archetype system in archetypes.ts.** 25 classes. STAT_BASE=2, primary +2, secondary +1. (V8.50)
+90. **Level-up post-combat, player-driven.** LevelUpModal + 5-button picker. STAT_XP auto-applies. (V8.50)
+91. **jest baseline = 520 (V8.61).** Narrator guard fix added 6 tests (514→520). 520 is authoritative. (V8.61)
+92. **Ability modifier: floor((score-2)/2).** abilityMod and getAttributeModifier MUST match. pip bar: value/2. (V8.51)
 93. **Enemy stat budgets: tier-1 agi_mod ≤1, hp min ≤8.** Bible prompts include ENEMY STAT BUDGET block. (V8.51)
-94. **RegionBibleCache in-flight dedup via promise map.** (V8.53)
+94. **RegionBibleCache in-flight dedup via Map<string, Promise>.** awaitRegionalBible resolves: cache → in-flight → null/live. (V8.53)
 95. **Post-apply pregeneration burst.** Wizard fires all adjacent_regions immediately. WorldBible NOT split. (V8.53)
-96. **Dungeon data layer in two pure modules.** `dungeon-validation.ts` + `dungeon-navigation.ts`. (V8.54)
-97. **LLM generation prompt skeleton anchors output.** Update skeleton + enforcement + logging together. (V8.55)
-98. **Nav card type label via `nodeTypeLabel()`.** settlement_hub→SETTLEMENT · outpost→OUTPOST · wilderness→WILDERNESS · dungeon→DUNGEON · landmark→LANDMARK · abandoned_settlement→RUINS. (V8.56)
-99. **Dungeon runtime in `hooks/useDungeonRuntime.ts`.** Separate hook. initDungeonState on arrival; re-fire guarded by useRef; "The dungeon falls silent." on boss clear. (V8.57)
+96. **Dungeon data layer in two pure modules.** dungeon-validation.ts + dungeon-navigation.ts (14 pure functions). (V8.54)
+97. **LLM generation prompt skeleton anchors output count and structure.** Update skeleton + enforcement + logging together. (V8.55)
+98. **Nav card type label via nodeTypeLabel().** settlement_hub→SETTLEMENT · outpost→OUTPOST · wilderness→WILDERNESS · dungeon→DUNGEON · landmark→LANDMARK · abandoned_settlement→RUINS. typeLabel() fallback chain: REGION → nodeTypeLabel → SETTLEMENT → category. (V8.56)
+99. **Dungeon runtime in hooks/useDungeonRuntime.ts.** Separate hook mirrors useCombat. initDungeonState on arrival; re-fire guarded by useRef; "The dungeon falls silent." on boss clear. (V8.57)
 100. **Room navigation semantics.** First-visit encounter; revisit suppresses description + encounter. Zero LLM cost. BACK from entrance → region zone; BACK from non-entrance → entrance. dungeon_state persists. (V8.57)
-101. **DungeonLockPopover.** Locked boss card → popover: hint + [USE key] + [FORCE STR ≥ 6] + Close. (V8.57)
-102. **Dungeon narrator context.** Inside dungeon: CURRENT ROOM injected, inventory stripped, connected locations = adjacent rooms only. Key items: NO USE button — text path (DUNGEON_KEY_USE) or nav card popover only. Out-of-combat healing: direct-dispatch. (V8.58)
-103. **Quest schema types in `types/game.ts`. (V8.59)** QuestArchetype (6 values), FinaleType, QuestStatus, QuestFaction, QuestBreadcrumb, QuestResolution, MainQuest, SideQuest, QuestEntry, QuestThreads. MasterState.quest_threads? and Metadata.world_intro? added. LocationObject + NPCDefinition gained quest_breadcrumb_id?.
-104. **WCD generates main quest seed; WorldBible expands it. (V8.59)** WCD: archetype + threat + factions + finale. WorldBible emits 4 breadcrumbs + 2 resolutions + world_intro_template. apply-world-bible calls initializeQuestThreads, logs main_quest diagnostic.
-105. **World intro template + RegionBible breadcrumb seeding. (V8.59)** 3-part second-person intro, {name}/{class} placeholders, resolved at apply time → metadata.world_intro. RegionBible receives first unanchored breadcrumb; apply-regional-bible stamps anchor_location_id.
-106. **Dungeon encounter guards (V8.60).** Two guards prevent combat corruption: (A) useGameLoop step 7c-3 checks `isDungeonNode(arrivedNode)` — dungeon nodes skip encounter entirely (encounters happen per-room via useDungeonRuntime.navigateToRoom, rule 100). (B) useDungeonRuntime auto-entry useEffect checks `combatBlocksDungeonEntry(masterState)` — bails when combat.active is true, re-runs once combat resolves. `combatBlocksDungeonEntry` is an exported pure predicate. 4 new tests: null combat, active true, no combat slice, active false.
+101. **DungeonLockPopover.** Locked boss card → popover: hint + [USE key when held] + [FORCE STR ≥ 6] + Close. (V8.57)
+102. **Dungeon narrator context.** CURRENT ROOM injected, inventory stripped, connected locations = adjacent rooms only. Key items: NO USE button — text path (DUNGEON_KEY_USE) or nav card popover only. Out-of-combat healing: direct-dispatch. (V8.58)
+103. **Quest schema types.** QuestArchetype (6 values), FinaleType, QuestStatus, QuestFaction, QuestBreadcrumb, QuestResolution, MainQuest, SideQuest, QuestEntry, QuestThreads in types/game.ts. MasterState.quest_threads? + Metadata.world_intro? added. LocationObject + NPCDefinition gained quest_breadcrumb_id?. (V8.59)
+104. **WCD generates main quest seed; WorldBible expands it.** WCD: archetype + threat + factions + finale. WorldBible: 4 breadcrumbs (act1 fixed, 2/3 floating, climax fixed) + 2 resolutions + world_intro_template. initializeQuestThreads called at apply time. Log: `main_quest: {archetype}, {N} breadcrumbs, finale: {finale_type}`. (V8.59)
+105. **World intro template + RegionBible breadcrumb seeding.** 3-part second-person intro, {name}/{class} placeholders → metadata.world_intro at apply time. RegionBible receives first unanchored breadcrumb as ACTIVE QUEST CONTEXT; apply-regional-bible stamps anchor_location_id on match. Display deferred to 23B pt2. (V8.59)
+106. **Dungeon encounter guards.** (A) useGameLoop step 7c-3: isDungeonNode(arrivedNode) → skip encounter entirely. (B) useDungeonRuntime auto-entry: combatBlocksDungeonEntry(masterState) → bail when combat.active, re-run when resolved. combatBlocksDungeonEntry is exported pure predicate. (V8.60)
+107. **Narrator items_acquired permanently blocked.** lib/game/narrator-guards.ts exports acceptNarratorItemsAcquired() → always returns []. useGameLoop step 8b routes narratorResponse.items_acquired through it; console.warn fires on every violation. Items enter inventory ONLY via resolveInteract→resolveLoot() (rule 84) or handleVictory→floor_loot (rule 83). Never via narrator prose. 6 regression tests include Surveyor's Seal symptom case. (V8.61)
+108. **Dungeon lock hint must not name the key item.** Hint describes the lock mechanism and KIND of object needed (a seal, a key, a token) WITHOUT naming the specific item. Player discovers the item's name by finding it. All four prompt locations updated (WB skeleton, WB DUNGEON STRUCTURE block, RB skeleton, RB DUNGEON STRUCTURE block). DungeonLockPopover [USE {key_item_name}] button only appears when player holds the item (rule 101) — name visible only then. (V8.61)
 
 ---
 
@@ -262,7 +198,7 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint
 | --- | --- | --- |
 | Narrator prose | var(--ink-1) | — |
 | NPC quoted speech | #f0c060 italic weight 600 | --hl-said |
-| Player actions (out-of-combat) | #7ab8c8 teal-blue 12px mono italic | — |
+| Player actions | #7ab8c8 teal-blue 12px mono italic | — |
 | Item highlights | #e8c547 yellow | --hl-item |
 | Region highlights | #c4b5fd lavender | --hl-region |
 | Location highlights | #7dd3fc sky-blue | --hl-loc |
@@ -270,38 +206,29 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint
 | Dungeon | #b45309 burnt-copper | --hl-dungeon |
 | NPC highlights | var(--accent) orange | — |
 | Level-up beat | --hl-pass green (centered) | — |
-| Combat routine player/enemy | #7ab8c8 teal / #e87c6d warm red | --combat-player / --combat-enemy |
-| Combat crits | #3b82a8 deeper blue / #c0392b blood red BOLD | --combat-player-crit / --combat-enemy-crit |
-| Combat outcomes | #7dbb8e victory / #a93226 defeat / #a8a29c flee | — |
-| Encounter banner | #f4a07a light coral | --combat-encounter-banner |
-| Roll detail suffix | 10px dim mono 0.6 opacity (D&D format) | --combat-roll-detail |
-| Floating damage | 28px (36px crit) mono bold, 1100ms fade, staggered | — |
+| Combat player/enemy routine | #7ab8c8 / #e87c6d | --combat-player / --combat-enemy |
+| Combat crits | #3b82a8 / #c0392b BOLD | --combat-player-crit / --combat-enemy-crit |
+| Combat outcomes | #7dbb8e / #a93226 / #a8a29c | victory / defeat / flee |
+| Encounter banner | #f4a07a | --combat-encounter-banner |
+| Roll detail suffix | 10px dim mono 0.6 opacity | --combat-roll-detail |
+| Floating damage | 28px (36px crit) bold, 1100ms fade | — |
 | Resolution destination | 12px italic serif 0.75 opacity | --combat-resolution-destination |
 
 ---
 
 ## Tech Stack · Classes · Monetization
 
-| Layer | Tool |
-| --- | --- |
-| Frontend | Next.js 14 (App Router) |
-| Styling | Tailwind + shadcn/ui + design tokens |
-| Database | Supabase (migrations 001-009) |
-| AI (world gen + narration + combat) | claude-sonnet-4-5 |
-| AI (RegionBible) | claude-haiku-4-5-20251001 |
-| Payments | Stripe · Deploy: Vercel · Audio: Howler.js · State: Zustand |
+**Stack:** Next.js 14 · Tailwind + shadcn/ui · Supabase · claude-sonnet-4-5 (narration) · claude-haiku-4-5-20251001 (RegionBible) · Stripe · Vercel · Howler.js · Zustand
 
-| Genre | Primary Color | Currency | HP | Classes (5) |
+| Genre | Color | Currency | HP | Classes |
 | --- | --- | --- | --- | --- |
 | Fantasy | #f59e0b amber | Gold | HP | Knight · Rogue · Mage · Ranger · Herald |
 | Cyberpunk | #22d3ee cyan | Credits | Integrity | Netrunner · Fixer · Street Samurai · Enforcer · Ghost |
-| Horror | #84cc16 acid green | Marks | HP + Sanity | Investigator · Cultist · Survivor · Phantom · Medium |
+| Horror | #84cc16 acid green | Marks | HP+Sanity | Investigator · Cultist · Survivor · Phantom · Medium |
 | Space Opera | #a855f7 purple | Stellar Units | Hull Integrity | Commander · Pilot · Engineer · Marine · Recon |
 | Post-Apoc | #ea580c rust | Caps | HP | Scavenger · Raider · Medic · Runner · Demagogue |
 
-*Sub-genre expansion deferred to Genre Session post-Day-25.*
-
-| Feature | Free | Adventurer ($6.99) | Legend ($14.99) |
+| Feature | Free | Adventurer $6.99 | Legend $14.99 |
 | --- | --- | --- | --- |
 | Genres | Fantasy | All 5 | All 5 + future |
 | Save Slots | 1 | 3 | Unlimited |
@@ -312,12 +239,12 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint
 
 ## Workflow
 
-Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim reports commit + tests → Claude.ai updates docs → Tim verifies → next prompt.
+Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim reports → Claude.ai updates docs → Tim verifies → next prompt.
 
-**Update routing:** New rules or status changes → CLAUDE.md. Trajectory notes, round history, future features → `/docs/project-log.md`. Quest system design → `/docs/quest-system-spec.md`.
+**Update routing:** Rules/status → CLAUDE.md. Trajectory/history/features → project-log.md. Quest design → quest-system-spec.md.
 
-**Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` = authoritative full-suite test count. Baseline = 514 (rule 91).**
+**Protocols:** Origin/main baseline check (rule 76) · Investigation-before-patching (V8.40). **npx jest (no pattern) = authoritative count. Baseline = 520 (rule 91).**
 
-**Note:** Remote URL is `https://github.com/AtomicTim/endless-worlds-rpg.git` (capitalized). Run `git remote set-url origin https://github.com/AtomicTim/endless-worlds-rpg.git` to silence redirect warnings.
+**Note:** Remote URL `https://github.com/AtomicTim/endless-worlds-rpg.git` (capitalized). Run `git remote set-url origin https://github.com/AtomicTim/endless-worlds-rpg.git` to silence redirect warnings.
 
-**Authority:** Architecture → /docs/architecture-spec.md · Combat → /docs/combat-spec.md · Quest system → /docs/quest-system-spec.md · Vision/scope → Game Vision · Strategic/sequencing → /docs/project-log.md.
+**Authority:** Architecture → architecture-spec.md · Combat → combat-spec.md · Quest → quest-system-spec.md · Vision → Game Vision · Trajectory → project-log.md.

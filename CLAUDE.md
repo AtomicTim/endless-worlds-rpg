@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.67
-**Status:** Hotfix 73b6035 complete (567/567) — Day 23.5 Character Creation design in progress
+**Version:** 8.68
+**Status:** Gen speed audit 7151085 complete (567/567) — timing report pending before Day 23.5
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -38,7 +38,8 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 ### Sequence
 
 1–15. ~~Through Day 23D + hotfixes~~ ✅
-15a. **Day 23.5 — Character Creation Rework** ⏳ NEXT (design in progress)
+15b. ~~Gen speed audit~~ ✅ — timing report pending; Phase 2B optimizations may follow
+15a. **Day 23.5 — Character Creation Rework** ⏳ NEXT (after timing report + any Phase 2B)
 16–18. Merchant Trading · Combat UX Polish · Mobile Combat Layout
 19. Day 24 — Multiplayer Foundation
 20. Day 25 — Customization Layer
@@ -48,46 +49,49 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 
 ## Current Status
 
-**Phase:** Hotfix 73b6035 complete (567/567). Day 23.5 design in progress — prompt not yet written.
+**Phase:** Gen speed audit landed (7151085, 567/567). Awaiting timing report from new-game test.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** AtomicTim/endless-worlds-rpg
 
 | Phase | Status |
 | --- | --- |
 | Gen pipeline + Day 23A–23D (all parts + fixes) | ✅ |
-| Hotfix 73b6035 — region spawn discovered flags + quest seed narrator injection | ✅ |
-| **Day 23.5 — Character Creation Rework** | ⏳ Design in progress |
+| Hotfix 73b6035 — region spawn flags + quest seed narrator injection | ✅ |
+| Gen speed audit 7151085 — instrumentation + optimizations | ✅ |
+| **Timing report** — start new game, paste [GEN_TIMING] server logs | ⏳ **ACTION NEEDED** |
+| **Day 23.5 — Character Creation Rework** | ⏳ After timing report |
 | Merchant Trading / Combat UX / Mobile Layout | ⏳ |
 | Day 24 Multiplayer / Day 25 Customization | ⏳ Pre-launch |
 
 **Known issues:** HP bar timing (deferred) · No equip during combat (intentional, rule 63) · Nav card peer disappearance (unresolved) · Nav card color differentiation for non-dungeon region_locations (deferred).
 
-### Hotfix 73b6035 — Region spawn flags + quest seed narrator injection (567/567, tsc clean)
+### Gen speed audit 7151085 — Instrumentation + optimizations (567/567, tsc clean)
 
-**Fix 1 — Region spawn discovered: false (rule 109 sibling for adjacent regions)**
-`apply-regional-bible/route.ts`: region zone node + settlement node both spawn with `discovered: false`. Previously spawned `discovered: true`, tripping rule 86 revisit suppression on first cross-region entry — emitting "You return to {name}" instead of full atmosphere prose. Rule 12 (end-of-step-7) flips to `true` on actual arrival. Second visit correctly suppresses. World map renders dim outlines for `discovered: false` — correct.
+**OPT 1 — WCD model:** claude-sonnet-4-5 → claude-haiku-4-5-20251001. Structured-JSON output; haiku ~5× faster.
+**OPT 2 — WorldBible max_tokens:** 10000 → 3000. Prompt ~31K chars — body load-bearing, no cuts made. output_tokens === 3000 in logs = truncation signal → revert to higher cap.
+**OPT 3 — RegionBible max_tokens:** 7000 → 1500. Already on haiku. Stub fallback catches truncation.
+**OPT 4 — Burst parallelism:** Already parallel (fire-and-forget in-flight Map). Log added confirming parallel dispatch; no code change needed.
 
-**Fix 2 — Quest seed threaded into narrator DIALOGUE context**
-Three-piece plumbing: (1) `WorldAssetConstitution` gains `quest_hook?: boolean` + `quest_seed?: string`. (2) `apply-world-bible` + `apply-regional-bible` `npcToAsset` mirrors these fields from NPCDefinition into asset constitution. (3) `prompt-builder.ts` ACTIVE NPC block appends SITUATION sub-block when `quest_hook === true` + `quest_seed` has content — instructs narrator to surface situation naturally in NPC's voice, not as mission briefing.
+**Instrumentation added to:** generate-wcd · generate-world-bible · generate-world-seed · generate-regional-bible.
+**Log format:** `[GEN_TIMING] {route} called` · `[GEN_TIMING] {route} start — model: {m}, prompt_tokens: {N}` · `[GEN_TIMING] {route} complete — elapsed: {ms}ms, output_tokens: {N}`
+
+**⚠️ CRITICAL CHECK in timing report:** If generate-world-bible shows `output_tokens: 3000` (at the cap), WorldBible is being truncated — revert max_tokens to a higher value before 23.5.
 
 ---
 
-## Day 23.5 — Character Creation Design (in progress)
+## Day 23.5 — Character Creation Design (design complete, prompt pending)
 
 See Drive doc: "day-23-5-character-creation-design-spec" for full spec.
 
-**Decisions made:**
+**All design decisions made:**
 - Three modes: Random / Quick Guided / Custom — all produce same PlayerCharacter object
-- Origin → starting item/gold bonus ONLY (no stats — class owns stat identity)
-- Species → Skyrim-style unique modifiers (resistances, skill affinities, passive traits, environmental flags) — NOT a simple +1 stat
-- Species schema declared now, future systems (combat elemental, skills, environmental) plug in without rework
-- NPC disposition has real downstream consequences: merchant prices, dialogue gating, info quality, follower recruitment threshold
-- Species generate during WCD/WorldBible (contextually appropriate to world) — not hardcoded
-- 1-2 passive traits per species max
-- 23.5 scope: narrator context injection + trust score cold-start. Merchant price formula deferred to trading session.
-
-**Still designing:**
-- Status effects / damage type constants vs. WCD-generated — how many are fixed per genre, how many are world-specific
-- World generation and character creation flow / timing — world must generate before species options appear; UX for this TBD
+- Flow order: Genre → [Phase 1 load, ~15–20s] → Species → Class → Origin → Appearance → **Name last** → Motivation
+- Phase 1/Phase 2 generation split: Phase 1 (world identity + species) fires on genre select, fast haiku call. Phase 2 (full WorldBible) runs in background during character creation steps.
+- Origin → starting item/gold ONLY (no stats — class owns stat identity)
+- Species → Skyrim-style: resistances, vulnerabilities, skill_affinities, passive_traits (max 2), environmental_flags, npc_disposition_seed. Schema declared now; future systems plug in without rework.
+- Species generated during WCD/WorldBible — contextually appropriate to world. Anchor species have consistent base traits; world-specific species have WCD-generated traits.
+- Damage types: fixed enum per genre (e.g. Fantasy: physical/fire/cold/poison/arcane/holy/shadow). WCD can alias canonical types to world-specific names (e.g. poison → "rootblight") via DamageTypeAlias[]. Alias injected everywhere — consistency enforced by data, not prompts.
+- NPC disposition cold-starts: species.npc_disposition_seed + npc.disposition_modifiers.toward_species applied at first encounter. Trust formula defined.
+- 23.5 scope: narrator context injection (species lore_notes + appearance.summary) + trust score cold-start. Merchant price formula deferred to trading session.
 
 ---
 
@@ -211,6 +215,11 @@ See Drive doc: "day-23-5-character-creation-design-spec" for full spec.
 116. **Side quest generation (Day 23D).** NPCDefinition gains quest_hook? + quest_seed?. SideQuest gains giver_name, region_id, discovery_trigger (QuestDiscoveryTrigger union — npc_dialogue/npc_rumor + 4 reserved), completion_condition, reward_hint, discovered. lib/game/side-quest-generator.ts: filterQuestHookNpcs, generateSideQuests (haiku, 800 tokens), mergeSideQuests (id-keyed dedup preserves progress). apply-regional-bible calls generator synchronously (atomic with master_state write — no fire-and-forget Vercel risk). Discovery: findUndiscoveredSideQuestForNpc + markSideQuestDiscovered in quest-discovery.ts; fires immediate side_quest_discovery SYSTEM beat (no modal, no delay — 11px serif italic accent 0.9 opacity). Journal SideQuestsTab: groups by status, hides undiscovered, count badge uses discovered only. (V8.66)
 117. **Region zone + settlement spawn discovered: false.** apply-regional-bible sets both to false at spawn time. Rule 12 flips on actual arrival. Prevents rule 86 revisit suppression on first cross-region entry. (V8.67)
 118. **Quest seed in narrator DIALOGUE context.** NPCDefinition quest_hook/quest_seed mirrored into WorldAssetConstitution. prompt-builder ACTIVE NPC block appends SITUATION sub-block for quest-hook NPCs. Narrator surfaces situation naturally, not as mission briefing. (V8.67)
+119. **Generation timing instrumentation.** [GEN_TIMING] logs on generate-wcd, generate-world-bible, generate-world-seed, generate-regional-bible. Format: called · start (model, prompt_tokens) · complete (elapsed ms, output_tokens). (V8.68)
+120. **WCD → haiku model.** claude-sonnet-4-5 → claude-haiku-4-5-20251001 for structured-JSON WCD output. (V8.68)
+121. **WorldBible max_tokens 10000 → 3000.** output_tokens === 3000 in logs = truncation; revert if seen. (V8.68)
+122. **RegionBible max_tokens 7000 → 1500.** Stub fallback catches truncation. (V8.68)
+123. **RegionBible burst confirmed parallel.** fire-and-forget in-flight Map; forEach dispatches all simultaneously. (V8.68)
 
 ---
 
@@ -261,7 +270,7 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint
 
 ## Tech Stack · Classes · Monetization
 
-**Stack:** Next.js 14 · Tailwind + shadcn/ui · Supabase · claude-sonnet-4-5 · claude-haiku-4-5-20251001 (RegionBible + journal + side quests) · Stripe · Vercel · Howler.js · Zustand
+**Stack:** Next.js 14 · Tailwind + shadcn/ui · Supabase · claude-sonnet-4-5 · claude-haiku-4-5-20251001 (WCD + RegionBible + journal + side quests) · Stripe · Vercel · Howler.js · Zustand
 
 | Genre | Color | Currency | HP | Classes |
 | --- | --- | --- | --- | --- |

@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.59
-**Status:** Day 23B Part 1 COMPLETE (commit d06db6f, 510/510) — verify generation then dispatch Part 2
+**Version:** 8.60
+**Status:** Dungeon combat freeze FIXED (fb5bd9c, 514/514) — Day 23B Part 2 NEXT
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -65,7 +65,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 **Per-prompt protocols (cumulative):**
 - **V8.40 — Investigation-before-patching.** Validate root-cause hypothesis BEFORE patching.
 - **V8.41 — Origin/main baseline check.** Step 1 of every prompt: `git fetch origin && git log origin/main --oneline -5`.
-- **V8.59 — jest baseline = 510.** See rule 91.
+- **V8.60 — jest baseline = 514.** See rule 91.
 
 ---
 
@@ -78,7 +78,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 1–11. ~~Polish through vertical slice playtest~~ ✅
 12a–12c. ~~Day 23A — World Structure, dungeons, location variety (all parts + fixes)~~ ✅
 13a. ~~Day 23B Part 1 — Quest data foundation (d06db6f)~~ ✅
-13b. **Day 23B Part 2 — Quest discovery + world intro display** ⏳ NEXT (after generation verified)
+13b. **Day 23B Part 2 — World intro display + quest discovery + region spawn fix** ⏳ NEXT
 14. Day 23C — Morrowind Journal UI
 15. Day 23D — Side Quest Generation
 15a. Day 23.5 — Character Creation Rework
@@ -103,16 +103,16 @@ This scenario drives every design decision. If a feature makes that scenario *be
 
 ## 🔄 Current Status (Read This First)
 
-**Current Phase:** Day 23B pt1 complete (d06db6f, 510/510). Generate a world and confirm `main_quest: {archetype}, 4 breadcrumbs` in server console before dispatching Part 2.
+**Current Phase:** Dungeon combat freeze fixed (fb5bd9c, 514/514). Day 23B Part 2 is next.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** AtomicTim/endless-worlds-rpg
 
 | Phase | Title | Status |
 | --- | --- | --- |
 | 1–11 | MVP through vertical slice playtest | ✅ Complete |
 | Gen pipeline + Day 23A (all parts) | World structure, dungeons, location variety, UX fixes | ✅ Complete |
-| Dungeon UX fixes (54c5895) | Nav cards, narrator context, key unlock text path, direct-heal | ✅ Complete |
 | Day 23B pt 1 (d06db6f) | Quest types, WCD archetype, WorldBible quest schema, world intro template, RegionBible breadcrumb context | ✅ Complete |
-| **Day 23B pt 2** | **Quest discovery triggers, world intro display, Act 1 breadcrumb wiring** | ⏳ **NEXT** |
+| Dungeon combat freeze fix (fb5bd9c) | isDungeonNode guard in step 7c-3 + combatBlocksDungeonEntry in useDungeonRuntime | ✅ Complete |
+| **Day 23B pt 2** | **Region spawn fix + world intro display + Act 1 breadcrumb discovery** | ⏳ **NEXT** |
 | Day 23C | Morrowind journal UI | ⏳ |
 | Day 23D | Side quest generation | ⏳ |
 | Day 23.5 | Character creation rework | ⏳ |
@@ -169,7 +169,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 29. Combat turn loop lives in `/lib/game/combat-engine.ts`. Defeat / victory / flee dismiss the combat state slice entirely. (V8.32)
 30. last_settlement_hub_id and navigation_trail update on every successful arrival in step 7c-2. INITIALIZED AT GAME SPAWN in apply-world-bible. (V8.32 + V8.38)
 31. pre_combat_xp captured at encounter start. Defeat handler restores player.xp = pre_combat_xp. (V8.32)
-32. Encounter trigger is in step 7c-3. (V8.32)
+32. Encounter trigger is in step 7c-3 — SKIPPED for dungeon nodes (rule 106). (V8.32 + V8.60)
 33. Enemy behavior on Day 20 is hardcoded "attack the player" regardless of behavior_flavor field. (V8.32)
 34. Returning to a region whose bible is in metadata.region_bibles AND whose graph node is discovered is GRAPH_NAVIGATE, not WORLD_EXPLORE. (V8.33)
 35. apply-regional-bible is idempotent: skipped: true when redundant. (V8.33)
@@ -179,7 +179,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 39. CombatMode is the bottom-strip swap when `master_state.combat?.active === true`. (V8.34)
 40. Each combatant row reserves a portrait slot (~128px). (V8.34)
 41. Bestiary codex entries write on `combat_start`, deduplicated by enemy.id. (V8.34)
-42. New game preamble: `recent_messages.length === 0` triggers "Your adventure begins. What will you do first?" unless `metadata.world_intro` is set. World intro display wired in Day 23B pt2. (V8.34 + V8.59)
+42. New game preamble: `recent_messages.length === 0` triggers world intro if `metadata.world_intro` is set, else "Your adventure begins. What will you do first?" World intro display wired in Day 23B pt2. (V8.34 + V8.59)
 43. Starting equipment lives in `lib/game/starting-equipment.ts` as separate module. (V8.35)
 44. Every starting weapon ships with `equipped: true` AND `effect.damage_die`. Every starting armor ships with `equipped: true` AND `effect.armor_bonus`. (V8.35)
 45. `combat_start` is templated, not LLM-narrated. (V8.35)
@@ -219,7 +219,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 79. **Prompt-template hardcoded structural IDs are a recurring bug class.** (V8.42)
 80. **Nav card dedup at region zone.** DEEPER suppresses settlement card if it matches BACK destination. (V8.43–V8.44)
 81. **Map tier auto-switch fires on every node arrival.** Region zone → tier 2, everything else → tier 1. (V8.43–V8.44)
-82. **jest baseline history.** 393→452→454→484→491→499→**510** (+11 quest-threads tests). See rule 91. (V8.47–V8.59)
+82. **jest baseline history.** 393→452→454→484→491→499→510→**514** (+4 dungeon combat guards). See rule 91. (V8.47–V8.60)
 83. **Loot never auto-credits.** All drops go to `MasterState.floor_loot[]`. (V8.47)
 84. **Container search is engine-resolved, zero LLM calls.** (V8.47)
 85. **Currency and inventory cap are canonical constants.** `INVENTORY_CAP = 20`. (V8.47)
@@ -228,7 +228,7 @@ This scenario drives every design decision. If a feature makes that scenario *be
 88. **`resolveUseItem` resolves heal by effect, not by id.** (V8.49)
 89. **Archetype system in `lib/game/archetypes.ts`.** 25 classes. STAT_BASE=2, primary +2, secondary +1. (V8.50)
 90. **Level-up flow is post-combat, player-driven.** LevelUpModal + 5-button picker. (V8.50)
-91. **jest baseline = 510 (V8.59).** Day 23B pt1 added 11 quest-threads tests (499→510). 510 is the authoritative count going forward. (V8.59)
+91. **jest baseline = 514 (V8.60).** Dungeon combat fix added 4 tests (510→514). 514 is the authoritative count going forward. (V8.60)
 92. **Ability modifier: `Math.floor((score - 2) / 2)`.** Both `abilityMod` and `getAttributeModifier` MUST match. (V8.51)
 93. **Enemy stat budgets: tier-1 agi_mod ≤1, hp min ≤8.** Bible prompts include ENEMY STAT BUDGET block. (V8.51)
 94. **RegionBibleCache in-flight dedup via promise map.** (V8.53)
@@ -240,9 +240,10 @@ This scenario drives every design decision. If a feature makes that scenario *be
 100. **Room navigation semantics.** First-visit encounter; revisit suppresses description + encounter. Zero LLM cost. BACK from entrance → region zone; BACK from non-entrance → entrance. dungeon_state persists. (V8.57)
 101. **DungeonLockPopover.** Locked boss card → popover: hint + [USE key] + [FORCE STR ≥ 6] + Close. (V8.57)
 102. **Dungeon narrator context.** Inside dungeon: CURRENT ROOM injected, inventory stripped, connected locations = adjacent rooms only. Key items: NO USE button — text path (DUNGEON_KEY_USE) or nav card popover only. Out-of-combat healing: direct-dispatch. (V8.58)
-103. **Quest schema types in `types/game.ts`. (V8.59)** QuestArchetype (6 values: ancient_awakening, power_vacuum, corruption, forbidden_knowledge, sacrifice, the_return), FinaleType, QuestStatus, QuestFaction, QuestBreadcrumb, QuestResolution, MainQuest, SideQuest, QuestEntry, QuestThreads. MasterState.quest_threads? and Metadata.world_intro? added. LocationObject + NPCDefinition gained quest_breadcrumb_id?. Legacy MainQuest fields replaced. WorldBible.main_quest now includes world_intro_template.
-104. **WCD generates main quest seed; WorldBible expands it. (V8.59)** WCD: archetype (1 of 6), threat_description, 2-3 factions (defenders/exploiters/deniers), finale_type. WorldBible emits: title, 4 breadcrumbs (act 1 fixed, acts 2/3 floating, climax fixed), 2 resolutions, world_intro_template. apply-world-bible calls initializeQuestThreads(bible), logs: `[apply-world-bible] main_quest: {archetype}, {N} breadcrumbs, finale: {finale_type}, factions: {N}, intro length: {N}`.
-105. **World intro template + RegionBible breadcrumb seeding. (V8.59)** world_intro_template: 3-part second-person (world now / who you are / opening moment). Uses {name}/{class} placeholders. resolveWorldIntro stores resolved text in metadata.world_intro. Display deferred to 23B pt2. RegionBible receives first unanchored act-2/3 breadcrumb; apply-regional-bible stamps anchor_location_id on match.
+103. **Quest schema types in `types/game.ts`. (V8.59)** QuestArchetype (6 values), FinaleType, QuestStatus, QuestFaction, QuestBreadcrumb, QuestResolution, MainQuest, SideQuest, QuestEntry, QuestThreads. MasterState.quest_threads? and Metadata.world_intro? added. LocationObject + NPCDefinition gained quest_breadcrumb_id?.
+104. **WCD generates main quest seed; WorldBible expands it. (V8.59)** WCD: archetype + threat + factions + finale. WorldBible emits 4 breadcrumbs + 2 resolutions + world_intro_template. apply-world-bible calls initializeQuestThreads, logs main_quest diagnostic.
+105. **World intro template + RegionBible breadcrumb seeding. (V8.59)** 3-part second-person intro, {name}/{class} placeholders, resolved at apply time → metadata.world_intro. RegionBible receives first unanchored breadcrumb; apply-regional-bible stamps anchor_location_id.
+106. **Dungeon encounter guards (V8.60).** Two guards prevent combat corruption: (A) useGameLoop step 7c-3 checks `isDungeonNode(arrivedNode)` — dungeon nodes skip encounter entirely (encounters happen per-room via useDungeonRuntime.navigateToRoom, rule 100). (B) useDungeonRuntime auto-entry useEffect checks `combatBlocksDungeonEntry(masterState)` — bails when combat.active is true, re-runs once combat resolves. `combatBlocksDungeonEntry` is an exported pure predicate. 4 new tests: null combat, active true, no combat slice, active false.
 
 ---
 
@@ -315,8 +316,8 @@ Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim rep
 
 **Update routing:** New rules or status changes → CLAUDE.md. Trajectory notes, round history, future features → `/docs/project-log.md`. Quest system design → `/docs/quest-system-spec.md`.
 
-**Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` = authoritative full-suite test count. Baseline = 510 (rule 91).**
+**Protocols:** Origin/main baseline check (rule 76) as step 1 · Investigation-before-patching (V8.40). **`npx jest` = authoritative full-suite test count. Baseline = 514 (rule 91).**
 
-**Note:** Remote URL updated to `https://github.com/AtomicTim/endless-worlds-rpg.git` (capitalized). Run `git remote set-url origin https://github.com/AtomicTim/endless-worlds-rpg.git` to silence redirect warnings.
+**Note:** Remote URL is `https://github.com/AtomicTim/endless-worlds-rpg.git` (capitalized). Run `git remote set-url origin https://github.com/AtomicTim/endless-worlds-rpg.git` to silence redirect warnings.
 
 **Authority:** Architecture → /docs/architecture-spec.md · Combat → /docs/combat-spec.md · Quest system → /docs/quest-system-spec.md · Vision/scope → Game Vision · Strategic/sequencing → /docs/project-log.md.

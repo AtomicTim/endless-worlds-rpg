@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.75
-**Status:** Day 23.5D complete (c7b0a79, 567/567) — quest modal double-fire hotfix next, then Merchant Trading
+**Version:** 8.76
+**Status:** Hotfix 94810ec complete (567/567) — Merchant Trading next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -34,69 +34,71 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 
 ## Trajectory
 
-> Full notes, round history, future features in `/docs/project-log.md`. Quest spec in `/docs/quest-system-spec.md`. Quest source taxonomy in Drive: "quest-source-taxonomy". Character creation design in Drive: "day-23-5-character-creation-design-spec-v2".
+> Full notes, round history, future features in `/docs/project-log.md`. Quest spec in `/docs/quest-system-spec.md`. Quest source taxonomy in Drive: "quest-source-taxonomy". Character creation design in Drive: "day-23-5-character-creation-design-spec-v2". World theme taxonomy in Drive: "world-theme-taxonomy".
 
 ### Sequence
 
 1–15. ~~Through Day 23D + hotfixes~~ ✅
-15b–f. ~~Gen speed audit + Day 23.5A–D + quality hotfixes~~ ✅
-15g. Quest modal double-fire hotfix ⏳ NEXT
-16. Merchant Trading
+15b–g. ~~Gen speed audit + Day 23.5A–D + quality hotfixes~~ ✅
+16. **Merchant Trading** ⏳ NEXT
 17–18. Combat UX Polish · Mobile Combat Layout
 19. Day 24 — Multiplayer Foundation
 20. Day 25 — Customization Layer
-21+. Genre Session (incl. world structure per-genre) · UI Overhaul · Verbal Action · Stealth (deferred)
+21+. **Genre Session** (world theme taxonomy implementation + world structure per-genre + code-driven theme selection) · UI Overhaul · Verbal Action · Stealth (deferred)
 
 ---
 
 ## Current Status
 
-**Phase:** Full Day 23.5 arc complete. World intro cinematic modal live. Quest modal double-fire is a known bug to fix before Merchant Trading.
+**Phase:** All pre-Merchant Trading work complete. Hotfix 94810ec closed the last known bugs. Ready for Merchant Trading design.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** AtomicTim/endless-worlds-rpg
 
 | Phase | Status |
 | --- | --- |
 | Day 23.5A–D + all hotfixes | ✅ |
-| **Quest modal double-fire hotfix** | ⏳ NEXT |
-| Merchant Trading | ⏳ |
+| Gen quality hotfix 94810ec | ✅ |
+| **Merchant Trading** | ⏳ NEXT |
 | Combat UX Polish / Mobile Layout | ⏳ |
 | Day 24 Multiplayer / Day 25 Customization | ⏳ |
 
-**Known issues:** Quest modal double-fire (fires during dialogue + again on NPC dismiss — see rule 149) · HP bar timing (deferred) · No equip during combat (intentional, rule 63) · Nav card peer disappearance (unresolved) · Nav card color differentiation for non-dungeon region_locations (deferred).
+**Known issues:** HP bar timing (deferred) · No equip during combat (intentional, rule 63) · Nav card peer disappearance (unresolved) · Nav card color differentiation for non-dungeon region_locations (deferred) · World intro prose style preference (atmospheric vs factual — deferred to Genre Session) · NPC species display in dialogue modal / sidebar (deferred).
 
-**Deferred design discussions:** World structure per-genre (Cyberpunk/Post-Apoc/Horror are Earth-based — "world with named regions" model doesn't fully fit) · Side quest discovery rework (dialogue option with quest marker) · NPC species display in dialogue modal / sidebar.
+**Deferred design discussions:** World structure per-genre · Side quest discovery rework · Code-driven theme selection (Genre Session).
 
-### Day 23.5D — World intro cinematic modal (c7b0a79, 567/567, tsc clean)
+### Hotfix 94810ec (567/567, tsc clean)
 
-**PART 1 — components/WorldIntroModal.tsx:** Full-screen overlay z-60 replacing in-feed NARRATIVE world_intro beat. No close button/header — click anywhere or any key dismisses. Radial-vignette black backdrop. Three-stage opacity-only fade cascade: overlay 0–800ms → world name (text-glow, primary color, font-mono) 800–1000ms → prose (ew-serif ew-world-intro italic, 0.85 opacity) + "Click anywhere to begin..." (animate-pulse) 1200–1600ms. All timeouts cleared on unmount; keydown listener removed on unmount. genre prop accepted for API contract; theming via CSS vars.
+**FIX 1 — Maritime theme cap (TEMPORARY — will be replaced by code-driven theme taxonomy in Genre Session):** Added maritime/coastal/tidal/aquatic/drowned/submerged/oceanic to OVERUSED block in WCD prompt, same 1-in-6 cap as volcanic. Added inline parenthetical on "tidal" in the elemental forces theme list. Note: this is a prompt-based band-aid. The correct fix is `lib/game/world-themes.ts` with `rollWorldTheme()` — code owns selection, LLM owns execution. See Drive: "world-theme-taxonomy".
 
-**PART 2 — app/game/page.tsx:** showWorldIntroModal state + worldIntroShownRef synchronous latch. Fresh-game preamble forks at recentMsgs.length === 0: (A) new games with world_intro → SYSTEM "You are…" fires, modal opens, "Your adventure begins." deferred to handleWorldIntroDismiss; (B) legacy saves without world_intro → SYSTEM "You are…" + "Your adventure begins." fire immediately as before. worldName resolves from metadata.world_consistency?.world_name with world_seed fallback.
+**FIX 2 — Motivation char limit:** Haiku prompt now has "Maximum 100 characters. One sentence only." Server-side `slice(0, 120).trim()` truncation added.
 
----
+**FIX 3 — Appearance summary name-agnostic:** Both `generate-appearance-options` and `generate-random-character` got GOOD/BAD rule: summary must never include the character's name. Defense-in-depth in `generate-random-character.normalizeCharacter`: strips leading `<Name> is/was/appears/seems/stands/looks/...` pattern from summary.
 
-## Quest Modal Double-Fire (known bug — fix before Merchant Trading)
-
-**Symptoms:** Quest reveal modal fires DURING active NPC dialogue (currentDialogueNpc is non-null), then fires AGAIN when dialogue is closed.
-
-**Root cause:** `pendingAct1Reveal` flag is not being checked against `currentDialogueNpc` state before scheduling. The `useDeferredQuestReveal` hook's null-transition trigger fires the modal without first verifying dialogue has fully closed.
-
-**Fix:** In `useDeferredQuestReveal` (or wherever `pendingAct1Reveal` is consumed):
-1. Guard: only run `runActOneDiscovery` when `currentDialogueNpc === null`
-2. Ensure `pendingAct1Reveal` is cleared BEFORE calling `runActOneDiscovery` (not after) to prevent re-trigger
-3. Add a ref-based latch (similar to worldIntroShownRef) so `runActOneDiscovery` can only fire once per breadcrumb discovery event
+**FIX 4 — Quest modal double-fire:** Three-part fix in `useDeferredQuestReveal`: (A) strict `currentDialogueNpc === null` gate added; (B) `setPendingAct1Reveal(false)` confirmed before setTimeout; (C) `act1RevealFiredRef` latch added, resets only on `false → true` transition of pendingAct1Reveal via `prevPendingRef` in dedicated useEffect.
 
 ---
 
-## Day 23.5 Complete — Full Arc Summary
+## World Theme Taxonomy — Design Complete
 
-| Sub-phase | Commit | What shipped |
-|---|---|---|
-| 23.5A | 6c137aa | Species types, WCD generation, apply-world-seed storage |
-| 23.5B | eb6df59 | 7-step character creation wizard, WorldForgingScreen, 3 modes |
-| 23.5B hotfix | 4d0cc98 | Screen timing, gender cache, motivation UX, bg WorldBible |
-| 23.5C | 23c1514 | Narrator PLAYER CHARACTER block, trust formula, journal voice |
-| Gen quality | f737c54 | World name guidance, species stat cap, disposition seeds, NPC names, WB bg fire |
-| 23.5D | c7b0a79 | World intro cinematic modal |
+See Drive doc: "world-theme-taxonomy" for full spec.
+
+**Architecture decision:** Code owns SELECTION, LLM owns EXECUTION.
+- `lib/game/world-themes.ts` defines WorldTheme[] taxonomy (54 themes across 5 genres)
+- `rollWorldTheme(genre, recentThemes)` uses Math.random() — true randomness, not LLM prediction
+- Theme injected into WCD prompt as an ASSIGNED parameter — LLM executes, does not choose
+- Tracks last 3 themes per user in Supabase profile to prevent immediate repeats
+- Unlocks future Custom World Creator: players pick theme + archetype + modifiers
+
+**Fantasy themes (14):** ancient_forest_kingdom · necromancer_domain · dragon_ruled_territory · haunted_battlefield · wild_magic_zone · fallen_empire_ruins · divine_war_aftermath · plague_ravaged_kingdom · frozen_tundra_frontier · desert_trade_empire · underground_realm · arcane_bureaucracy · coastal_pirate_haven(capped) · mountain_fortress_world
+
+**Cyberpunk (10):** corporate_district_wars · ai_emergence · bio_augmentation_underground · data_sovereignty_conflict · orbital_class_war · neon_theocracy · post_revolution_ruins · clone_labor_uprising · retrofuturist_decay · megacity_infrastructure_collapse
+
+**Horror (10):** small_town_wrongness · deep_sea_station · epidemic_horror · cult_territory · military_experiment · folklore_made_real · body_horror_transformation · psychic_contamination · haunted_institution · ancient_entity_return
+
+**Space Opera (10):** dying_star_evacuation · first_contact_conflict · precursor_ruins · generation_ship_politics · wormhole_gate_politics · corporate_terraforming_colony · galactic_empire_fracture · rogue_ai_ship · uplift_conflict · pirate_republic
+
+**Post-Apoc (10):** nuclear_wasteland · flooded_ruins · endless_winter · plague_aftermath · tech_regression · corporate_bunker_emergence · superstorm_earth · jungle_reclamation · warlord_kingdoms · vault_emergence
+
+Implementation: Genre Session prompt. Replaces WCD theme-selection instructions entirely.
 
 ---
 
@@ -143,7 +145,7 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 39. CombatMode bottom-strip swap when `combat?.active === true`. (V8.34)
 40. Each combatant row reserves ~128px portrait slot. (V8.34)
 41. Bestiary codex entries write on combat_start, deduplicated by enemy.id. (V8.34)
-42. **World intro cinematic modal** (WorldIntroModal component) fires on first game load when `metadata.world_intro` set + `recentMsgs.length === 0`. Dismissed by click/key. "Your adventure begins." deferred to post-dismiss. Old saves without world_intro: immediate SYSTEM beats as before. (V8.75)
+42. **World intro cinematic modal** fires on first game load when `metadata.world_intro` set + `recentMsgs.length === 0`. Dismissed by click/key. "Your adventure begins." deferred to post-dismiss. (V8.75)
 43. Starting equipment in `lib/game/starting-equipment.ts`. (V8.35)
 44. Starting weapon: equipped + damage_die. Starting armor: equipped + armor_bonus. (V8.35)
 45. combat_start templated, not LLM-narrated. (V8.35)
@@ -214,7 +216,7 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 110. **World intro cinematic modal** — see rule 42. (V8.75)
 111. **Act 1 breadcrumb discovery.** Two triggers: DIALOGUE + boss clear. (V8.62)
 112. **Sub-location node_type fix.** (V8.63)
-113. **Quest discovery pipeline.** Boss-clear 1200ms. Dialogue: pendingAct1Reveal → useDeferredQuestReveal null-transition → 2500ms. QuestRevealModal: persistent hold. Acts 2/3: delayed ✦ beat only. ⚠️ Double-fire bug: modal fires during active dialogue + again on dismiss. Fix pending. (V8.63+64+65+75)
+113. **Quest discovery pipeline.** Boss-clear 1200ms. Dialogue: pendingAct1Reveal → useDeferredQuestReveal → currentDialogueNpc null gate → act1RevealFiredRef latch → 2500ms. Double-fire fixed in 94810ec. (V8.63+64+65+76)
 114. **JournalModal + journal entry generation.** 4 tabs. haiku 200 tokens. CHARACTER VOICE block. (V8.63+65+66+73)
 115. **Codex concurrent-write race guard.** (V8.65)
 116. **Side quest generation (Day 23D).** Synchronous in apply-regional-bible. (V8.66)
@@ -234,23 +236,27 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 130. **WCD character fields optional.** WCD fires on genre select. (V8.71)
 131. **Character creation wizard: 7-step flow.** genre → forging → species → class → origin → appearance → name → motivation. (V8.71)
 132. **WorldForgingScreen.** Blinking ▋ cursor stages 1+2. Stage 4 hold 2500ms. Fast WCD skips stage 2. (V8.71+72)
-133. **Haiku generation routes.** origin-options · appearance-options · random-name · random-character · random-motivation. (V8.71+72)
+133. **Haiku generation routes.** origin-options · appearance-options · random-name · random-character · random-motivation (100 char cap). (V8.71+72+76)
 134. **save-character-profile route.** Atomic read→patch→write. (V8.71)
 135. **Origin generation fires on class select.** (V8.71)
 136. **Appearance generation: gender-aware cache.** Gender toggle on appearance step only. (V8.71+72)
-137. **Motivation step UX.** "I came to this world to…". Skip: "Play as a blank slate". Randomize. Character summary card. (V8.72)
-138. **Random mode.** Full coherent character, lands on name step. (V8.71)
+137. **Motivation step UX.** "I came to this world to…". Skip: "Play as a blank slate". Randomize (120 char cap). Character summary card. (V8.72+76)
+138. **Random mode.** Full coherent character, lands on name step. Appearance summary name-agnostic. (V8.71+76)
 139. **WorldBible fires in background after WCD completes.** Root cause of 400 fixed. (V8.72+74)
 140. **PLAYER CHARACTER narrator block.** formatPlayerCharacterBlock(state). Between WCD and HARD RULES. COMBAT exempt. (V8.73)
 141. **Trust formula: computeInitialTrust(state, npcAsset).** 50 + species.npc_disposition_seed + disposition_modifiers, clamped 0–100. (V8.73)
 142. **{motivation} resolved in world_intro_template.** (V8.73)
 143. **Journal CHARACTER VOICE block.** (V8.73)
-144. **world_name = entire game world.** Per-genre scope rules. NOT settlement/document/feature. (V8.74)
+144. **world_name = entire game world.** Per-genre scope rules. (V8.74)
 145. **Species stat_modifiers: exactly ±1, max 2 entries.** normalizeWcd clamps defensively. (V8.74)
 146. **Disposition seed COMMITMENT RULE.** Feared → ≤-8. Revered → ≥+8. Neutral → 0. (V8.74)
-147. **NPC names WCD-anchored.** Skeleton placeholders. Naming instruction in WB + RegionBible. (V8.74)
-148. **WorldBible background validation fix.** Only requires genre + wcd. Logs [WB_BACKGROUND]. (V8.74)
-149. **Quest modal double-fire bug.** QuestRevealModal fires during active dialogue (currentDialogueNpc non-null) then again on dialogue close. Fix: guard useDeferredQuestReveal to only run when currentDialogueNpc === null; clear pendingAct1Reveal before calling runActOneDiscovery; add ref latch. (V8.75 — pending fix)
+147. **NPC names WCD-anchored.** Skeleton placeholders. (V8.74)
+148. **WorldBible background validation fix.** Only requires genre + wcd. (V8.74)
+149. **Quest modal double-fire fixed.** currentDialogueNpc === null gate + act1RevealFiredRef latch. (V8.76)
+150. **Maritime theme prompt cap (TEMPORARY).** Band-aid until Genre Session implements code-driven rollWorldTheme(). (V8.76)
+151. **Motivation char limit enforced.** Prompt + server-side slice(0,120). (V8.76)
+152. **Appearance summary name-agnostic.** Prompt rule + normalizeCharacter regex strip. (V8.76)
+153. **Code-driven world theme taxonomy designed.** 54 themes across 5 genres in Drive: "world-theme-taxonomy". Implementation: Genre Session. lib/game/world-themes.ts + rollWorldTheme() replaces all WCD theme-selection instructions. (V8.76)
 
 ---
 

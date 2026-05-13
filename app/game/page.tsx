@@ -19,6 +19,7 @@ import { JournalModal } from "@/components/game/JournalModal";
 import { LevelUpModal } from "@/components/game/LevelUpModal";
 import { QuestRevealModal } from "@/components/game/QuestRevealModal";
 import { FloorLootStrip } from "@/components/game/FloorLootStrip";
+import WorldIntroModal from "@/components/WorldIntroModal";
 import { useFloorLoot } from "@/hooks/useFloorLoot";
 import { AssetCategory, Genre } from "@/types/game";
 import type { MasterState } from "@/types/game";
@@ -50,6 +51,12 @@ export default function GamePage() {
   const initRef    = useRef(false);
   const inputBarRef = useRef<InputBarHandle>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
+  // Day 23.5D — world intro cinematic modal. Replaces the in-feed
+  // NARRATIVE world_intro beat. worldIntroShownRef latches at fire
+  // time so the modal can never re-trigger on store updates that
+  // happen during normal play.
+  const [showWorldIntroModal, setShowWorldIntroModal] = useState(false);
+  const worldIntroShownRef = useRef(false);
 
   const masterState    = useGameStore((s) => s.masterState);
   const messages       = useGameStore((s) => s.messages);
@@ -171,13 +178,19 @@ export default function GamePage() {
         }
       } else {
         // V8.34 (Prompt 3 Task 7) + Day 23B pt 2 (TASK 1) — fresh-session
-        // preamble. Three beats:
-        //   1. SYSTEM "You are {name}, a {class} in the {World}." divider.
-        //   2. NARRATIVE world_intro (cinematic, second-person, 3 parts)
-        //      when metadata.world_intro is set. Old saves without an
-        //      intro skip this beat — rule 42 fallback holds.
-        //   3. SYSTEM "Your adventure begins. What will you do first?"
-        //      soft prompt — unchanged.
+        // preamble. Two paths now (Day 23.5D):
+        //
+        //   A. world_intro IS set (new games on 23.5D+):
+        //      1. SYSTEM "You are {name}, a {class} in the {World}." beat
+        //      2. Schedule the WorldIntroModal — the cinematic overlay
+        //         renders the world intro prose. "Your adventure begins."
+        //         fires inside handleWorldIntroDismiss when the player
+        //         clicks/keypresses to dismiss it.
+        //
+        //   B. world_intro is NOT set (legacy saves predating Day 23B):
+        //      1. SYSTEM "You are {name}, a {class} in the {World}." beat
+        //      2. SYSTEM "Your adventure begins..." beat — immediate,
+        //         no modal (rule 42 fallback path).
         const worldName    = WORLD_NAMES[state.metadata.genre] ?? "World";
         const locationName = formatLocationId(state.world_state.current_location_id);
         store.addMessage(makeMessage("SYSTEM",
@@ -186,18 +199,20 @@ export default function GamePage() {
         ));
         const intro = state.metadata.world_intro;
         if (typeof intro === "string" && intro.trim().length > 0) {
-          // Day 23B pt 2 — cinematic world intro beat. StoryFeed renders
-          // it with distinct italic-serif styling via the world_intro
-          // metadata flag. Fires exactly once per new game (recent_
-          // messages.length === 0 branch).
-          store.addMessage(makeMessage("NARRATIVE", intro.trim(), {
-            world_intro: true,
-          }));
+          // Day 23.5D — cinematic overlay replaces the in-feed NARRATIVE
+          // beat. Latch the ref synchronously so the trigger can't fire
+          // again from any subsequent state update.
+          worldIntroShownRef.current = true;
+          setShowWorldIntroModal(true);
+        } else {
+          // Legacy path — no world_intro means no modal. Fire the
+          // soft-prompt SYSTEM beat immediately so the player still
+          // sees the "begin adventure" cue.
+          store.addMessage(makeMessage("SYSTEM",
+            "Your adventure begins. What will you do first?",
+            { isFreshGamePreamble: true }
+          ));
         }
-        store.addMessage(makeMessage("SYSTEM",
-          "Your adventure begins. What will you do first?",
-          { isFreshGamePreamble: true }
-        ));
       }
 
       // Debug: log the location identifiers we're about to query against so
@@ -311,11 +326,42 @@ export default function GamePage() {
 
   const genre = masterState?.metadata.genre ?? Genre.FANTASY;
 
+  // Day 23.5D — dismiss handler for the world intro modal. Fires the
+  // "Your adventure begins…" SYSTEM beat that previously fired
+  // immediately in the fresh-game preamble. Idempotent: subsequent
+  // calls (e.g. very fast double-click) are absorbed by the
+  // showWorldIntroModal guard.
+  const handleWorldIntroDismiss = () => {
+    if (!showWorldIntroModal) return;
+    setShowWorldIntroModal(false);
+    useGameStore.getState().addMessage(makeMessage(
+      "SYSTEM",
+      "Your adventure begins. What will you do first?",
+      { isFreshGamePreamble: true },
+    ));
+  };
+
   return (
     <GameLayout
       genre={genre}
       mainPanel={
         <>
+          {/* Day 23.5D — World intro cinematic. Mounts at z-60 above
+              every other modal; self-dismissed via click or keypress.
+              Only shows on the fresh-game branch when metadata.world_intro
+              is set (legacy saves skip directly to the soft-prompt beat). */}
+          {showWorldIntroModal && masterState?.metadata.world_intro && (
+            <WorldIntroModal
+              worldName={
+                masterState.metadata.world_consistency?.world_name
+                ?? masterState.metadata.world_seed?.world_name
+                ?? ""
+              }
+              worldIntro={masterState.metadata.world_intro}
+              genre={masterState.metadata.genre}
+              onDismiss={handleWorldIntroDismiss}
+            />
+          )}
           {masterState && (
             <SceneArt
               locationId={masterState.world_state.current_location_id}

@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.70
-**Status:** Day 23.5A complete (6c137aa, 567/567) — 23.5B character creation UI next
+**Version:** 8.71
+**Status:** Day 23.5B complete (eb6df59, 567/567) — 23.5C narrator + trust integration next
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -39,10 +39,10 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 ### Sequence
 
 1–15. ~~Through Day 23D + hotfixes~~ ✅
-15b. ~~Gen speed audit~~ ✅ (net neutral — pipeline restored)
+15b. ~~Gen speed audit~~ ✅
 15c. ~~Day 23.5A — Types + WCD species + apply-world-seed storage~~ ✅
-15d. **Day 23.5B — Character creation UI** ⏳ NEXT
-15e. Day 23.5C — Narrator + trust integration ⏳
+15d. ~~Day 23.5B — Character creation UI~~ ✅
+15e. **Day 23.5C — Narrator + trust integration** ⏳ NEXT
 16–18. Merchant Trading · Combat UX Polish · Mobile Combat Layout
 19. Day 24 — Multiplayer Foundation
 20. Day 25 — Customization Layer
@@ -52,77 +52,80 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 
 ## Current Status
 
-**Phase:** 23.5A complete. Species generating in WCD, stored in metadata. Character creation UI (23.5B) is next.
+**Phase:** 23.5B complete. Full 7-step character creation wizard live. 23.5C wires character context into narrator, trust formula, world intro, and journal.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** AtomicTim/endless-worlds-rpg
 
 | Phase | Status |
 | --- | --- |
 | Gen pipeline + Day 23A–23D (all parts + fixes) | ✅ |
-| Hotfix 73b6035 — region spawn flags + quest seed narrator injection | ✅ |
-| Gen speed audit — pipeline restored | ✅ |
 | Day 23.5A — Types + WCD species + storage (6c137aa) | ✅ |
-| **Day 23.5B — Character creation UI** | ⏳ NEXT |
-| Day 23.5C — Narrator + trust integration | ⏳ |
+| Day 23.5B — Character creation UI (eb6df59) | ✅ |
+| **Day 23.5C — Narrator + trust integration** | ⏳ NEXT |
 | Merchant Trading / Combat UX / Mobile Layout | ⏳ |
 | Day 24 Multiplayer / Day 25 Customization | ⏳ |
 
 **Known issues:** HP bar timing (deferred) · No equip during combat (intentional, rule 63) · Nav card peer disappearance (unresolved) · Nav card color differentiation for non-dungeon region_locations (deferred).
 
-### Day 23.5A — Types + WCD species + storage (6c137aa, 567/567, tsc clean)
+### Day 23.5B — Character creation UI (eb6df59, 567/567, tsc clean)
 
-**PART 1 — types/game.ts:** Added `StatKey`, `DamageType`, `DamageTypeAlias`, `TraitEffectType`, `EnvironmentalFlag`, `PassiveTrait`, `Species`, `StartingBonus`, `OriginChoice`, `AppearanceProfile`, `PlayerCharacterProfile`. Extended `WorldConsistencyDocument` (species[]+damage_type_aliases[]), `Metadata` (species?/damage_type_aliases?), `PlayerState` (character_profile?), `NPCDefinition` (species_id?/disposition_modifiers?/min_trust_to_recruit?).
+Bundle: 10.7 kB → 18.3 kB on `/game/new`.
 
-**PART 2 — generate-wcd/route.ts:** Species + damage_type_aliases prompt sections added. Per-genre anchor rules (Human always + genre-common second), FORBIDDEN archetype list, genre aesthetic constraints, WCD-anchored uniqueness requirement, shape-only skeleton. Normalizer remaps stat key abbreviations and drops invalid entries. Log: `[WCD] Species count: N, damage_type_aliases: N`. WCD_MAX_TOKENS unchanged at 4000.
+**PART 1 — types/game.ts:** `PlayerCharacterProfile.gender: "male" | "female"` added.
 
-**PART 3 — apply routes:** `metadata.species` and `metadata.damage_type_aliases` hoisted from WCD in both `apply-world-seed` (legacy) and `apply-world-bible` (active path). No nested traversal needed in 23.5B.
+**PART 2 — generate-wcd:** `character_name` and `character_class` made optional. WCD now fires on genre select (before name/class known). WCD generates world identity from genre alone.
 
-**PART 4 — generate-world-bible/route.ts:** 3-5 line SPECIES context block injected after WCD block. Lists species names+ids. NPCs may optionally carry species_id + disposition_modifiers.toward_species. No restructuring of the 36K-char prompt body.
+**PART 3 — /api/game/generate-origin-options:** haiku, 600 tokens. 3 origin cards per genre/class. Item-or-gold bonus only, no stats. Returns `{ options: OriginChoice[] }`.
 
-### Generation timing (confirmed baseline — clean run)
-| Step | Time | Tokens out | Notes |
-|---|---|---|---|
-| WCD | ~37-45s | ~1800-2500 | Will grow with species — monitor cap |
-| WorldBible | ~145s | ~9251 | Under 10000 cap (no retry when cap not hit) |
-| apply-world-bible | ~3s | — | |
-| RegionBible burst ×4 parallel | ~30s | <7000 each | Clean |
-| **Total perceived wait** | **~45s** | | WB hidden behind char creation |
+**PART 4 — /api/game/generate-appearance-options:** haiku, 400 tokens. 3 gender-authentic appearance descriptor sets. Returns `{ options: AppearanceProfile[] }`.
 
-**V8.69 protocol:** Never change a token cap without confirmed output_tokens data.
+**PART 5 — /api/game/generate-random-name:** haiku, 50 tokens. Single name for genre + species + gender. Returns `{ name: string }`.
+
+**PART 6 — /api/game/generate-random-character:** haiku, 700 tokens. Full coherent character (name/gender/species_id/class_id/origin/appearance/motivation) thematically coherent with world. Returns `{ character }`.
+
+**PART 7 — /api/game/save-character-profile:** Atomic read→patch→write. Sets `master_state.player.character_profile`. Same pattern as apply-world-bible.
+
+**PART 8 — WorldForgingScreen component:** 4-stage genre-specific messaging. 80ms/char typewriter with latch ref preventing mid-sequence restart. All timeouts cleaned on unmount. Calls `onComplete()` after transition message.
+
+**PART 9 — app/game/new/page.tsx rewrite:** Full 7-step wizard. WizardStage: genre → forging → species → class → origin → appearance → name → motivation. WCD fires async on genre→Next, WorldForgingScreen owns viewport during generation. Mode picker (RANDOM/GUIDED/CUSTOM) on species step. Species tap cards from wcd.species. Origin cards haiku-generated on class select. Appearance cards haiku-generated on appearance step entry. Gender toggle (♂/♀) on name step. Random name button. Motivation textarea with skip. Submit chain: new session → WCD (from state) → WorldBible → apply → save-character-profile → RegionBible burst → navigate.
+
+### Generation timing (revised after 23.5B — WCD with species)
+| Step | Time | Notes |
+|---|---|---|
+| WCD (with species) | ~56s | Up from ~37s — species instructions added to prompt |
+| WorldBible | ~145s | Runs after WCD, during char creation steps |
+| RegionBible burst ×4 | ~30s | Parallel, after WorldBible |
+| **Perceived wait (WCD loading screen)** | **~56s** | Player then does ~60-90s char creation |
 
 ---
 
-## Day 23.5B — Character Creation UI (NEXT)
+## Day 23.5C — Narrator + Trust Integration (NEXT)
 
 See Drive doc: "day-23-5-character-creation-design-spec-v2" for full spec.
 
-### Flow
-Genre select → WCD fires (~40-45s) → **WorldForgingScreen** loading → WCD complete → character creation opens with species cards → Species → Class → Origin → Appearance → Name → Motivation → Begin Adventure. WorldBible fires in background after WCD completes (hidden behind character creation steps).
+### What 23.5C implements
+1. **prompt-builder.ts** — add PLAYER CHARACTER block to every narrator prompt:
+   ```
+   ═══ PLAYER CHARACTER ═══
+   Species: {species.name} — {species.lore_notes}
+   Gender: {gender}
+   Appearance: {appearance.summary}
+   Origin: {origin.label} — {origin.description}
+   Motivation: {motivation}  [omit if empty]
+   ════════════════════════
+   ```
+   Read species from `metadata.species.find(s => s.id === player.character_profile.species_id)`.
 
-### WorldForgingScreen (loading component)
-4 stages tied to generation progress:
-1. Atmospheric opener (genre-specific, on WCD start)
-2. Escalating tension mid-generation
-3. "A name forms..." then world name types in letter by letter (~80ms/char, blinking cursor)
-4. Transition message → character creation slides in, world name moves to header
+2. **Trust formula at first NPC encounter** — incorporate species.npc_disposition_seed:
+   ```
+   effective_trust = 50
+     + (species?.npc_disposition_seed ?? 0)
+     + (npc.disposition_modifiers?.toward_species[species_id] ?? 0)
+     + existing world_state modifiers
+   ```
 
-Genre messages:
-- Fantasy: "A world stirs beyond the veil..." / "Ancient forces weave the land..." / "A name forms from nothing..." / "Your fate awaits."
-- Cyberpunk: "Initializing simulation..." / "Compiling reality matrix..." / "World designation incoming..." / "Jack in."
-- Horror: "Something stirs in the dark..." / "The voices grow louder..." / "A name forms from the whispers..." / "You shouldn't be here."
-- Space Opera: "Scanning star charts..." / "Calculating jump coordinates..." / "World designation confirmed..." / "Prepare for entry."
-- Post-Apoc: "Surveying the ruins..." / "Mapping the wasteland..." / "Designation acquired..." / "Survivor, your world awaits."
+3. **apply-world-bible** — resolve `{motivation}` in `world_intro_template` from `character_profile.motivation`. Currently only `{name}` and `{class}` are resolved. Add `{motivation}`.
 
-### Three modes
-- **RANDOM**: haiku generates species+class+origin+appearance+name from world options. Accept or re-roll. Individual field re-roll optional.
-- **GUIDED** (~60s, fully tappable): Species tap cards → Class → Origin (3 tap cards, haiku) → Appearance (3 tap cards, haiku) → Name (field + random button) → Motivation (optional + skip)
-- **CUSTOM**: All fields open.
-
-### New API routes needed
-- `/api/game/generate-origin-options` — haiku, 3 origin cards per genre/class combo
-- `/api/game/generate-appearance-options` — haiku, 3 appearance cards
-
-### Saves to
-`master_state.player.character_profile: PlayerCharacterProfile`
+4. **generate-journal-entry** — pass `character_profile` in request context so diary voice reflects species + origin + motivation. Currently only gets location/event context.
 
 ---
 
@@ -130,15 +133,15 @@ Genre messages:
 
 See Drive doc: "day-23-5-character-creation-design-spec-v2" for full spec.
 
-**All design decisions made:**
-- Species in WCD (not a separate call). WCD generates species[] contextually from world seed.
-- Flow order: Genre → WCD loading → Species → Class → Origin → Appearance → Name (last) → Motivation
-- Origin → starting item/gold ONLY (no stats — class owns stat identity)
-- Species → Skyrim-style: resistances, vulnerabilities, passive_traits (max 2), environmental_flags, stat_modifiers (negatives allowed), npc_disposition_seed. Schema declared now; systems plug in without rework.
-- Damage types: fixed enum per genre + DamageTypeAlias[] for world-specific naming (deferred injection until elemental combat)
-- NPC disposition cold-starts from species.npc_disposition_seed — implemented in 23.5C
-- 23.5B scope: UI flow + WorldForgingScreen + three modes + origin/appearance generation + PlayerCharacterProfile save
-- 23.5C scope: narrator PLAYER CHARACTER block + trust formula + world_intro {motivation} resolution + journal context
+**All design decisions made and implemented (23.5A + 23.5B):**
+- 7-step flow: Genre → WCD loading → Species → Class → Origin → Appearance → Name+Gender → Motivation
+- Three modes: Random (haiku full character) / Guided (tap cards) / Custom (text inputs)
+- WorldForgingScreen: 4-stage genre messages + typewriter world name reveal
+- Species in WCD: 3-4 species per world, world-specific + anchors
+- Origin: item/gold bonus only, haiku-generated per genre/class
+- Gender: Male/Female on name step, feeds appearance generation + narrator (23.5C)
+- PlayerCharacterProfile saved to master_state after game creation
+- 23.5C remaining: narrator PLAYER CHARACTER block, trust formula, {motivation} resolution, journal context
 
 ---
 
@@ -259,20 +262,29 @@ See Drive doc: "day-23-5-character-creation-design-spec-v2" for full spec.
 113. **Quest discovery pipeline.** Boss-clear: scheduleActOneDiscovery 1200ms. Dialogue: pendingAct1Reveal → useDeferredQuestReveal (currentDialogueNpc null transition → 2500ms → runActOneDiscovery). QuestRevealModal: persistent hold (X/backdrop/Escape), QUEST_REVEAL CustomEvent. Acts 2/3: delayed ✦ beat only. (V8.63+64+65)
 114. **JournalModal + journal entry generation.** 4 tabs. JOURNAL between CODEX and SAVE. /api/game/generate-journal-entry (haiku, 200 tokens). LogEntryType.QUEST. Side Quests tab populated in 23D. (V8.63+65+66)
 115. **Codex concurrent-write race guard.** Module-scoped Set<string> keyed by sessionId:entryId. Synchronous claim prevents duplicate feed beats when steps 7b+7g fire concurrently. Both upserts still issue (idempotent). Clears on reload. (V8.65)
-116. **Side quest generation (Day 23D).** NPCDefinition gains quest_hook? + quest_seed?. SideQuest gains giver_name, region_id, discovery_trigger (QuestDiscoveryTrigger union — npc_dialogue/npc_rumor + 4 reserved), completion_condition, reward_hint, discovered. lib/game/side-quest-generator.ts: filterQuestHookNpcs, generateSideQuests (haiku, 800 tokens), mergeSideQuests (id-keyed dedup preserves progress). apply-regional-bible calls generator synchronously (atomic with master_state write — no fire-and-forget Vercel risk). Discovery: findUndiscoveredSideQuestForNpc + markSideQuestDiscovered in quest-discovery.ts; fires immediate side_quest_discovery SYSTEM beat (no modal, no delay — 11px serif italic accent 0.9 opacity). Journal SideQuestsTab: groups by status, hides undiscovered, count badge uses discovered only. (V8.66)
-117. **Region zone + settlement spawn discovered: false.** apply-regional-bible sets both to false at spawn time. Rule 12 flips on actual arrival. Prevents rule 86 revisit suppression on first cross-region entry. (V8.67)
-118. **Quest seed in narrator DIALOGUE context.** NPCDefinition quest_hook/quest_seed mirrored into WorldAssetConstitution. prompt-builder ACTIVE NPC block appends SITUATION sub-block for quest-hook NPCs. Narrator surfaces situation naturally, not as mission briefing. (V8.67)
-119. **Generation timing instrumentation.** [GEN_TIMING] logs on generate-wcd, generate-world-bible, generate-world-seed, generate-regional-bible. (V8.68)
-120. **WCD max_tokens 4000, sonnet model.** Actual output ~1800-2500 tokens with species. Monitor cap after 23.5A. (V8.68+70)
-121. **WorldBible max_tokens 10000, sonnet model.** Actual output ~9251 tokens on clean run. (V8.69)
-122. **RegionBible max_tokens 7000, haiku model.** Restored after audit regression. (V8.69)
+116. **Side quest generation (Day 23D).** NPCDefinition gains quest_hook? + quest_seed?. SideQuest gains giver_name, region_id, discovery_trigger, completion_condition, reward_hint, discovered. lib/game/side-quest-generator.ts: filterQuestHookNpcs, generateSideQuests (haiku, 800 tokens), mergeSideQuests. apply-regional-bible calls generator synchronously. Discovery fires immediate side_quest_discovery SYSTEM beat. Journal SideQuestsTab hides undiscovered. (V8.66)
+117. **Region zone + settlement spawn discovered: false.** Rule 12 flips on actual arrival. (V8.67)
+118. **Quest seed in narrator DIALOGUE context.** SITUATION sub-block for quest-hook NPCs. (V8.67)
+119. **Generation timing instrumentation.** [GEN_TIMING] logs on WCD, WorldBible, WorldSeed, RegionBible. (V8.68)
+120. **WCD max_tokens 4000, sonnet.** Output ~1800-3117 tokens with species. (V8.68+70+71)
+121. **WorldBible max_tokens 10000, sonnet.** Output ~7997-9251 tokens. (V8.69)
+122. **RegionBible max_tokens 7000, haiku.** Output 5000-6000 tokens typical. (V8.69)
 123. **RegionBible burst confirmed parallel.** fire-and-forget in-flight Map. (V8.68)
 124. **No token cap changes without output_tokens data.** (V8.69)
-125. **Species generated in WCD.** species[] + damage_type_aliases[] in WCD output. Stored in metadata by both apply-world-seed and apply-world-bible. 3-4 species per world: Human anchor + genre-common anchor + 1-2 world-specific. Forbidden archetype list + genre aesthetic constraints + WCD-anchored uniqueness requirement prevent fixation. (V8.70)
-126. **Species schema.** Species: id/name/description/lore_notes/is_anchor/stat_modifiers/skill_affinities/resistances/vulnerabilities/passive_traits(max 2)/environmental_flags/npc_disposition_seed/faction_affinities?. PassiveTrait: id/label/description/effect_type/effect_data. TraitEffectType union + EnvironmentalFlag union in types/game.ts. Unknown effect_types fall through to flavor_only at runtime. (V8.70)
-127. **PlayerCharacterProfile schema.** species_id + origin(OriginChoice) + appearance(AppearanceProfile) + motivation. Stored at MasterState.player.character_profile. OriginChoice.starting_bonus = item or gold ONLY, no stat. (V8.70)
-128. **NPCDefinition extended.** species_id? + disposition_modifiers?{toward_species/toward_factions} + min_trust_to_recruit? added. WorldBible NPCs may optionally carry species_id and disposition_modifiers. (V8.70)
-129. **WorldBible species context block.** 3-5 line block injected after WCD block listing species names+ids. NPCs may reference them. No restructuring of 36K-char WB prompt. (V8.70)
+125. **Species generated in WCD.** species[] + damage_type_aliases[] in WCD. Stored by apply-world-seed + apply-world-bible. 3-4 species per world. Forbidden archetype list + genre aesthetic constraints + WCD-anchored uniqueness requirement. (V8.70)
+126. **Species schema.** Full schema in types/game.ts. PassiveTrait max 2 per species. Unknown effect_types → flavor_only. (V8.70)
+127. **PlayerCharacterProfile schema.** species_id + gender("male"|"female") + origin(OriginChoice) + appearance(AppearanceProfile) + motivation. Stored at MasterState.player.character_profile. (V8.70+71)
+128. **NPCDefinition extended.** species_id? + disposition_modifiers? + min_trust_to_recruit? (V8.70)
+129. **WorldBible species context block.** 3-5 lines after WCD block. No restructuring of 36K-char prompt. (V8.70)
+130. **WCD character fields optional.** character_name + character_class omitted from WCD call in new flow. WCD fires on genre select before character creation. (V8.71)
+131. **Character creation wizard: 7-step flow.** WizardStage: genre → forging → species → class → origin → appearance → name → motivation. Mode picker: RANDOM/GUIDED/CUSTOM on species step. (V8.71)
+132. **WorldForgingScreen component.** 4-stage genre messaging + 80ms/char typewriter world name reveal. Latch ref prevents mid-sequence restart. onComplete() fires after transition message. (V8.71)
+133. **New haiku generation routes.** generate-origin-options (600 tok) · generate-appearance-options (400 tok, gender-aware) · generate-random-name (50 tok) · generate-random-character (700 tok, coherent full character). (V8.71)
+134. **save-character-profile route.** Atomic read→patch→write. Sets master_state.player.character_profile. (V8.71)
+135. **Origin generation fires on class select.** useEffect watching selectedBackground. Origin cards ready by the time player reaches origin step. (V8.71)
+136. **Appearance generation fires on appearance step entry.** Gender-aware: re-generates if gender changes after appearance step already visited. (V8.71)
+137. **Gender toggle on name step.** ♂ Male / ♀ Female. Feeds appearance generation, narrator context (23.5C), journal voice (23.5C). (V8.71)
+138. **Random mode.** Single haiku call generates full coherent character. Lands on name step pre-filled for confirmation. (V8.71)
 
 ---
 
@@ -286,10 +298,11 @@ See Drive doc "quest-source-taxonomy" for full spec.
 
 ## Narrator Prompt Order
 
-DIALOGUE: WCD → HARD RULES → RESPONDING CHARACTER → CLOSED CONTEXT → TIER 1 OBJECTS → WORLD ASSETS → SCENE → VERBOSITY
-non-DIALOGUE: WCD → HARD RULES → NPCS PRESENT → TIER 1 OBJECTS → CONNECTED LOCATIONS → WORLD ASSETS → SCENE → VERBOSITY
-DUNGEON ROOM: WCD → HARD RULES → CURRENT ROOM → OBJECTS IN ROOM → ADJACENT ROOMS → SCENE → VERBOSITY (no inventory, no settlement)
+DIALOGUE: WCD → HARD RULES → PLAYER CHARACTER → RESPONDING CHARACTER → CLOSED CONTEXT → TIER 1 OBJECTS → WORLD ASSETS → SCENE → VERBOSITY
+non-DIALOGUE: WCD → HARD RULES → PLAYER CHARACTER → NPCS PRESENT → TIER 1 OBJECTS → CONNECTED LOCATIONS → WORLD ASSETS → SCENE → VERBOSITY
+DUNGEON ROOM: WCD → HARD RULES → PLAYER CHARACTER → CURRENT ROOM → OBJECTS IN ROOM → ADJACENT ROOMS → SCENE → VERBOSITY
 COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint
+Note: PLAYER CHARACTER block added in 23.5C — not yet in prompt-builder.
 
 ---
 
@@ -323,7 +336,7 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint
 
 ## Tech Stack · Classes · Monetization
 
-**Stack:** Next.js 14 · Tailwind + shadcn/ui · Supabase · claude-sonnet-4-5 · claude-haiku-4-5-20251001 (RegionBible + journal + side quests + origin/appearance generation) · Stripe · Vercel · Howler.js · Zustand
+**Stack:** Next.js 14 · Tailwind + shadcn/ui · Supabase · claude-sonnet-4-5 · claude-haiku-4-5-20251001 (WCD species + RegionBible + journal + origin/appearance/name/random-character generation) · Stripe · Vercel · Howler.js · Zustand
 
 | Genre | Color | Currency | HP | Classes |
 | --- | --- | --- | --- | --- |

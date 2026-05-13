@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.68
-**Status:** Gen speed audit 7151085 complete (567/567) — timing report pending before Day 23.5
+**Version:** 8.69
+**Status:** Pipeline restored (f91aef0 + 8deb9bd, 567/567) — WorldBible split design needed before 23.5
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -28,6 +28,7 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 - **V8.40** — Investigation-before-patching.
 - **V8.41** — Origin/main baseline check: `git fetch origin && git log origin/main --oneline -5` as step 1.
 - **V8.66** — jest baseline = 567. See rule 91.
+- **V8.69** — No token cap changes without confirmed output_tokens data first.
 
 ---
 
@@ -38,8 +39,8 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 ### Sequence
 
 1–15. ~~Through Day 23D + hotfixes~~ ✅
-15b. ~~Gen speed audit~~ ✅ — timing report pending; Phase 2B optimizations may follow
-15a. **Day 23.5 — Character Creation Rework** ⏳ NEXT (after timing report + any Phase 2B)
+15b. Gen speed audit — pipeline restored; WorldBible split design in progress ⏳
+15a. **Day 23.5 — Character Creation Rework** ⏳ NEXT (after WorldBible split)
 16–18. Merchant Trading · Combat UX Polish · Mobile Combat Layout
 19. Day 24 — Multiplayer Foundation
 20. Day 25 — Customization Layer
@@ -49,32 +50,64 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 
 ## Current Status
 
-**Phase:** Gen speed audit landed (7151085, 567/567). Awaiting timing report from new-game test.
+**Phase:** Pipeline restored. WorldBible outputs ~8000–10000 tokens and is the primary bottleneck (~2.5–3 min alone). Split design needed before 23.5.
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** AtomicTim/endless-worlds-rpg
 
 | Phase | Status |
 | --- | --- |
 | Gen pipeline + Day 23A–23D (all parts + fixes) | ✅ |
 | Hotfix 73b6035 — region spawn flags + quest seed narrator injection | ✅ |
-| Gen speed audit 7151085 — instrumentation + optimizations | ✅ |
-| **Timing report** — start new game, paste [GEN_TIMING] server logs | ⏳ **ACTION NEEDED** |
-| **Day 23.5 — Character Creation Rework** | ⏳ After timing report |
+| Gen speed audit — instrumentation added, regressions introduced + restored | ✅ (net neutral) |
+| **WorldBible split design** — split into Core + Extended calls | ⏳ Design in progress |
+| **Day 23.5 — Character Creation Rework** | ⏳ After WorldBible split |
 | Merchant Trading / Combat UX / Mobile Layout | ⏳ |
 | Day 24 Multiplayer / Day 25 Customization | ⏳ Pre-launch |
 
 **Known issues:** HP bar timing (deferred) · No equip during combat (intentional, rule 63) · Nav card peer disappearance (unresolved) · Nav card color differentiation for non-dungeon region_locations (deferred).
 
-### Gen speed audit 7151085 — Instrumentation + optimizations (567/567, tsc clean)
+### Current token caps (all restored to working values)
+- WCD: max_tokens 4000 · model sonnet · actual output ~1800 tokens ✅
+- WorldBible: max_tokens 10000 · model sonnet · actual output 8000–10000 tokens ⚠️ AT CAP
+- RegionBible: max_tokens 7000 · model haiku · actual output TBD (stubs confirmed fixed)
 
-**OPT 1 — WCD model:** claude-sonnet-4-5 → claude-haiku-4-5-20251001. Structured-JSON output; haiku ~5× faster.
-**OPT 2 — WorldBible max_tokens:** 10000 → 3000. Prompt ~31K chars — body load-bearing, no cuts made. output_tokens === 3000 in logs = truncation signal → revert to higher cap.
-**OPT 3 — RegionBible max_tokens:** 7000 → 1500. Already on haiku. Stub fallback catches truncation.
-**OPT 4 — Burst parallelism:** Already parallel (fire-and-forget in-flight Map). Log added confirming parallel dispatch; no code change needed.
+### Confirmed timing breakdown (from full run)
+| Step | Time | Notes |
+|---|---|---|
+| WCD | ~37s | Clean, well under cap |
+| WorldBible | ~164s attempt 1 (hit cap) + ~136s retry = ~300s total | Primary bottleneck |
+| apply-world-bible | ~3s | Negligible |
+| RegionBible burst ×3 parallel | ~31s | Clean at 7000 cap |
+| **Total** | **~370s (~6 min)** | WorldBible retry is the killer |
 
-**Instrumentation added to:** generate-wcd · generate-world-bible · generate-world-seed · generate-regional-bible.
-**Log format:** `[GEN_TIMING] {route} called` · `[GEN_TIMING] {route} start — model: {m}, prompt_tokens: {N}` · `[GEN_TIMING] {route} complete — elapsed: {ms}ms, output_tokens: {N}`
+### Audit prompt regressions (all now reverted)
+- WCD model: sonnet → haiku (caused truncation at 2000 tokens) → reverted to sonnet
+- WorldBible max_tokens: 10000 → 3000 → 8000 → 10000 (manual) — all caused truncation
+- RegionBible max_tokens: 7000 → 1500 (caused all 3 regions to stub) → reverted to 7000
 
-**⚠️ CRITICAL CHECK in timing report:** If generate-world-bible shows `output_tokens: 3000` (at the cap), WorldBible is being truncated — revert max_tokens to a higher value before 23.5.
+### New protocol (V8.69)
+**Never change a token cap without first confirming the actual output_tokens from a clean run.**
+The original caps were set empirically. Any reduction requires data showing the model outputs less than the new cap. "It should be smaller" is not sufficient justification.
+
+---
+
+## WorldBible Split — Design (in progress)
+
+The WorldBible is outputting 8000–10000 tokens in a single call, taking 2.5–3 minutes, and
+hitting the cap unreliably. The fix is splitting into two sequential calls.
+
+**Call 1 — WorldBible-Core** (blocks game start):
+Starting region + NPCs + locations + adjacent region outlines + main quest seed + world_intro_template.
+Everything needed to drop the player into the world. Target: ~4000–5000 tokens, ~60–80s.
+
+**Call 2 — WorldBible-Extended** (non-blocking):
+World loot tables + enemy rosters + anything that doesn't block game start.
+Runs in parallel with RegionBible burst after Call 1 completes.
+Target: ~3000–4000 tokens, ~45–60s, hidden behind character creation/RegionBible time.
+
+**Key constraint:** apply-world-bible currently expects both sections in one response.
+The split requires: (1) two separate prompts, (2) apply-world-bible updated to handle
+two-phase apply, or (3) a new apply-world-bible-extended route for the second phase.
+Design this carefully before prompting Claude Code.
 
 ---
 
@@ -85,13 +118,12 @@ See Drive doc: "day-23-5-character-creation-design-spec" for full spec.
 **All design decisions made:**
 - Three modes: Random / Quick Guided / Custom — all produce same PlayerCharacter object
 - Flow order: Genre → [Phase 1 load, ~15–20s] → Species → Class → Origin → Appearance → **Name last** → Motivation
-- Phase 1/Phase 2 generation split: Phase 1 (world identity + species) fires on genre select, fast haiku call. Phase 2 (full WorldBible) runs in background during character creation steps.
-- Origin → starting item/gold ONLY (no stats — class owns stat identity)
-- Species → Skyrim-style: resistances, vulnerabilities, skill_affinities, passive_traits (max 2), environmental_flags, npc_disposition_seed. Schema declared now; future systems plug in without rework.
-- Species generated during WCD/WorldBible — contextually appropriate to world. Anchor species have consistent base traits; world-specific species have WCD-generated traits.
-- Damage types: fixed enum per genre (e.g. Fantasy: physical/fire/cold/poison/arcane/holy/shadow). WCD can alias canonical types to world-specific names (e.g. poison → "rootblight") via DamageTypeAlias[]. Alias injected everywhere — consistency enforced by data, not prompts.
-- NPC disposition cold-starts: species.npc_disposition_seed + npc.disposition_modifiers.toward_species applied at first encounter. Trust formula defined.
-- 23.5 scope: narrator context injection (species lore_notes + appearance.summary) + trust score cold-start. Merchant price formula deferred to trading session.
+- Phase 1/Phase 2 generation split: Phase 1 (world identity + species) fires on genre select. Phase 2 (full WorldBible) runs in background during character creation.
+- Origin → starting item/gold ONLY (no stats)
+- Species → Skyrim-style unique modifiers. Schema declared now; future systems plug in.
+- Damage types: fixed enum per genre + DamageTypeAlias[] for world-specific naming.
+- NPC disposition cold-starts from species.npc_disposition_seed.
+- 23.5 scope: narrator context injection + trust score cold-start only.
 
 ---
 
@@ -160,7 +192,7 @@ See Drive doc: "day-23-5-character-creation-design-spec" for full spec.
 61. Defeat/flee carry destination payload. Victory does not. (V8.38)
 62. rolls.d20 stores raw 1-20. target_dc wrapped in Math.round(). (V8.39)
 63. Inventory during combat: USE routes submitCombatAction; Equip/Unequip/Read/Drop hidden. INTERIM. (V8.39)
-64. Floating damage routing uses explicit switch(event.type). (V8.39)
+64. Floating damage routing uses explicit switch(event.type). (V8.40)
 65. Settlement-hub detection: is_settlement_node === true predicate only. (V8.39)
 66. Floating damage emitted inside projectCombatEventsToFeed, after pacing sleeps. (V8.40)
 67. computeFloatStartDelay: 300ms increments, animation-fill-mode: both. (V8.40)
@@ -215,11 +247,12 @@ See Drive doc: "day-23-5-character-creation-design-spec" for full spec.
 116. **Side quest generation (Day 23D).** NPCDefinition gains quest_hook? + quest_seed?. SideQuest gains giver_name, region_id, discovery_trigger (QuestDiscoveryTrigger union — npc_dialogue/npc_rumor + 4 reserved), completion_condition, reward_hint, discovered. lib/game/side-quest-generator.ts: filterQuestHookNpcs, generateSideQuests (haiku, 800 tokens), mergeSideQuests (id-keyed dedup preserves progress). apply-regional-bible calls generator synchronously (atomic with master_state write — no fire-and-forget Vercel risk). Discovery: findUndiscoveredSideQuestForNpc + markSideQuestDiscovered in quest-discovery.ts; fires immediate side_quest_discovery SYSTEM beat (no modal, no delay — 11px serif italic accent 0.9 opacity). Journal SideQuestsTab: groups by status, hides undiscovered, count badge uses discovered only. (V8.66)
 117. **Region zone + settlement spawn discovered: false.** apply-regional-bible sets both to false at spawn time. Rule 12 flips on actual arrival. Prevents rule 86 revisit suppression on first cross-region entry. (V8.67)
 118. **Quest seed in narrator DIALOGUE context.** NPCDefinition quest_hook/quest_seed mirrored into WorldAssetConstitution. prompt-builder ACTIVE NPC block appends SITUATION sub-block for quest-hook NPCs. Narrator surfaces situation naturally, not as mission briefing. (V8.67)
-119. **Generation timing instrumentation.** [GEN_TIMING] logs on generate-wcd, generate-world-bible, generate-world-seed, generate-regional-bible. Format: called · start (model, prompt_tokens) · complete (elapsed ms, output_tokens). (V8.68)
-120. **WCD → haiku model.** claude-sonnet-4-5 → claude-haiku-4-5-20251001 for structured-JSON WCD output. (V8.68)
-121. **WorldBible max_tokens 10000 → 3000.** output_tokens === 3000 in logs = truncation; revert if seen. (V8.68)
-122. **RegionBible max_tokens 7000 → 1500.** Stub fallback catches truncation. (V8.68)
-123. **RegionBible burst confirmed parallel.** fire-and-forget in-flight Map; forEach dispatches all simultaneously. (V8.68)
+119. **Generation timing instrumentation.** [GEN_TIMING] logs on generate-wcd, generate-world-bible, generate-world-seed, generate-regional-bible. (V8.68)
+120. **WCD max_tokens 4000, sonnet model.** Actual output ~1800 tokens. Well under cap. (V8.68+69)
+121. **WorldBible max_tokens 10000, sonnet model.** Actual output 8000–10000 tokens — AT CAP. Split required. (V8.68+69)
+122. **RegionBible max_tokens 7000, haiku model.** Restored after audit regression. (V8.68+69)
+123. **RegionBible burst confirmed parallel.** fire-and-forget in-flight Map. (V8.68)
+124. **No token cap changes without output_tokens data.** Confirmed output size required before any reduction. (V8.69)
 
 ---
 
@@ -270,7 +303,7 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint
 
 ## Tech Stack · Classes · Monetization
 
-**Stack:** Next.js 14 · Tailwind + shadcn/ui · Supabase · claude-sonnet-4-5 · claude-haiku-4-5-20251001 (WCD + RegionBible + journal + side quests) · Stripe · Vercel · Howler.js · Zustand
+**Stack:** Next.js 14 · Tailwind + shadcn/ui · Supabase · claude-sonnet-4-5 · claude-haiku-4-5-20251001 (RegionBible + journal + side quests) · Stripe · Vercel · Howler.js · Zustand
 
 | Genre | Color | Currency | HP | Classes |
 | --- | --- | --- | --- | --- |
@@ -293,7 +326,7 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint
 
 Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim reports → Claude.ai updates docs → Tim verifies → next prompt.
 
-**Protocols:** Origin/main baseline check (rule 76) · Investigation-before-patching (V8.40). **npx jest (no pattern) = authoritative count. Baseline = 567 (rule 91).**
+**Protocols:** Origin/main baseline check (rule 76) · Investigation-before-patching (V8.40) · No token cap changes without output_tokens data (V8.69). **npx jest (no pattern) = authoritative count. Baseline = 567 (rule 91).**
 
 **Note:** Remote URL `https://github.com/AtomicTim/endless-worlds-rpg.git` (capitalized). Run `git remote set-url origin https://github.com/AtomicTim/endless-worlds-rpg.git` to silence redirect warnings.
 

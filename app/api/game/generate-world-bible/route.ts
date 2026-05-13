@@ -313,8 +313,8 @@ Return EXACTLY this JSON structure (fill in the values):
     ],
     "npcs": [
       {
-        "id": "character_innkeeper_slug",
-        "name": "Full Name",
+        "id": "<name_slug>",
+        "name": "<NPC name derived from WCD cultural context>",
         "home_location_id": "tavern_slug",
         "role": "innkeeper",
         "personality": "1 sentence",
@@ -324,8 +324,8 @@ Return EXACTLY this JSON structure (fill in the values):
         "default_trust": 50
       },
       {
-        "id": "character_merchant_slug",
-        "name": "Full Name",
+        "id": "<name_slug>",
+        "name": "<NPC name derived from WCD cultural context>",
         "home_location_id": "shop_slug",
         "role": "merchant",
         "personality": "1 sentence",
@@ -463,6 +463,13 @@ town. Connect it to the settlement node via connections.
 'name' is the geographic region. 'settlement_name' is the town.
 Make content original, specific to the WCD and genre.
 REAL NAMES for all NPCs. No placeholders.
+
+NPC names must be derived from the cultural, linguistic, and
+geographic context established in the WCD above. A maritime
+salvage world names people differently than a volcanic fortress
+world. A corporate dystopia names people differently than a
+haunted coastal village. Read the WCD. Let the world's identity
+generate the names — do not draw from generic naming pools.
 
 V8.53 — MINIMUM-VIABLE WORLDBIBLE
 Generate ONLY what the player needs at game start. RegionBible
@@ -1323,9 +1330,17 @@ export async function POST(request: NextRequest) {
   }
 
   const { genre, character_name, character_class, wcd } = body;
-  if (!genre || !character_name || !character_class || !wcd) {
+  // Day 23.5C+1 (FIX 5) — character_name + character_class are fully
+  // optional. The background fire from /game/new fires WB right after
+  // WCD completes (before the player has chosen a name/class), so
+  // it sends "" for both. The WB prompt builder omits the Character
+  // line cleanly when both are blank; world_intro_template
+  // {name}/{class} resolution lives in apply-world-bible reading
+  // master_state.player_state.name / .background. Only genre + wcd
+  // are required for a valid WB request.
+  if (!genre || !wcd) {
     return NextResponse.json(
-      { error: "Missing required fields: genre, character_name, character_class, wcd" },
+      { error: "Missing required fields: genre, wcd" },
       { status: 400 }
     );
   }
@@ -1333,7 +1348,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid genre" }, { status: 400 });
   }
 
-  const userPrompt = buildUserPrompt(genre, character_name, character_class, wcd);
+  const charName  = typeof character_name  === "string" ? character_name.trim()  : "";
+  const charClass = typeof character_class === "string" ? character_class.trim() : "";
+  console.log(
+    charName || charClass
+      ? "[WB] generating with character context"
+      : "[WB_BACKGROUND] generating without character context",
+  );
+
+  const userPrompt = buildUserPrompt(genre, charName, charClass, wcd);
 
   // V8.68 — prompt audit data point. The WB prompt body is mostly the
   // JSON skeleton + load-bearing instruction blocks (Day 20 enemies,

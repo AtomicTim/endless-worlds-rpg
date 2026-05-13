@@ -50,7 +50,38 @@ function buildUserPrompt(body: {
     headerLine,
     "",
     "Requirements:",
-    "- world_name: a unique evocative name for this world (not Earth)",
+    "- world_name: the name of the ENTIRE GAME WORLD — the planet,",
+    "  continent, or reality that all events take place in. It is the",
+    "  word a resident would use when asked 'where are you from?' and",
+    "  gesturing at everything around them.",
+    "",
+    "  It must NOT be:",
+    "    - The name of a settlement, city, or region within the world",
+    "    - A descriptive document title or phrase",
+    "      ('The Drowned Ledger', 'The Lost Chronicle')",
+    "    - A geographic feature ('The Shattered Jetty',",
+    "      'The Cinder Threshold')",
+    "",
+    "  It MUST be:",
+    "    - A proper name that feels like a world someone inhabits",
+    "    - Genre-appropriate in scope and feel:",
+    "      FANTASY — invented world name (a single evocative word or",
+    "        short phrase that sounds like a place civilizations have",
+    "        named their whole world)",
+    "      POST-APOCALYPTIC — a name for the remnant of Earth or the",
+    "        wasteland region the game takes place in",
+    "      HORROR — the name of the isolated location, community, or",
+    "        reality the horror occupies (can be a town name if the",
+    "        game is set in one place)",
+    "      CYBERPUNK — a future city, corporate zone, or urban",
+    "        territory name (Earth-based; name it like a place people",
+    "        actually live and fight over)",
+    "      SPACE OPERA — a planet name, system name, or the name of a",
+    "        space territory/station the game centers on",
+    "",
+    "  The world_name appears at the top of the game screen and is the",
+    "  first thing every player reads. It must feel like a world, not",
+    "  a filing cabinet.",
     "- world_tagline: one atmospheric sentence capturing the world's essence",
     "- atmosphere: 1-2 sentences of tonal and sensory truth about this world",
     "- world_description: 2-3 sentences describing this world AS A WHOLE — its core premise, what makes it unique, why a player would care. NOT atmospheric prose about one place; this is the world-level summary shown when the player opens the map's World tier. Distinct from atmosphere (sensory/tonal) and from any region's atmosphere.",
@@ -208,7 +239,10 @@ function buildUserPrompt(body: {
     "     skip the second anchor and generate 2 world-specific species",
     "     instead of 1.",
     "   CYBERPUNK: Augmented (heavily modified human)",
-    "     stat_modifiers {\"strength\": 1, \"agility\": 1, \"intelligence\": -1}",
+    "     stat_modifiers: exactly one +1 and one -1. Pick the tradeoff",
+    "     that fits the WCD's specific augmentation culture (e.g.",
+    "     {\"strength\": 1, \"intelligence\": -1} for combat chrome,",
+    "     {\"intelligence\": 1, \"charisma\": -1} for neural overclocking).",
     "     1 passive trait: effect_type \"combat_passive\" or",
     "     \"environmental\" — tech-interface or physical enhancement.",
     "   HORROR: NO second anchor. Horror requires human",
@@ -266,7 +300,7 @@ function buildUserPrompt(body: {
     '  "description": "<2-3 sentences from WCD atmosphere>",',
     '  "lore_notes": "<1 sentence: how others in this world see them>",',
     '  "is_anchor": <true|false>,',
-    '  "stat_modifiers": {"<stat_key>": <integer>},',
+    '  "stat_modifiers": { "<StatKey>": 1, "<StatKey>": -1 },',
     '  "skill_affinities": [],',
     '  "resistances": {},',
     '  "vulnerabilities": {},',
@@ -285,11 +319,33 @@ function buildUserPrompt(body: {
     "",
     "Constraints:",
     "- passive_traits: MAX 2 per species, MAX 1 for anchor species",
+    "",
+    "- stat_modifiers: EXACTLY 2 entries maximum. No exceptions.",
+    "  Values: exactly +1 or -1 only. No +2. No -2.",
+    "  One positive entry, one negative entry.",
+    "  Shape: { ONE_STAT: 1, ANOTHER_STAT: -1 }",
+    "  Human anchor: stat_modifiers: {} (empty — Human is the baseline)",
+    "  All other species: exactly one +1 and one -1.",
+    "  This represents a meaningful tradeoff, not a stat sheet.",
+    "  A species is better at one thing and worse at another.",
+    "  Nothing more.",
+    "",
     "- npc_disposition_seed: 0 = neutral/common, +5 to +10 =",
-    "  trusted or revered, -5 to -15 = feared or persecuted",
-    "- stat_modifiers: world-specific species MUST include at least",
-    "  1 negative — meaningful tradeoffs, not pure buffs",
-    "- Human always has stat_modifiers: {}",
+    "  trusted or revered, -5 to -15 = feared or persecuted.",
+    "",
+    "  COMMITMENT RULE — npc_disposition_seed MUST match the species'",
+    "  lore_notes. Read what you wrote in lore_notes:",
+    "    If lore_notes says the species is feared, distrusted, or",
+    "    persecuted: seed must be -8 or lower (e.g. -8, -10, -12).",
+    "    If lore_notes says the species is revered, trusted, or",
+    "    privileged: seed must be +8 or higher (e.g. +8, +10, +12).",
+    "    If lore_notes says the species is unremarkable, common, or",
+    "    socially neutral: seed = 0.",
+    "  Do NOT write lore_notes that describe social tension and then",
+    "  assign seed = 0 or seed = -2. The number must commit to what",
+    "  the text says. Mild or vague feelings should be written as",
+    "  neutral (seed = 0) not assigned a small non-zero value.",
+    "",
     "- Use effect_type \"flavor_only\" for traits whose mechanical",
     "  systems are not yet built",
     "",
@@ -578,6 +634,10 @@ function normalizeWcd(parsed: unknown): unknown {
     if (typeof sp.is_anchor   !== "boolean") sp.is_anchor   = false;
 
     // stat_modifiers — remap abbreviations + drop unknown keys.
+    // Day 23.5C+1 — also clamp to ±1 per entry and to MAX 2 entries
+    // total (one positive, one negative). The new prompt spec caps
+    // species at exactly two tradeoffs of magnitude 1; the model can
+    // overshoot so we enforce at the data layer too.
     const rawMods = (sp.stat_modifiers && typeof sp.stat_modifiers === "object")
       ? (sp.stat_modifiers as Record<string, unknown>)
       : {};
@@ -586,9 +646,23 @@ function normalizeWcd(parsed: unknown): unknown {
       const mapped = STAT_ABBREVIATIONS[rawKey] ?? rawKey.toLowerCase();
       if (!VALID_STAT_KEYS.has(mapped)) continue;
       if (typeof rawVal !== "number" || !Number.isFinite(rawVal)) continue;
-      cleanedMods[mapped] = Math.trunc(rawVal);
+      const truncated = Math.trunc(rawVal);
+      if (truncated === 0) continue;
+      // Clamp magnitude to ±1.
+      cleanedMods[mapped] = truncated > 0 ? 1 : -1;
     }
-    sp.stat_modifiers = cleanedMods;
+    // Cap to 2 entries — prefer 1 positive + 1 negative when both
+    // exist. Drop extras silently (the spec is hard-rule: "no exceptions").
+    const positives = Object.entries(cleanedMods).filter(([, v]) => v > 0);
+    const negatives = Object.entries(cleanedMods).filter(([, v]) => v < 0);
+    const finalMods: Record<string, number> = {};
+    if (positives[0]) finalMods[positives[0][0]] = 1;
+    if (negatives[0]) finalMods[negatives[0][0]] = -1;
+    // If only one polarity was present, allow up to 2 of that polarity
+    // (anchor species sometimes legitimately get one tradeoff only).
+    if (!positives[0] && negatives[1]) finalMods[negatives[1][0]] = -1;
+    if (!negatives[0] && positives[1]) finalMods[positives[1][0]] = 1;
+    sp.stat_modifiers = finalMods;
 
     if (!Array.isArray(sp.skill_affinities))   sp.skill_affinities   = [];
     if (!sp.resistances     || typeof sp.resistances     !== "object") sp.resistances     = {};

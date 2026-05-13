@@ -254,7 +254,7 @@ consistent with the WCD):
   "npcs": [
     {
       "id": "character_${npc1Slug}",
-      "name": "[Full Real Name]",
+      "name": "<NPC name derived from WCD cultural context>",
       "home_location_id": "${subSlug}",
       "role": "innkeeper",
       "personality": "[1 sentence]",
@@ -265,7 +265,7 @@ consistent with the WCD):
     },
     {
       "id": "character_${npc2Slug}",
-      "name": "[Full Real Name]",
+      "name": "<NPC name derived from WCD cultural context>",
       "home_location_id": "${subSlug}",
       "role": "patron",
       "personality": "[1 sentence]",
@@ -274,7 +274,7 @@ consistent with the WCD):
     },
     {
       "id": "character_${npc3Slug}",
-      "name": "[Full Real Name]",
+      "name": "<NPC name derived from WCD cultural context>",
       "home_location_id": "${regionLocSlug}",
       "role": "explorer",
       "personality": "[1 sentence — give them a reason to be at this remote spot]",
@@ -413,6 +413,13 @@ consistent with the WCD):
 
 Make everything original and consistent with the WCD.
 Real names for all NPCs. No placeholders.
+
+NPC names must be derived from the cultural, linguistic, and
+geographic context established in the WCD above. A maritime
+salvage world names people differently than a volcanic fortress
+world. A corporate dystopia names people differently than a
+haunted coastal village. Read the WCD. Let the world's identity
+generate the names — do not draw from generic naming pools.
 
 REGION_LOCATIONS COUNT GUIDANCE (V8.54 — match outline.region_type):
 The region_locations array MUST hold 2-4 standalone nodes alongside

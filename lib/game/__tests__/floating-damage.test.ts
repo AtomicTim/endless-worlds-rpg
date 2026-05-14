@@ -147,6 +147,32 @@ describe("makeFloatingEntry — Day 20.4.1 TASK 1 routing", () => {
     expect(makeFloatingEntry(evt({ type: "combat_start" }))).toBeNull();
   });
 
+  // Prompt 5 — status DoT ticks float a muted-orange number on the
+  // affected portrait (same size as a regular hit, never a crit).
+  it("status_tick produces a muted-orange float on the affected portrait", () => {
+    const result = makeFloatingEntry(evt({
+      type:           "status_tick",
+      actor:          "Goblin",
+      target:         PLAYER_ID,
+      damage_dealt:   3,
+      weapon_or_item: "poisoned",
+    }));
+    expect(result).not.toBeNull();
+    expect(result?.targetId).toBe(PLAYER_ID);
+    expect(result?.payload.value).toBe(3);
+    expect(result?.payload.kind).toBe("hit");   // no crit size upgrade
+    expect(result?.payload.color).toBe("#fb923c");
+  });
+
+  it("status_tick with no damage returns null", () => {
+    expect(makeFloatingEntry(evt({
+      type:         "status_tick",
+      actor:        "Goblin",
+      target:       PLAYER_ID,
+      damage_dealt: 0,
+    }))).toBeNull();
+  });
+
   it("player_attack with empty target returns null (defensive)", () => {
     expect(makeFloatingEntry(evt({
       type:    "player_attack",

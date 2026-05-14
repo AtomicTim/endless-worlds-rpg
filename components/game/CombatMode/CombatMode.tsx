@@ -35,6 +35,7 @@ import { ItemType } from "@/types/game";
 import type { CombatEvent, CombatState, PlayerState } from "@/types/game";
 import type { PlayerActionInput } from "@/lib/game/combat-engine";
 import { PLAYER_ID } from "@/lib/game/combat-engine";
+import type { WcdStatusAliasSource } from "@/lib/game/combat-narration/status-display";
 import type { FloatingDamageEntry } from "./CombatantRow";
 import { CombatantRow } from "./CombatantRow";
 import { ActionBar } from "./ActionBar";
@@ -68,11 +69,15 @@ interface Props {
    *  with the matching story-feed line). CombatMode is now a pure
    *  renderer for this map. */
   floatingByActor?: Record<string, FloatingDamageEntry[]>;
+  /** Prompt 5 — WCD for status-effect alias lookup. Threaded down to
+   *  the player's CombatantRow so the status pills can show world-
+   *  native names. Optional — pills fall back to the canonical id. */
+  wcd?:         WcdStatusAliasSource;
   onAction:     (action: PlayerActionInput) => void;
 }
 
 export function CombatMode({
-  combat, player, isResolving, displayPhase, floatingByActor, onAction,
+  combat, player, isResolving, displayPhase, floatingByActor, wcd, onAction,
 }: Props) {
   const [attackTargeting, setAttackTargeting] = useState(false);
   const [showItemPicker,  setShowItemPicker]  = useState(false);
@@ -256,6 +261,8 @@ export function CombatMode({
             combatant={player}
             isPlayer
             floatingDamage={floatingByActor?.[PLAYER_ID]}
+            statusEffects={combat.player_status_effects}
+            wcd={wcd}
           />
         </div>
 
@@ -413,9 +420,33 @@ export function makeFloatingEntry(
       };
     }
 
+    // ── Status DoT tick → muted-orange float over the affected portrait ─
+    // Prompt 5 — poisoned/burning ticks emit a float too. The engine
+    // applies status to the player only today, but route by event.target
+    // defensively so a future enemy-side DoT lands on the right portrait.
+    case "status_tick": {
+      const dmg = event.damage_dealt ?? 0;
+      if (dmg <= 0) return null;
+      const hostId =
+        typeof event.target === "string" && event.target.length > 0
+          ? event.target
+          : PLAYER_ID;
+      return {
+        targetId: hostId,
+        payload: {
+          key:   `status_tick_${event.timestamp}_${hostId}`,
+          value: dmg,
+          // "hit" kind keeps the 28px base size (no crit upgrade). The
+          // muted acid-orange reads as residual DoT, not a fresh hit.
+          kind:  "hit",
+          color: "#fb923c",
+        },
+      };
+    }
+
     // Everything else (defend, kill, flee_attempt, victory, defeat,
-    // round_start, player_turn_start, enemy_phase_start, combat_start):
-    // no floating number.
+    // round_start, player_turn_start, enemy_phase_start, combat_start,
+    // status_applied, status_saved, status_expired): no floating number.
     default:
       return null;
   }

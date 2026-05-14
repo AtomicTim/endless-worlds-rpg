@@ -90,9 +90,78 @@ export function renderRoutineCombatEvent(
       // Successful flee is dramatic — leave to LLM. Failed is templated.
       if (event.outcome === "fled_failed") return wrap(renderFleeFail(event));
       return null;
+    // ── Prompt 5 — status effect beats ─────────────────────────────────────
+    // Terse by design: these fire frequently and compete with combat
+    // prose. No rolls suffix — the lines carry the damage inline.
+    case "status_applied":
+      return { primary: renderStatusApplied(event, context), rolls: null };
+    case "status_tick":
+      return { primary: renderStatusTick(event, context), rolls: null };
+    case "status_saved":
+      return { primary: renderStatusSaved(event), rolls: null };
+    case "status_expired":
+      return { primary: renderStatusExpired(event), rolls: null };
     default:
       return null;
   }
+}
+
+// ── Prompt 5 — status effect renderers ─────────────────────────────────────
+// The status name is the raw canonical id for now (event.weapon_or_item);
+// world-alias skinning at narration time lands in P7 with WCD integration.
+
+/** Canonical buff ids — status_expired phrases buffs differently. */
+const STATUS_BUFF_IDS = new Set(["fortified", "hastened", "focused"]);
+
+/** Pull the status id off a status event (engine stores it in
+ *  weapon_or_item). Defensive fallback so a malformed event still
+ *  renders a readable line. */
+function statusIdOf(event: CombatEvent): string {
+  return event.weapon_or_item ?? "effect";
+}
+
+function renderStatusApplied(
+  event:   CombatEvent,
+  context: { enemyName?: (instanceId: string) => string | undefined }
+): string {
+  const id = statusIdOf(event);
+  if (event.target === "PLAYER") {
+    const source =
+      (event.actor !== "PLAYER" ? context.enemyName?.(event.actor) : undefined)
+      ?? "An enemy";
+    return `${source} inflicts ${id} on you.`;
+  }
+  // Enemy is the target (forward-compat — the engine applies status to
+  // the player only today).
+  const enemyName =
+    (typeof event.target === "string" ? context.enemyName?.(event.target) : undefined)
+    ?? "the enemy";
+  return `You afflict ${enemyName} with ${id}.`;
+}
+
+function renderStatusTick(
+  event:   CombatEvent,
+  context: { enemyName?: (instanceId: string) => string | undefined }
+): string {
+  const id  = statusIdOf(event);
+  const dmg = event.damage_dealt ?? 0;
+  if (event.target === "PLAYER") {
+    return `${id} deals ${dmg} damage.`;
+  }
+  const enemyName =
+    (typeof event.target === "string" ? context.enemyName?.(event.target) : undefined)
+    ?? "the enemy";
+  return `${id} deals ${dmg} damage to ${enemyName}.`;
+}
+
+function renderStatusSaved(event: CombatEvent): string {
+  return `You shake off the ${statusIdOf(event)}.`;
+}
+
+function renderStatusExpired(event: CombatEvent): string {
+  const id = statusIdOf(event);
+  if (STATUS_BUFF_IDS.has(id)) return `${id} wears off.`;
+  return `The ${id} fades.`;
 }
 
 // ── Day 20.4 TASK 2 — roll suffix builder ──────────────────────────────────

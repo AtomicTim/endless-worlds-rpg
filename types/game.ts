@@ -152,6 +152,10 @@ export interface Item {
   /** Sell value in genre currency. Common 5-15, Uncommon 20-50,
    *  Rare 100-300, Legendary 500+. */
   value?:      number;
+  /** P3 — true for player starting equipment. Starting gear has a
+   *  sell value of 0 (CLAUDE.md ECONOMY BASELINE); sellItem refuses
+   *  it with `no_value` regardless of the `value` field. */
+  starting_item?: boolean;
   // ── Day 23A — Dungeon key items ──────────────────────────────────────────
   /** Day 23A — when true, this item is a story-named key found in a
    *  dungeon's middle chamber. Used by the boss-room USE-key flow:
@@ -238,6 +242,17 @@ export interface DamageTypeAlias {
   canonical_type: DamageType;
   world_name:     string;
   description:    string;
+}
+
+/** Prompt 5 — world-specific status effect rename. Same opt-in shape as
+ *  DamageTypeAlias (the "rootblight" rule). Emitted by generate-wcd
+ *  (shipped P2); the combat UI resolves display names off this via
+ *  getStatusDisplayName. `description` is optional — the UI only needs
+ *  canonical_id + world_name. */
+export interface StatusEffectAlias {
+  canonical_id: StatusEffectId;
+  world_name:   string;
+  description?: string;
 }
 
 /** Trait effect categories. effect_data carries the type-specific payload;
@@ -659,6 +674,11 @@ export interface WorldConsistencyDocument {
    *  1-2 aliases when world_rules / atmosphere strongly imply a renamed
    *  type. Most worlds use the canonical names directly. */
   damage_type_aliases?: DamageTypeAlias[];
+  /** Prompt 5 — world-specific status effect renames. Default []; same
+   *  opt-in rule as damage_type_aliases (the "rootblight" rule, rule
+   *  174). Emitted by generate-wcd (shipped P2); the combat UI resolves
+   *  status pill display names off this. Optional so legacy WCDs load. */
+  status_effect_aliases?: StatusEffectAlias[];
 }
 
 // ---------------------------------------------------------------------------
@@ -808,6 +828,16 @@ export interface NPCDefinition {
   is_merchant?:      boolean;
   /** What the merchant sells. */
   speciality?:       string;
+  /** P3 — world-asset-backed merchant inventory. Seeded at
+   *  WorldBible/RegionBible generation time, never narrator-generated.
+   *  Depletes on purchase (item quantity → 0 = "Sold Out"); a sold
+   *  item is bought back into this list. Undefined / empty = the
+   *  merchant has nothing to sell. */
+  merchant_inventory?: Item[];
+  /** P3 — ItemTypes this merchant accepts when the player sells.
+   *  Omitted = non-merchant NPC (accepts nothing). VALUABLE items are
+   *  accepted by ANY merchant regardless of this list. */
+  merchant_speciality?: ItemType[];
   /** Starting trust score (0-100). */
   default_trust:     number;
   /** Day 23.5A — id of a Species entry in metadata.species (or
@@ -1681,10 +1711,11 @@ export interface DialogueOption {
    *    knowledge → submits speech AND pipes content to the narrator as
    *                closed-context (revealed on success, deflected on fail).
    *    trade     → opens the trade panel directly (no speech submitted).
+   *    rest      → P3: innkeeper inn-rest action (10 gold → full HP).
    *    free      → opens the inline free-type input row (no speech yet).
    *    farewell  → closes the dialogue (no speech submitted).
    *  Legacy AI-generated options omit this and rely on `tone` alone. */
-  type?:    "knowledge" | "trade" | "free" | "farewell";
+  type?:    "knowledge" | "trade" | "rest" | "free" | "farewell";
   /** For type==="knowledge": the full closed-context fact the NPC knows.
    *  Routed through resolution.narrative_context.selected_knowledge so
    *  the narrator prompt can reveal it on a passed stat check or

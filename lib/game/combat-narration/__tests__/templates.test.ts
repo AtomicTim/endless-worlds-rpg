@@ -535,6 +535,82 @@ describe("renderResolutionBanner (Day 20.3 TASK 5)", () => {
   });
 });
 
+// Prompt 5 — status effect story-feed templates.
+
+describe("renderRoutineCombatEvent — status effects (Prompt 5)", () => {
+  it("status_applied (player target) renders the source and the status id", () => {
+    const ev = makeEvent({
+      type:           "status_applied",
+      actor:          "g1",
+      target:         "PLAYER",
+      weapon_or_item: "poisoned",
+    });
+    const out = renderRoutineCombatEvent(ev, { enemyName: ENEMY_LOOKUP });
+    expect(out).not.toBeNull();
+    expect(out!.primary).toContain("Goblin");
+    expect(out!.primary).toContain("poisoned");
+    expect(out!.primary).toBe("Goblin inflicts poisoned on you.");
+  });
+
+  it("status_applied falls back to a generic source when the actor can't resolve", () => {
+    const ev = makeEvent({
+      type:           "status_applied",
+      actor:          "unknown_enemy",
+      target:         "PLAYER",
+      weapon_or_item: "burning",
+    });
+    const out = renderRoutineCombatEvent(ev, { enemyName: () => undefined });
+    expect(out!.primary).toBe("An enemy inflicts burning on you.");
+  });
+
+  it("status_tick (player target) includes the damage number", () => {
+    const ev = makeEvent({
+      type:           "status_tick",
+      actor:          "Goblin",
+      target:         "PLAYER",
+      damage_dealt:   3,
+      weapon_or_item: "poisoned",
+    });
+    const out = renderRoutineCombatEvent(ev);
+    expect(out).not.toBeNull();
+    expect(out!.primary).toContain("3");
+    expect(out!.primary).toBe("poisoned deals 3 damage.");
+  });
+
+  it("status_saved includes the status id", () => {
+    const ev = makeEvent({
+      type:           "status_saved",
+      actor:          "PLAYER",
+      target:         "PLAYER",
+      weapon_or_item: "chilled",
+    });
+    const out = renderRoutineCombatEvent(ev);
+    expect(out).not.toBeNull();
+    expect(out!.primary).toContain("chilled");
+    expect(out!.primary).toBe("You shake off the chilled.");
+  });
+
+  it("status_expired renders an ailment fade line", () => {
+    const ev = makeEvent({
+      type:           "status_expired",
+      actor:          "PLAYER",
+      target:         "PLAYER",
+      weapon_or_item: "frightened",
+    });
+    expect(renderRoutineCombatEvent(ev)?.primary).toBe("The frightened fades.");
+  });
+
+  it("status_expired renders a buff wear-off line", () => {
+    const ev = makeEvent({
+      type:           "status_expired",
+      actor:          "PLAYER",
+      target:         "PLAYER",
+      weapon_or_item: "fortified",
+    });
+    expect(renderRoutineCombatEvent(ev)?.primary).toBe("fortified wears off.");
+  });
+});
+
 // Day 20.1 TASK 3 — turn-boundary separators.
 
 describe("renderRoutineCombatEvent — turn separators (Day 20.1 TASK 3)", () => {

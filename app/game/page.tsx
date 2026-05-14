@@ -427,6 +427,7 @@ export default function GamePage() {
               isResolving={combatResolving}
               displayPhase={combatDisplayPhase}
               floatingByActor={combatFloatingByActor}
+              wcd={masterState.metadata.world_consistency}
               onAction={(a) => { void submitCombatAction(a); }}
             />
           ) : (

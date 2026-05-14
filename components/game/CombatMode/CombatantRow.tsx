@@ -1,9 +1,13 @@
 "use client";
 
 import React from "react";
-import type { CombatEnemyInstance, PlayerState } from "@/types/game";
+import type {
+  ActiveStatusEffect, CombatEnemyInstance, PlayerState,
+} from "@/types/game";
+import type { WcdStatusAliasSource } from "@/lib/game/combat-narration/status-display";
 import { PortraitSlot } from "./PortraitSlot";
 import { HPBar } from "./HPBar";
+import { StatusEffectPills } from "./StatusEffectPills";
 import { FloatingDamage } from "./FloatingDamage";
 
 /**
@@ -45,6 +49,12 @@ interface PlayerProps {
   shake?:          boolean;
   /** Day 20.4 TASK 3 — currently-animating floating numbers. */
   floatingDamage?: FloatingDamageEntry[];
+  /** Prompt 5 — active status effects on the player. Rendered as a
+   *  pill row below the HP bar; omitted/empty hides the row. */
+  statusEffects?:  ActiveStatusEffect[];
+  /** Prompt 5 — WCD for status-effect alias lookup (world-native pill
+   *  names). Optional — pills fall back to the capitalized id. */
+  wcd?:            WcdStatusAliasSource;
 }
 interface EnemyProps {
   combatant:       CombatEnemyInstance;
@@ -151,6 +161,15 @@ export function CombatantRow(props: Props) {
       </div>
 
       <HPBar current={current} max={max} isBoss={isBoss} />
+
+      {/* Prompt 5 — active status effect pills, directly below the
+          player HP bar. Player-only; renders nothing when empty. */}
+      {props.isPlayer && (props.statusEffects?.length ?? 0) > 0 && (
+        <StatusEffectPills
+          effects={props.statusEffects ?? []}
+          wcd={props.wcd}
+        />
+      )}
 
       {description && (
         <div

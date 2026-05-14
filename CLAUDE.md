@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.81  |  **Build status → see PROMPT-LOG.md**
+**Version:** 8.82  |  **Build status → see PROMPT-LOG.md**
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -26,7 +26,7 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 **Per-prompt protocols:**
 - **V8.40** — Investigation-before-patching.
 - **V8.41** — Origin/main baseline check: `git fetch origin && git log origin/main --oneline -5` as step 1.
-- **V8.81** — jest baseline = 593. See rule 91.
+- **V8.82** — jest baseline = 605. See rule 91.
 - **V8.69** — No token cap changes without confirmed output_tokens data first.
 - **V8.78** — Prompts for Claude Code are written directly in the Claude.ai conversation, not in Drive docs.
 
@@ -58,7 +58,7 @@ Post-Day 25: **Genre Session** (world theme taxonomy + world structure per-genre
 
 ---
 
-## Design Session Decisions (V8.77–V8.81) — Full index
+## Design Session Decisions (V8.77–V8.82) — Full index
 
 ### DEATH PENALTY (locked — ✅ shipped P1)
 - Gold loss: 10% of current gold, cap 50, floor 0
@@ -74,18 +74,19 @@ Post-Day 25: **Genre Session** (world theme taxonomy + world structure per-genre
 - Item tiers: Common consumable 8–15g · Uncommon 20–40g · Common weapon 30–60g · Uncommon weapon 80–150g
 - Starting equipment sell value = 0
 
-### MERCHANT TRADING (locked — P3)
+### MERCHANT TRADING (locked — P3 in progress)
 - Inventory seeded at WorldBible/RegionBible time — never narrator-generated
 - Trust pricing: 0–40 = +25% · 41–60 = base · 61–80 = −10% · 81–100 = −20%
 - Speciality-filtered selling; VALUABLE sells to any merchant
 - Quest completion gates (type === "item") must be mechanically enforced
 
-### STATUS EFFECTS (designed — ✅ engine P1, generation P2)
+### STATUS EFFECTS (designed — ✅ engine P1, generation P2, UI P5)
 - 5 ailments: POISONED (1d4/3r AGI DC12) · BURNING (1d6/2r AGI DC14) · CHILLED (−2atk+saves/2r STR DC11) · WEAKENED (−3STR/2r STR DC10) · FRIGHTENED (−2all/2r CHA DC12)
 - 3 buffs: FORTIFIED (+3 armor/3r) · HASTENED (+3 atk/2r) · FOCUSED (+3 INT-PER/2r)
 - One-curse limit (ailments). Boss resistance: max 1 tick, 2-round immunity after.
 - Save: d20 + stat vs DC at END of player turn.
 - World aliases: WCD.status_effect_aliases (only when thematically compelling — "rootblight" rule)
+- UI: StatusEffectPills below player HP bar. DoT floats #fb923c. Feed templates for all 4 status events.
 
 ### DAMAGE TYPES (designed — ✅ shipped P1 + P2)
 - Enemy gains primary_damage_type?: DamageType
@@ -200,7 +201,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 56. Resolution events: two-line centered block, ≤20-word LLM prose, max_tokens 120. (V8.37)
 57. CombatEvent.rolls on every event. (V8.38)
 58. Inline roll suffix: `{primary, rolls}` return shape. (V8.38)
-59. Floating damage: hit/crit/heal only. (V8.38–39)
+59. Floating damage: hit/crit/heal/status_tick. (V8.38–39+82)
 60. Defeat teleport: last_settlement_hub_id initialized at spawn; 3-tier fallback. (V8.38)
 61. Defeat/flee carry destination payload. Victory does not. (V8.38)
 62. rolls.d20 stores raw 1-20. target_dc wrapped in Math.round(). (V8.39)
@@ -223,7 +224,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 79. **Prompt-template hardcoded IDs are a recurring bug class.** (V8.42)
 80. **Nav card dedup at region zone.** DEEPER suppresses settlement if matches BACK. (V8.43–44)
 81. **Map tier auto-switch on every arrival.** Region zone → tier 2, else → tier 1. (V8.43–44)
-82. **jest baseline history.** 393→…→552→567→580→593. (V8.47–V8.81)
+82. **jest baseline history.** 393→…→552→567→580→593→605. (V8.47–V8.82)
 83. **Loot never auto-credits.** All drops go to floor_loot[]. (V8.47)
 84. **Container search is engine-resolved, zero LLM calls.** (V8.47)
 85. **Currency + inventory cap canonical.** INVENTORY_CAP = 20. (V8.47)
@@ -232,7 +233,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 88. **resolveUseItem resolves heal by effect, not id.** (V8.49)
 89. **Archetype system in archetypes.ts.** 25 classes. STAT_BASE=2, primary +2, secondary +1. (V8.50)
 90. **Level-up post-combat, player-driven.** LevelUpModal + 5-button picker. (V8.50)
-91. **jest baseline = 593 (V8.81).** HF1 added 13 tests (580→593). 593 is authoritative. (V8.81)
+91. **jest baseline = 605 (V8.82).** P5 added 12 tests (593→605). 605 is authoritative. (V8.82)
 92. **Ability modifier: floor((score-2)/2).** (V8.51)
 93. **Enemy stat budgets: tier-1 agi_mod ≤1, hp min ≤8.** (V8.51)
 94. **RegionBibleCache in-flight dedup via Map<string, Promise>.** (V8.53)
@@ -254,7 +255,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 110. **World intro cinematic modal** — see rule 42. (V8.75)
 111. **Act 1 breadcrumb discovery.** Two triggers: DIALOGUE + boss clear. (V8.62)
 112. **Sub-location node_type fix.** (V8.63)
-113. **Quest discovery pipeline.** act1RevealFiredRef is a permanent session latch — once true, never resets, regardless of subsequent NPC dialogue turns. Boss-clear 1200ms. Dialogue: fires exactly once per session. (V8.63+64+65+76+81)
+113. **Quest discovery pipeline.** act1RevealFiredRef is a permanent session latch — once true, never resets. Boss-clear 1200ms. Dialogue: fires exactly once per session. (V8.63+64+65+76+81)
 114. **JournalModal + journal entry generation.** 4 tabs. haiku 200 tokens. CHARACTER VOICE block. (V8.63+65+66+73)
 115. **Codex concurrent-write race guard.** (V8.65)
 116. **Side quest generation (Day 23D).** Synchronous in apply-regional-bible. (V8.66)
@@ -297,8 +298,8 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 153. **World theme taxonomy designed.** 54 themes in Drive: "world-theme-taxonomy". Genre Session implementation. (V8.76)
 154. **Death penalty designed + shipped P1.** 10% gold (cap 50) + 75% HP spawn + Inn Rest (10g → HP to max). (V8.77+79)
 155. **Economy baseline designed.** Price tiers, enemy gold drops, merchant seeding rules. Drive: "economy-and-progression-design-spec". (V8.77)
-156. **Merchant trading architecture designed.** World-asset-backed inventory, trust pricing, speciality selling. P3 scope. (V8.77)
-157. **Status effects designed + shipped.** Engine P1. World aliases P2. UI P5. (V8.77+79+80)
+156. **Merchant trading architecture designed.** World-asset-backed inventory, trust pricing, speciality selling. P3 in progress. (V8.77)
+157. **Status effects fully shipped.** Engine P1. World aliases P2. UI P5 (pills + feed templates + DoT floats + getStatusDisplayName with alias resolution). StatusEffectAlias type + WCD.status_effect_aliases? added to types/game.ts in P5. (V8.77+79+80+82)
 158. **Damage type system designed + shipped.** P1 engine. P2 generation guidance. (V8.77+79+80)
 159. **Abilities system designed.** 125 templates + LLM flavor; learned pool vs equipped slots; stat gates; 3 acquisition paths. P6–P7 scope. Flavor names deferred to P7. (V8.77+80)
 160. **Perks system designed.** ~20 pool, every 4 combat levels (4/8/12/16/20). P8 scope. (V8.77)
@@ -315,15 +316,16 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 171. **Post-quest world state.** End Chapter OR Continue Exploring. QUEST_STATUS: resolved_[id] in narrator permanently. Zero content locks. (V8.78)
 172. **Ability library v1 complete.** Drive: "ability-library-v1-all-25-classes". Variant pools v2 pending before P6. (V8.78)
 173. **Ability system architecture final.** Drive: "ability-system-architecture-v2-final". (V8.78)
-174. **Status effect world aliases.** WCD.status_effect_aliases — rootblight rule. ✅ P2. (V8.78+80)
+174. **Status effect world aliases.** WCD.status_effect_aliases — rootblight rule. ✅ P2 generation, ✅ P5 UI resolution. (V8.78+80+82)
 175. **Prompt workflow.** Prompts written in Claude.ai conversation. Drive = design specs only. (V8.78)
 176. **11-prompt implementation arc defined.** P1–P8 active; P9–P11 Day 25. (V8.78)
 177. **P1 shipped d577359.** Full status effects engine + death penalty rebalance + 3-tier gold. 567→580 tests. (V8.79)
 178. **P2 shipped 354a013.** WCD status_effect_aliases. WB/RB enemy type guidance + profession manuals mandatory. Prompt-text only. (V8.80)
 179. **PROMPT-LOG.md introduced.** Volatile build state lives in PROMPT-LOG.md. CLAUDE.md only updated when rules change. (V8.80)
-180. **HF1 shipped 16e990d.** Crit LLM removed (rule 54 reversed). Encounter banner restored. Dungeon exit → region zone fixed (resolveDungeonExitTarget). act1RevealFiredRef made permanent session latch. 580→593 tests. (V8.81)
-181. **Dungeon exit target resolution.** resolveDungeonExitTarget walks zone_id chain past settlement to region zone. apply routes normalize dungeon zone_id at generation time. (V8.81)
-182. **act1RevealFiredRef is permanent.** Set once per session, never reset. Fires exactly once regardless of subsequent NPC dialogue turns or panel re-opens. (V8.81)
+180. **HF1 shipped 16e990d.** Crit LLM removed. Encounter banner restored. Dungeon exit → region zone fixed. act1RevealFiredRef permanent latch. 580→593 tests. (V8.81)
+181. **Dungeon exit target resolution.** resolveDungeonExitTarget walks zone_id chain past settlement to region zone. (V8.81)
+182. **act1RevealFiredRef is permanent.** Set once per session, never reset. Fires exactly once. (V8.81)
+183. **P5 shipped 7439cb8.** StatusEffectPills component (color-coded, ailments solid/buffs ghost, rounds remaining). Feed templates for status_applied/tick/saved/expired. getStatusDisplayName with alias resolution. DoT floats #fb923c. StatusEffectAlias type + WCD.status_effect_aliases? added to types/game.ts (tsc-forced, purely additive). 593→605 tests. (V8.82)
 
 ---
 
@@ -365,6 +367,8 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint
 | Encounter banner | #f4a07a | --combat-encounter-banner |
 | Roll detail suffix | 10px dim mono 0.6 opacity | — |
 | Floating damage | 28px (36px crit) bold, 1100ms fade | — |
+| Floating DoT tick | 28px #fb923c, 1100ms fade | — |
+| Status effect pills | solid (ailments) / ghost (buffs), xs rounded-full | — |
 | Resolution destination | 12px italic serif 0.75 opacity | — |
 
 ---
@@ -396,7 +400,7 @@ Claude.ai owns CLAUDE.md and PROMPT-LOG.md. After every prompt: update PROMPT-LO
 
 Round flow: Claude Code pushes → Tim reports → Claude.ai updates PROMPT-LOG.md → Tim verifies → next prompt.
 
-**Protocols:** Origin/main baseline check (rule 76) · Investigation-before-patching (V8.40) · No token cap changes without output_tokens data (V8.69) · Prompts written in Claude.ai conversation (rule 175). **npx jest (no pattern) = authoritative count. Baseline = 593 (rule 91).**
+**Protocols:** Origin/main baseline check (rule 76) · Investigation-before-patching (V8.40) · No token cap changes without output_tokens data (V8.69) · Prompts written in Claude.ai conversation (rule 175). **npx jest (no pattern) = authoritative count. Baseline = 605 (rule 91).**
 
 **Note:** Remote URL `https://github.com/AtomicTim/endless-worlds-rpg.git` (capitalized).
 

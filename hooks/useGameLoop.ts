@@ -31,22 +31,20 @@ import {
   markSideQuestDiscovered,
   shouldTriggerDialogueDiscovery,
 } from "@/lib/game/quest-discovery";
+import {
+  openTrade as resolveOpenTrade,
+  buyItem as resolveBuyItem,
+  sellItem as resolveSellItem,
+  resolveInnRest,
+  findMerchantNpc,
+} from "@/lib/game/trade-resolver";
+import { currencyLabelFor } from "@/lib/game/currency";
 import type { FloorLootEntry } from "@/types/game";
 import { ActionType, AssetCategory, Genre, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { DialogueOption, Item, MasterState, ParsedAction, RegionBible, RegionOutline, ResolutionResult, StoredMessage, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
 
 const MAX_INPUT_LENGTH  = 500;
 const AUTO_SAVE_INTERVAL = 10;
-
-// Genre → resources key under which the primary currency is stored. Mirrors
-// the table in CharacterSheet — kept here so the trade hook never imports UI.
-// Horror/Lovecraftian has no primary currency by design (sanity is its scarcity).
-const GENRE_CURRENCY_KEY: Partial<Record<Genre, string>> = {
-  [Genre.FANTASY]:          "gold",
-  [Genre.CYBERPUNK]:        "credits",
-  [Genre.SPACE_OPERA]:      "stellar_units",
-  [Genre.POST_APOCALYPTIC]: "caps",
-};
 
 // Module-level counter — persists across renders, resets when the module reloads.
 let autoSaveActionCount = 0;
@@ -224,6 +222,19 @@ function buildDialogueOptions(npcAsset: WorldAsset | null): DialogueOption[] {
       id:   "browse_wares",
       text: "Browse your wares",
       type: "trade",
+      tone: "friendly",
+    });
+  }
+
+  // P3 — innkeepers offer Inn Rest: 10 gold → HP fully restored.
+  // The generation prompt (P2 territory) seeds the innkeeper role; this
+  // builder surfaces the action whenever the role matches.
+  const isInnkeeper = role.includes("innkeeper") || role.includes("inn_keeper");
+  if (isInnkeeper) {
+    options.push({
+      id:   "rest_room",
+      text: "Rent a room for the night",
+      type: "rest",
       tone: "friendly",
     });
   }
@@ -3127,17 +3138,27 @@ export function useGameLoop() {
         }
       }
 
-      // ── 7h. Day 16 — TRADE: items_for_sale → Trade Modal ────────────────────
-      // The narrator emits items_for_sale when resolveInteract flagged
-      // trade_available. Push them into the store so the Trade Modal opens.
-      // Subsequent non-trade actions don't auto-clear — the player closes the
-      // modal explicitly so they can browse over multiple turns.
+      // ── 7h. P3 — TRADE: narrator merchant flag → world-asset inventory ──────
+      // The narrator's items_for_sale only SIGNALS "this is a merchant" — the
+      // real wares are world-asset-backed (NPCDefinition.merchant_inventory in
+      // the bibles), seeded at generation time and NEVER narrator-generated
+      // (CLAUDE.md MERCHANT TRADING). Resolve the NPC and open the panel with
+      // their seeded inventory; the narrator's item list is discarded.
       if (narratorResponse.items_for_sale && narratorResponse.items_for_sale.length > 0) {
-        store.setTradeItems(narratorResponse.items_for_sale);
-        console.log(
-          "[GameLoop/7h] items_for_sale received:",
-          narratorResponse.items_for_sale.length
-        );
+        const merchantRef =
+          parsedAction.primary_target ?? useGameStore.getState().currentDialogueNpc;
+        const trade = resolveOpenTrade(updatedState, merchantRef);
+        if (!("error" in trade)) {
+          store.openMerchantTrade(trade.npc_name, trade.inventory);
+          console.log(
+            `[GameLoop/7h] trade opened with ${trade.npc_name}: ${trade.inventory.length} ware(s)`
+          );
+        } else {
+          console.warn(
+            "[GameLoop/7h] narrator flagged a merchant but NPC not found in world assets:",
+            merchantRef
+          );
+        }
       }
 
       // ── 8. Merge new NPCs into registry ────────────────────────────────────
@@ -3364,74 +3385,116 @@ export function useGameLoop() {
     }
   }, []);
 
-  // ── Day 16 — Trade actions ─────────────────────────────────────────────────
-  // Buy / sell are dispatched from the TradeModal. They mutate masterState and
-  // currentTradeItems directly via the store, log a DISCOVERY entry, and
-  // fire-and-forget the world-state persist. They never go through the
-  // narrator — pure mechanical commerce.
+  // ── P3 — Merchant trade actions ────────────────────────────────────────────
+  // Buy / sell / openTrade / restAtInn are dispatched from the TradeModal and
+  // DialogueModal. All mechanical commerce lives in the pure trade-resolver
+  // module (lib/game/trade-resolver.ts); these callbacks just wire the result
+  // into the store + story feed. They NEVER call the narrator — merchant
+  // inventory is world-asset-backed (NPCDefinition.merchant_inventory).
+
+  /** Refresh the displayed wares from a merchant's (possibly depleted)
+   *  world-asset inventory after a buy/sell. */
+  const refreshTradeWares = (state: MasterState, npcRef: string | null): void => {
+    const gs       = useGameStore.getState();
+    const merchant = findMerchantNpc(state, npcRef);
+    gs.setTradeWares(merchant?.npc.merchant_inventory ?? []);
+  };
 
   const buyItem = useCallback((item: Item) => {
-    const gs = useGameStore.getState();
+    const gs    = useGameStore.getState();
     const state = gs.masterState;
     if (!state) return;
+    const npcRef = gs.tradeNpcName;
 
-    const currencyKey = GENRE_CURRENCY_KEY[state.metadata.genre];
-    if (!currencyKey) {
-      gs.addMessage(makeMessage("SYSTEM", "This genre does not use currency."));
+    const result = resolveBuyItem(state, npcRef, item.id);
+    if ("error" in result) {
+      const msg =
+        result.error === "insufficient_funds"   ? `You can't afford ${item.name}.`
+        : result.error === "item_not_available" ? `${item.name} is no longer available.`
+        : result.error === "inventory_full"     ? "Your pack is full."
+        : result.error === "no_currency"        ? "This genre does not use currency."
+        :                                          "That merchant isn't here.";
+      gs.addMessage(makeMessage("SYSTEM", msg));
       return;
     }
-    const balance = state.player_state.resources[currencyKey] ?? 0;
-    const cost    = typeof item.value === "number" ? item.value : 0;
-    if (balance < cost) {
-      gs.addMessage(makeMessage("SYSTEM", `You can't afford ${item.name} (need ${cost}, have ${balance}).`));
-      return;
-    }
 
-    // Add a single copy with quantity 1 (merchant offer is per-item).
-    const purchased: Item = { ...item, quantity: 1, equipped: false };
-    let next = addToInventory(state, purchased);
-    next = {
-      ...next,
-      player_state: {
-        ...next.player_state,
-        resources: { ...next.player_state.resources, [currencyKey]: balance - cost },
-      },
-    };
-    next = persistLogEntry(next, LogEntryType.DISCOVERY, `Bought: ${item.name} (${cost})`);
-
+    const next = persistLogEntry(
+      result.state, LogEntryType.DISCOVERY,
+      `Bought: ${result.item.name} (${result.price_paid})`
+    );
     gs.setMasterState(next);
-    gs.setTradeItems(gs.currentTradeItems.filter((i) => i.id !== item.id));
-    gs.addMessage(makeMessage("SYSTEM", `[ Bought: ${item.name} for ${cost} ]`));
+    refreshTradeWares(next, npcRef);
+    gs.addMessage(makeMessage(
+      "SYSTEM", `[ Bought: ${result.item.name} for ${result.price_paid} ]`
+    ));
   }, []);
 
   const sellItem = useCallback((item: Item) => {
-    const gs = useGameStore.getState();
+    const gs    = useGameStore.getState();
     const state = gs.masterState;
     if (!state) return;
+    const npcRef = gs.tradeNpcName;
 
-    const currencyKey = GENRE_CURRENCY_KEY[state.metadata.genre];
-    if (!currencyKey) {
-      gs.addMessage(makeMessage("SYSTEM", "This genre does not use currency."));
+    const result = resolveSellItem(state, npcRef, item.id);
+    if ("error" in result) {
+      const msg =
+        result.error === "merchant_not_interested"
+          ? `${npcRef ?? "The merchant"} isn't interested in ${item.name}.`
+        : result.error === "no_value"       ? `${item.name} has no resale value.`
+        : result.error === "item_not_owned" ? `You don't have ${item.name}.`
+        : result.error === "no_currency"    ? "This genre does not use currency."
+        :                                      "That merchant isn't here.";
+      gs.addMessage(makeMessage("SYSTEM", msg));
       return;
     }
 
-    const owned = state.player_state.inventory.find((i) => i.id === item.id);
-    if (!owned) return;
-
-    const sellPrice = Math.max(1, Math.floor(((item.value ?? 0)) * 0.5));
-    let next        = removeFromInventory(state, item.id, 1);
-    const balance   = next.player_state.resources[currencyKey] ?? 0;
-    next = {
-      ...next,
-      player_state: {
-        ...next.player_state,
-        resources: { ...next.player_state.resources, [currencyKey]: balance + sellPrice },
-      },
-    };
-    next = persistLogEntry(next, LogEntryType.DISCOVERY, `Sold: ${item.name} for ${sellPrice}`);
-
+    const next = persistLogEntry(
+      result.state, LogEntryType.DISCOVERY,
+      `Sold: ${result.item.name} for ${result.sell_price}`
+    );
     gs.setMasterState(next);
-    gs.addMessage(makeMessage("SYSTEM", `[ Sold: ${item.name} for ${sellPrice} ]`));
+    refreshTradeWares(next, npcRef);
+    gs.addMessage(makeMessage(
+      "SYSTEM", `[ Sold: ${result.item.name} for ${result.sell_price} ]`
+    ));
+  }, []);
+
+  /**
+   * P3 — Inn Rest. Dispatched from the innkeeper's "rest" dialogue option.
+   * Deducts INN_REST_COST, restores HP to max, emits a templated story-feed
+   * beat (no LLM call), and fires the rest_complete signal so P7's
+   * attunement modal has a hook point.
+   */
+  const restAtInn = useCallback(() => {
+    const gs    = useGameStore.getState();
+    const state = gs.masterState;
+    if (!state) return;
+
+    const result = resolveInnRest(state);
+    if ("error" in result) {
+      gs.addMessage(makeMessage(
+        "SYSTEM",
+        result.error === "insufficient_funds"
+          ? "You can't afford a room tonight."
+          : "This genre does not use currency."
+      ));
+      return;
+    }
+
+    const currencyLbl = currencyLabelFor(state.metadata.genre).toLowerCase();
+    const next = persistLogEntry(
+      result.state, LogEntryType.DISCOVERY,
+      `Rested at the inn (${result.cost} ${currencyLbl})`
+    );
+    gs.setMasterState(next);
+    gs.clearDialogueOptions();
+    gs.addMessage(makeMessage(
+      "SYSTEM",
+      `You pay ${result.cost} ${currencyLbl} for a room. ` +
+      `You wake rested. HP fully restored.`
+    ));
+    // P7 attunement hook — rest is also an attunement opportunity.
+    gs.signalRestComplete();
   }, []);
 
   /**
@@ -3561,84 +3624,31 @@ export function useGameLoop() {
   }, [submitAction]);
 
   /**
-   * FIX (UX 4) — open trade with the named merchant WITHOUT routing
-   * through the intent parser or resolveDialogue. Trade is always
-   * available for merchants — trust affects price, not access — so a
-   * stat check on the trade button is wrong by design.
+   * P3 — open trade with the named merchant. Trade is always available
+   * for merchants — trust affects price, not access. The merchant's
+   * wares come straight from the world-asset-backed
+   * NPCDefinition.merchant_inventory (seeded at WorldBible/RegionBible
+   * generation time); there is NO narrator call and NO stat check.
    *
-   * Flow:
-   *   1. Open the trade panel immediately so the player gets visual
-   *      feedback while we fetch items.
-   *   2. If items_for_sale is already populated, we're done.
-   *   3. Otherwise synthesize an INTERACT/trade_available resolution
-   *      and call narrateAction directly. Items returned in the
-   *      narrator's items_for_sale flow into setTradeItems and the
-   *      panel populates without ever firing a stat check.
+   * An empty inventory still opens the panel — the modal shows a
+   * "nothing to sell" message rather than failing silently.
    */
-  const openTrade = useCallback(async (npcName: string) => {
+  const openTrade = useCallback((npcName: string) => {
     const gs    = useGameStore.getState();
     const state = gs.masterState;
     if (!state) return;
 
-    gs.openTradePanel();
-
-    if (gs.currentTradeItems.length > 0) {
-      // Already populated — panel just re-opens with existing wares.
+    const trade = resolveOpenTrade(state, npcName);
+    if ("error" in trade) {
+      console.warn("[openTrade] merchant not found in world assets:", npcName);
+      gs.addMessage(makeMessage("SYSTEM", `${npcName} has nothing to trade.`));
       return;
     }
-
-    gs.setProcessing(true, `Trading with ${npcName}...`);
-    try {
-      const tradeAction: ParsedAction = {
-        action_type:     ActionType.INTERACT,
-        primary_target:  npcName,
-        inferred_intent: `open trade with ${npcName}`,
-        confidence:      1,
-      };
-      const tradeResolution: ResolutionResult = {
-        success:      true,
-        outcome_type: "INTERACT_SUCCESS",
-        state_delta:  {},
-        narrative_context: {
-          target:           npcName,
-          trade_available:  true,
-          object_confirmed: true,
-          object_name:      npcName,
-          object_exists_message:
-            "This is a merchant. Trade is open. Populate items_for_sale.",
-        },
-      };
-      const verbosity = gs.verbosity;
-      const liveAssets = gs.locationAssets;
-      const wcd        = state.metadata.world_consistency;
-      const lastNarrative = gs.lastNarrativeText;
-
-      const response = await narrateAction(
-        tradeResolution,
-        state,
-        lastNarrative,
-        tradeAction,
-        liveAssets,
-        verbosity,
-        wcd,
-      );
-
-      if (response.items_for_sale && response.items_for_sale.length > 0) {
-        gs.setTradeItems(response.items_for_sale);
-        console.log(
-          "[openTrade] items_for_sale received:",
-          response.items_for_sale.length
-        );
-      } else {
-        console.warn(
-          "[openTrade] narrator returned no items_for_sale — trade panel stays empty."
-        );
-      }
-    } catch (err) {
-      console.warn("[openTrade] narrator call failed:", err);
-    } finally {
-      gs.setProcessing(false);
-    }
+    gs.openMerchantTrade(trade.npc_name, trade.inventory);
+    console.log(
+      `[openTrade] ${trade.npc_name}: ${trade.inventory.length} ware(s) seeded, ` +
+      `trust ${trade.npc_trust}`
+    );
   }, []);
 
   return {
@@ -3651,5 +3661,6 @@ export function useGameLoop() {
     buyItem,
     sellItem,
     openTrade,
+    restAtInn,
   };
 }

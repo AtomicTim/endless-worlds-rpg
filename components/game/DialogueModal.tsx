@@ -32,6 +32,8 @@ interface DialogueModalProps {
   ) => void;
   onFocusInput: () => void;
   onOpenTrade:  (npcName: string) => void;
+  /** P3 — innkeeper "rest" dialogue action: 10 gold → HP fully restored. */
+  onRest:       () => void;
 }
 
 interface ToneBadge {
@@ -71,7 +73,7 @@ function npcInitials(name: string | null | undefined): string {
   return parts.map((w) => w[0]?.toUpperCase() ?? "").join("").slice(0, 2) || "??";
 }
 
-export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade }: DialogueModalProps) {
+export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: DialogueModalProps) {
   const options       = useGameStore((s) => s.currentDialogueOptions);
   const npcName       = useGameStore((s) => s.currentDialogueNpc);
   const npcKey        = useGameStore((s) => s.currentDialogueNpcKey);
@@ -121,6 +123,14 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade }: DialogueM
         clear();
         setInlineInputOpen(false);
         onOpenTrade(npcName);
+        return;
+      }
+      case "rest": {
+        // P3 — innkeeper Inn Rest. clear() closes the dialogue panel;
+        // restAtInn handles the gold check, HP restore, and feed beat.
+        clear();
+        setInlineInputOpen(false);
+        onRest();
         return;
       }
       case "free": {

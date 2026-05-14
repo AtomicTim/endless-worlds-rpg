@@ -60,10 +60,22 @@ interface GameStore {
   lastDialoguePortrait:   string | null;
 
   // ── Trade Modal ────────────────────────────────────────────────────────────
-  /** Items the current merchant has on offer. Set by step 7 of useGameLoop
-   *  whenever the narrator emits items_for_sale. The TradeModal renders only
-   *  while this array is non-empty. */
+  /** P3 — the current merchant's wares (a mirror of the NPC's
+   *  world-asset-backed `merchant_inventory`). Populated by
+   *  openMerchantTrade and refreshed by buyItem/sellItem via
+   *  setTradeWares. May be empty — a merchant with nothing to sell
+   *  still opens the panel (gated on `tradeOpen`, not array length). */
   currentTradeItems:      Item[];
+  /** P3 — name of the merchant the trade panel is currently bound to.
+   *  buyItem/sellItem resolve the NPCDefinition from this. Survives the
+   *  dialogue-modal teardown that opening the trade panel performs
+   *  (currentDialogueNpc is nulled by that teardown). Cleared on close. */
+  tradeNpcName:           string | null;
+  /** P3 — Inn Rest signal. Incremented every time the player completes
+   *  an innkeeper rest. P7's attunement modal subscribes to this to
+   *  offer ability swapping after a rest; for now it is just a counter
+   *  so the hook point exists. */
+  restCompleteSignal:     number;
 
   // ── Day 18 — Verbosity ─────────────────────────────────────────────────────
   /** Narrator response-length preference. Hydrated from localStorage on
@@ -155,6 +167,17 @@ interface GameStore {
    *  narrator. The merchant trade button uses this so the click never
    *  pays for an AI call or fires a stat check. */
   openTradePanel:          () => void;
+  /** P3 — open the trade panel bound to a specific merchant, with that
+   *  merchant's world-asset-backed inventory. Hides the dialogue modal
+   *  (snapshotting it for restore on close), sets tradeNpcName, and
+   *  opens the panel even when `inventory` is empty (the modal shows a
+   *  "nothing to sell" message). */
+  openMerchantTrade:       (npcName: string, inventory: Item[]) => void;
+  /** P3 — refresh just the displayed wares (after a buy/sell) without
+   *  touching tradeOpen / tradeNpcName / dialogue snapshot. */
+  setTradeWares:           (items: Item[]) => void;
+  /** P3 — fire the Inn Rest completion signal (bumps restCompleteSignal). */
+  signalRestComplete:      () => void;
   /** Narrator response-length toggle. Persists to localStorage. */
   setVerbosity:            (v: "terse" | "standard" | "rich") => void;
   /** Toggle the WorldMap sidebar panel open/closed. */
@@ -229,6 +252,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   lastDialogueNpcKey:     null,
   lastDialoguePortrait:   null,
   currentTradeItems:      [],
+  tradeNpcName:           null,
+  restCompleteSignal:     0,
   verbosity:              loadVerbosity(),
   mapPanelOpen:           false,
   codexModalOpen:         false,
@@ -325,18 +350,44 @@ export const useGameStore = create<GameStore>((set, get) => ({
         return {
           currentTradeItems:      [],
           tradeOpen:              false,
+          tradeNpcName:           null,
           currentDialogueOptions: s.lastDialogueOptions,
           currentDialogueNpc:     s.lastDialogueNpc,
           currentDialogueNpcKey:  s.lastDialogueNpcKey,
           currentNpcPortrait:     s.lastDialoguePortrait,
         };
       }
-      return { currentTradeItems: [], tradeOpen: false };
+      return { currentTradeItems: [], tradeOpen: false, tradeNpcName: null };
     }),
   // FIX (UX 4) — open the trade panel without an AI call. The merchant
   // trade button calls this directly. Trade is always available for
   // merchants — trust affects price (buy/sell math), never access.
   openTradePanel: () => set({ tradeOpen: true }),
+  // P3 — open the trade panel bound to a specific merchant. Mirrors the
+  // setTradeItems(non-empty) dialogue teardown (hide + snapshot) but
+  // ALSO records tradeNpcName and opens even when the merchant's
+  // inventory is empty (tradeOpen drives visibility, not array length).
+  openMerchantTrade: (npcName, inventory) =>
+    set((s) => ({
+      currentTradeItems:      inventory,
+      tradeNpcName:           npcName,
+      tradeOpen:              true,
+      // Snapshot + hide the dialogue modal so the two never overlap;
+      // setTradeItems([]) restores it from last* on close.
+      lastDialogueOptions:    s.currentDialogueOptions.length > 0
+                                ? s.currentDialogueOptions : s.lastDialogueOptions,
+      lastDialogueNpc:        s.currentDialogueNpc ?? s.lastDialogueNpc,
+      lastDialogueNpcKey:     s.currentDialogueNpcKey ?? s.lastDialogueNpcKey,
+      lastDialoguePortrait:   s.currentNpcPortrait ?? s.lastDialoguePortrait,
+      currentDialogueOptions: [],
+      currentDialogueNpc:     null,
+      currentDialogueNpcKey:  null,
+      currentNpcPortrait:     null,
+    })),
+  // P3 — refresh just the displayed wares after a buy/sell. Does NOT
+  // touch tradeOpen / tradeNpcName / dialogue snapshot.
+  setTradeWares: (items) => set({ currentTradeItems: items }),
+  signalRestComplete: () => set((s) => ({ restCompleteSignal: s.restCompleteSignal + 1 })),
   setVerbosity: (v) => {
     saveVerbosity(v);
     set({ verbosity: v });
@@ -378,6 +429,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastDialoguePortrait:   null,
       currentTradeItems:      [],
       tradeOpen:              false,
+      tradeNpcName:           null,
+      restCompleteSignal:     0,
       locationAssets:         [],
       lastNarrativeText:      null,
       mapPanelOpen:           false,

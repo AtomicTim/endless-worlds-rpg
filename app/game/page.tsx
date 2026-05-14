@@ -62,7 +62,7 @@ export default function GamePage() {
   const messages       = useGameStore((s) => s.messages);
   const locationAssets = useGameStore((s) => s.locationAssets);
 
-  const { submitAction, navigateTo, isProcessing, processingStep, buyItem, sellItem, openTrade } = useGameLoop();
+  const { submitAction, navigateTo, isProcessing, processingStep, buyItem, sellItem, openTrade, restAtInn } = useGameLoop();
   const {
     combat:           activeCombat,
     isResolving:      combatResolving,
@@ -397,6 +397,7 @@ export default function GamePage() {
                 onSubmit={(input, opts) => { void submitAction(input, opts); }}
                 onFocusInput={() => { inputBarRef.current?.focus(); }}
                 onOpenTrade={(name) => { void openTrade(name); }}
+                onRest={() => { restAtInn(); }}
               />
             }
           />

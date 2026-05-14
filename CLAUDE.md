@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.80  |  **Build status → see PROMPT-LOG.md**
+**Version:** 8.81  |  **Build status → see PROMPT-LOG.md**
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -26,7 +26,7 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 **Per-prompt protocols:**
 - **V8.40** — Investigation-before-patching.
 - **V8.41** — Origin/main baseline check: `git fetch origin && git log origin/main --oneline -5` as step 1.
-- **V8.79** — jest baseline = 580. See rule 91.
+- **V8.81** — jest baseline = 593. See rule 91.
 - **V8.69** — No token cap changes without confirmed output_tokens data first.
 - **V8.78** — Prompts for Claude Code are written directly in the Claude.ai conversation, not in Drive docs.
 
@@ -58,7 +58,7 @@ Post-Day 25: **Genre Session** (world theme taxonomy + world structure per-genre
 
 ---
 
-## Design Session Decisions (V8.77–V8.80) — Full index
+## Design Session Decisions (V8.77–V8.81) — Full index
 
 ### DEATH PENALTY (locked — ✅ shipped P1)
 - Gold loss: 10% of current gold, cap 50, floor 0
@@ -186,7 +186,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 42. **World intro cinematic modal** fires on first game load when `metadata.world_intro` set + `recentMsgs.length === 0`. Dismissed by click/key. "Your adventure begins." deferred to post-dismiss. (V8.75)
 43. Starting equipment in `lib/game/starting-equipment.ts`. (V8.35)
 44. Starting weapon: equipped + damage_die. Starting armor: equipped + armor_bonus. (V8.35)
-45. combat_start templated, not LLM-narrated. (V8.35)
+45. combat_start templated, not LLM-narrated. Produces visible "You encounter [enemy]" banner line. (V8.35+81)
 46. player_turn_start + enemy_phase_start emitted at phase transitions. (V8.35)
 47. Pacing: 800ms before enemy_phase_start, 800ms before player_turn_start, 500ms between distinct enemy actors. (V8.35)
 48. CombatMode displayPhase decoupled from turn_index, flips ahead of feed. (V8.35)
@@ -195,8 +195,8 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 51. Inventory detail: WEAPON Damage, ARMOR Armor (+0 shown), CONSUMABLE Heal. EQUIPPED pill. (V8.36)
 52. Combat input button-only. INTERIM until Day 20.5. (V8.37)
 53. Use Item templated: "You use {item}. Restored N HP." Out-of-combat: direct-dispatch via handleDirectConsumeItem. (V8.37+58)
-54. Crit: two lines — templated banner instant, then LLM prose. (V8.37)
-55. planEventSuppression pre-scans batches. Victory: kill events dropped, last crit prose suppressed. (V8.37)
+54. **Crit: one templated line only. No LLM call.** The damage number + CRITICAL HIT label is sufficient. isCritProse render branch kept as defensive no-op for stale messages. (V8.37→V8.81)
+55. planEventSuppression pre-scans batches. Victory: kill events dropped. (V8.37+81)
 56. Resolution events: two-line centered block, ≤20-word LLM prose, max_tokens 120. (V8.37)
 57. CombatEvent.rolls on every event. (V8.38)
 58. Inline roll suffix: `{primary, rolls}` return shape. (V8.38)
@@ -223,7 +223,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 79. **Prompt-template hardcoded IDs are a recurring bug class.** (V8.42)
 80. **Nav card dedup at region zone.** DEEPER suppresses settlement if matches BACK. (V8.43–44)
 81. **Map tier auto-switch on every arrival.** Region zone → tier 2, else → tier 1. (V8.43–44)
-82. **jest baseline history.** 393→…→552→567→580. (V8.47–V8.79)
+82. **jest baseline history.** 393→…→552→567→580→593. (V8.47–V8.81)
 83. **Loot never auto-credits.** All drops go to floor_loot[]. (V8.47)
 84. **Container search is engine-resolved, zero LLM calls.** (V8.47)
 85. **Currency + inventory cap canonical.** INVENTORY_CAP = 20. (V8.47)
@@ -232,7 +232,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 88. **resolveUseItem resolves heal by effect, not id.** (V8.49)
 89. **Archetype system in archetypes.ts.** 25 classes. STAT_BASE=2, primary +2, secondary +1. (V8.50)
 90. **Level-up post-combat, player-driven.** LevelUpModal + 5-button picker. (V8.50)
-91. **jest baseline = 580 (V8.79).** P1 added 13 tests (567→580). 580 is authoritative. (V8.79)
+91. **jest baseline = 593 (V8.81).** HF1 added 13 tests (580→593). 593 is authoritative. (V8.81)
 92. **Ability modifier: floor((score-2)/2).** (V8.51)
 93. **Enemy stat budgets: tier-1 agi_mod ≤1, hp min ≤8.** (V8.51)
 94. **RegionBibleCache in-flight dedup via Map<string, Promise>.** (V8.53)
@@ -241,7 +241,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 97. **LLM generation prompt skeleton anchors output.** Update skeleton + enforcement + logging together. (V8.55)
 98. **Nav card type label via nodeTypeLabel().** settlement_hub→SETTLEMENT · outpost→OUTPOST · wilderness→WILDERNESS · dungeon→DUNGEON · landmark→LANDMARK · abandoned_settlement→RUINS. (V8.56+63)
 99. **Dungeon runtime in hooks/useDungeonRuntime.ts.** Separate hook. (V8.57)
-100. **Room navigation semantics.** First-visit encounter; revisit suppresses. BACK from entrance → region zone. (V8.57)
+100. **Room navigation semantics.** First-visit encounter; revisit suppresses. BACK from dungeon entrance → region zone (not settlement). resolveDungeonExitTarget walks zone_id chain. (V8.57+81)
 101. **DungeonLockPopover.** Locked boss card → hint + [USE key] + [FORCE STR ≥ 6] + Close. (V8.57)
 102. **Dungeon narrator context.** CURRENT ROOM injected, inventory stripped, adjacent rooms only. (V8.58)
 103. **Quest schema types.** QuestArchetype (6), FinaleType, QuestStatus, QuestFaction, QuestBreadcrumb, QuestResolution, MainQuest, SideQuest, QuestEntry, QuestThreads. (V8.59)
@@ -254,7 +254,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 110. **World intro cinematic modal** — see rule 42. (V8.75)
 111. **Act 1 breadcrumb discovery.** Two triggers: DIALOGUE + boss clear. (V8.62)
 112. **Sub-location node_type fix.** (V8.63)
-113. **Quest discovery pipeline.** Boss-clear 1200ms. Dialogue: pendingAct1Reveal → useDeferredQuestReveal → currentDialogueNpc null gate → act1RevealFiredRef latch → 2500ms. (V8.63+64+65+76)
+113. **Quest discovery pipeline.** act1RevealFiredRef is a permanent session latch — once true, never resets, regardless of subsequent NPC dialogue turns. Boss-clear 1200ms. Dialogue: fires exactly once per session. (V8.63+64+65+76+81)
 114. **JournalModal + journal entry generation.** 4 tabs. haiku 200 tokens. CHARACTER VOICE block. (V8.63+65+66+73)
 115. **Codex concurrent-write race guard.** (V8.65)
 116. **Side quest generation (Day 23D).** Synchronous in apply-regional-bible. (V8.66)
@@ -290,7 +290,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 146. **Disposition seed COMMITMENT RULE.** Feared → ≤-8. Revered → ≥+8. Neutral → 0. (V8.74)
 147. **NPC names WCD-anchored.** Skeleton placeholders. (V8.74)
 148. **WorldBible background validation fix.** Only requires genre + wcd. (V8.74)
-149. **Quest modal double-fire fixed.** currentDialogueNpc === null gate + act1RevealFiredRef latch. (V8.76)
+149. **Quest modal double-fire fixed.** currentDialogueNpc === null gate + act1RevealFiredRef permanent latch. (V8.76+81)
 150. **Maritime theme prompt cap (TEMPORARY).** Band-aid until Genre Session. (V8.76)
 151. **Motivation char limit enforced.** Prompt + server-side slice(0,120). (V8.76)
 152. **Appearance summary name-agnostic.** Prompt rule + normalizeCharacter regex strip. (V8.76)
@@ -320,7 +320,10 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 176. **11-prompt implementation arc defined.** P1–P8 active; P9–P11 Day 25. (V8.78)
 177. **P1 shipped d577359.** Full status effects engine + death penalty rebalance + 3-tier gold. 567→580 tests. (V8.79)
 178. **P2 shipped 354a013.** WCD status_effect_aliases. WB/RB enemy type guidance + profession manuals mandatory. Prompt-text only. (V8.80)
-179. **PROMPT-LOG.md introduced.** Volatile build state (commit, baseline, P-table) lives in PROMPT-LOG.md. CLAUDE.md only updated when rules or architecture change. (V8.80)
+179. **PROMPT-LOG.md introduced.** Volatile build state lives in PROMPT-LOG.md. CLAUDE.md only updated when rules change. (V8.80)
+180. **HF1 shipped 16e990d.** Crit LLM removed (rule 54 reversed). Encounter banner restored. Dungeon exit → region zone fixed (resolveDungeonExitTarget). act1RevealFiredRef made permanent session latch. 580→593 tests. (V8.81)
+181. **Dungeon exit target resolution.** resolveDungeonExitTarget walks zone_id chain past settlement to region zone. apply routes normalize dungeon zone_id at generation time. (V8.81)
+182. **act1RevealFiredRef is permanent.** Set once per session, never reset. Fires exactly once regardless of subsequent NPC dialogue turns or panel re-opens. (V8.81)
 
 ---
 
@@ -393,7 +396,7 @@ Claude.ai owns CLAUDE.md and PROMPT-LOG.md. After every prompt: update PROMPT-LO
 
 Round flow: Claude Code pushes → Tim reports → Claude.ai updates PROMPT-LOG.md → Tim verifies → next prompt.
 
-**Protocols:** Origin/main baseline check (rule 76) · Investigation-before-patching (V8.40) · No token cap changes without output_tokens data (V8.69) · Prompts written in Claude.ai conversation (rule 175). **npx jest (no pattern) = authoritative count. Baseline = 580 (rule 91).**
+**Protocols:** Origin/main baseline check (rule 76) · Investigation-before-patching (V8.40) · No token cap changes without output_tokens data (V8.69) · Prompts written in Claude.ai conversation (rule 175). **npx jest (no pattern) = authoritative count. Baseline = 593 (rule 91).**
 
 **Note:** Remote URL `https://github.com/AtomicTim/endless-worlds-rpg.git` (capitalized).
 

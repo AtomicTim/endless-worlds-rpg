@@ -9,7 +9,7 @@
  */
 
 import { ItemRarity, ItemType } from "@/types/game";
-import type { DungeonRoom, Item, MasterState, WorldNode } from "@/types/game";
+import type { DungeonRoom, Item, MasterState, WorldGraph, WorldNode } from "@/types/game";
 import {
   advanceDungeonState,
   buildRoomCards,
@@ -25,6 +25,7 @@ import {
   markRoomDiscovered,
   markRoomUnlocked,
   playerHasKeyFor,
+  resolveDungeonExitTarget,
   roomTypeLabel,
 } from "@/lib/game/dungeon-navigation";
 
@@ -357,5 +358,91 @@ describe("isAtDungeonEntrance", () => {
       current_room_id: "d_middle",
       rooms_visited: ["d_entrance", "d_middle"],
     })).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HF1 FIX 3 — resolveDungeonExitTarget
+//
+// Walking BACK from a dungeon entrance must ALWAYS land on the
+// geographic region zone, never the settlement hub (rule 100).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("resolveDungeonExitTarget (HF1 FIX 3)", () => {
+  const regionZone: WorldNode = {
+    id:            "pale_crossing_vale",
+    name:          "Pale Crossing Vale",
+    type:          "zone",
+    zone_id:       "pale_crossing_vale",   // self-zoned region zone
+    is_expandable: true,
+    connections:   ["threnhold", "the_murmuring_crypt"],
+    npc_ids:       [],
+    item_ids:      [],
+    asset_id:      "location_pale_crossing_vale",
+    discovered:    true,
+    map_position:  { x: 0, y: 0 },
+    is_settlement_node: false,
+  };
+  const settlement: WorldNode = {
+    id:            "threnhold",
+    name:          "Threnhold",
+    type:          "zone",
+    zone_id:       "pale_crossing_vale",
+    is_expandable: false,
+    connections:   ["pale_crossing_vale"],
+    npc_ids:       [],
+    item_ids:      [],
+    asset_id:      "location_threnhold",
+    discovered:    true,
+    map_position:  { x: 1, y: 0 },
+    is_settlement_node: true,
+  };
+
+  function makeGraph(dungeonZoneId: string): WorldGraph {
+    const dungeon: WorldNode = {
+      ...makeDungeon(),
+      id:      "the_murmuring_crypt",
+      name:    "The Murmuring Crypt",
+      zone_id: dungeonZoneId,
+    };
+    return {
+      nodes: {
+        [regionZone.id]:  regionZone,
+        [settlement.id]:  settlement,
+        [dungeon.id]:     dungeon,
+      },
+      current_node_id:  dungeon.id,
+      starting_node_id: settlement.id,
+    } as WorldGraph;
+  }
+
+  it("dungeon zone_id points straight at the region zone → returns region zone", () => {
+    const graph = makeGraph("pale_crossing_vale");
+    expect(resolveDungeonExitTarget(graph.nodes["the_murmuring_crypt"], graph))
+      .toBe("pale_crossing_vale");
+  });
+
+  it("dungeon zone_id points at the SETTLEMENT → walks up, returns region zone (NOT settlement)", () => {
+    // The bug case: AI authored the dungeon as an interior of the town.
+    const graph = makeGraph("threnhold");
+    const target = resolveDungeonExitTarget(graph.nodes["the_murmuring_crypt"], graph);
+    expect(target).toBe("pale_crossing_vale");
+    expect(target).not.toBe("threnhold");
+  });
+
+  it("returns null when the dungeon node or graph is missing", () => {
+    const graph = makeGraph("pale_crossing_vale");
+    expect(resolveDungeonExitTarget(undefined, graph)).toBeNull();
+    expect(resolveDungeonExitTarget(graph.nodes["the_murmuring_crypt"], undefined)).toBeNull();
+  });
+
+  it("falls back to the immediate parent when no region zone is in the chain", () => {
+    // Settlement's zone_id points at a node that doesn't exist — the
+    // walk can't reach a self-zoned expandable zone, so it returns the
+    // immediate parent rather than stranding the player.
+    const graph = makeGraph("threnhold");
+    graph.nodes["threnhold"] = { ...settlement, zone_id: "nonexistent_region" };
+    expect(resolveDungeonExitTarget(graph.nodes["the_murmuring_crypt"], graph))
+      .toBe("threnhold");
   });
 });

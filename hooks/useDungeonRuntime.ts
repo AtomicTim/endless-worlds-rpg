@@ -19,6 +19,7 @@ import {
   playerHasKeyFor,
 } from "@/lib/game/dungeon-navigation";
 import { rollEncounterWithPlayer } from "@/lib/game/combat-engine";
+import { renderRoutineCombatEvent } from "@/lib/game/combat-narration/templates";
 import { shouldTriggerBossClearDiscovery } from "@/lib/game/quest-discovery";
 import { scheduleActOneDiscovery } from "@/lib/game/quest-discovery-pipeline";
 
@@ -210,6 +211,13 @@ export function useDungeonRuntime() {
     // Encounter check — fires only on FIRST entry per room. Revisits
     // suppress the roll so cleared rooms stay cleared. Reuses the
     // same combat-engine path as graph-node arrivals.
+    //
+    // HF1 FIX 2 — when an encounter starts, build the templated
+    // combat_start banner here. combat_start lives in combat_log but
+    // isn't part of any executePlayerAction batch the useCombat drain
+    // sees, so without this the player drops straight into "Round 1 /
+    // Your turn" with no announcement (mirrors useGameLoop step 7c-3).
+    let combatStartBanner: ReturnType<typeof makeMessage> | null = null;
     if (!alreadyVisited && target.encounter_chance > 0) {
       const effectiveNode: WorldNode = {
         ...updatedNode,
@@ -228,6 +236,26 @@ export function useDungeonRuntime() {
       });
       if (result.combatStarted && result.combat) {
         updatedState = { ...updatedState, combat: result.combat };
+
+        const combatStartEvent = result.combat.combat_log.find(
+          (e) => e.type === "combat_start"
+        );
+        if (combatStartEvent) {
+          const banner = renderRoutineCombatEvent(combatStartEvent, {
+            enemyNames:   result.combat.enemies.map((e) => e.name),
+            locationName: target.name,
+          });
+          if (banner) {
+            combatStartBanner = makeMessage("COMBAT", banner.primary, {
+              combat:       true,
+              event_type:   "combat_start",
+              actor:        "PLAYER",
+              target:       null,
+              outcome:      null,
+              rolls_suffix: banner.rolls,
+            });
+          }
+        }
       }
     }
 
@@ -240,6 +268,9 @@ export function useDungeonRuntime() {
         dungeon_room:  target.id,
       })
     );
+    // HF1 FIX 2 — encounter banner lands AFTER the room-arrival beat:
+    // the player reads "you enter the room", THEN "⚔ You encounter …".
+    if (combatStartBanner) addMessage(combatStartBanner);
   }, [setMasterState, addMessage]);
 
   // ── Locked-room actions ────────────────────────────────────────────────────

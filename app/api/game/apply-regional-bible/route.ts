@@ -604,6 +604,13 @@ export async function POST(request: NextRequest) {
     // Day 23A — derive node_type + (for dungeons) validate rooms.
     const locRecord = loc as unknown as Record<string, unknown>;
     const nodeType  = deriveNodeType(locRecord);
+    // HF1 FIX 3 — a dungeon's parent is ALWAYS the geographic region
+    // zone, never the settlement (rule 100). Mirror apply-world-bible:
+    // normalize a dungeon authored as an interior of the settlement so
+    // its exit lands on the region zone, not the town.
+    if (nodeType === "dungeon") {
+      zoneId = bibleNarrowed.id;
+    }
     const dungeonRooms = nodeType === "dungeon"
       ? validateDungeonRooms(
           locRecord.dungeon_rooms,

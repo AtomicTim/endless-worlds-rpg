@@ -12,6 +12,7 @@ import {
   rollEncounter,
   type RollEncounterResult,
 } from "../combat-engine";
+import { renderRoutineCombatEvent } from "../combat-narration/templates";
 
 function seqRng(values: number[]): () => number {
   let i = 0;
@@ -343,5 +344,38 @@ describe("rollEncounter", () => {
       forceEnemyIds: ["fantasy_goblin"],
     });
     expect(result.combat?.combat_log[0].type).toBe("combat_start");
+  });
+
+  // HF1 FIX 2 — the combat_start event must produce a visible,
+  // non-empty story-feed line naming the enemies. useGameLoop (step
+  // 7c-3) and useDungeonRuntime (navigateToRoom) both pull the
+  // combat_start event out of combat_log and run it through
+  // renderRoutineCombatEvent; this pins that data path end-to-end.
+  it("HF1 FIX 2 — combat_start renders a non-empty banner naming the enemies", () => {
+    const rng = seqRng([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
+    const result = rollEncounter({
+      node:          baseNode,
+      world_bible:   undefined,
+      region_bibles: undefined,
+      genre:         Genre.FANTASY,
+      current_xp:    0,
+      rng,
+      forceEnemyIds: ["fantasy_goblin", "fantasy_skeleton"],
+    });
+    const startEvent = result.combat!.combat_log.find(
+      (e) => e.type === "combat_start"
+    );
+    expect(startEvent).toBeDefined();
+
+    const banner = renderRoutineCombatEvent(startEvent!, {
+      enemyNames:   result.combat!.enemies.map((e) => e.name),
+      locationName: baseNode.name,
+    });
+    expect(banner).not.toBeNull();
+    expect(banner!.primary.trim().length).toBeGreaterThan(0);
+    // Names of the spawned enemies appear in the feed line.
+    expect(banner!.primary).toContain("Goblin");
+    expect(banner!.primary).toContain("Skeleton");
+    expect(banner!.primary).toContain(baseNode.name);
   });
 });

@@ -15,6 +15,7 @@ import {
   buildRoomCards,
   isAtDungeonEntrance,
   findRoom,
+  resolveDungeonExitTarget,
   type RoomCard,
 } from "@/lib/game/dungeon-navigation";
 import { DungeonLockPopover } from "./DungeonLockPopover";
@@ -363,8 +364,12 @@ function DungeonBackColumn({
   let label = "";
   let sublabel = "";
   if (atEntrance) {
-    // Exit dungeon → go to the dungeon node's zone_id (parent region).
-    const parent = dungeonNode.zone_id && worldGraph?.nodes[dungeonNode.zone_id];
+    // HF1 FIX 3 — exit ALWAYS lands on the geographic region zone, never
+    // the settlement hub (rule 100). resolveDungeonExitTarget walks up
+    // the zone_id chain past any settlement node so a dungeon authored
+    // as an interior of the town still exits to the region.
+    const exitId = resolveDungeonExitTarget(dungeonNode, worldGraph ?? undefined);
+    const parent = exitId ? worldGraph?.nodes[exitId] : undefined;
     if (parent) {
       targetId = parent.id;
       label = parent.name.toUpperCase();
@@ -577,8 +582,11 @@ function buildDungeonBreadcrumb(
   currentRoomId: string,
 ): string {
   const parts: string[] = [];
-  // Tier 1 — geographic region (parent zone).
-  const parent = dungeonNode.zone_id && worldGraph?.nodes[dungeonNode.zone_id];
+  // Tier 1 — geographic region (parent zone). HF1 FIX 3 — resolve the
+  // true region zone (walk up past the settlement) so the breadcrumb
+  // and the BACK card agree on the dungeon's parent.
+  const exitId = resolveDungeonExitTarget(dungeonNode, worldGraph ?? undefined);
+  const parent = exitId ? worldGraph?.nodes[exitId] : undefined;
   if (parent) parts.push(parent.name.toUpperCase());
   // Tier 2 — dungeon itself.
   parts.push(dungeonNode.name.toUpperCase());

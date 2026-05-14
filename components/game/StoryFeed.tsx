@@ -482,9 +482,11 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
           );
         }
 
-        // Day 20.3 TASK 3 — CRITICAL HIT banner (line 1 of the
-        // two-line crit render). Color from actor. Day 20.4 TASK 2
-        // — append the dimmed-mono rolls suffix when present.
+        // CRITICAL HIT banner. HF1 FIX 1 — this is now the ONLY line a
+        // crit renders (rule 54's two-line banner-plus-LLM-prose render
+        // is reversed: crit = one templated line + roll suffix, no LLM
+        // call). Color from actor. Day 20.4 TASK 2 — append the
+        // dimmed-mono rolls suffix when present.
         if (isCritBanner) {
           const isPlayerCrit = actor === "PLAYER";
           const color = isPlayerCrit
@@ -503,9 +505,11 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
           );
         }
 
-        // Day 20.3 TASK 3 — crit prose (line 2). Same color as the
-        // banner, italic bold serif so it reads as the dramatic
-        // sibling to the banner above.
+        // Crit prose (legacy line 2). HF1 FIX 1 — no COMBAT message is
+        // ever flagged is_crit_prose anymore (the narrate-combat call
+        // for crits was removed). This branch is kept only as a
+        // defensive renderer for any stale persisted message; live
+        // play never reaches it.
         if (isCritProse) {
           const isPlayerCrit = actor === "PLAYER";
           const color = isPlayerCrit
@@ -625,8 +629,8 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
         // Event-class buckets:
         //   victory / defeat / flee_success → handled above as
         //     isResolutionBanner two-line block (Day 20.3 TASK 5)
-        //   crit                              → handled above as
-        //     isCritBanner + isCritProse two-line block (Day 20.3 TASK 3)
+        //   crit                              → handled above as the
+        //     isCritBanner single templated line (HF1 FIX 1)
         //   routine                           → normal weight + side color, ⚔ prefix
         const isCrit    = outcome === "crit";
         const isPlayer  = actor === "PLAYER";

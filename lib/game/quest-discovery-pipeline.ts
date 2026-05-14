@@ -206,6 +206,34 @@ export function runActOneDiscovery({ trigger, npcName, roomId }: SchedulePipelin
 // ── V8.64 deferred reveal hook ───────────────────────────────────────────────
 
 /**
+ * HF1 FIX 4 — pure decision for the deferred Act 1 reveal.
+ *
+ * Returns true only on the dialogue-panel CLOSE transition for a
+ * discovery event that has NOT yet fired this session.
+ *
+ * The `alreadyFired` latch is owned by useDeferredQuestReveal as a
+ * session-lifetime useRef. Once true it NEVER resets — so a second
+ * dialogue turn with the same NPC, a follow-up question, or the
+ * dialogue panel closing and reopening can never re-trigger the Act 1
+ * discovery pipeline. The discovery fires exactly once per game
+ * session, regardless of how many dialogue turns occur.
+ */
+export function shouldFireDeferredReveal(args: {
+  /** game-store currentDialogueNpc this render. */
+  currentNpc:   string | null;
+  /** currentDialogueNpc on the previous render. */
+  prevNpc:      string | null;
+  /** pendingAct1Reveal flag — a discovery event is in flight. */
+  pendingAct1:  boolean;
+  /** the permanent session latch — true once the reveal has fired. */
+  alreadyFired: boolean;
+}): boolean {
+  const wasOpen  = args.prevNpc !== null;
+  const isClosed = args.currentNpc === null;
+  return wasOpen && isClosed && args.pendingAct1 && !args.alreadyFired;
+}
+
+/**
  * useDeferredQuestReveal — fires the Act 1 discovery pipeline when the
  * dialogue panel closes AFTER a successful NPC conversation that flagged
  * `pendingAct1Reveal: true`.
@@ -219,59 +247,63 @@ export function runActOneDiscovery({ trigger, npcName, roomId }: SchedulePipelin
  * Boss-clear trigger is unaffected: it uses scheduleActOneDiscovery's
  * 1200ms delay path since there's no dialogue panel to wait on.
  *
- * Mount once in GamePage. Idempotent: the pendingAct1Reveal flag is
- * cleared immediately after the pipeline runs so re-renders can't
- * fire it twice.
+ * Mount once in GamePage.
+ *
+ * HF1 FIX 4 — `act1RevealFiredRef` is now a PERMANENT session latch.
+ * The previous code reset it whenever pendingAct1Reveal transitioned
+ * false → true, but that flag is re-set on EVERY dialogue turn with the
+ * quest NPC until runActOneDiscovery sets first_npc_conversation_had
+ * (2500ms later). A second dialogue turn inside that window reset the
+ * latch and the discovery fired twice. The latch now never resets:
+ * once the reveal has fired, the pipeline cannot be re-entered for the
+ * rest of the session.
  */
 export function useDeferredQuestReveal(): void {
   const currentNpc       = useGameStore((s) => s.currentDialogueNpc);
   const pendingAct1      = useGameStore((s) => s.pendingAct1Reveal);
   const setPendingAct1   = useGameStore((s) => s.setPendingAct1Reveal);
   const prevNpcRef       = useRef<string | null>(null);
-  // 23.5C+2 hotfix (FIX 4) — fire latch + previous-pending tracker.
-  // The latch (act1RevealFiredRef) prevents any second call to
-  // runActOneDiscovery for the same discovery event, even if the
-  // open→close transition somehow fires twice. Reset only when
-  // pendingAct1 transitions false → true (a new discovery event).
-  const prevPendingRef   = useRef(false);
+  // HF1 FIX 4 — PERMANENT session latch. A useRef survives every
+  // re-render and every store update; set true on the first (and only)
+  // dialogue-triggered Act 1 reveal and NEVER reset.
   const act1RevealFiredRef = useRef(false);
 
-  // Reset the fire latch when a fresh discovery event arrives.
   useEffect(() => {
-    if (!prevPendingRef.current && pendingAct1) {
-      act1RevealFiredRef.current = false;
-    }
-    prevPendingRef.current = pendingAct1;
-  }, [pendingAct1]);
-
-  useEffect(() => {
-    const wasOpen = prevNpcRef.current !== null;
-    const isClosed = currentNpc === null;
+    const prevNpc = prevNpcRef.current;
     prevNpcRef.current = currentNpc;
 
-    // 23.5C+2 (FIX 4) — strict gate. All four must hold:
-    //   CHANGE A: dialogue panel is currently closed (currentNpc === null)
-    //   wasOpen + isClosed: this render is the close transition
-    //   pendingAct1: a discovery event is in flight
-    //   !firedRef: we haven't already fired for this event
     if (
-      currentNpc === null &&
-      wasOpen &&
-      isClosed &&
-      pendingAct1 &&
-      !act1RevealFiredRef.current
+      shouldFireDeferredReveal({
+        currentNpc,
+        prevNpc,
+        pendingAct1,
+        alreadyFired: act1RevealFiredRef.current,
+      })
     ) {
-      // CHANGE C — latch the fire BEFORE the (deferred) call so any
-      // re-entry during the 2500ms wait sees the gate closed.
+      // Latch BEFORE the (deferred) call so any re-entry during the
+      // 2500ms wait — or any later dialogue turn — sees the gate
+      // permanently closed.
       act1RevealFiredRef.current = true;
-      // CHANGE B — clear pendingAct1 BEFORE scheduling runActOne
-      // (was already first in the previous code; kept explicit per spec).
+      // Clear pendingAct1 before scheduling runActOneDiscovery.
       setPendingAct1(false);
       // V8.65 — 2500ms idle gap so the revelation lands AFTER the
       // post-dialogue silence rather than during the close animation.
       setTimeout(() => {
         runActOneDiscovery({ trigger: "dialogue" });
       }, 2500);
+      return;
+    }
+
+    // Already latched: if a stray pendingAct1Reveal got set on a later
+    // dialogue turn with the same NPC, clear it on the close transition
+    // so the store flag doesn't stay stuck true. No pipeline re-entry.
+    if (
+      act1RevealFiredRef.current &&
+      prevNpc !== null &&
+      currentNpc === null &&
+      pendingAct1
+    ) {
+      setPendingAct1(false);
     }
   }, [currentNpc, pendingAct1, setPendingAct1]);
 }

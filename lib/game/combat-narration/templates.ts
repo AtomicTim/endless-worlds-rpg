@@ -18,9 +18,9 @@ export interface RoutineEventResult {
  * Routine combat events (hit / miss / fumble / defend / use_item /
  * failed flee) get instant code-generated lines pulled from a small
  * variant pool. The combat narrator API only fires on dramatic
- * events (crit / kill / victory / defeat / successful flee /
- * combat_start) — everything else stays in templates so the action
- * loop feels snappy.
+ * events (kill / victory / defeat / successful flee) — everything
+ * else, including crits (HF1 FIX 1) and combat_start, stays in
+ * templates so the action loop feels snappy.
  *
  * Variant selection is deterministic per event: the same event
  * always renders the same string. This matters because the story
@@ -335,9 +335,10 @@ function renderUseItem(event: CombatEvent, itemName?: string): string {
 }
 
 /**
- * Day 20.3 TASK 3 + Day 20.4 TASK 2 — CRITICAL HIT banner (line 1
- * of the two-line crit render). Returns the banner string + an
- * optional rolls suffix for inline display. Damage in the banner
+ * CRITICAL HIT banner. HF1 FIX 1 — this is the ONLY line a crit
+ * renders: rule 54's two-line render (banner + LLM prose) is reversed,
+ * so there is no second narrate-combat line. Returns the banner string
+ * + an optional rolls suffix for inline display. Damage in the banner
  * interpolates from event.damage_dealt (the resolved final damage);
  * the rolls suffix shows the breakdown (max + bonus + str_mod).
  */

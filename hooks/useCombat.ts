@@ -77,13 +77,20 @@ if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
  * Day 20.1 — combat_start dropped from this set; it now renders
  * via the templated encounter banner (templates.ts) for clarity
  * over flavor at the moment of "what's happening?".
+ *
+ * HF1 FIX 1 — crits dropped from this set. Rule 54's two-line crit
+ * (templated banner + LLM prose) is reversed: a crit now renders ONLY
+ * the templated banner line + roll-detail suffix — no narrate-combat
+ * call, no prose paragraph.
+ *
+ * Exported for the hotfix regression test (combat-crit-no-llm).
  */
-function isDramaticEvent(ev: CombatEvent): boolean {
+export function isDramaticEvent(ev: CombatEvent): boolean {
   if (ev.type === "victory")       return true;
   if (ev.type === "defeat")        return true;
   if (ev.type === "flee_success")  return true;
-  if (ev.outcome === "crit")       return true;
   if (ev.outcome === "kill")       return true;
+  // HF1 FIX 1 — crit is no longer dramatic (banner-only, no LLM).
   // combat_start, round_start, player_turn_start, enemy_phase_start:
   // all templated, no LLM call.
   return false;
@@ -230,8 +237,8 @@ export function useCombat() {
   /**
    * Submit a player combat action. Resolves through the engine,
    * splices state, then walks the emitted events: routine events
-   * get templated story-feed lines instantly, dramatic events
-   * (crit/kill/victory/defeat/flee_success) hit the
+   * (and crits — HF1 FIX 1) get templated story-feed lines instantly,
+   * dramatic events (kill/victory/defeat/flee_success) hit the
    * /api/game/narrate-combat endpoint for prose. The action bar
    * stays disabled until all narration has landed.
    */
@@ -469,12 +476,15 @@ export function planEventSuppression(events: CombatEvent[]): {
   return { suppressProseAt, skipEntirely };
 }
 
-async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void> {
+export async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void> {
   const enemyNameByInstanceId = (id: string): string | undefined =>
     args.combat.enemies.find((e) => e.instance_id === id)?.name;
 
-  // Day 20.3 TASK 4 — pre-scan the batch for prose-suppression rules.
-  const { suppressProseAt, skipEntirely } = planEventSuppression(args.events);
+  // Day 20.3 TASK 4 — pre-scan the batch for the kill-event drop rule.
+  // (HF1 FIX 1 — suppressProseAt is no longer consulted: crits emit a
+  // banner only, with no prose to suppress. planEventSuppression still
+  // computes it for its own pinned tests.)
+  const { skipEntirely } = planEventSuppression(args.events);
 
   // Day 20.1 TASK 4 — pacing across enemy turns. Track which enemy
   // last acted so we can insert a 500ms gap between successive
@@ -522,11 +532,12 @@ async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void> {
     // call on every iteration.
     args.emitFloat(event);
 
-    // ── Day 20.3 TASK 3 — CRITICAL HIT two-line render ───────────────
+    // ── HF1 FIX 1 — CRITICAL HIT one-line render ─────────────────────
     // For player_attack / enemy_attack with outcome === "crit", push
-    // the templated banner FIRST (instant), then fall through to the
-    // dramatic-event LLM prose (line 2). Suppress prose when victory
-    // follows in the same batch (TASK 4).
+    // ONLY the templated banner line (instant). Rule 54's two-line
+    // crit (banner + LLM prose) is reversed: no narrate-combat call,
+    // no narrative paragraph — the roll-detail suffix on the banner
+    // already supplies the context.
     if (
       event.outcome === "crit" &&
       (event.type === "player_attack" || event.type === "enemy_attack")
@@ -539,16 +550,6 @@ async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void> {
           rolls_suffix:   banner.rolls,
         })
       );
-      if (suppressProseAt.has(i)) continue;  // killing blow → no prose
-      const text = await fetchCombatNarration(event, args);
-      if (text) {
-        args.addMessage(
-          makeMessage("COMBAT", text, {
-            ...makeCombatMessageMetadata(event),
-            is_crit_prose: true,
-          })
-        );
-      }
       continue;
     }
 

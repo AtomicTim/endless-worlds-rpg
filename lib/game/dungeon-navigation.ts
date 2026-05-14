@@ -1,4 +1,4 @@
-import type { DungeonRoom, Item, MasterState, WorldNode } from "@/types/game";
+import type { DungeonRoom, Item, MasterState, WorldGraph, WorldNode } from "@/types/game";
 
 /**
  * Day 23A — pure helpers for the dungeon-room navigation runtime.
@@ -270,4 +270,49 @@ export function isAtDungeonEntrance(
 ): boolean {
   const current = getCurrentRoom(node, dungeon_state);
   return current?.room_type === "entrance";
+}
+
+/**
+ * HF1 FIX 3 — resolve the node a dungeon exits BACK to.
+ *
+ * Per rule 100, walking BACK from a dungeon entrance lands the player
+ * on the geographic REGION ZONE — never the settlement hub. A dungeon
+ * region_location normally carries zone_id = region zone, so the exit
+ * is one hop. But the AI occasionally authors a dungeon as an interior
+ * of the settlement (zone_id → settlement) or in the settlement-side
+ * locations list; in those cases zone_id points at the settlement (or
+ * the dungeon itself) and a naive `worldGraph.nodes[dungeon.zone_id]`
+ * exit would dump the player in town.
+ *
+ * This walks UP the zone_id chain past any settlement node until it
+ * reaches the self-zoned, expandable geographic region zone. Falls
+ * back to the immediate zone_id parent (then null) so the player is
+ * never stranded if the graph is malformed.
+ */
+export function resolveDungeonExitTarget(
+  dungeonNode: WorldNode | undefined,
+  worldGraph:  WorldGraph | undefined
+): string | null {
+  if (!dungeonNode || !worldGraph) return null;
+  const nodes = worldGraph.nodes;
+
+  const firstParentId =
+    dungeonNode.zone_id && dungeonNode.zone_id !== dungeonNode.id
+      ? dungeonNode.zone_id
+      : null;
+
+  const visited = new Set<string>([dungeonNode.id]);
+  let cur: WorldNode | undefined = firstParentId ? nodes[firstParentId] : undefined;
+  while (cur && !visited.has(cur.id)) {
+    visited.add(cur.id);
+    // The geographic region zone is self-zoned + expandable.
+    if (cur.is_expandable === true && cur.zone_id === cur.id) {
+      return cur.id;
+    }
+    cur = cur.zone_id ? nodes[cur.zone_id] : undefined;
+  }
+
+  // No region zone in the chain — fall back to the immediate parent so
+  // the player still has a way out.
+  return firstParentId;
 }

@@ -13,7 +13,12 @@
  *      metadata and sets pendingQuestReveal for Act 1.
  */
 
-import { DISCOVERY_DELAY_MS, runActOneDiscovery, scheduleActOneDiscovery } from "@/lib/game/quest-discovery-pipeline";
+import {
+  DISCOVERY_DELAY_MS,
+  runActOneDiscovery,
+  scheduleActOneDiscovery,
+  shouldFireDeferredReveal,
+} from "@/lib/game/quest-discovery-pipeline";
 
 // useGameStore is the singleton — the pipeline reads it directly. For
 // these tests we mock it so we can assert what was called.
@@ -191,5 +196,78 @@ describe("runActOneDiscovery — pipeline behavior", () => {
 
     const s = storeModule.__getStoreState();
     expect(s.setMasterState).not.toHaveBeenCalled();
+  });
+});
+
+// ── HF1 FIX 4 — deferred-reveal latch ────────────────────────────────────────
+//
+// The dialogue-triggered Act 1 reveal must fire EXACTLY ONCE per game
+// session. Before HF1 the latch reset whenever pendingAct1Reveal went
+// false → true — which happened on every dialogue turn with the quest
+// NPC — so a second turn re-triggered the discovery pipeline.
+//
+// shouldFireDeferredReveal is the pure decision the hook now uses; the
+// `alreadyFired` arg is the hook's permanent session useRef.
+
+describe("shouldFireDeferredReveal — fires once per session (HF1 FIX 4)", () => {
+  it("fires on the dialogue-close transition when a discovery event is pending", () => {
+    expect(
+      shouldFireDeferredReveal({
+        currentNpc:   null,    // panel just closed
+        prevNpc:      "Korven", // …was open last render
+        pendingAct1:  true,
+        alreadyFired: false,
+      })
+    ).toBe(true);
+  });
+
+  it("does NOT fire while the dialogue panel is still open", () => {
+    expect(
+      shouldFireDeferredReveal({
+        currentNpc:   "Korven",
+        prevNpc:      "Korven",
+        pendingAct1:  true,
+        alreadyFired: false,
+      })
+    ).toBe(false);
+  });
+
+  it("does NOT re-fire on a SECOND dialogue turn with the same NPC (latch held)", () => {
+    // Turn 2: player re-opened then closed the dialogue with the same
+    // quest NPC. pendingAct1 may even be set again — but the session
+    // latch is already true, so discovery must not re-trigger.
+    expect(
+      shouldFireDeferredReveal({
+        currentNpc:   null,
+        prevNpc:      "Korven",
+        pendingAct1:  true,
+        alreadyFired: true,   // ← permanent latch from the first fire
+      })
+    ).toBe(false);
+  });
+
+  it("fires exactly once across many dialogue turns regardless of pendingAct1 toggling", () => {
+    // Simulate the hook's latch lifecycle: once shouldFire returns true,
+    // the hook sets alreadyFired = true and NEVER resets it.
+    let alreadyFired = false;
+    let fireCount = 0;
+
+    // Five dialogue open→close cycles with the quest NPC; pendingAct1
+    // gets re-set true on each one (the pre-HF1 double-fire condition).
+    for (let turn = 0; turn < 5; turn += 1) {
+      if (
+        shouldFireDeferredReveal({
+          currentNpc:   null,
+          prevNpc:      "Korven",
+          pendingAct1:  true,
+          alreadyFired,
+        })
+      ) {
+        fireCount += 1;
+        alreadyFired = true; // permanent latch — never reset
+      }
+    }
+
+    expect(fireCount).toBe(1);
   });
 });

@@ -690,6 +690,14 @@ export async function POST(request: NextRequest) {
     // Day 23A — derive node_type + (for dungeons) validate rooms.
     const locRecord = loc as unknown as Record<string, unknown>;
     const nodeType  = deriveNodeType(locRecord);
+    // HF1 FIX 3 — a dungeon's parent is ALWAYS the geographic region
+    // zone, never the settlement (rule 100). The AI sometimes authors
+    // a dungeon as an interior of the settlement (parent_location_id =
+    // town), which would point zone_id at the settlement and make the
+    // dungeon exit dump the player in town. Normalize it here.
+    if (nodeType === "dungeon") {
+      zoneId = geographicRegionId;
+    }
     const dungeonRooms = nodeType === "dungeon"
       ? validateDungeonRooms(locRecord.dungeon_rooms, `starting_region.locations[${loc.id}]`, "[apply-world-bible]")
       : undefined;

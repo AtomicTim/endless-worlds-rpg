@@ -382,9 +382,16 @@ consistent with the WCD):
       "xp_value": 55,
       "loot_table_id": "${outline.id}_themed_enemy_id_loot",
       "is_boss": false,
-      "behavior_flavor": "[1-3 word phrase]"
+      "behavior_flavor": "[1-3 word phrase]",
+      "primary_damage_type": "poison",
+      "status_effect": { "id": "poisoned", "chance": 0.30 },
+      "can_weaken": false
     }
   ],
+  /* enemies[].primary_damage_type, status_effect, and can_weaken are
+     OPTIONAL — omit primary_damage_type for plain physical attackers;
+     omit status_effect for generic melee; omit can_weaken when false.
+     See ENEMY DAMAGE TYPE AND STATUS EFFECT below for when to set them. */
   "region_loot_items": [
     {
       "id": "${outline.id}_item_slug",
@@ -517,6 +524,22 @@ NEVER generate starting-tier enemies with:
   - agi_mod above 1
   - hp_range minimum above 8
   - damage_die larger than "1d6"
+
+ENEMY DAMAGE TYPE AND STATUS EFFECT (optional fields):
+
+primary_damage_type — The type of damage this enemy primarily
+deals. Most enemies use "physical" and should OMIT this field.
+Only set for clearly typed enemies (venom → "poison", fire →
+"fire", shadow → "shadow", etc.). Use the genre's canonical
+type list (same as WB — see genre type lists above).
+
+status_effect — Optional. Only include for enemies whose core
+identity is a status threat. Shape and valid ids same as WB.
+Shape: { "id": "<status_id>", "chance": <0.0-1.0> }
+Valid ids: "poisoned" | "burning" | "chilled" | "weakened" | "frightened"
+Typical chances: 0.20-0.40. Boss: 0.50-0.80.
+
+can_weaken — Optional boolean, large/crushing enemies only.
 
 ENCOUNTER TAGGING for combat-eligible region_locations:
 The standalone region_location IS combat-eligible. It MUST carry:

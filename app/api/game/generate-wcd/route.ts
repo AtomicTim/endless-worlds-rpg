@@ -370,6 +370,31 @@ function buildUserPrompt(body: {
     '  "description": "<1 sentence>"',
     "}",
     "",
+    // Prompt 2 — Status effect aliases. Same shape as damage_type_aliases:
+    // worlds opt in only when atmosphere/world_rules strongly imply a
+    // renamed effect. Defaults to []. Engine reads status_effect_aliases
+    // off metadata at narration time to skin status events with world-
+    // native names.
+    "STATUS EFFECT ALIASES",
+    "status_effect_aliases defaults to []. Only generate 1-2 entries",
+    "when the world's atmosphere or world_rules strongly imply a",
+    "thematically compelling renamed status effect — for example, a",
+    "world where an ancient cursed forest spreads its corruption might",
+    "rename \"poisoned\" → \"rootblight\". A volcanic world with living",
+    "lava spirits might rename \"burning\" → \"cindermark\". Most worlds",
+    "should output status_effect_aliases: [].",
+    "",
+    "Valid canonical_id values (use exactly as written):",
+    '  "poisoned" | "burning" | "chilled" | "weakened" | "frightened"',
+    '  "fortified" | "hastened" | "focused"',
+    "",
+    "Schema per entry:",
+    '  { "canonical_id": "<StatusEffectId>", "world_name": "<string>" }',
+    "",
+    "One alias per canonical_id. Never create aliases for status",
+    "effects that don't have a strong thematic reason specific to",
+    "this world's lore. When in doubt, output [].",
+    "",
     "Make it feel original and specific to this genre and character. Avoid generic clichés. Be creative and unexpected.",
   ].join("\n");
 }

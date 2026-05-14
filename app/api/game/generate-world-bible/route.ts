@@ -348,9 +348,16 @@ Return EXACTLY this JSON structure (fill in the values):
         "xp_value": 25,
         "loot_table_id": "<region_id>_themed_enemy_id_loot",
         "is_boss": false,
-        "behavior_flavor": "1-3 word phrase"
+        "behavior_flavor": "1-3 word phrase",
+        "primary_damage_type": "poison",
+        "status_effect": { "id": "poisoned", "chance": 0.30 },
+        "can_weaken": false
       }
     ]
+    /* enemies[].primary_damage_type, status_effect, and can_weaken are
+       OPTIONAL — omit primary_damage_type for plain physical attackers;
+       omit status_effect for generic melee; omit can_weaken when false.
+       See ENEMY DAMAGE TYPE AND STATUS EFFECT below for when to set them. */
   },
   "adjacent_regions": [
     {
@@ -376,9 +383,15 @@ Return EXACTLY this JSON structure (fill in the values):
           "xp_value": 50,
           "loot_table_id": "<region_slug>_outline_enemy_id_loot",
           "is_boss": false,
-          "behavior_flavor": "1-3 word phrase"
+          "behavior_flavor": "1-3 word phrase",
+          "primary_damage_type": "poison",
+          "status_effect": { "id": "poisoned", "chance": 0.30 },
+          "can_weaken": false
         }
       ]
+      /* Same optional-field note as starting_region.enemies — omit
+         primary_damage_type / status_effect / can_weaken when not
+         applicable. */
     }
   ],
   "main_quest": {
@@ -471,6 +484,30 @@ world. A corporate dystopia names people differently than a
 haunted coastal village. Read the WCD. Let the world's identity
 generate the names — do not draw from generic naming pools.
 
+PROFESSION MANUALS — MANDATORY:
+
+The shop, library, or general-purpose sub-location MUST contain
+at least 3 readable objects representing basic profession guides.
+These are the player's introduction to the three professions.
+Use world-appropriate names that fit the WCD's atmosphere and
+genre. They must have type: "lore" and is_interactable: true.
+
+Genre-appropriate names (adapt to the world's specific flavor):
+  Fantasy:     "Alchemist's Compendium"  / "Blacksmith's Manual"  / "Scholar's Primer"
+  Cyberpunk:   "Chemistry Handbook"      / "Engineering Manual"   / "Data Codex"
+  Horror:      "Apothecary's Formulary"  / "Tinkerer's Notes"     / "Research Journal"
+  Space Opera: "Medical Field Manual"    / "Engineer's Handbook"  / "Xenolinguistics Primer"
+  Post-Apoc:   "Medic's Field Guide"     / "Salvager's Manual"    / "Scavenger's Codex"
+
+Place all three in the same sub-location (shop preferred; if the
+fourth sub-location is a library or archive, place them there
+instead). Each object:
+  - name: world-appropriate profession guide name
+  - description: 1 sentence describing what it covers
+  - type: "lore"
+  - is_interactable: true
+  - contains_lore: 1 sentence of flavor text about the profession
+
 V8.53 — MINIMUM-VIABLE WORLDBIBLE
 Generate ONLY what the player needs at game start. RegionBible
 expansion adds richness when adjacent regions are entered. Skip
@@ -539,6 +576,42 @@ NEVER generate starting region enemies with:
   - hp_range minimum above 8
   - damage_die larger than "1d6"
 Violating these guarantees produces an unwinnable level-1 fight.
+
+ENEMY DAMAGE TYPE AND STATUS EFFECT (optional fields):
+
+primary_damage_type — The type of damage this enemy primarily
+deals. Use the genre's canonical damage types. Most enemies
+use "physical" (the default) and should OMIT this field.
+Only set it when the enemy's nature is clearly elemental or
+typed: a venom spider → "poison", a fire imp → "fire", an
+undead mage → "shadow", a cryo-drone → "cold". Valid types
+per genre:
+  Fantasy:     physical | fire | cold | poison | arcane | holy | shadow
+  Cyberpunk:   physical | electric | thermal | toxic | emp | viral
+  Horror:      physical | psychic | corruption | void | holy
+  Space Opera: physical | plasma | radiation | void | sonic
+  Post-Apoc:   physical | radiation | toxic | fire | acid | electric
+
+status_effect — Optional. When this enemy naturally inflicts a
+status condition on a successful hit, add this field. Only include
+for enemies whose core identity is a status threat (venomous,
+fire-based, fear-inducing, etc.). Do NOT add to generic melee enemies.
+Shape: { "id": "<status_id>", "chance": <0.0-1.0> }
+Valid ids: "poisoned" | "burning" | "chilled" | "weakened" | "frightened"
+Typical chances: 0.20-0.40 on hit. Boss enemies may have higher chance
+on their primary attack (0.50-0.80). Chance 1.0 means guaranteed on hit.
+
+Examples:
+  Venom Crawler: { "id": "poisoned", "chance": 0.30 }
+  Ember Sprite:  { "id": "burning",  "chance": 0.25 }
+  Frost Wraith:  { "id": "chilled",  "chance": 0.35 }
+  Eldritch Worm: { "id": "frightened","chance": 0.30 }
+  Most goblins, bandits, wolves: omit status_effect entirely.
+
+can_weaken — Optional boolean. Set true only on large, crushing
+enemies (stone golems, war-machines, giant beasts). When true
+the engine auto-derives a WEAKENED application at 20% chance.
+Default: omit (false).
 
 adjacent_regions[i].enemies — give 1-2 enemies per outline (less
 detail, since the full roster is generated when the region is

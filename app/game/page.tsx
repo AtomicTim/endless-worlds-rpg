@@ -15,12 +15,20 @@ import { WorldMap } from "@/components/game/WorldMap";
 import { NavigationBar } from "@/components/game/NavigationBar";
 import { CombatMode } from "@/components/game/CombatMode";
 import { CodexModal } from "@/components/game/CodexModal";
+import { JournalModal } from "@/components/game/JournalModal";
+import { LevelUpModal } from "@/components/game/LevelUpModal";
+import { QuestRevealModal } from "@/components/game/QuestRevealModal";
+import { FloorLootStrip } from "@/components/game/FloorLootStrip";
+import WorldIntroModal from "@/components/WorldIntroModal";
+import { useFloorLoot } from "@/hooks/useFloorLoot";
 import { AssetCategory, Genre } from "@/types/game";
 import type { MasterState } from "@/types/game";
 import { createClient } from "@/lib/supabase/client";
 import { useGameStore, makeMessage } from "@/lib/stores/game-store";
 import { useGameLoop } from "@/hooks/useGameLoop";
 import { useCombat } from "@/hooks/useCombat";
+import { useDungeonRuntime } from "@/hooks/useDungeonRuntime";
+import { useDeferredQuestReveal } from "@/lib/game/quest-discovery-pipeline";
 import { getAllWorldAssets, getWorldAssetsForLocation, normalizeLocationId, saveCodexEntry } from "@/lib/game/codex";
 import { formatLocationId } from "@/lib/game/location-formatter";
 
@@ -43,6 +51,12 @@ export default function GamePage() {
   const initRef    = useRef(false);
   const inputBarRef = useRef<InputBarHandle>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
+  // Day 23.5D — world intro cinematic modal. Replaces the in-feed
+  // NARRATIVE world_intro beat. worldIntroShownRef latches at fire
+  // time so the modal can never re-trigger on store updates that
+  // happen during normal play.
+  const [showWorldIntroModal, setShowWorldIntroModal] = useState(false);
+  const worldIntroShownRef = useRef(false);
 
   const masterState    = useGameStore((s) => s.masterState);
   const messages       = useGameStore((s) => s.messages);
@@ -56,6 +70,17 @@ export default function GamePage() {
     floatingByActor:  combatFloatingByActor,
     submitCombatAction,
   } = useCombat();
+  // Day 23A pt 2 — dungeon-runtime callbacks for the NavigationBar
+  // room cards + locked-room popover. The hook also runs the
+  // dungeon-entry side effect (initialize dungeon_state on arrival)
+  // and the boss-victory beat observer.
+  const dungeon = useDungeonRuntime();
+  // V8.64 — defer Act 1 quest reveal until the dialogue panel closes.
+  // The hook watches currentDialogueNpc → null transitions; when
+  // pendingAct1Reveal is set, it runs the discovery pipeline once.
+  useDeferredQuestReveal();
+  // Day 21 — SEARCH REMAINS + TAKE handlers backing the FloorLootStrip.
+  const floorLootHandlers = useFloorLoot();
   const inCombat = activeCombat?.active === true;
 
   // ── Load session on mount ─────────────────────────────────────────────────
@@ -152,20 +177,42 @@ export default function GamePage() {
           });
         }
       } else {
-        // V8.34 (Prompt 3 Task 7) — fresh session preamble. Replaces the
-        // generic "Resuming your adventure" head that was firing on
-        // brand-new games. Two short lines: a SYSTEM divider for the
-        // opening beat + a soft prompt for the player's first input.
+        // V8.34 (Prompt 3 Task 7) + Day 23B pt 2 (TASK 1) — fresh-session
+        // preamble. Two paths now (Day 23.5D):
+        //
+        //   A. world_intro IS set (new games on 23.5D+):
+        //      1. SYSTEM "You are {name}, a {class} in the {World}." beat
+        //      2. Schedule the WorldIntroModal — the cinematic overlay
+        //         renders the world intro prose. "Your adventure begins."
+        //         fires inside handleWorldIntroDismiss when the player
+        //         clicks/keypresses to dismiss it.
+        //
+        //   B. world_intro is NOT set (legacy saves predating Day 23B):
+        //      1. SYSTEM "You are {name}, a {class} in the {World}." beat
+        //      2. SYSTEM "Your adventure begins..." beat — immediate,
+        //         no modal (rule 42 fallback path).
         const worldName    = WORLD_NAMES[state.metadata.genre] ?? "World";
         const locationName = formatLocationId(state.world_state.current_location_id);
         store.addMessage(makeMessage("SYSTEM",
           `You are ${state.player_state.name}, a ${state.player_state.background} in the ${worldName}. ` +
           `Your adventure begins at ${locationName}.`
         ));
-        store.addMessage(makeMessage("SYSTEM",
-          "Your adventure begins. What will you do first?",
-          { isFreshGamePreamble: true }
-        ));
+        const intro = state.metadata.world_intro;
+        if (typeof intro === "string" && intro.trim().length > 0) {
+          // Day 23.5D — cinematic overlay replaces the in-feed NARRATIVE
+          // beat. Latch the ref synchronously so the trigger can't fire
+          // again from any subsequent state update.
+          worldIntroShownRef.current = true;
+          setShowWorldIntroModal(true);
+        } else {
+          // Legacy path — no world_intro means no modal. Fire the
+          // soft-prompt SYSTEM beat immediately so the player still
+          // sees the "begin adventure" cue.
+          store.addMessage(makeMessage("SYSTEM",
+            "Your adventure begins. What will you do first?",
+            { isFreshGamePreamble: true }
+          ));
+        }
       }
 
       // Debug: log the location identifiers we're about to query against so
@@ -279,11 +326,42 @@ export default function GamePage() {
 
   const genre = masterState?.metadata.genre ?? Genre.FANTASY;
 
+  // Day 23.5D — dismiss handler for the world intro modal. Fires the
+  // "Your adventure begins…" SYSTEM beat that previously fired
+  // immediately in the fresh-game preamble. Idempotent: subsequent
+  // calls (e.g. very fast double-click) are absorbed by the
+  // showWorldIntroModal guard.
+  const handleWorldIntroDismiss = () => {
+    if (!showWorldIntroModal) return;
+    setShowWorldIntroModal(false);
+    useGameStore.getState().addMessage(makeMessage(
+      "SYSTEM",
+      "Your adventure begins. What will you do first?",
+      { isFreshGamePreamble: true },
+    ));
+  };
+
   return (
     <GameLayout
       genre={genre}
       mainPanel={
         <>
+          {/* Day 23.5D — World intro cinematic. Mounts at z-60 above
+              every other modal; self-dismissed via click or keypress.
+              Only shows on the fresh-game branch when metadata.world_intro
+              is set (legacy saves skip directly to the soft-prompt beat). */}
+          {showWorldIntroModal && masterState?.metadata.world_intro && (
+            <WorldIntroModal
+              worldName={
+                masterState.metadata.world_consistency?.world_name
+                ?? masterState.metadata.world_seed?.world_name
+                ?? ""
+              }
+              worldIntro={masterState.metadata.world_intro}
+              genre={masterState.metadata.genre}
+              onDismiss={handleWorldIntroDismiss}
+            />
+          )}
           {masterState && (
             <SceneArt
               locationId={masterState.world_state.current_location_id}
@@ -327,6 +405,16 @@ export default function GamePage() {
               /game without changing routes, so combat / dialogue stay
               mounted while the player consults the codex. */}
           <CodexModal />
+          {/* Day 23C — Journal modal overlay. Same overlay pattern as
+              Codex. JOURNAL button in GameLayout toggles it. */}
+          <JournalModal />
+          {/* Day 23C — Act 1 cinematic. Mounts at z-60 so it sits above
+              every other modal. Self-clears when its animation cycle
+              completes; pointer-events: none so it never blocks input. */}
+          <QuestRevealModal />
+          {/* Day 22 — Level-up modal. Opens when player_state
+              .pending_level_up=true AND combat is no longer active. */}
+          <LevelUpModal />
           {/* V8.34 (Prompt 3 Task 3) — when combat is active, swap the
               navigation strip + input bar for the CombatMode panel.
               CombatMode covers more vertical space so the player has
@@ -343,11 +431,39 @@ export default function GamePage() {
             />
           ) : (
             <>
+              {/* Day 21 — Floor Loot Strip. Renders between story feed
+                  and nav cards. Hidden during combat (CombatMode swap
+                  above replaces this whole subtree). Auto-unmounts
+                  when no entries match the current node. */}
+              {masterState && (
+                <FloorLootStrip
+                  floor_loot={masterState.floor_loot ?? []}
+                  current_node_id={
+                    masterState.world_state.current_node_id
+                    ?? masterState.world_state.current_location_id
+                  }
+                  genre={masterState.metadata.genre}
+                  player_inventory_count={masterState.player_state.inventory.length}
+                  onSearchRemains={floorLootHandlers.onSearchRemains}
+                  onTake={floorLootHandlers.onTake}
+                  onTakeGold={floorLootHandlers.onTakeGold}
+                  onTakeAll={floorLootHandlers.onTakeAll}
+                />
+              )}
               <NavigationBar
                 masterState={masterState}
                 worldGraph={masterState?.world_graph}
                 onNavigate={(nodeId) => navigateTo(nodeId)}
                 genre={genre}
+                // Day 23A pt 2 — dungeon callbacks. NavigationBar
+                // branches to room-card mode when masterState
+                // .dungeon_state is set.
+                onNavigateRoom={dungeon.navigateToRoom}
+                onUseKeyOnRoom={dungeon.useKeyOnRoom}
+                onForceRoom={dungeon.forceUnlockRoom}
+                canForceUnlock={dungeon.canForceUnlock()}
+                keyItemForRoom={dungeon.keyItemForRoom}
+                strBypassThreshold={dungeon.strBypassThreshold}
               />
               <InputBar
                 ref={inputBarRef}

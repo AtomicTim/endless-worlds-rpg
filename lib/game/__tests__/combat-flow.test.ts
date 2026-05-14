@@ -30,9 +30,14 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     health:      30,
     max_health:  30,
     resources:   { gold: 100 },
+    // V8.51 — calibrated for the new abilityMod formula
+    // (floor((stat - 2) / 2)). STR 6 / AGI 6 both yield +2 modifiers,
+    // matching the assertions in this file written under the legacy
+    // D&D formula (STR 14 also gave +2). The other stats stay at the
+    // 2-10 ceiling — they don't feed combat math.
     attributes: {
-      strength:     14,
-      agility:      14,
+      strength:     6,
+      agility:      6,
       charisma:     10,
       intelligence: 10,
       perception:   10,
@@ -174,12 +179,13 @@ describe("integration: defeat path", () => {
     expect(result.resolution?.kind).toBe("defeat");
     if (result.resolution?.kind !== "defeat") throw new Error("expected defeat");
     expect(result.resolution.teleport_to_node_id).toBe("oathwatch_crossing");
-    // HP reset to 50% of max (15)
-    expect(result.newPlayer.health).toBe(Math.floor(player.max_health * 0.5));
+    // Prompt 1 — HP reset to 75% of max (was 50%). 30 * 0.75 = 22.
+    expect(result.newPlayer.health).toBe(Math.floor(player.max_health * 0.75));
     // XP rolled back to pre_combat_xp
     expect(result.newPlayer.xp).toBe(50);
-    // Currency 90% (gold for fantasy)
-    expect(result.newPlayer.resources.gold).toBe(Math.floor(100 * 0.9));
+    // Prompt 1 — currency loss = min(50, 10% of current). 100 gold →
+    // 10 loss → 90 remaining (same as old 90% formula at this scale).
+    expect(result.newPlayer.resources.gold).toBe(90);
   });
 
   // ── Day 20.4 TASK 4 — fallback chain ──────────────────────────────────

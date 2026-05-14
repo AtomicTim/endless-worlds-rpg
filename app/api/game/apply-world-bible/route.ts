@@ -7,6 +7,7 @@ import type {
   LocationDefinition,
   MasterState,
   NPCDefinition,
+  RegionType,
   WorldAsset,
   WorldBible,
   WorldConsistencyDocument,
@@ -15,6 +16,12 @@ import type {
 } from "@/types/game";
 import { Genre } from "@/types/game";
 import { getGenreBestiary } from "@/lib/game/bestiary";
+import {
+  VALID_REGION_TYPES,
+  deriveNodeType,
+  validateDungeonRooms,
+} from "@/lib/game/dungeon-validation";
+import { initializeQuestThreads, resolveWorldIntro } from "@/lib/game/quest-threads";
 
 /**
  * Day 19B — Apply a freshly-generated WorldBible to a session.
@@ -54,9 +61,15 @@ function validateEnemy(raw: unknown, context: string): Enemy | null {
   const o = raw as Record<string, unknown>;
   const id   = typeof o.id   === "string" ? o.id.trim()   : "";
   const name = typeof o.name === "string" ? o.name.trim() : "";
+  // V8.53 — description is no longer required. The WB prompt was
+  // trimmed to drop enemy descriptions (minimum-viable detail). When
+  // missing, the genre bestiary's static description applies if the
+  // enemy id matches a bestiary entry, otherwise the narrator invents
+  // flavor on demand. Default to empty string so downstream type
+  // contracts still pass.
   const desc = typeof o.description === "string" ? o.description.trim() : "";
-  if (!id || !name || !desc) {
-    console.warn(`[apply-world-bible] Enemy in ${context} missing id/name/description — dropping.`);
+  if (!id || !name) {
+    console.warn(`[apply-world-bible] Enemy in ${context} missing id/name — dropping.`);
     return null;
   }
   const hpRange = Array.isArray(o.hp_range) ? o.hp_range : null;
@@ -214,6 +227,19 @@ function npcToAsset(npc: NPCDefinition, sessionId: string): WorldAsset {
       ...(npc.faction_id ? { faction: npc.faction_id } : {}),
       knowledge:       knowledgeItems,
       notes,
+      // V8.67 — mirror quest_hook + quest_seed so prompt-builder can
+      // surface a SITUATION block when the player talks to a hook NPC.
+      ...(npc.quest_hook === true            ? { quest_hook: true }            : {}),
+      ...(npc.quest_seed && npc.quest_seed.trim()
+        ? { quest_seed: npc.quest_seed.trim() }
+        : {}),
+      // Day 23.5C — mirror disposition_modifiers so the trust-seed
+      // pipeline (state-utils.seedNpcRegistry) can read it without
+      // re-loading the world bible. Skipped when absent so non-tense
+      // NPCs don't carry empty modifier maps.
+      ...(npc.disposition_modifiers
+        ? { disposition_modifiers: npc.disposition_modifiers }
+        : {}),
     },
     significance:        npc.quest_relevance === "key" ? "MAJOR" : "NOTABLE",
     first_seen_location: npc.home_location_id,
@@ -661,6 +687,23 @@ export async function POST(request: NextRequest) {
       isExpandable
     );
 
+    // Day 23A — derive node_type + (for dungeons) validate rooms.
+    const locRecord = loc as unknown as Record<string, unknown>;
+    const nodeType  = deriveNodeType(locRecord);
+    const dungeonRooms = nodeType === "dungeon"
+      ? validateDungeonRooms(locRecord.dungeon_rooms, `starting_region.locations[${loc.id}]`, "[apply-world-bible]")
+      : undefined;
+    // V8.54 — dungeon validation diagnostic. Empty count means the AI
+    // emitted a dungeon without rooms (or with malformed rooms — see
+    // validateDungeonRooms warnings above); this is the canonical
+    // signal that the prompt's DUNGEON STRUCTURE block needs another
+    // pass. Tim greps these lines after a fresh world generates.
+    if (nodeType === "dungeon") {
+      console.log(
+        `[apply-world-bible] dungeon node ${loc.id}: ${dungeonRooms?.length ?? 0} rooms validated.`
+      );
+    }
+
     graphNodes[loc.id] = {
       id:                 loc.id,
       name:               loc.name,
@@ -687,6 +730,9 @@ export async function POST(request: NextRequest) {
       encounter_roster:   Array.isArray(loc.encounter_roster) && loc.encounter_roster.length > 0
                             ? [...loc.encounter_roster] : undefined,
       is_boss_room:       loc.is_boss_room === true ? true : undefined,
+      // Day 23A — location-typology + dungeon-room persistence.
+      ...(nodeType        ? { node_type: nodeType } : {}),
+      ...(dungeonRooms    ? { dungeon_rooms: dungeonRooms } : {}),
     };
   }
 
@@ -717,7 +763,26 @@ export async function POST(request: NextRequest) {
     if (!validConnections.includes(startingNodeId)) {
       validConnections.push(startingNodeId);
     }
-    const regionLocNode = {
+    // Day 23A — region_locations are the dungeon / wilderness / landmark
+    // nodes that live in the geographic region. Derive node_type and
+    // validate dungeon_rooms here so the runtime knows whether to
+    // switch into room-navigation mode on arrival.
+    const locRecord = loc as unknown as Record<string, unknown>;
+    const nodeType  = deriveNodeType(locRecord);
+    const dungeonRooms = nodeType === "dungeon"
+      ? validateDungeonRooms(locRecord.dungeon_rooms, `starting_region.region_locations[${loc.id}]`, "[apply-world-bible]")
+      : undefined;
+    // V8.54 — dungeon validation diagnostic. Region_locations are the
+    // MOST likely place a starting-region dungeon lives, so a missing
+    // room count here is the most actionable WB-prompt issue to
+    // surface in server logs.
+    if (nodeType === "dungeon") {
+      console.log(
+        `[apply-world-bible] dungeon node ${loc.id}: ${dungeonRooms?.length ?? 0} rooms validated.`
+      );
+    }
+
+    const regionLocNode: WorldNode = {
       id:                 loc.id,
       name:               loc.name,
       // FIX 3 — region_locations MUST carry type: "zone" (NOT
@@ -753,6 +818,9 @@ export async function POST(request: NextRequest) {
       encounter_roster:   Array.isArray(loc.encounter_roster) && loc.encounter_roster.length > 0
                             ? [...loc.encounter_roster] : undefined,
       is_boss_room:       loc.is_boss_room === true ? true : undefined,
+      // Day 23A — location-typology + dungeon-room persistence.
+      ...(nodeType        ? { node_type: nodeType } : {}),
+      ...(dungeonRooms    ? { dungeon_rooms: dungeonRooms } : {}),
     };
     // FIX 3 — diagnostic. Surface the three fields the WorldMap
     // predicate keys off so a generation regression is immediately
@@ -829,8 +897,19 @@ export async function POST(request: NextRequest) {
       npc_ids:       [],
       item_ids:      [],
       asset_id:      `location_${geographicRegionId}`,
-      discovered:    true,
+      // FIX 0 (V8.62) — region zone spawns undiscovered.
+      // Pre-fix this was `true`, which caused the first walk
+      // from the starting settlement to the surrounding region
+      // zone to trigger revisit suppression (rule 86) and emit
+      // "You return to {name}." instead of the full atmosphere
+      // description. Only the starting settlement itself spawns
+      // discovered (see step 4a: `discovered: loc.is_settlement_node`).
+      discovered:    false,
       map_position:  bibleNarrowed.starting_region.grid_centre,
+      // Day 23A — the starting region is ALWAYS "settled" by spec
+      // (per quest-system-spec.md). Adjacent_regions vary; their
+      // zone nodes are created in step 4d.
+      region_type:   "settled",
     };
     // Wire the settlement node back to the geographic region. The
     // settlement ↔ region_location wiring already happened in 4b/4b-2;
@@ -956,6 +1035,13 @@ export async function POST(request: NextRequest) {
   const placeholderBackLink = isSameAsSettlement ? startingNodeId : geographicRegionId;
   for (const region of bibleNarrowed.adjacent_regions) {
     if (graphNodes[region.id]) continue; // shouldn't collide, but defensive
+    // Day 23A — propagate region_type from the outline (defaults to
+    // "settled" when the AI omitted it, matching the spec default).
+    const rtRaw = (region as unknown as { region_type?: unknown }).region_type;
+    const regionType: RegionType =
+      typeof rtRaw === "string" && VALID_REGION_TYPES.has(rtRaw as RegionType)
+        ? (rtRaw as RegionType)
+        : "settled";
     graphNodes[region.id] = {
       id:            region.id,
       name:          region.name,
@@ -969,6 +1055,7 @@ export async function POST(request: NextRequest) {
       asset_id:      `location_${region.id}`,
       discovered:    false,
       map_position:  region.grid_centre,
+      region_type:   regionType,
     };
   }
   // For the legacy single-tier shape (region.id === startingNodeId),
@@ -1005,7 +1092,53 @@ export async function POST(request: NextRequest) {
     starting_node_id: startingNodeId,
   };
 
+  // ── 4e. Day 23B — Initialize quest_threads + resolve world_intro ───────────
+  // Build the runtime quest slice from the WorldBible's main_quest seed and
+  // resolve the world_intro_template with the player's character name/class.
+  // Both are no-ops when the bible was generated before Day 23B (no
+  // main_quest field) — quest_threads stays undefined, world_intro stays
+  // empty, and the game falls back to the legacy preamble.
+  const questThreads = initializeQuestThreads(bibleNarrowed);
+  // Day 23.5C — also resolve {motivation} from the character profile.
+  // When the save-character-profile route has already written the
+  // profile (the wizard fires it before apply-world-bible runs the
+  // RegionBible burst in 23.5B), this picks up the player's stated
+  // motivation. Empty motivation → placeholder replaced with "".
+  const worldIntro   = resolveWorldIntro(
+    bibleNarrowed.main_quest?.world_intro_template,
+    current.player_state.name,
+    current.player_state.background,
+    current.player_state.character_profile?.motivation,
+  );
+
+  // Diagnostic per spec — surfaces archetype + breadcrumb count + finale
+  // on every apply so a missing field is visible in server logs.
+  if (questThreads?.main_quest) {
+    const mq = questThreads.main_quest;
+    console.log(
+      `[apply-world-bible] main_quest: ${mq.archetype}, ` +
+      `${mq.breadcrumbs.length} breadcrumbs, finale: ${mq.finale_type}, ` +
+      `factions: ${mq.factions.length}, intro length: ${worldIntro.length}`
+    );
+  } else {
+    console.log("[apply-world-bible] main_quest: <missing — bible had no quest seed>");
+  }
+
   // ── 5. Patch master_state ──────────────────────────────────────────────────
+  // Day 23.5A — hoist species + damage_type_aliases from the WCD onto
+  // metadata top-level. The 23.5B character creation UI reads from
+  // metadata.species; storing them only inside metadata.world_consistency
+  // would force every consumer to know about the WCD's nested shape.
+  // Defaults to empty arrays when the WCD didn't emit them.
+  const speciesFromWcd  = wcdNarrowed.species ?? [];
+  const aliasesFromWcd  = wcdNarrowed.damage_type_aliases ?? [];
+  console.log(
+    `[apply-world-bible] species stored: ${speciesFromWcd.length} entries`
+  );
+  console.log(
+    `[apply-world-bible] damage_type_aliases stored: ${aliasesFromWcd.length} entries`
+  );
+
   const patched: MasterState = {
     ...current,
     metadata: {
@@ -1016,6 +1149,12 @@ export async function POST(request: NextRequest) {
       // match WORLD_EXPLORE destinations against adjacent_regions without
       // an extra fetch on every move.
       world_bible:       bibleNarrowed,
+      // Day 23B — pre-resolved opening intro. The game loop's new-game
+      // preamble reads this and falls back to the legacy line when empty.
+      ...(worldIntro ? { world_intro: worldIntro } : {}),
+      // Day 23.5A — species + damage type aliases promoted to top level.
+      species:             speciesFromWcd,
+      damage_type_aliases: aliasesFromWcd,
     },
     world_state: {
       ...current.world_state,
@@ -1035,6 +1174,9 @@ export async function POST(request: NextRequest) {
     // useGameLoop step 7c-2 then keeps it current as the player
     // visits other settlements.
     last_settlement_hub_id: startingNodeId,
+    // Day 23B — runtime quest slice. undefined when the bible had no
+    // main_quest seed; the rest of the codebase guards on this.
+    ...(questThreads ? { quest_threads: questThreads } : {}),
   };
 
   // ── 6. Persist master_state + dedicated columns ────────────────────────────

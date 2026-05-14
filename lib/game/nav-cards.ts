@@ -29,7 +29,7 @@
  * visited node ids, most recent at end; trail[-2] is the prior node).
  */
 
-import type { MasterState, WorldGraph, WorldNode } from "@/types/game";
+import type { LocationNodeType, MasterState, WorldGraph, WorldNode } from "@/types/game";
 
 export type CardKind = "back" | "deeper" | "exit" | "peer-known" | "peer-unknown";
 
@@ -106,8 +106,71 @@ export function groupCardsByDirection(cards: readonly Card[]): Record<CardDirect
   return out;
 }
 
+/**
+ * V8.55 (Day 23A) — render a typed LocationNodeType as the small
+ * uppercase badge under the nav-card title.
+ *
+ * Falls back to "LOCATION" for `undefined` or for any unrecognised
+ * value (defensive against future LocationNodeType additions that
+ * don't have a label yet).
+ *
+ * Pre-V8.55 nav cards derived this badge from the legacy `category`
+ * (the bible-side LocationDefinition.type slug). The Day 23A
+ * region_locations skeleton uses `type: "wilderness"` for non-dungeon
+ * standalone nodes — and the AI was overriding to `type: "dungeon"`
+ * on every entry, producing nav cards uniformly labelled "DUNGEON".
+ * node_type is the canonical Day 23A field the AI now emits correctly,
+ * so we read from it directly. typeLabel() prefers node_type over
+ * category to fix this drift.
+ */
+const NODE_TYPE_LABEL: Record<LocationNodeType, string> = {
+  settlement_hub:       "SETTLEMENT",
+  outpost:              "OUTPOST",
+  wilderness:           "WILDERNESS",
+  dungeon:              "DUNGEON",
+  landmark:             "LANDMARK",
+  abandoned_settlement: "RUINS",
+};
+
+export function nodeTypeLabel(nodeType: LocationNodeType | undefined | null): string {
+  if (!nodeType) return "LOCATION";
+  return NODE_TYPE_LABEL[nodeType] ?? "LOCATION";
+}
+
+/**
+ * V8.63 (Day 23C) — sub-location label guard.
+ *
+ * Symptom we're guarding: the WorldBible prompt used to instruct the AI
+ * to set node_type: "settlement_hub" on EVERY sub-location ("they live
+ * inside it"). That made every tavern / shop / smithy / shrine nav card
+ * render "SETTLEMENT". The WB+RB prompts have since been tightened to
+ * only stamp settlement_hub on the actual is_settlement_node, but this
+ * guard catches any AI that still over-applies the type — a sub-location
+ * (type: "sub_location") tagged "settlement_hub" falls through to the
+ * category label so "TAVERN" / "SHOP" / etc. render correctly.
+ */
 function typeLabel(node: WorldNode): string {
   if (node.is_expandable === true && node.zone_id === node.id) return "REGION";
+
+  // Sub-location-with-mistagged-settlement_hub guard. A real settlement
+  // hub always carries is_settlement_node: true AND type: "zone". A
+  // sub-location that picked up settlement_hub from a buggy bible has
+  // type: "sub_location" — that combination is impossible by design,
+  // so we drop the node_type and fall through.
+  const mistaggedSubLocation =
+    node.node_type === "settlement_hub" &&
+    node.is_settlement_node !== true;
+
+  // V8.55 — prefer node_type when present so a landmark renders
+  // "LANDMARK" / wilderness renders "WILDERNESS" instead of all
+  // region_locations defaulting to the category string (which the
+  // AI sometimes sets to "dungeon" for every entry).
+  if (node.node_type && !mistaggedSubLocation) {
+    return nodeTypeLabel(node.node_type);
+  }
+  // Settlement hubs without a node_type (legacy bibles, test fixtures
+  // that don't run through apply-world-bible) get a sensible default.
+  if (node.is_settlement_node === true) return "SETTLEMENT";
   const raw = (node.category ?? node.type ?? "").toString();
   return raw.toUpperCase();
 }

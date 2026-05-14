@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useGameStore, makeMessage } from "@/lib/stores/game-store";
 import { LocationStatus } from "@/types/game";
-import type { CombatEvent, CombatState, MasterState, PlayerState } from "@/types/game";
+import type {
+  CombatEvent, CombatState, FloorLootEntry, MasterState, PlayerState,
+} from "@/types/game";
 import {
   executePlayerAction as engineExecute,
   kickoffCombatIfEnemyFirst,
@@ -105,6 +107,15 @@ const FLOAT_ANIMATION_MS   = 1100;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Day 21 — id stamp for FloorLootEntry. Wraps crypto.randomUUID
+ *  with a fallback so the hook can run in non-browser test contexts. */
+function makeFloorLootId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    try { return crypto.randomUUID(); } catch { /* fall through */ }
+  }
+  return `floorloot_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -728,13 +739,29 @@ export function applyCombatResult(
   }
 
   switch (resolution.kind) {
-    case "victory":
-      // Combat dismissed; player remains at origin_node_id.
+    case "victory": {
+      // Day 21 — drop a PENDING FloorLootEntry for the dead enemies.
+      // The strip's SEARCH REMAINS button resolves it into real items
+      // + gold. Player stays at origin_node_id; combat slice unsets.
+      const pendingEntry: FloorLootEntry = {
+        id:      makeFloorLootId(),
+        node_id: resolution.pending_loot.node_id,
+        items:   [],
+        gold:    0,
+        owner:   null,
+        source:  "enemy",
+        pending: {
+          enemy_instance_ids: resolution.pending_loot.enemy_instance_ids,
+          enemy_loot_refs:    resolution.pending_loot.enemy_loot_refs,
+        },
+      };
       return {
         ...state,
         player_state: newPlayer,
         combat:       undefined,
+        floor_loot: [...(state.floor_loot ?? []), pendingEntry],
       };
+    }
     case "defeat": {
       // Teleport to the death-warp target. Mark ARRIVING so the normal
       // post-arrival pipeline (asset reload, codex first-visit) fires

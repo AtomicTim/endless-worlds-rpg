@@ -1,27 +1,38 @@
-import { ItemRarity, ItemType } from "@/types/game";
+import { ItemType } from "@/types/game";
 import type {
+  ActiveStatusEffect,
   CombatEnemyInstance,
   CombatEvent,
   CombatState,
   Enemy,
   Genre,
-  Item,
   PlayerState,
   RegionBible,
+  StatusEffectId,
   WorldBible,
   WorldNode,
 } from "@/types/game";
 import { getGenreBestiary } from "./bestiary";
-import { rollStubDrops, BASIC_HEALTH_POTION_ID } from "./loot/stub-drops";
+// Day 21 — rollStubDrops, makeStubItem, and the BASIC_HEALTH_POTION_ID
+// import are all removed: loot is now resolved on demand by the
+// floor-loot SEARCH REMAINS path through lib/game/loot-resolver.ts.
+// The lib/game/loot/stub-drops module remains for combat-resolver's
+// use_item heal lookup (which imports its own copy of the constant
+// directly).
 import {
   applyDefendDamageReduction,
+  buildStatusEffect,
   resolveAttack,
   resolveFlee,
   resolveUseItem,
   rollEnemyHP,
   rollInitiative,
+  rollStatusApplication,
+  rollStatusSave,
   type Rng,
 } from "./combat-resolver";
+import { applyStatBoost, checkLevelUp } from "./level-resolver";
+import { getArchetype } from "./archetypes";
 
 /**
  * Day 20 Combat — state-transition engine.
@@ -276,6 +287,15 @@ export function rollEncounter({
       is_boss:         enemy.is_boss,
       behavior_flavor: enemy.behavior_flavor,
       alive:           true,
+      // Prompt 1 — mirror bestiary status fields onto the instance.
+      // can_weaken: when true and the bestiary didn't declare an
+      // explicit status_effect, apply WEAKENED at 20% on hit.
+      status_effect:       enemy.status_effect
+                             ?? (enemy.can_weaken
+                                 ? { id: "weakened" as StatusEffectId, chance: 0.20 }
+                                 : undefined),
+      primary_damage_type: enemy.primary_damage_type,
+      status_effects:      [],
     });
   });
 
@@ -315,6 +335,8 @@ export function rollEncounter({
     combat_log:         [],
     origin_node_id:     node.id,
     pre_combat_xp:      current_xp,
+    // Prompt 1 — status effects start clean.
+    player_status_effects: [],
   };
 
   const startEvent = makeEvent({
@@ -445,7 +467,16 @@ export interface PlayerActionResult {
 export type CombatResolutionPayload =
   | {
       kind:           "victory";
-      loot_summary:   { gold: number; items: string[] };
+      /** Day 21 — pending loot refs that the FloorLootStrip's SEARCH
+       *  REMAINS button will resolve into items + gold. Gold no longer
+       *  auto-adds to player resources on victory; items no longer
+       *  auto-add to inventory. The loot drops onto the floor and the
+       *  player claims it. */
+      pending_loot:   {
+        node_id:            string;
+        enemy_instance_ids: string[];
+        enemy_loot_refs:    Array<{ loot_table_id: string; is_boss: boolean; xp_value?: number }>;
+      };
       xp_awarded:     number;
     }
   | {
@@ -492,6 +523,32 @@ export function executePlayerAction({
   let s = state;
   let p = player;
 
+  // Prompt 1 — Status tick. DoT effects (poisoned, burning) damage at
+  // the START of the player turn. If the tick KOs the player, we
+  // resolve as defeat immediately — no action this turn.
+  const activeEffects = s.player_status_effects ?? [];
+  if (activeEffects.length > 0) {
+    const { newHp, tickEvents } = applyPlayerStatusTicks(p, activeEffects);
+    p = { ...p, health: newHp };
+    s = appendEvents(s, tickEvents);
+    events.push(...tickEvents);
+    if (checkDefeat(p)) {
+      const defeat = handleDefeat({
+        state: s, player: p, last_settlement_hub_id, world_genre,
+        defeat_fallback_node_id, world_graph_nodes,
+      });
+      return {
+        newState:  undefined,
+        newPlayer: defeat.newPlayer,
+        events:    [...events, ...defeat.events],
+        resolution: {
+          kind: "defeat",
+          teleport_to_node_id: defeat.newCurrentNodeId,
+        },
+      };
+    }
+  }
+
   switch (action.action) {
     case "attack": {
       const target = findEnemyByInstanceId(s, action.target_instance_id);
@@ -503,8 +560,10 @@ export function executePlayerAction({
       const result = resolveAttack({
         attacker: {
           name:       player.name,
-          agi_mod:    abilityMod(player.attributes.agility),
-          str_mod:    abilityMod(player.attributes.strength),
+          // Prompt 1 — fold status modifiers (chilled, weakened,
+          // frightened, hastened) into the player's effective attack
+          // mods.
+          ...playerEffectiveAttackMods(p, s.player_status_effects ?? []),
           damage_die: weaponDamageDie(player),
         },
         target: {
@@ -560,9 +619,45 @@ export function executePlayerAction({
         console.warn(`[combat-engine] use_item: ${action.item_id} not in inventory — turn forfeit.`);
         break;
       }
+
+      // Day 22 — STAT_XP fast-apply for mid-combat use. The inventory
+      // picker isn't shown during combat (would slow the action loop),
+      // so the boost auto-targets the player's archetype primary stat.
+      // Falls back to STR if the background isn't a registered archetype.
+      // The item is consumed exactly like any other consumable; a
+      // use_item event renders the templated story-feed beat.
+      if (owned.type === ItemType.STAT_XP) {
+        const arch = getArchetype(player.background);
+        const targetStat = arch?.primary ?? "strength";
+        const beforeValue = player.attributes[targetStat];
+        const afterAttrs  = applyStatBoost(player, targetStat);
+        const capped      = afterAttrs[targetStat] === beforeValue;
+        p = consumeItem({ ...p, attributes: afterAttrs }, action.item_id);
+        events.push(makeEvent({
+          type:                "use_item",
+          actor:               PLAYER_ID,
+          target:              PLAYER_ID,
+          outcome:             "item_used",
+          damage_dealt:        0,
+          remaining_target_hp: player.health,
+          weapon_or_item:      owned.name,
+          context_note:        capped
+                                ? `${targetStat} already at cap`
+                                : `+1 ${targetStat} (mid-combat fast-apply → primary)`,
+        }));
+        break;
+      }
+
       const result = resolveUseItem({
-        item_id: action.item_id,
-        player:  { current_hp: player.health, max_hp: player.max_health },
+        item_id:     action.item_id,
+        // V8.49 — pass the item's effect through so resolveUseItem can
+        // read effect.heal directly. Without this, looted potions
+        // (which carry crypto.randomUUID() ids from loot-resolver,
+        // never the static BASIC_HEALTH_POTION_ID) silently no-oped
+        // mid-combat with no HP restored and the potion still in
+        // inventory.
+        item_effect: owned.effect,
+        player:      { current_hp: player.health, max_hp: player.max_health },
         rng,
       });
       if (result.item_consumed) {
@@ -618,6 +713,18 @@ export function executePlayerAction({
 
   s = appendEvents(s, events);
 
+  // Prompt 1 — Status saves. END of player turn: every active ailment
+  // rolls d20 + stat-mod vs save_dc. Buffs decrement duration without
+  // rolling. Saves/expiries emit dedicated events.
+  const effectsNow = s.player_status_effects ?? [];
+  if (effectsNow.length > 0) {
+    const { newEffects, saveEvents } =
+      rollPlayerStatusSaves(p, effectsNow, rng);
+    s = { ...s, player_status_effects: newEffects };
+    s = appendEvents(s, saveEvents);
+    events.push(...saveEvents);
+  }
+
   // Did the player just clear the field?
   if (checkVictory(s)) {
     const victory = handleVictory({ state: s, player: p, world_genre, rng });
@@ -625,7 +732,11 @@ export function executePlayerAction({
       newState:   undefined,
       newPlayer:  victory.newPlayer,
       events:     [...events, ...victory.events],
-      resolution: { kind: "victory", loot_summary: victory.loot_summary, xp_awarded: victory.xp_awarded },
+      resolution: {
+        kind:         "victory",
+        pending_loot: victory.pending_loot,
+        xp_awarded:   victory.xp_awarded,
+      },
     };
   }
 
@@ -727,6 +838,10 @@ export function advanceEnemyTurn({
     return { newState: s, newPlayer: player, events: advanced.events };
   }
 
+  // Prompt 1 — track in-flight player status effects so an enemy hit's
+  // status application is committed to state alongside the damage event.
+  let pendingPlayerEffects = state.player_status_effects ?? [];
+
   // Defend buff: halve damage AND +2 to player AGI for defense. Apply
   // the AGI bonus by passing inflated agi_mod to resolveAttack via the
   // target field; halve damage post-roll.
@@ -742,7 +857,10 @@ export function advanceEnemyTurn({
     target: {
       name:        player.name,
       agi_mod:     playerAgi,
-      armor_bonus: playerArmorBonus(player),
+      // Prompt 1 — fortified +3 (and any future armor status_modifier)
+      // is folded into the effective armor bonus here so the resolver
+      // sees the buffed DC.
+      armor_bonus: playerEffectiveArmorBonus(player, pendingPlayerEffects),
       current_hp:  player.health,
     },
     rng,
@@ -751,6 +869,19 @@ export function advanceEnemyTurn({
   let damage = result.damage;
   if (state.player_defending && damage > 0) {
     damage = applyDefendDamageReduction(damage);
+  }
+
+  // Prompt 1 — armor.damage_resistances. If the player's equipped armor
+  // resists this enemy's primary_damage_type, subtract that flat
+  // amount (minimum 1 if any damage got through). Applies AFTER the
+  // defend buff so resistance stacks but doesn't compound oddly.
+  if (damage > 0 && actor.primary_damage_type) {
+    const armor = player.inventory.find(
+      (i) => i.type === ItemType.ARMOR && i.equipped
+    );
+    const resist =
+      armor?.damage_resistances?.[actor.primary_damage_type] ?? 0;
+    if (resist > 0) damage = Math.max(1, damage - resist);
   }
 
   const newHealth = Math.max(0, player.health - damage);
@@ -770,6 +901,17 @@ export function advanceEnemyTurn({
     context_note:        actor.behavior_flavor,
     rolls:               result.rolls,
   }));
+
+  // Prompt 1 — on-hit status application. Bestiary-declared
+  // status_effect (or the can_weaken-derived WEAKENED@20%) rolls
+  // against rng. One-curse-limit: any existing ailment is replaced
+  // when a new one applies. Buffs aren't touched.
+  if (result.outcome === "hit" || result.outcome === "crit") {
+    const { newEffects, applicationEvent } =
+      maybeApplyEnemyStatus(actor, pendingPlayerEffects, rng);
+    pendingPlayerEffects = newEffects;
+    if (applicationEvent) events.push(applicationEvent);
+  }
 
   // Did the enemy KO the player?
   if (newHealth <= 0) {
@@ -792,6 +934,10 @@ export function advanceEnemyTurn({
 
   // Advance turn; emit any round_start event from advanceTurn.
   let s = appendEvents(state, events);
+  // Prompt 1 — commit any status applied this enemy turn before
+  // handing control back to the caller. status saves happen on the
+  // player's NEXT turn (end-of-turn pass in executePlayerAction).
+  s = { ...s, player_status_effects: pendingPlayerEffects };
   const advanced = advanceTurn(s);
   s = appendEvents(advanced.state, advanced.events);
 
@@ -962,15 +1108,28 @@ export function kickoffCombatIfEnemyFirst({
 
 export interface VictoryResult {
   newPlayer:    PlayerState;
-  loot_summary: { gold: number; items: string[] };
+  /** Day 21 — loot is no longer rolled on victory. The hook layer
+   *  reads this to build a pending FloorLootEntry whose SEARCH REMAINS
+   *  button resolves the real items + gold. */
+  pending_loot: {
+    node_id:            string;
+    enemy_instance_ids: string[];
+    enemy_loot_refs:    Array<{ loot_table_id: string; is_boss: boolean; xp_value?: number }>;
+  };
   xp_awarded:   number;
   events:       CombatEvent[];
 }
 
 /**
- * Tally XP from defeated enemies and roll stub loot for each.
- * Currency goes into player.resources[currencyKey], items go into
- * player.inventory. Combat dismissed.
+ * Day 21 — tally XP and emit a pending-loot manifest for the dead
+ * enemies. Gold + items DO NOT auto-apply on victory; they're
+ * resolved when the player presses SEARCH REMAINS on the FloorLoot
+ * strip. The CombatEnemyInstance already carries loot_table_id +
+ * is_boss, so the manifest is everything the loot resolver needs.
+ *
+ * `newPlayer` gets XP only — resources and inventory are untouched
+ * to preserve the soulslike "claim your spoils" beat the prompt
+ * requires.
  */
 export function handleVictory({
   state, player, world_genre, rng = DEFAULT_RNG,
@@ -978,40 +1137,47 @@ export function handleVictory({
   state:       CombatState;
   player:      PlayerState;
   world_genre: Genre | string | undefined;
+  /** rng is accepted for signature symmetry with handleDefeat /
+   *  handleFleeSuccess, but unused by Day 21 victory (no rolls happen
+   *  here — loot is rolled at SEARCH REMAINS time with its own rng). */
   rng?:        Rng;
 }): VictoryResult {
-  let totalGold  = 0;
-  let totalXp    = 0;
-  const itemIds: string[] = [];
+  // Reference the param so the unused-args lint stays satisfied
+  // without breaking the soulslike "no loot at victory" contract.
+  void rng;
+  let totalXp = 0;
+  const enemyInstanceIds: string[] = [];
+  const enemyLootRefs: Array<{ loot_table_id: string; is_boss: boolean; xp_value?: number }> = [];
+
   for (const e of state.enemies) {
     if (e.alive) continue;  // shouldn't happen post-victory, but safe
     totalXp += e.xp_value;
-    const drops = rollStubDrops({
-      id:              e.enemy_id,
-      name:            e.name,
-      description:     e.description,
-      hp_range:        [e.max_hp, e.max_hp],
-      agi_mod:         e.agi_mod,
-      str_mod:         e.str_mod,
-      damage_die:      e.damage_die,
-      armor_bonus:     e.armor_bonus,
-      xp_value:        e.xp_value,
-      loot_table_id:   e.loot_table_id,
-      is_boss:         e.is_boss,
-      behavior_flavor: e.behavior_flavor,
-    }, rng);
-    totalGold += drops.gold;
-    itemIds.push(...drops.items);
+    enemyInstanceIds.push(e.instance_id);
+    // Prompt 1 — propagate xp_value so the gold tier (Tier 2 fires
+    // when xp_value >= 20) is computable at SEARCH REMAINS time.
+    enemyLootRefs.push({
+      loot_table_id: e.loot_table_id,
+      is_boss:       e.is_boss,
+      xp_value:      e.xp_value,
+    });
   }
 
-  // Apply currency + items + XP.
-  const currencyKey = currencyKeyFor(world_genre);
-  const currentBal  = player.resources[currencyKey] ?? 0;
+  // XP only — no resource / inventory mutation. world_genre is kept
+  // in the signature for symmetry with handleDefeat / handleFleeSuccess
+  // and so the hook layer can still introspect it from the result
+  // without re-fetching MasterState.
+  void world_genre;
+  const newXp = player.xp + totalXp;
+
+  // Day 22 — detect XP threshold crossing. The level-up modal opens
+  // AFTER combat dismisses (gated on `!combat?.active && pending`),
+  // so we just flag it here. checkLevelUp clamps at LEVEL_CAP — a
+  // capped player accumulates XP without re-triggering the modal.
+  const { leveled_up } = checkLevelUp(newXp, player.level);
   const newPlayer: PlayerState = {
     ...player,
-    resources: { ...player.resources, [currencyKey]: currentBal + totalGold },
-    xp:        player.xp + totalXp,
-    inventory: [...player.inventory, ...itemIds.map(makeStubItem)],
+    xp: newXp,
+    ...(leveled_up ? { pending_level_up: true } : {}),
   };
 
   const events: CombatEvent[] = [makeEvent({
@@ -1021,16 +1187,23 @@ export function handleVictory({
     outcome:      null,
     damage_dealt: null,
     weapon_or_item: null,
-    context_note: `xp +${totalXp}, gold +${totalGold}, items: ${itemIds.length === 0 ? "none" : itemIds.join(",")}`,
+    context_note: `xp +${totalXp}, ${enemyInstanceIds.length} enemy(ies) defeated — search remains for loot`,
   })];
 
   // eslint-disable-next-line no-console
-  console.log(`[Combat] Victory! XP +${totalXp}, gold +${totalGold}, items: [${itemIds.join(", ")}]`);
+  console.log(
+    `[Combat] Victory! XP +${totalXp}, ` +
+    `${enemyInstanceIds.length} enemies dropped pending loot.`
+  );
 
   return {
     newPlayer,
-    loot_summary: { gold: totalGold, items: itemIds },
-    xp_awarded:   totalXp,
+    pending_loot: {
+      node_id:            state.origin_node_id,
+      enemy_instance_ids: enemyInstanceIds,
+      enemy_loot_refs:    enemyLootRefs,
+    },
+    xp_awarded: totalXp,
     events,
   };
 }
@@ -1075,16 +1248,25 @@ export function handleDefeat({
    *  the destination payload is built from ids only. */
   world_graph_nodes?:       Record<string, WorldNode>;
 }): DefeatResult {
-  const halvedHp    = Math.max(1, Math.floor(player.max_health * 0.5));
+  // Prompt 1 — death penalty rebalanced. HP restored to 75% of max
+  // (was 50%) so the player isn't immediately one-shot by ambient
+  // wandering enemies on respawn. Gold penalty: 10% of current
+  // balance, capped at 50 (was a flat 10% with no cap) — keeps the
+  // sting on a small purse without crushing a wealthy save.
+  // player_status_effects lives on CombatState which is dismissed
+  // wholesale on defeat (rule 29), so no explicit clear needed here.
+  const respawnHp   = Math.max(1, Math.floor(player.max_health * 0.75));
   const currencyKey = currencyKeyFor(world_genre);
   const currentBal  = player.resources[currencyKey] ?? 0;
+  const goldLoss    = Math.min(50, Math.floor(currentBal * 0.1));
+  const newBal      = Math.max(0, currentBal - goldLoss);
   const newPlayer: PlayerState = {
     ...player,
-    health:    halvedHp,
+    health:    respawnHp,
     xp:        state.pre_combat_xp, // forfeit gains
     resources: {
       ...player.resources,
-      [currencyKey]: Math.floor(currentBal * 0.9),
+      [currencyKey]: newBal,
     },
   };
 
@@ -1213,12 +1395,169 @@ export function handleFleeSuccess({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Prompt 1 — Status effect helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Ailments (debuffs) vs buffs. Saves are rolled for ailments only;
+ *  buffs decrement duration and drop off when they reach 0. */
+const AILMENT_IDS: StatusEffectId[] = [
+  "poisoned", "burning", "chilled", "weakened", "frightened",
+];
+
+/** Sum stat_modifier contributions across active effects to produce the
+ *  player's effective AGI/STR for attack rolls. Buffs add; debuffs (with
+ *  negative `amount`) subtract. */
+function playerEffectiveAttackMods(
+  player:  PlayerState,
+  effects: ActiveStatusEffect[],
+): { agi_mod: number; str_mod: number } {
+  let agiMod = abilityMod(player.attributes.agility);
+  let strMod = abilityMod(player.attributes.strength);
+  for (const e of effects) {
+    if (!e.stat_modifier) continue;
+    const { stat, amount } = e.stat_modifier;
+    if (stat === "all_rolls") { agiMod += amount; strMod += amount; }
+    else if (stat === "agility")  agiMod += amount;
+    else if (stat === "strength") strMod += amount;
+  }
+  return { agi_mod: agiMod, str_mod: strMod };
+}
+
+/** Effective armor bonus = equipped armor + sum of armor stat_modifiers
+ *  (fortified +3, etc.). Negative armor modifiers are theoretically
+ *  possible but the canonical effect set only uses positive values. */
+function playerEffectiveArmorBonus(
+  player:  PlayerState,
+  effects: ActiveStatusEffect[],
+): number {
+  let bonus = playerArmorBonus(player);
+  for (const e of effects) {
+    if (e.stat_modifier?.stat === "armor") bonus += e.stat_modifier.amount;
+  }
+  return bonus;
+}
+
+/** Apply DoT damage for every active effect carrying damage_per_tick.
+ *  Returns the player's new HP and a tick event per ailment that dealt
+ *  damage. Pure — caller commits the HP back to PlayerState. */
+function applyPlayerStatusTicks(
+  player:  PlayerState,
+  effects: ActiveStatusEffect[],
+): { newHp: number; tickEvents: CombatEvent[] } {
+  let hp = player.health;
+  const tickEvents: CombatEvent[] = [];
+  for (const e of effects) {
+    if (!e.damage_per_tick || e.damage_per_tick <= 0) continue;
+    hp = Math.max(0, hp - e.damage_per_tick);
+    tickEvents.push(makeEvent({
+      type:                "status_tick",
+      actor:               e.source,
+      target:              PLAYER_ID,
+      damage_dealt:        e.damage_per_tick,
+      remaining_target_hp: hp,
+      weapon_or_item:      e.id,
+      context_note:        `${e.id} tick`,
+    }));
+  }
+  return { newHp: hp, tickEvents };
+}
+
+/** End-of-turn save pass. Buffs decrement duration without rolling;
+ *  ailments roll d20 + stat-mod vs save_dc. A save OR a duration
+ *  expiry drops the effect. Emits status_saved / status_expired events. */
+function rollPlayerStatusSaves(
+  player:  PlayerState,
+  effects: ActiveStatusEffect[],
+  rng:     Rng,
+): { newEffects: ActiveStatusEffect[]; saveEvents: CombatEvent[] } {
+  const saveEvents: CombatEvent[] = [];
+  const surviving: ActiveStatusEffect[] = [];
+  for (const e of effects) {
+    const isBuff    = !AILMENT_IDS.includes(e.id);
+    const newRounds = e.rounds_remaining - 1;
+    if (isBuff) {
+      if (newRounds > 0) {
+        surviving.push({ ...e, rounds_remaining: newRounds });
+      } else {
+        saveEvents.push(makeEvent({
+          type:           "status_expired",
+          actor:          PLAYER_ID,
+          target:         PLAYER_ID,
+          weapon_or_item: e.id,
+          context_note:   `${e.id} expired`,
+        }));
+      }
+      continue;
+    }
+    const statVal    = player.attributes[e.save_stat] ?? 2;
+    const saveResult = rollStatusSave(e, abilityMod(statVal), rng);
+    if (saveResult.saved || newRounds <= 0) {
+      saveEvents.push(makeEvent({
+        type:           saveResult.saved ? "status_saved" : "status_expired",
+        actor:          PLAYER_ID,
+        target:         PLAYER_ID,
+        weapon_or_item: e.id,
+        context_note:   saveResult.saved
+          ? `saved (${saveResult.total} vs DC${saveResult.dc})`
+          : `expired`,
+        rolls:          saveResult.rolls,
+      }));
+    } else {
+      surviving.push({ ...e, rounds_remaining: newRounds });
+    }
+  }
+  return { newEffects: surviving, saveEvents };
+}
+
+/** One-curse-limit applicator. Rolls the enemy's on-hit status. If it
+ *  applies, removes any existing AILMENT from the player's effect list
+ *  before adding the new one. Buffs are preserved. */
+function maybeApplyEnemyStatus(
+  actor:   CombatEnemyInstance,
+  current: ActiveStatusEffect[],
+  rng:     Rng,
+): { newEffects: ActiveStatusEffect[]; applicationEvent: CombatEvent | null } {
+  const cfg = actor.status_effect;
+  if (!cfg) return { newEffects: current, applicationEvent: null };
+  const { applied, damage_per_tick } =
+    rollStatusApplication(cfg.id, cfg.chance, rng);
+  if (!applied) return { newEffects: current, applicationEvent: null };
+  const next = [
+    ...current.filter((e) => !AILMENT_IDS.includes(e.id)),
+    buildStatusEffect(cfg.id, actor.name, damage_per_tick),
+  ];
+  return {
+    newEffects: next,
+    applicationEvent: makeEvent({
+      type:           "status_applied",
+      actor:          actor.instance_id,
+      target:         PLAYER_ID,
+      weapon_or_item: cfg.id,
+      context_note:   `${actor.name} applied ${cfg.id}`,
+    }),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Player stat helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Standard d20 ability modifier: floor((score - 10) / 2). */
+/**
+ * Ability modifier calibrated for our 2-10 stat range (V8.51+).
+ *
+ *   score 2-3 → +0    score 6-7 →  +2
+ *   score 4-5 → +1    score 8-9 →  +3
+ *   score 10  → +4    (max achievable)
+ *
+ * The legacy D&D 5e formula `floor((score - 10) / 2)` produced
+ * negative modifiers across our whole stat range — a Knight with
+ * archetype-rolled AGI 3 was rolling d20-4 to hit, ~25% hit rate
+ * against typical enemy DC. Combat was unwinnable at level 1.
+ * dice.ts's getAttributeModifier mirrors this formula so display
+ * and stat-check paths stay consistent.
+ */
 function abilityMod(score: number): number {
-  return Math.floor((score - 10) / 2);
+  return Math.floor((score - 2) / 2);
 }
 
 /**
@@ -1248,34 +1587,6 @@ function playerArmorBonus(player: PlayerState): number {
   return 0;
 }
 
-/**
- * Build a minimal Item row for a stub-loot item id. The Day 21 loot
- * system replaces this with real item rows from the regional loot
- * table; for Day 20 this lets the basic health potion enter the
- * inventory in a usable shape.
- */
-function makeStubItem(itemId: string): Item {
-  if (itemId === BASIC_HEALTH_POTION_ID) {
-    return {
-      id:          BASIC_HEALTH_POTION_ID,
-      name:        "Basic Health Potion",
-      type:        ItemType.CONSUMABLE,
-      rarity:      ItemRarity.COMMON,
-      description: "A small vial of red liquid that restores some health.",
-      effect:      { heal: 8 },
-      quantity:    1,
-      stackable:   true,
-      max_stack:   10,
-    };
-  }
-  // Unknown stub id — treat as a basic loot consumable.
-  return {
-    id:          itemId,
-    name:        itemId.replace(/_/g, " "),
-    type:        ItemType.CONSUMABLE,
-    rarity:      ItemRarity.COMMON,
-    description: "A salvaged item of unclear origin.",
-    quantity:    1,
-    stackable:   true,
-  };
-}
+// Day 21 — makeStubItem removed. Victory no longer stamps loot
+// items inline; the FloorLootStrip's SEARCH REMAINS button resolves
+// real Item rows via loot-resolver instead.

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { AssetCategory, Genre, LocationStatus } from "@/types/game";
 import type { Json } from "@/types/database";
@@ -12,12 +13,23 @@ import type {
   WorldGraph,
   WorldNode,
 } from "@/types/game";
+import { applyBreadcrumbAnchors } from "@/lib/game/quest-threads";
 import { getGenreBestiary } from "@/lib/game/bestiary";
 import {
   isApplyRegionalBibleRedundant,
   mergeNodePreservingDiscovered,
   splitConflatedRegionSettlement,
 } from "@/lib/game/region-expansion-guard";
+import {
+  deriveNodeType,
+  validateDungeonRooms,
+} from "@/lib/game/dungeon-validation";
+import {
+  filterQuestHookNpcs,
+  generateSideQuests,
+  mergeSideQuests,
+  type SideQuestGenerationContext,
+} from "@/lib/game/side-quest-generator";
 
 /**
  * Day 19D — Apply a freshly-generated RegionBible to a session.
@@ -114,6 +126,21 @@ function npcToAsset(npc: NPCDefinition, sessionId: string): WorldAsset {
       ...(npc.faction_id ? { faction: npc.faction_id } : {}),
       knowledge:       knowledgeItems,
       notes,
+      // V8.67 — mirror quest_hook + quest_seed onto the asset's
+      // constitution so the narrator DIALOGUE prompt can detect this
+      // NPC as a quest carrier without re-reading the region bible.
+      // Omit fields when absent so non-quest NPCs don't carry empty
+      // quest metadata.
+      ...(npc.quest_hook === true            ? { quest_hook: true }            : {}),
+      ...(npc.quest_seed && npc.quest_seed.trim()
+        ? { quest_seed: npc.quest_seed.trim() }
+        : {}),
+      // Day 23.5C — mirror disposition_modifiers so seedNpcRegistry
+      // can apply species-tension trust seeds without round-tripping
+      // back through the region bible.
+      ...(npc.disposition_modifiers
+        ? { disposition_modifiers: npc.disposition_modifiers }
+        : {}),
     },
     significance:        npc.quest_relevance === "key" ? "MAJOR" : "NOTABLE",
     first_seen_location: npc.home_location_id,
@@ -193,9 +220,12 @@ function validateEnemy(raw: unknown, context: string): Enemy | null {
   const o = raw as Record<string, unknown>;
   const id   = typeof o.id   === "string" ? o.id.trim()   : "";
   const name = typeof o.name === "string" ? o.name.trim() : "";
+  // V8.53 — description optional. WB-trimming applies here too because
+  // RegionBibles are expanded from the same prompt family. See
+  // apply-world-bible:validateEnemy for the symmetric rationale.
   const desc = typeof o.description === "string" ? o.description.trim() : "";
-  if (!id || !name || !desc) {
-    console.warn(`[apply-regional-bible] Enemy in ${context} missing id/name/description — dropping.`);
+  if (!id || !name) {
+    console.warn(`[apply-regional-bible] Enemy in ${context} missing id/name — dropping.`);
     return null;
   }
   const hpRange = Array.isArray(o.hp_range) ? o.hp_range : null;
@@ -571,6 +601,25 @@ export async function POST(request: NextRequest) {
       zoneId = loc.id;
     }
 
+    // Day 23A — derive node_type + (for dungeons) validate rooms.
+    const locRecord = loc as unknown as Record<string, unknown>;
+    const nodeType  = deriveNodeType(locRecord);
+    const dungeonRooms = nodeType === "dungeon"
+      ? validateDungeonRooms(
+          locRecord.dungeon_rooms,
+          `locations[${loc.id}]`,
+          "[apply-regional-bible]"
+        )
+      : undefined;
+    // V8.54 — dungeon validation diagnostic. Mirrors apply-world-bible
+    // so grepping "dungeon node X: N rooms validated" surfaces the
+    // count across both bible apply paths.
+    if (nodeType === "dungeon") {
+      console.log(
+        `[apply-regional-bible] dungeon node ${loc.id}: ${dungeonRooms?.length ?? 0} rooms validated.`
+      );
+    }
+
     newNodes[loc.id] = {
       id:                 loc.id,
       name:               loc.name,
@@ -582,9 +631,21 @@ export async function POST(request: NextRequest) {
       npc_ids:            finalNpcIds,
       item_ids:           loc.objects.map((o) => `item_${o.id}`),
       asset_id:           `location_${loc.id}`,
-      // The settlement node is what the player just crossed into — mark it
-      // discovered so the world map renders it without delay.
-      discovered:         loc.is_settlement_node,
+      // V8.67 (FIX 1) — every node in a freshly-applied adjacent region
+      // spawns discovered: false, including the settlement node. The
+      // player lands at the region zone first (Architecture CHANGE 1)
+      // and walks INTO the settlement; that first walk should emit the
+      // full atmosphere description, not the "You return to {name}."
+      // revisit beat (rule 86). End-of-step-7 (rule 12) flips
+      // discovered: true on actual arrival.
+      //
+      // Pre-fix this read `loc.is_settlement_node`, which made the
+      // settlement spawn discovered: true and tripped revisit
+      // suppression on first cross-region entry to the settlement.
+      // The world-map renderer is fine with discovered: false — it
+      // shows the node as dim outline until the player visits, which
+      // accurately reflects the state.
+      discovered:         false,
       map_position:       loc.grid_position,
       // CHANGE 2 — flag the settlement node so NavigationBar's parent
       // search succeeds. Sub-locations and standalone zones carry false.
@@ -595,6 +656,9 @@ export async function POST(request: NextRequest) {
       encounter_roster:   Array.isArray(loc.encounter_roster) && loc.encounter_roster.length > 0
                             ? [...loc.encounter_roster] : undefined,
       is_boss_room:       loc.is_boss_room === true ? true : undefined,
+      // Day 23A — location-typology + dungeon-room persistence.
+      ...(nodeType        ? { node_type: nodeType } : {}),
+      ...(dungeonRooms    ? { dungeon_rooms: dungeonRooms } : {}),
     };
     // Day 20.4.3 — diagnostic log on settlement creation. Matches
     // apply-world-bible's region-zone log so cross-region apply
@@ -647,6 +711,23 @@ export async function POST(request: NextRequest) {
       sessionId,
     });
 
+    // Day 23A — derive node_type + (for dungeons) validate rooms.
+    const locRecord = loc as unknown as Record<string, unknown>;
+    const nodeType  = deriveNodeType(locRecord);
+    const dungeonRooms = nodeType === "dungeon"
+      ? validateDungeonRooms(
+          locRecord.dungeon_rooms,
+          `region_locations[${loc.id}]`,
+          "[apply-regional-bible]"
+        )
+      : undefined;
+    // V8.54 — dungeon validation diagnostic.
+    if (nodeType === "dungeon") {
+      console.log(
+        `[apply-regional-bible] dungeon node ${loc.id}: ${dungeonRooms?.length ?? 0} rooms validated.`
+      );
+    }
+
     newNodes[loc.id] = {
       id:                 loc.id,
       name:               loc.name,
@@ -671,6 +752,9 @@ export async function POST(request: NextRequest) {
       encounter_roster:   Array.isArray(loc.encounter_roster) && loc.encounter_roster.length > 0
                             ? [...loc.encounter_roster] : undefined,
       is_boss_room:       loc.is_boss_room === true ? true : undefined,
+      // Day 23A — location-typology + dungeon-room persistence.
+      ...(nodeType        ? { node_type: nodeType } : {}),
+      ...(dungeonRooms    ? { dungeon_rooms: dungeonRooms } : {}),
     };
   }
 
@@ -860,7 +944,14 @@ export async function POST(request: NextRequest) {
       npc_ids:       [],
       item_ids:      [],
       asset_id:      `location_${bibleNarrowed.id}`,
-      discovered:    true,
+      // V8.67 (FIX 1) — region zone spawns undiscovered. Same fix as
+      // rule 109 (apply-world-bible) but for adjacent-region expansion.
+      // The player lands here as their first beat in the new region;
+      // pre-fix the discovered: true flag tripped rule 86 revisit
+      // suppression so the first arrival emitted "You return to {name}"
+      // instead of the full atmosphere description. End-of-step-7
+      // (rule 12) flips discovered: true on actual arrival.
+      discovered:    false,
       map_position:  adjustedPos,
     };
     // Day 20.4.3 — diagnostic log on region zone creation. Pairs with
@@ -1013,12 +1104,86 @@ export async function POST(request: NextRequest) {
     [bibleNarrowed.id]: bibleNarrowed,
   };
 
+  // Day 23B — Floating breadcrumb anchoring. The RegionBible prompt is
+  // asked to embed an active floating breadcrumb when a plausible anchor
+  // exists (rule 5 of the quest spec). The LLM marks the carrier (an NPC,
+  // a dungeon room object, or a landmark object) with quest_breadcrumb_id.
+  // applyBreadcrumbAnchors scans the bible for those markers and returns
+  // the updated quest_threads slice plus the list of stamped anchors for
+  // logging.
+  const anchorResult = applyBreadcrumbAnchors(
+    currentMasterState.quest_threads,
+    bibleNarrowed
+  );
+  let nextQuestThreads = anchorResult.threads;
+  for (const a of anchorResult.anchored) {
+    // act lives on the breadcrumb itself — look it up off the runtime
+    // shape so the log line matches the quest spec format exactly.
+    const bc = nextQuestThreads?.main_quest?.breadcrumbs.find((b) => b.id === a.breadcrumbId);
+    const actLabel = bc?.act === "climax" ? "climax" : `act${bc?.act ?? "?"}`;
+    console.log(
+      `[apply-regional-bible] breadcrumb ${actLabel} anchored to ${a.locationId}`
+    );
+  }
+
+  // ── Day 23D — Side quest generation (V8.66) ───────────────────────────────
+  // Synchronous (NOT fire-and-forget) so the freshly-generated quests land
+  // in the SAME master_state write below — atomic with the rest of the
+  // bible apply. The haiku call adds ~1-2s to a 5-15s expansion, which the
+  // player is already waiting on. Idempotency rides on mergeSideQuests'
+  // id dedup: re-applying the same RegionBible never duplicates a quest.
+  //
+  // Errors are swallowed inside generateSideQuests (returns [] on any
+  // failure) so a flaky haiku call never blocks region expansion.
+  const hookNpcs = filterQuestHookNpcs(bibleNarrowed.npcs ?? []);
+  if (hookNpcs.length > 0) {
+    const wcd  = currentMasterState.metadata.world_consistency;
+    const mq   = currentMasterState.quest_threads?.main_quest;
+    const ctx: SideQuestGenerationContext = {
+      world_name:         wcd?.world_name ?? "this world",
+      archetype:          mq?.archetype ?? "ancient_awakening",
+      threat_description: mq?.threat_description ?? "an unresolved threat",
+      genre:              currentMasterState.metadata.genre ?? Genre.FANTASY,
+      tone:               currentMasterState.metadata.tone  ?? "grounded",
+    };
+    const client     = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const freshQuests = await generateSideQuests({
+      npcs:     bibleNarrowed.npcs,
+      regionId: bibleNarrowed.id,
+      ctx,
+      client,
+    });
+    if (freshQuests.length > 0) {
+      const existingThreads = nextQuestThreads ?? currentMasterState.quest_threads ?? {
+        side_quests:         [],
+        faction_alignment:   {},
+        completed_quest_ids: [],
+        failed_quest_ids:    [],
+      };
+      const mergedSideQuests = mergeSideQuests(
+        existingThreads.side_quests ?? [],
+        freshQuests
+      );
+      nextQuestThreads = { ...existingThreads, side_quests: mergedSideQuests };
+    }
+    // Diagnostic per spec — surfaces generated quest count + hook NPC
+    // count on every region application. {N} of 0 is normal when the AI
+    // skipped quest_hook on all NPCs OR when haiku returned a parse-fail.
+    console.log(
+      `[apply-regional-bible] side_quests: ${freshQuests.length} generated for ${bibleNarrowed.id} ` +
+      `(${hookNpcs.length} quest NPC${hookNpcs.length === 1 ? "" : "s"})`
+    );
+  }
+
   const patchedMasterState: MasterState = {
     ...currentMasterState,
     metadata: {
       ...currentMasterState.metadata,
       region_bibles: nextRegionBibles,
     },
+    // Day 23B — write back the breadcrumb anchor stamps + side quest
+    // appends. nextQuestThreads carries both mutations when either fired.
+    ...(nextQuestThreads ? { quest_threads: nextQuestThreads } : {}),
     world_state: {
       ...currentMasterState.world_state,
       current_location_id: regionZoneId,
@@ -1065,5 +1230,11 @@ export async function POST(request: NextRequest) {
     updated_world_graph: updatedWorldGraph,
     location_count:      bibleNarrowed.locations.length,
     npc_count:           bibleNarrowed.npcs.length,
+    /** Day 23D — return the updated quest_threads so the client can
+     *  mirror the server's breadcrumb anchoring + side-quest appends
+     *  into its local masterState immediately, rather than waiting on
+     *  a reload to pick up the DB write. Undefined when no mutation
+     *  fired (no breadcrumb match AND no quest_hook NPCs). */
+    quest_threads:       nextQuestThreads,
   });
 }

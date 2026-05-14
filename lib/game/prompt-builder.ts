@@ -195,6 +195,71 @@ export function formatWcdBlock(wcd: WorldConsistencyDocument | undefined): strin
   return lines.join("\n");
 }
 
+/**
+ * Day 23.5C — Format the player's character profile (species, gender,
+ * appearance, origin, motivation) as a compact narrator context block.
+ *
+ * Returns "" when player_state.character_profile is absent (old saves
+ * that predate 23.5). The caller unconditionally concatenates so this
+ * must be empty-string-safe — never null.
+ *
+ * Block format:
+ *   ═══ PLAYER CHARACTER ═══
+ *   Species: {species.name} — {species.lore_notes}
+ *   Gender: {gender}
+ *   Appearance: {appearance.summary}
+ *   Origin: {origin.label} — {origin.description}
+ *   Motivation: {motivation}   (omitted entirely if empty)
+ *   ════════════════════════
+ */
+export function formatPlayerCharacterBlock(state: MasterState): string {
+  const profile = state.player_state.character_profile;
+  if (!profile) return "";
+
+  const lines: string[] = ["═══ PLAYER CHARACTER ═══"];
+
+  // Species — look up in metadata.species by id. When the metadata
+  // species list is missing or the id doesn't match, skip the species
+  // line silently and still emit the rest.
+  const species = (state.metadata.species ?? []).find(
+    (s) => s.id === profile.species_id
+  );
+  if (species) {
+    const lore = species.lore_notes?.trim();
+    lines.push(
+      lore
+        ? `Species: ${species.name} — ${lore}`
+        : `Species: ${species.name}`,
+    );
+  }
+
+  lines.push(`Gender: ${profile.gender}`);
+
+  const appearanceSummary = profile.appearance?.summary?.trim();
+  if (appearanceSummary) {
+    lines.push(`Appearance: ${appearanceSummary}`);
+  }
+
+  const originLabel = profile.origin?.label?.trim();
+  const originDesc  = profile.origin?.description?.trim();
+  if (originLabel) {
+    lines.push(
+      originDesc
+        ? `Origin: ${originLabel} — ${originDesc}`
+        : `Origin: ${originLabel}`,
+    );
+  }
+
+  const motivation = profile.motivation?.trim();
+  if (motivation) {
+    lines.push(`Motivation: ${motivation}`);
+  }
+
+  lines.push("════════════════════════");
+  console.log("[prompt-builder] PLAYER CHARACTER block injected");
+  return lines.join("\n");
+}
+
 // FIX 6 — Concrete, measurable sentence caps so the three modes
 // produce visibly different output. Also overrides the earlier
 // RESPONSE LENGTH tiers in the system prompt — the verbosity block
@@ -246,7 +311,16 @@ export function buildNarratorSystemPrompt(
   // visually separated.
   const wcdPrefix = wcd ? `${formatWcdBlock(wcd)}\n\n` : "";
 
-  return `${wcdPrefix}YOUR ROLE AND HARD RULES — READ BEFORE ANYTHING ELSE
+  // Day 23.5C — PLAYER CHARACTER block. Lives between WCD and HARD RULES
+  // so the narrator anchors on who the player is before reading the rules.
+  // Silently omitted when character_profile is absent (old saves predating
+  // 23.5). Combat narration uses a different system prompt and doesn't
+  // receive this block (per spec).
+  const playerCharacterBlock = formatPlayerCharacterBlock(state);
+  const playerCharacterPrefix =
+    playerCharacterBlock.length > 0 ? `${playerCharacterBlock}\n\n` : "";
+
+  return `${wcdPrefix}${playerCharacterPrefix}YOUR ROLE AND HARD RULES — READ BEFORE ANYTHING ELSE
 ═══════════════════════════════════════════════════════════════
 
 A — YOUR THREE JOBS:
@@ -652,6 +726,21 @@ export function buildNarratorUserPrompt(
 ): string {
   void wcd;
   const { metadata, player_state, world_state, log_book } = state;
+
+  // FIX 2 — detect when the player is inside a dungeon room so the narrator
+  // receives room context (2A), no inventory hints (2B), and room-scoped
+  // connected locations (2C).
+  const _currentGraphNodeId = state.world_graph?.current_node_id ?? state.world_state.current_node_id ?? "";
+  const _ds = state.dungeon_state;
+  const isInsideDungeon = !!(
+    _ds && _ds.node_id && _ds.node_id === _currentGraphNodeId
+  );
+  const dungeonRoomNode = isInsideDungeon
+    ? (state.world_graph?.nodes[_ds!.node_id] ?? null)
+    : null;
+  const currentDungeonRoom = dungeonRoomNode && _ds
+    ? ((dungeonRoomNode.dungeon_rooms ?? []).find((r) => r.id === _ds!.current_room_id) ?? null)
+    : null;
   const { name, background, attributes, health, max_health, sanity, max_sanity } = player_state;
 
   const recentLog = log_book.entries
@@ -845,6 +934,30 @@ export function buildNarratorUserPrompt(
     }
   }
 
+  // ── FIX 2A — CURRENT ROOM block (dungeon only) ────────────────────────────
+  // Gives the narrator the room's name, description, and objects instead of
+  // the dungeon node's graph assets (which describe the dungeon exterior +
+  // connections to the region zone). The standard ESTABLISHED WORLD ASSETS
+  // block still follows — it provides genre/faction/lore context.
+  const dungeonRoomLines: string[] = [];
+  if (isInsideDungeon && currentDungeonRoom) {
+    dungeonRoomLines.push(
+      "══════════════════════════════",
+      `CURRENT ROOM: ${currentDungeonRoom.name}`,
+      currentDungeonRoom.description || "(no description recorded)",
+    );
+    const roomObjs = (currentDungeonRoom.objects ?? []) as Array<{ name?: string; description?: string }>;
+    if (roomObjs.length > 0) {
+      dungeonRoomLines.push("OBJECTS IN THIS ROOM:");
+      for (const obj of roomObjs) {
+        if (obj.name) {
+          dungeonRoomLines.push(`- ${obj.name}${obj.description ? `: ${obj.description}` : ""}`);
+        }
+      }
+    }
+    dungeonRoomLines.push("══════════════════════════════");
+  }
+
   // ── Scene context block ────────────────────────────────────────────────────
   const sceneLines: string[] = [];
   if (isArriving) {
@@ -868,6 +981,9 @@ export function buildNarratorUserPrompt(
     ...headerLines,
     ...(worldFactLines.length > 0 ? ["", ...worldFactLines] : []),
     ...(npcPresentLines.length > 0 ? ["", ...npcPresentLines] : []),
+    // FIX 2A — room block before world assets so the narrator reads the
+    // immediate room context first, then the broader world lore.
+    ...(dungeonRoomLines.length > 0 ? ["", ...dungeonRoomLines] : []),
     ...(assetsBlock ? ["", assetsBlock] : []),
     ...(tier1Lines.length > 0 ? ["", ...tier1Lines] : []),
     ...(sceneLines.length > 0 ? ["", ...sceneLines] : []),
@@ -885,10 +1001,15 @@ export function buildNarratorUserPrompt(
     `- Background: ${background}`,
     `- HP: ${health}/${max_health}${sanityLine}`,
     `- Attributes: STR ${attributes.strength}, AGI ${attributes.agility}, CHA ${attributes.charisma}, INT ${attributes.intelligence}, PER ${attributes.perception}`,
-    "",
-    "EQUIPPED LOADOUT:",
-    `- Weapon: ${weaponLine}`,
-    `- Armor: ${armorLine}`,
+    // FIX 2B — strip EQUIPPED LOADOUT inside a dungeon room. Knowing the
+    // player's gear lets the narrator hint "its markings match the sword
+    // you carry" — that inference belongs to the player, not the narrator.
+    ...(isInsideDungeon ? [] : [
+      "",
+      "EQUIPPED LOADOUT:",
+      `- Weapon: ${weaponLine}`,
+      `- Armor: ${armorLine}`,
+    ]),
     "",
     `ACTIVE WORLD FLAGS (most recent 10): ${flagSummary}`,
     "",
@@ -1008,6 +1129,43 @@ export function buildNarratorUserPrompt(
           "═════════════════════════════════════════════════════",
         ];
         prompt += `\n${npcLines.join("\n")}`;
+
+        // V8.67 — SITUATION block. When the NPC carries a quest_seed
+        // (mirrored from NPCDefinition by apply-*-bible's npcToAsset),
+        // hand the narrator the seed sentence and instruct them to
+        // surface it naturally — as something weighing on the NPC, not
+        // a mission briefing. Without this block, the narrator
+        // free-associates from the NPC's personality + knowledge and
+        // never mentions the situation that drives their side-quest.
+        //
+        // Pre-fix symptom: Kessian Thorne's quest fired when the
+        // player talked to him about quicksilver sickness, but Kessian
+        // never mentioned his missing daughter — because the narrator
+        // didn't know about that thread.
+        //
+        // Only injects when quest_hook is true AND quest_seed has
+        // content. Non-quest NPCs and quest NPCs without a seed
+        // (legacy / partial data) get the normal ACTIVE NPC block
+        // alone.
+        const questHook = c.quest_hook === true;
+        const questSeed = typeof c.quest_seed === "string" ? c.quest_seed.trim() : "";
+        if (questHook && questSeed.length > 0) {
+          const situationLines: string[] = [
+            "",
+            "═══ SITUATION (quest-hook NPC — surface naturally) ═══",
+            `"${questSeed}"`,
+            "",
+            "This NPC is worried about or dealing with this situation.",
+            "They may bring it up in conversation — not as a mission",
+            "briefing, but as something weighing on them. Reference",
+            "obliquely when the player's question is adjacent; reveal",
+            "more directly only when the player asks about it or earns",
+            "the NPC's trust. Never put the literal sentence above into",
+            "the NPC's mouth — paraphrase it in their voice.",
+            "═════════════════════════════════════════════════════",
+          ];
+          prompt += `\n${situationLines.join("\n")}`;
+        }
       }
     }
   }
@@ -1068,6 +1226,14 @@ export function buildNarratorUserPrompt(
             `- ${node.name} (${cat}, to the ${compass(node)})`
           );
         }
+      }
+    } else if (isInsideDungeon && currentDungeonRoom) {
+      // FIX 2C — inside a dungeon room, connected locations are only the
+      // adjacent rooms. Do NOT expose the graph connections (region zone,
+      // settlement) — the narrator has no business naming the world above.
+      for (const connId of currentDungeonRoom.connections) {
+        const room = (dungeonRoomNode?.dungeon_rooms ?? []).find((r) => r.id === connId);
+        if (room) connectedLines.push(`- ${room.name}`);
       }
     } else {
       for (const connId of currentNode.connections) {

@@ -4,6 +4,7 @@ import {
   directionOfCard,
   tierOfNode,
   isCrossRegionArrival,
+  nodeTypeLabel,
   previousNodeIdFromTrail,
   type Card,
 } from "../nav-cards";
@@ -43,6 +44,12 @@ function mkNode(overrides: Partial<WorldNode> & { id: string; name: string }): W
     discovered:         overrides.discovered ?? false,
     map_position:       overrides.map_position ?? { x: 0, y: 0 },
     is_settlement_node: overrides.is_settlement_node ?? false,
+    // Day 23A — propagate node_type / region_type / dungeon_rooms when
+    // the test specifies them so nav-card scenarios can assert on
+    // typed-node behaviour.
+    ...(overrides.node_type     !== undefined ? { node_type: overrides.node_type } : {}),
+    ...(overrides.region_type   !== undefined ? { region_type: overrides.region_type } : {}),
+    ...(overrides.dungeon_rooms !== undefined ? { dungeon_rooms: overrides.dungeon_rooms } : {}),
   };
 }
 
@@ -322,6 +329,125 @@ describe("buildCards — DEEPER dedup at region zone (rule 80)", () => {
   });
 });
 
+// ── V8.55 — region_zone retains peer cards after BACK from dungeon ─────────
+//
+// SYMPTOM (Tim's playtest): after region_zone → dungeon → BACK → region_zone,
+// the nav bar shows only the settlement BACK card. All peer region_location
+// cards (dungeon, landmark, wilderness) disappear. Navigating away to the
+// settlement and back restores them.
+//
+// HYPOTHESIS in the prompt: trail[-2] being a dungeon node is affecting
+// BACK/PEER/DEEPER logic in buildCards. These tests pin the contract that
+// the peer cards remain regardless of which type of region_location the
+// player just came from.
+
+describe("buildCards — region_zone peer cards after returning from a region_location", () => {
+  function makeGraphWithLandmarksAndDungeon(currentNodeId: string): WorldGraph {
+    const settle = mkNode({
+      id: "settle_a",
+      name: "Chain's Rest",
+      zone_id: "region_a",
+      is_settlement_node: true,
+      discovered: true,
+    });
+    const dungeon = mkNode({
+      id: "dungeon_a",
+      name: "The Broken Vigil",
+      zone_id: "region_a",
+      is_expandable: false,
+      discovered: true,
+      node_type: "dungeon",
+      category: "dungeon",
+    });
+    const landmark = mkNode({
+      id: "landmark_a",
+      name: "The Obsidian Spire",
+      zone_id: "region_a",
+      is_expandable: false,
+      discovered: false,
+      node_type: "landmark",
+      category: "wilderness",
+    });
+    const wilderness = mkNode({
+      id: "wild_a",
+      name: "Sulfur Vent Field",
+      zone_id: "region_a",
+      is_expandable: false,
+      discovered: false,
+      node_type: "wilderness",
+      category: "wilderness",
+    });
+    const region = mkNode({
+      id: "region_a",
+      name: "The Ashfall Lowlands",
+      is_expandable: true,
+      discovered: true,
+      connections: ["settle_a", "dungeon_a", "landmark_a", "wild_a"],
+    });
+    return {
+      nodes: {
+        [region.id]:     region,
+        [settle.id]:     settle,
+        [dungeon.id]:    dungeon,
+        [landmark.id]:   landmark,
+        [wilderness.id]: wilderness,
+      },
+      current_node_id:  currentNodeId,
+      starting_node_id: "settle_a",
+    };
+  }
+
+  it("shows the full peer card set when player returns to the region zone from a DUNGEON (trail[-2] = dungeon)", () => {
+    // Sequence: settle_a → region_a → dungeon_a → BACK → region_a.
+    // After BACK lands, trail[-2] is dungeon_a (the node just left).
+    const graph = makeGraphWithLandmarksAndDungeon("region_a");
+    const state = makeMasterState({
+      trail: ["settle_a", "region_a", "dungeon_a", "region_a"],
+    });
+    const cards = buildCards(graph, state);
+
+    // All three peer region_locations must be visible.
+    const peerIds = cards
+      .filter((c) => c.kind === "peer-known" || c.kind === "peer-unknown")
+      .map((c) => c.targetId)
+      .sort();
+    expect(peerIds).toEqual(["dungeon_a", "landmark_a", "wild_a"]);
+
+    // BACK still points at the settlement hub (rule 80 dedup only
+    // suppresses DEEPER, not peer cards).
+    const back = cards.find((c) => c.kind === "back");
+    expect(back?.targetId).toBe("settle_a");
+  });
+
+  it("shows the full peer card set when player returns from a LANDMARK", () => {
+    const graph = makeGraphWithLandmarksAndDungeon("region_a");
+    const state = makeMasterState({
+      trail: ["settle_a", "region_a", "landmark_a", "region_a"],
+    });
+    const cards = buildCards(graph, state);
+    const peerIds = cards
+      .filter((c) => c.kind === "peer-known" || c.kind === "peer-unknown")
+      .map((c) => c.targetId)
+      .sort();
+    expect(peerIds).toEqual(["dungeon_a", "landmark_a", "wild_a"]);
+  });
+
+  it("shows the full peer card set on first arrival (no return)", () => {
+    // Sanity baseline: with no trail or a simple inbound trail, all
+    // region_locations show. If this test were ever to fail it would
+    // mean the peer-card iteration itself is broken — independent of
+    // the trail-driven cross-region BACK heuristic.
+    const graph = makeGraphWithLandmarksAndDungeon("region_a");
+    const state = makeMasterState({ trail: ["settle_a", "region_a"] });
+    const cards = buildCards(graph, state);
+    const peerIds = cards
+      .filter((c) => c.kind === "peer-known" || c.kind === "peer-unknown")
+      .map((c) => c.targetId)
+      .sort();
+    expect(peerIds).toEqual(["dungeon_a", "landmark_a", "wild_a"]);
+  });
+});
+
 // ── isCrossRegionArrival ────────────────────────────────────────────────────
 
 describe("isCrossRegionArrival", () => {
@@ -337,5 +463,126 @@ describe("isCrossRegionArrival", () => {
     expect(isCrossRegionArrival(null, "region_a")).toBe(false);
     expect(isCrossRegionArrival("region_a", null)).toBe(false);
     expect(isCrossRegionArrival(null, null)).toBe(false);
+  });
+});
+
+// ── V8.55 — nodeTypeLabel + peer-card sublabel correctness ─────────────────
+//
+// SYMPTOM (Tim's playtest): every region_location nav card rendered
+// "DUNGEON" regardless of its actual type. Fix: render the label from
+// node_type rather than the legacy category slug.
+
+describe("nodeTypeLabel", () => {
+  it("maps every LocationNodeType to a stable badge string", () => {
+    expect(nodeTypeLabel("settlement_hub")).toBe("SETTLEMENT");
+    expect(nodeTypeLabel("outpost")).toBe("OUTPOST");
+    expect(nodeTypeLabel("wilderness")).toBe("WILDERNESS");
+    expect(nodeTypeLabel("dungeon")).toBe("DUNGEON");
+    expect(nodeTypeLabel("landmark")).toBe("LANDMARK");
+    expect(nodeTypeLabel("abandoned_settlement")).toBe("RUINS");
+  });
+  it("falls back to LOCATION for undefined / null", () => {
+    expect(nodeTypeLabel(undefined)).toBe("LOCATION");
+    expect(nodeTypeLabel(null)).toBe("LOCATION");
+  });
+});
+
+describe("buildCards — peer card sublabels reflect node_type (not legacy category)", () => {
+  function makeGraphWithTypedPeers(): WorldGraph {
+    const settle = mkNode({
+      id: "settle_a",
+      name: "Chain's Rest",
+      zone_id: "region_a",
+      is_settlement_node: true,
+      discovered: true,
+    });
+    // Three region_locations with the SAME legacy category to prove
+    // node_type is what's driving the label. If typeLabel were still
+    // reading from category these would all render the same string.
+    const dungeon = mkNode({
+      id: "dungeon_a",
+      name: "Broken Vigil Ruins",
+      zone_id: "region_a",
+      category: "dungeon",
+      node_type: "dungeon",
+    });
+    const landmark = mkNode({
+      id: "landmark_a",
+      name: "Obsidian Spire",
+      zone_id: "region_a",
+      category: "dungeon",  // legacy mis-tag — node_type is the truth
+      node_type: "landmark",
+    });
+    const wilderness = mkNode({
+      id: "wild_a",
+      name: "Sulfur Vent Field",
+      zone_id: "region_a",
+      category: "dungeon",  // legacy mis-tag again
+      node_type: "wilderness",
+    });
+    const region = mkNode({
+      id: "region_a",
+      name: "Ashfall Lowlands",
+      is_expandable: true,
+      discovered: true,
+      connections: ["settle_a", "dungeon_a", "landmark_a", "wild_a"],
+    });
+    return {
+      nodes: {
+        [region.id]:     region,
+        [settle.id]:     settle,
+        [dungeon.id]:    dungeon,
+        [landmark.id]:   landmark,
+        [wilderness.id]: wilderness,
+      },
+      current_node_id:  "region_a",
+      starting_node_id: "settle_a",
+    };
+  }
+
+  it("renders peer-card sublabel from node_type — dungeon / landmark / wilderness all distinct", () => {
+    const graph = makeGraphWithTypedPeers();
+    const state = makeMasterState({ trail: ["settle_a", "region_a"] });
+    const cards = buildCards(graph, state);
+    const byId = new Map(cards.map((c) => [c.targetId, c]));
+    expect(byId.get("dungeon_a")?.sublabel).toBe("DUNGEON");
+    expect(byId.get("landmark_a")?.sublabel).toBe("LANDMARK");
+    expect(byId.get("wild_a")?.sublabel).toBe("WILDERNESS");
+  });
+
+  it("falls back to legacy category when node_type is absent (back-compat)", () => {
+    // Legacy nodes generated before Day 23A have no node_type and the
+    // nav card should still produce a readable badge from category.
+    const settle = mkNode({
+      id: "settle_a",
+      name: "Chain's Rest",
+      zone_id: "region_a",
+      is_settlement_node: true,
+      discovered: true,
+    });
+    const oldDungeon = mkNode({
+      id: "old_dungeon",
+      name: "Old Dungeon",
+      zone_id: "region_a",
+      category: "ruin",
+      // no node_type — pre-Day 23A bible
+    });
+    const region = mkNode({
+      id: "region_a",
+      name: "Region A",
+      is_expandable: true,
+      discovered: true,
+      connections: ["settle_a", "old_dungeon"],
+    });
+    const graph: WorldGraph = {
+      nodes: { region_a: region, settle_a: settle, old_dungeon: oldDungeon },
+      current_node_id:  "region_a",
+      starting_node_id: "settle_a",
+    };
+    const state = makeMasterState({ trail: ["settle_a", "region_a"] });
+    const cards = buildCards(graph, state);
+    const oldCard = cards.find((c) => c.targetId === "old_dungeon");
+    // Should fall back to category.toUpperCase() since no node_type.
+    expect(oldCard?.sublabel).toBe("RUIN");
   });
 });

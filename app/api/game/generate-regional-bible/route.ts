@@ -38,6 +38,17 @@ interface RequestBody {
   genre?:                 Genre;
   wcd?:                   WorldConsistencyDocument;
   existing_region_names?: string[];
+  /** Day 23B — Active floating breadcrumb to seed in this region if a
+   *  plausible anchor exists. Caller (useGameLoop) supplies the first
+   *  unanchored act-2 / act-3 breadcrumb from quest_threads. When
+   *  undefined, the ACTIVE QUEST CONTEXT block is omitted and the bible
+   *  generates without quest seeding. */
+  floating_breadcrumb?: {
+    id:          string;
+    act:         1 | 2 | 3 | "climax";
+    content:     string;
+    anchor_type: "fixed" | "floating";
+  };
 }
 
 const SYSTEM_PROMPT =
@@ -64,12 +75,52 @@ function buildUserPrompt(
   originRegionName:    string,
   directionFromOrigin: string,
   wcd:                 WorldConsistencyDocument,
-  existingNames:       string[]
+  existingNames:       string[],
+  floatingBreadcrumb?: NonNullable<RequestBody["floating_breadcrumb"]>,
 ): string {
   const wcdBlock = formatWcdBlock(wcd);
   const opposite = OPPOSITE[directionFromOrigin.toLowerCase()] ?? "the opposite direction";
   void existingNames;
   void genre;
+
+  // Day 23B — Active quest context block. When the caller supplies a
+  // floating breadcrumb that hasn't yet been anchored, the bible is
+  // asked to embed it naturally (NPC dialogue, dungeon lore object, or
+  // landmark atmosphere) and mark the carrier with quest_breadcrumb_id
+  // so apply-regional-bible can stamp anchor_location_id afterward.
+  // Omitted entirely when no floating breadcrumb is supplied — most
+  // expansions land that way (Act 1 fixed at world gen, climax fixed at
+  // 23C, and acts 2+3 only float ONCE each before they're anchored).
+  const questContextBlock = floatingBreadcrumb
+    ? [
+        "═══════════════════════════════════════════════════════════════",
+        "ACTIVE QUEST CONTEXT (Day 23B)",
+        "═══════════════════════════════════════════════════════════════",
+        "The world has an ongoing main quest. If this region contains a",
+        "plausible anchor for the following breadcrumb (an NPC who would",
+        "know, a dungeon with relevant history, a lore site), embed it",
+        "naturally. If not eligible, do not force it.",
+        "",
+        `Floating breadcrumb to seed (id "${floatingBreadcrumb.id}", act ${floatingBreadcrumb.act}):`,
+        `  "${floatingBreadcrumb.content}"`,
+        "",
+        "Guidelines:",
+        "  - If seeding via NPC: give that NPC dialogue or knowledge that",
+        "    hints at the breadcrumb content WITHOUT stating it explicitly.",
+        `    Mark the NPC with: "quest_breadcrumb_id": "${floatingBreadcrumb.id}"`,
+        "    in the RegionBible output.",
+        "  - If seeding via dungeon lore: add (or repurpose) a LORE object",
+        "    inside one of the dungeon rooms whose description reflects the",
+        `    breadcrumb. Mark the object with "quest_breadcrumb_id": "${floatingBreadcrumb.id}".`,
+        "  - If seeding via landmark: add it to the landmark's atmosphere or",
+        "    a lore object there.",
+        "  - Never seed more than 1 floating breadcrumb per region.",
+        "  - If none of the region's content can plausibly carry the",
+        "    breadcrumb, simply omit the quest_breadcrumb_id field — the",
+        "    breadcrumb stays floating and the next region gets a chance.",
+        "═══════════════════════════════════════════════════════════════",
+      ].join("\n")
+    : "";
 
   // Day 20.4.3 Region Expansion Hotfix — the LLM template previously
   // hardcoded `locations[0].id = outline.id`, which forced the bible
@@ -96,10 +147,13 @@ function buildUserPrompt(
   const obj2Slug       = `${outline.id}_obj2`;
   const obj3Slug       = `${outline.id}_obj3`;
   const obj4Slug       = `${outline.id}_obj4`;
-  const obj5Slug       = `${outline.id}_obj5`;
-  const obj6Slug       = `${outline.id}_obj6`;
+  // V8.54 (Day 23A) — region_location objects[] is now empty (the dungeon
+  // schema moved them into dungeon_rooms[]). obj5/obj6 slugs that previously
+  // seeded those object ids are no longer referenced. Dropped to satisfy
+  // no-unused-vars; if future region_locations regain objects, regenerate
+  // these slugs alongside.
 
-  return `${wcdBlock}
+  return `${wcdBlock}${questContextBlock ? "\n\n" + questContextBlock : ""}
 
 Expand this region outline into a RegionBible JSON.
 Region: ${JSON.stringify(outline)}
@@ -200,67 +254,112 @@ consistent with the WCD):
   "npcs": [
     {
       "id": "character_${npc1Slug}",
-      "name": "[Full Real Name]",
+      "name": "<NPC name derived from WCD cultural context>",
       "home_location_id": "${subSlug}",
       "role": "innkeeper",
-      "appearance": "[1 sentence]",
       "personality": "[1 sentence]",
-      "speech_style": "[3 words]",
       "knowledge": [{"topic": "[3-5 word label]", "content": "[Full WCD-consistent sentence]"}],
-      "default_trust": 50
+      "default_trust": 50,
+      "quest_hook": true,
+      "quest_seed": "[1 sentence describing what this NPC needs or is waiting for — embed it in their situation. GOOD: 'She's been waiting three weeks for a shipment of medicines that never arrived from the eastern pass.' BAD: 'She wants the player to retrieve medicines.']"
     },
     {
       "id": "character_${npc2Slug}",
-      "name": "[Full Real Name]",
+      "name": "<NPC name derived from WCD cultural context>",
       "home_location_id": "${subSlug}",
       "role": "patron",
-      "appearance": "[1 sentence]",
       "personality": "[1 sentence]",
-      "speech_style": "[3 words]",
       "knowledge": [{"topic": "[3-5 word label]", "content": "[Full WCD-consistent sentence]"}],
       "default_trust": 50
     },
     {
       "id": "character_${npc3Slug}",
-      "name": "[Full Real Name]",
+      "name": "<NPC name derived from WCD cultural context>",
       "home_location_id": "${regionLocSlug}",
       "role": "explorer",
-      "appearance": "[1 sentence]",
       "personality": "[1 sentence — give them a reason to be at this remote spot]",
-      "speech_style": "[3 words]",
-      "knowledge": ["[WCD-consistent fact specific to this site]"],
-      "default_trust": 50
+      "knowledge": [{"topic": "[3-5 word label]", "content": "[WCD-consistent fact specific to this site]"}],
+      "default_trust": 50,
+      "quest_hook": true,
+      "quest_seed": "[1 sentence describing the situation that needs help — written as a problem in their world, not a quest. The remoteness of the location should inform what they need.]"
     }
   ],
   "region_locations": [
     {
       "id": "${regionLocSlug}",
-      "name": "[Standalone landmark name — dungeon / wilderness / shrine]",
+      "name": "[Standalone dungeon name]",
       "type": "dungeon",
+      "node_type": "dungeon",
       "is_settlement_node": false,
       "is_interior": false,
-      "atmosphere": "[1 sentence]",
+      "atmosphere": "[1 sentence — the dungeon's exterior and history]",
       "grid_position": {"x": ${outline.grid_centre.x + 1}, "y": ${outline.grid_centre.y}},
       "connections": ["${settlementSlug}"],
       "npc_ids": ["character_${npc3Slug}"],
-      "objects": [
-        {
-          "id": "${obj5Slug}",
-          "name": "[Exact Object Name with lore weight]",
-          "description": "[1 sentence — hint at history or mystery]",
-          "is_interactable": true
-        },
-        {
-          "id": "${obj6Slug}",
-          "name": "[Exact Object Name with lore weight]",
-          "description": "[1 sentence — hint at history or mystery]",
-          "is_interactable": true
-        }
-      ],
+      "objects": [],
       "ambient_type": "dungeon_corridor",
       "encounter_chance": 0.6,
       "encounter_roster": ["fantasy_skeleton", "${outline.id}_themed_enemy_id"],
-      "is_boss_room": false
+      "is_boss_room": false,
+      "dungeon_rooms": [
+        {
+          "id": "${regionLocSlug}_entrance",
+          "name": "[Entrance Room Name]",
+          "description": "[1-2 sentences. Establishes the dungeon identity.]",
+          "room_type": "entrance",
+          "connections": ["${regionLocSlug}_middle"],
+          "encounter_chance": 0.5,
+          "objects": [
+            {"id": "${regionLocSlug}_entrance_chest", "name": "[Container Name]", "description": "[1 sentence]", "is_interactable": true, "type": "container"},
+            {"id": "${regionLocSlug}_entrance_lore", "name": "[Lore Object Name]", "description": "[1 sentence — foreshadows the boss lock]", "is_interactable": true, "type": "lore"}
+          ]
+        },
+        {
+          "id": "${regionLocSlug}_middle",
+          "name": "[Middle Chamber Name]",
+          "description": "[1-2 sentences. The chamber that hides the key.]",
+          "room_type": "middle",
+          "connections": ["${regionLocSlug}_entrance", "${regionLocSlug}_boss"],
+          "encounter_chance": 0.7,
+          "objects": [
+            {"id": "${regionLocSlug}_middle_chest", "name": "[Container Name]", "description": "[1 sentence]", "is_interactable": true, "type": "container"},
+            {"id": "${regionLocSlug}_middle_key_object", "name": "[Story-Named Key Object Name]", "description": "[1 sentence — where the key item rests]", "is_interactable": true, "type": "container", "is_key_item": true, "unlocks_node": "${regionLocSlug}_boss"}
+          ]
+        },
+        {
+          "id": "${regionLocSlug}_boss",
+          "name": "[Boss Chamber Name]",
+          "description": "[1-2 sentences. The climactic chamber.]",
+          "room_type": "boss",
+          "connections": ["${regionLocSlug}_middle"],
+          "encounter_chance": 1.0,
+          "objects": [],
+          "lock": {
+            "type": "key",
+            "hint": "[1-2 sentences describing the sealed door + the KIND of object that would open it (a seal, a key, a token, a glyph). NEVER name the key object directly — the player must discover its name by finding it. GOOD: 'A ceremonial lock shaped to receive an official seal of office.' BAD: 'Requires the Warden's Seal.']",
+            "key_item_id": "${regionLocSlug}_middle_key_object",
+            "key_item_name": "[Story-Named Key Object Name]",
+            "unlocked": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "${outline.id}_landmark",
+      "name": "[Standalone landmark name — a ruin / shrine / overlook, NOT a dungeon]",
+      "type": "wilderness",
+      "node_type": "landmark",
+      "is_settlement_node": false,
+      "is_interior": false,
+      "atmosphere": "[1-2 sentences describing this lore-rich site]",
+      "grid_position": {"x": ${outline.grid_centre.x - 2}, "y": ${outline.grid_centre.y + 1}},
+      "connections": ["${settlementSlug}"],
+      "npc_ids": [],
+      "objects": [
+        {"id": "${outline.id}_landmark_lore", "name": "[Tier 1 Lore Object]", "description": "[1 sentence]", "is_interactable": true, "type": "lore"}
+      ],
+      "ambient_type": "open_ruins",
+      "encounter_chance": 0.1
     }
   ],
   "exits": [
@@ -275,27 +374,79 @@ consistent with the WCD):
     {
       "id": "${outline.id}_themed_enemy_id",
       "name": "[Themed Enemy Name]",
-      "description": "[1 sentence of WCD-consistent flavor for narration]",
-      "hp_range": [12, 18],
+      "hp_range": [9, 14],
       "agi_mod": 1,
-      "str_mod": 2,
+      "str_mod": 1,
       "damage_die": "1d8",
       "armor_bonus": 1,
-      "xp_value": 60,
+      "xp_value": 55,
       "loot_table_id": "${outline.id}_themed_enemy_id_loot",
       "is_boss": false,
-      "behavior_flavor": "[1-3 word phrase]"
+      "behavior_flavor": "[1-3 word phrase]",
+      "primary_damage_type": "poison",
+      "status_effect": { "id": "poisoned", "chance": 0.30 },
+      "can_weaken": false
     }
-  ]
+  ],
+  /* enemies[].primary_damage_type, status_effect, and can_weaken are
+     OPTIONAL — omit primary_damage_type for plain physical attackers;
+     omit status_effect for generic melee; omit can_weaken when false.
+     See ENEMY DAMAGE TYPE AND STATUS EFFECT below for when to set them. */
+  "region_loot_items": [
+    {
+      "id": "${outline.id}_item_slug",
+      "name": "[Item Name]",
+      "type": "CONSUMABLE|VALUABLE|LORE|WEAPON|ARMOR",
+      "rarity": "COMMON|UNCOMMON",
+      "description": "[1 sentence — item specific to this region].",
+      "effect": {},
+      "quantity": 1,
+      "stackable": false,
+      "value": 15
+    }
+  ],
+  "boss_drop_item": {
+    "id": "${outline.id}_boss_trophy",
+    "name": "[Unique Boss Item Name]",
+    "type": "WEAPON|ARMOR",
+    "rarity": "RARE",
+    "description": "[1 sentence — this item's significance in the region].",
+    "effect": { "damage_die": "1d10" },
+    "quantity": 1,
+    "stackable": false,
+    "value": 250
+  }
 }
 
 Make everything original and consistent with the WCD.
 Real names for all NPCs. No placeholders.
-The region_locations entry is a STANDALONE point in the geographic
-area (dungeon / wilderness / shrine) — NOT inside the settlement.
-It connects directly to the settlement hub. It MUST have an NPC
-with a believable reason to be there, plus 2 evocative Tier 1
-objects.
+
+NPC names must be derived from the cultural, linguistic, and
+geographic context established in the WCD above. A maritime
+salvage world names people differently than a volcanic fortress
+world. A corporate dystopia names people differently than a
+haunted coastal village. Read the WCD. Let the world's identity
+generate the names — do not draw from generic naming pools.
+
+REGION_LOCATIONS COUNT GUIDANCE (V8.54 — match outline.region_type):
+The region_locations array MUST hold 2-4 standalone nodes alongside
+the settlement. Mix by region_type:
+  settled  — 1 dungeon + 1-2 of {landmark, wilderness, outpost}  → 2-3 total
+  frontier — 1-2 dungeons + 1-2 of {wilderness, landmark}        → 2-4 total
+  hostile  — 2-3 dungeons + 1-2 of {landmark, abandoned}         → 3-4 total
+            (hostile regions have NO settlement; locations[] is
+            still required for navigation but settlement_id may
+            point at a structural-only outpost entry.)
+Each region_location is a STANDALONE node in the geographic area
+(dungeon / landmark / wilderness / outpost / abandoned_settlement)
+— NOT inside the settlement. Connect each to the settlement hub.
+Dungeons MUST have an NPC with a believable reason to be there,
+plus 2 evocative Tier 1 objects.
+
+DUNGEON ROOMS — every node_type "dungeon" in region_locations MUST
+include a 3-entry dungeon_rooms array (entrance → middle → boss)
+following the skeleton above. A dungeon without dungeon_rooms is
+incomplete and will be rejected client-side.
 
 NPC KNOWLEDGE FORMAT (Architecture C): every NPC's "knowledge"
 array must be objects of shape {topic, content}. The topic is a
@@ -304,6 +455,33 @@ array must be objects of shape {topic, content}. The topic is a
 NPC reveals on a passed stat check. Generate 1-2 entries per NPC.
 Do NOT emit plain strings — always {topic, content}.
 
+DAY 23D — SIDE QUEST HOOKS (V8.66):
+Of the 3 NPCs you generate, 1-2 should carry quest_hook: true with
+a quest_seed sentence. The skeleton shows npc1 (innkeeper, in the
+settlement) and npc3 (explorer, at the standalone region location)
+as the hook carriers — keep that pattern but write seeds that
+fit each NPC's situation.
+
+Seed rules (rule 116):
+  - 1 sentence describing what they NEED or are WAITING for.
+  - Written as a SITUATION embedded in their life, NOT a mission.
+    GOOD: "He has been searching for his sister's grave for two
+           seasons and is convinced it lies somewhere in the
+           barrow north of here."
+    BAD:  "He wants the player to find his sister's grave."
+  - The seed must feel native to the region. A settlement
+    innkeeper's seed differs from a remote-explorer's seed.
+  - DO NOT mention "the player" or "you" in the seed.
+
+The seed is the GENERATOR's input — a separate
+/api/game/generate-side-quests call expands it into a full
+SideQuest object with title, objective, completion_condition,
+and reward_hint. Keep the seed tight and evocative; the
+generator handles the rest.
+
+Non-quest NPCs (npc2 in the skeleton): omit quest_hook and
+quest_seed entirely. Do not include them as false / null.
+
 DAY 20 COMBAT — REGION ENEMIES & ENCOUNTER TAGGING:
 
 The "enemies" array must contain 3-5 region-themed enemies that
@@ -311,15 +489,57 @@ thematically fit the WCD flavor and the region's atmosphere.
 Constraints:
 - 3-5 entries with UNIQUE ids prefixed with the region id
   (e.g. "${outline.id}_husk_warden")
-- description: 1 sentence of WCD-consistent flavor for narration
-- hp_range: [min, max] — common 8-25, elite 25-50, boss 50-100
-- agi_mod and str_mod: integers between -2 and +4
+- hp_range: [min, max] — see ENEMY STAT BUDGET BY REGION TIER below
+- agi_mod and str_mod: integers (range bounded by tier — see below)
 - armor_bonus: integer between 0 and 3
 - damage_die: one of "1d4", "1d6", "1d8", "1d10", "2d4", "2d6", "2d8"
 - xp_value: integer between 25 and 1000 scaled to difficulty
 - behavior_flavor: 1-3 word phrase
 - is_boss: false unless this enemy IS a region-tied boss
 - loot_table_id: stub of form "<enemy_id>_loot"
+
+ENEMY STAT BUDGET BY REGION TIER (V8.51 — calibrated for the 2-10
+player stat scale, NOT the D&D 1-20 scale):
+
+Player modifier formula: floor((stat - 2) / 2). Stat 4 = +1 mod.
+Target DC = 10 + enemy.agi_mod + enemy.armor_bonus.
+
+Starting region / first dungeon enemies (level 1 appropriate):
+  hp_range:    [4, 8]    agi_mod: 0–1    armor_bonus: 0
+  str_mod:     0–1       damage_die:     "1d4" or "1d6"
+  Design check: a level-1 player should kill these in 2-3 hits.
+
+First expansion region enemies (levels 2-4):
+  hp_range:    [7, 14]   agi_mod: 1–2    armor_bonus: 0–1
+  str_mod:     1–2       damage_die:     "1d6" or "1d8"
+
+Deep region enemies (levels 4+):
+  hp_range:    [12, 22]  agi_mod: 2–3    armor_bonus: 1–2
+  str_mod:     2–3       damage_die:     "1d8" or "2d4"
+
+Pick the tier that matches this region's position in the world.
+A region adjacent to the starting hub uses the "first expansion"
+budget; a region two hops out uses the "deep region" budget.
+NEVER generate starting-tier enemies with:
+  - agi_mod above 1
+  - hp_range minimum above 8
+  - damage_die larger than "1d6"
+
+ENEMY DAMAGE TYPE AND STATUS EFFECT (optional fields):
+
+primary_damage_type — The type of damage this enemy primarily
+deals. Most enemies use "physical" and should OMIT this field.
+Only set for clearly typed enemies (venom → "poison", fire →
+"fire", shadow → "shadow", etc.). Use the genre's canonical
+type list (same as WB — see genre type lists above).
+
+status_effect — Optional. Only include for enemies whose core
+identity is a status threat. Shape and valid ids same as WB.
+Shape: { "id": "<status_id>", "chance": <0.0-1.0> }
+Valid ids: "poisoned" | "burning" | "chilled" | "weakened" | "frightened"
+Typical chances: 0.20-0.40. Boss: 0.50-0.80.
+
+can_weaken — Optional boolean, large/crushing enemies only.
 
 ENCOUNTER TAGGING for combat-eligible region_locations:
 The standalone region_location IS combat-eligible. It MUST carry:
@@ -333,6 +553,112 @@ The standalone region_location IS combat-eligible. It MUST carry:
 The settlement hub and tavern sub-location are NOT combat-eligible
 — omit encounter_chance/encounter_roster on those (or set chance
 to 0).
+
+DAY 23A — LOCATION VARIETY & DUNGEON STRUCTURE (region_type "${outline.region_type ?? "settled"}")
+
+Every node MUST carry a "node_type" from this fixed set:
+  • settlement_hub | outpost | wilderness | dungeon | landmark
+  • abandoned_settlement
+
+NODE_TYPE ASSIGNMENT — CRITICAL:
+  • ONLY the location where is_settlement_node: true receives
+    node_type: "settlement_hub". Exactly one entry in locations[]
+    carries both flags.
+  • ALL sub-locations inside the settlement (tavern, inn, shop,
+    smithy, shrine) MUST NOT have node_type set — OMIT the field.
+    Their nav-card label derives from their "type" field instead.
+  • EVERY entry in region_locations gets node_type set to one of
+    {dungeon, landmark, wilderness, outpost, abandoned_settlement}
+    matching the location's character.
+
+Pre-fix bug: setting node_type: "settlement_hub" on sub-locations
+collapses every sub-location's nav card label to "SETTLEMENT".
+
+REGION TYPE GUIDANCE — match this region's mix:
+  settled   — 1 settlement_hub + 1-2 dungeons + 1-2 landmark/wilderness
+  frontier  — 0-1 outposts + 1-2 dungeons + 1-2 wilderness/landmarks
+  hostile   — 0 settlements + 2-3 dungeons + 1-2 landmarks/abandoned
+              All non-dungeon nodes encounter_chance ≥ 0.3
+
+DUNGEON STRUCTURE (mandatory for every "node_type: dungeon" node):
+The dungeon location MUST carry a "dungeon_rooms" array of EXACTLY
+3 entries — entrance → middle → boss — following the skeleton shown
+above. Required fields per room: id, name, description (1-2 sent),
+room_type, connections (room ids), encounter_chance, objects[].
+
+Room 1 entrance — encounter_chance 0.5; ≥1 object type "container";
+optional 1 "lore" object foreshadowing the boss lock.
+Room 2 middle  — encounter_chance 0.7; ≥1 "container" PLUS a named
+story key-object with is_interactable: true, type: "container",
+is_key_item: true, unlocks_node: "{dungeon_id}_boss". The key-object
+name must be specific to the dungeon (e.g. "The Warden's Seal",
+"The Cracked Signet Ring") — never a generic "iron key".
+Room 3 boss    — encounter_chance 1.0; objects: []; lock object with
+type "key", key_item_id matching the middle-room key object id,
+key_item_name matching its name, unlocked: false. The lock's HINT
+must describe the door + the KIND of object that opens it (a seal,
+a key, a token, a glyph) WITHOUT naming the key object directly.
+The player should discover the key item's name by finding it, not
+by reading the lock hint. GOOD: "A ceremonial lock shaped to
+receive an official seal of office." BAD: "Requires the Warden's
+Seal."
+
+DAY 23A — LOOT CONTEXT GUIDANCE
+Dungeon / combat drop tables: weapons, armor, valuables, healing
+consumables, rare RARE artifacts. NEVER generate food / ration
+items in dungeon loot or enemy drops — food belongs in
+settlement/outpost containers and merchant inventories only.
+
+DAY 21 LOOT — REGION LOOT ITEMS:
+
+Generate 3-5 region_loot_items specific to this region — items
+found here and nowhere else. They should feel native to the
+region's atmosphere (a salt-plains region drops salt-crusted
+relics; a rust-peaks region drops corroded oddities).
+
+Mix of rarities: mostly COMMON, some UNCOMMON. Vary types:
+CONSUMABLE, VALUABLE, LORE — and optionally one WEAPON or one
+ARMOR scoped to this region's theme. Item id format:
+"${outline.id}_<item_slug>".
+
+Stat fields by type:
+- WEAPON: effect: { "damage_die": "1d4"|"1d6"|"1d8" }, value 25-100.
+- ARMOR:  effect: { "armor_bonus": 1|2 }, value 15-80.
+- CONSUMABLE: effect: { "heal": N } when it heals; {} for utility.
+  Value 5-30. stackable: true.
+- VALUABLE: effect: {}. Value 10-80. stackable: false.
+- LORE:     effect: {}. Value 2-15. stackable: false.
+
+Quantity: 1 for all template entries (resolver stamps per-drop).
+
+DAY 21 LOOT — BOSS DROP:
+
+Generate ONE boss_drop_item per RegionBible — the unique reward
+for defeating the region's boss. Always:
+- type: WEAPON or ARMOR (something the player wears or wields)
+- rarity: "RARE"
+- value: 200-500
+- id format: "${outline.id}_boss_trophy" or similar
+- description references the region / boss explicitly
+
+OMIT boss_drop_item entirely if this region has no boss (no
+enemy with is_boss=true). The field is optional.
+
+DAY 21 LOOT — DUNGEON CONTAINER GUARANTEE:
+
+Every region_location that's combat-eligible (dungeon /
+encounter_chance > 0 / is_boss_room) MUST contain at least one
+Tier 1 object with type "container" (chest, sarcophagus, offering
+bowl, footlocker — pick something thematic). LocationObject gains
+an optional "type" field:
+- "container" — INTERACT rolls loot for the player.
+- "fixture" — decorative; INTERACT returns a templated empty beat.
+- "lore" — INTERACT delivers a tip; templated, no LLM call.
+- "trigger" — drives a flag; reserved for future use.
+
+Non-combat locations (settlement, tavern, market): tag
+is_interactable objects as "fixture" or "lore" so INTERACT skips
+the narrator and returns the templated response.
 
 CRITICAL: Keep total response under 5500 tokens. Be concise.
 Atmosphere: max 2 sentences. NPC fields: 1 sentence each.
@@ -438,6 +764,79 @@ function stripJsonFences(raw: string): string {
     .trim();
 }
 
+/**
+ * Day 21 — RegionBible normalization for loot + container fields.
+ *
+ * Runs BEFORE validateBible so the validator sees defaulted values.
+ * Mutates in place (returns the same reference) for parity with how
+ * the WorldBible normalization is wired.
+ *
+ * Adds:
+ *   - region_loot_items: [] default when omitted/malformed.
+ *   - boss_drop_item: left undefined when missing (optional schema).
+ *   - LocationObject container promotion: same rule as
+ *     normalizeLocationContainers in the WorldBible route — every
+ *     combat-eligible region_location ends up with at least one
+ *     type:"container" object; non-combat is_interactable objects
+ *     default to "fixture".
+ */
+function normalizeBible(parsed: unknown): unknown {
+  if (!parsed || typeof parsed !== "object") return parsed;
+  const o = parsed as Record<string, unknown>;
+
+  if (!Array.isArray(o.region_loot_items)) {
+    o.region_loot_items = [];
+  }
+
+  // boss_drop_item stays as-is (optional). Drop empty-object placeholders
+  // so the resolver's `if (params.boss_drop_item)` check works as expected.
+  if (
+    o.boss_drop_item &&
+    typeof o.boss_drop_item === "object" &&
+    !Array.isArray(o.boss_drop_item) &&
+    Object.keys(o.boss_drop_item as Record<string, unknown>).length === 0
+  ) {
+    delete o.boss_drop_item;
+  }
+
+  normalizeRegionLocationContainers(o.locations);
+  normalizeRegionLocationContainers(o.region_locations);
+
+  return o;
+}
+
+/**
+ * Day 21 — promote one is_interactable object to type:"container" on
+ * every combat-eligible location, and stamp untagged is_interactable
+ * objects as "fixture" on non-combat locations. Mirrors the
+ * WorldBible route's helper.
+ */
+function normalizeRegionLocationContainers(locs: unknown): void {
+  if (!Array.isArray(locs)) return;
+  for (const raw of locs) {
+    if (!raw || typeof raw !== "object") continue;
+    const loc      = raw as Record<string, unknown>;
+    const isCombat =
+      loc.type === "dungeon" || loc.is_boss_room === true ||
+      (typeof loc.encounter_chance === "number" && (loc.encounter_chance as number) > 0);
+    const objs = Array.isArray(loc.objects) ? (loc.objects as Array<Record<string, unknown>>) : [];
+    if (objs.length === 0) continue;
+
+    const hasContainer = objs.some((o) => o && o.type === "container");
+    if (isCombat && !hasContainer) {
+      const first = objs.find((o) => o && o.is_interactable === true);
+      if (first) first.type = "container";
+    }
+    if (!isCombat) {
+      for (const o of objs) {
+        if (o && o.is_interactable === true && !o.type) {
+          o.type = "fixture";
+        }
+      }
+    }
+  }
+}
+
 function validateBible(parsed: unknown): { ok: true; bible: RegionBible } | { ok: false; error: string } {
   if (!parsed || typeof parsed !== "object") {
     return { ok: false, error: "RegionBible is not an object" };
@@ -469,26 +868,46 @@ function validateBible(parsed: unknown): { ok: true; bible: RegionBible } | { ok
   return { ok: true, bible: parsed as RegionBible };
 }
 
+// V8.69 — restore RegionBible max_tokens to a working ceiling.
+// V8.68's OPT 3 reduced 7000 → 1500; instrumentation confirmed all
+// 3 adjacent-region RegionBibles truncate at exactly 1500 and
+// return stub fallbacks, leaving every region the player can travel
+// to with no real content. Stub fallback ≠ acceptable — it's a
+// degradation, not a feature.
+//
+// 7000 was the Day 20 value (bumped from 6000 to give haiku
+// headroom for the 3-5 enemies in combat-spec §6.5). Restoring it.
+const RB_MODEL      = "claude-haiku-4-5-20251001";
+const RB_MAX_TOKENS = 7000;
+
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
   // Architecture spec ("Model Selection"): RegionBible generation runs on
   // haiku because the outline already locks the region's identity. Quality
   // from a simpler prompt is acceptable; speed matters more here than for
   // WCD/WorldBible/narration.
-  //
-  // Day 20 — bumped 6000 → 7000 to give the haiku headroom for the
-  // 3-5 enemy entries added at combat-spec §6.5. The stub fallback in
-  // the POST handler still catches any remaining truncation.
-  console.log("[RegionBible] Using haiku model");
+  const promptTokens = Math.ceil((SYSTEM_PROMPT.length + userPrompt.length) / 4);
+  console.log(
+    `[GEN_TIMING] generate-regional-bible start — model: ${RB_MODEL}, prompt_tokens: ${promptTokens}`
+  );
+  const startedAt = Date.now();
   const message = await client.messages.create({
-    model:      "claude-haiku-4-5-20251001",
-    max_tokens: 7000,
+    model:      RB_MODEL,
+    max_tokens: RB_MAX_TOKENS,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });
-  return message.content[0]?.type === "text" ? message.content[0].text : "";
+  const text = message.content[0]?.type === "text" ? message.content[0].text : "";
+  const outputTokens = message.usage?.output_tokens ?? Math.ceil(text.length / 4);
+  const elapsed = Date.now() - startedAt;
+  console.log(
+    `[GEN_TIMING] generate-regional-bible complete — elapsed: ${elapsed}ms, output_tokens: ${outputTokens}`
+  );
+  return text;
 }
 
 export async function POST(request: NextRequest) {
+  console.log("[GEN_TIMING] generate-regional-bible called");
+  console.log(`[GEN_TIMING] generate-regional-bible max_tokens: ${RB_MAX_TOKENS}`);
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
@@ -510,6 +929,7 @@ export async function POST(request: NextRequest) {
     genre,
     wcd,
     existing_region_names,
+    floating_breadcrumb,
   } = body;
 
   if (!session_id || !outline || !origin_region_name || !direction_from_origin || !genre || !wcd) {
@@ -523,7 +943,14 @@ export async function POST(request: NextRequest) {
   }
 
   const existing = Array.isArray(existing_region_names) ? existing_region_names : [];
-  const userPrompt = buildUserPrompt(genre, outline, origin_region_name, direction_from_origin, wcd, existing);
+  if (floating_breadcrumb) {
+    console.log(
+      `[RegionBible] Seeding floating breadcrumb ${floating_breadcrumb.id} (act ${floating_breadcrumb.act}) into ${outline.name}.`
+    );
+  }
+  const userPrompt = buildUserPrompt(
+    genre, outline, origin_region_name, direction_from_origin, wcd, existing, floating_breadcrumb,
+  );
 
   // Per-request client so the API key is read fresh each call.
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -577,6 +1004,9 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  // Day 21 — normalize loot defaults + container tags before validation.
+  parsed = normalizeBible(parsed);
 
   const validated = validateBible(parsed);
   if (!validated.ok) {

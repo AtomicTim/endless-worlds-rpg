@@ -55,6 +55,9 @@ export function GameLayout({
   // Day 20.4.2 TASK 4 — codex modal toggle (replaces Link navigation).
   const codexModalOpen   = useGameStore((s) => s.codexModalOpen);
   const toggleCodexModal = useGameStore((s) => s.toggleCodexModal);
+  // Day 23C — journal modal toggle (same pattern as codex).
+  const journalModalOpen   = useGameStore((s) => s.journalModalOpen);
+  const toggleJournalModal = useGameStore((s) => s.toggleJournalModal);
 
   // The CSS tokens key off short slugs (fantasy / cyber / horror /
   // space / apoc); genre is the full enum value. genreSlug maps both.
@@ -198,6 +201,27 @@ export function GameLayout({
               stroke="currentColor" strokeWidth="1.1" fill="none" />
           </svg>
           <span className="hidden sm:inline">CODEX</span>
+        </button>
+
+        {/* JOURNAL — Day 23C. Same overlay pattern as Codex. Sits
+            between CODEX and SAVE in the top nav. Holds the Morrowind-
+            style quest log: main / side / completed / failed. */}
+        <button
+          type="button"
+          onClick={() => toggleJournalModal()}
+          aria-label="Open journal"
+          title="Journal"
+          style={chromeBtn(journalModalOpen)}
+          className="min-h-[44px] sm:min-h-0"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+            {/* Open-book glyph: spine + two pages with ruled lines. */}
+            <path d="M 7 2 L 2 3 L 2 12 L 7 11 L 12 12 L 12 3 L 7 2 Z M 7 2 L 7 11"
+              stroke="currentColor" strokeWidth="1.1" fill="none" />
+            <path d="M 3.5 6 L 6 5.7 M 3.5 8 L 6 7.7 M 8 5.7 L 10.5 6 M 8 7.7 L 10.5 8"
+              stroke="currentColor" strokeWidth="0.6" opacity="0.55" />
+          </svg>
+          <span className="hidden sm:inline">JOURNAL</span>
         </button>
 
         {/* Save & Exit — desktop only */}

@@ -12,7 +12,7 @@ import { generateLocationStub } from "@/lib/game/location-stub-generator";
 import { findAmbientResponse } from "@/lib/game/ambient-objects";
 import {
   matchRegionOutline,
-  getCachedRegionalBible,
+  awaitRegionalBible,
   cacheRegionalBible,
   pregenerateRegionalBible,
   invalidateRegionalBibleCache,
@@ -21,7 +21,18 @@ import { rollEncounterWithPlayer, shouldRollEncounter } from "@/lib/game/combat-
 import { consumeForcedEncounter } from "@/hooks/useCombat";
 import { isRegionAlreadyExpanded } from "@/lib/game/region-expansion-guard";
 import { renderRoutineCombatEvent } from "@/lib/game/combat-narration/templates";
-import { ActionType, AssetCategory, Genre, ItemRarity, ItemType, LocationStatus, LogEntryType } from "@/types/game";
+import { resolveLoot } from "@/lib/game/loot-resolver";
+import { getEmptyContainerTemplate, getSearchNarrative } from "@/lib/game/container-templates";
+import { pickRegionLootItemsForNode } from "@/lib/game/floor-loot";
+import { isDungeonNode, markRoomUnlocked } from "@/lib/game/dungeon-navigation";
+import { acceptNarratorItemsAcquired } from "@/lib/game/narrator-guards";
+import {
+  findUndiscoveredSideQuestForNpc,
+  markSideQuestDiscovered,
+  shouldTriggerDialogueDiscovery,
+} from "@/lib/game/quest-discovery";
+import type { FloorLootEntry } from "@/types/game";
+import { ActionType, AssetCategory, Genre, ItemType, LocationStatus, LogEntryType } from "@/types/game";
 import type { DialogueOption, Item, MasterState, ParsedAction, RegionBible, RegionOutline, ResolutionResult, StoredMessage, WorldAsset, WorldGraph, WorldNode } from "@/types/game";
 
 const MAX_INPUT_LENGTH  = 500;
@@ -292,13 +303,6 @@ function outcomeToLogType(outcomeType: string): LogEntryType {
   return LogEntryType.STORY;
 }
 
-const RARITY_LABELS: Record<ItemRarity, string> = {
-  [ItemRarity.COMMON]:    "Common",
-  [ItemRarity.UNCOMMON]:  "Uncommon",
-  [ItemRarity.RARE]:      "Rare",
-  [ItemRarity.LEGENDARY]: "Legendary",
-};
-
 /**
  * Adds a log entry to masterState AND syncs it to the Zustand persistedLogEntries
  * so the LogBook survives SPA navigation without waiting for a DB auto-save.
@@ -325,6 +329,32 @@ function saveWorldStateAsync(sessionId: string, worldState: import("@/types/game
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ sessionId, worldState }),
+      });
+    } catch {
+      // Silently swallow — best-effort; the 10-action auto-save is the fallback.
+    }
+  })();
+}
+
+/**
+ * Day 23B pt 2 — fire-and-forget quest_threads persist (Task 4).
+ * Breadcrumb discovery, faction alignment changes, and side-quest
+ * mutations all use this so the change lands in the DB before the
+ * 10-action auto-save. Reuses /api/game/world-state (no new route).
+ *
+ * Exported so useDungeonRuntime's boss-clear hook can call it too
+ * (TRIGGER B is fired from there, not from this hook).
+ */
+export function saveQuestThreadsAsync(
+  sessionId:    string,
+  questThreads: import("@/types/game").QuestThreads
+): void {
+  void (async () => {
+    try {
+      await fetch("/api/game/world-state", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ sessionId, questThreads }),
       });
     } catch {
       // Silently swallow — best-effort; the 10-action auto-save is the fallback.
@@ -376,7 +406,12 @@ function saveLogEntriesAsync(sessionId: string, logBook: import("@/types/game").
   })();
 }
 
-async function persistState(
+/**
+ * Day 21 — re-exported so `useFloorLoot` (and any future per-action
+ * hooks that mutate MasterState outside of the main game-loop)
+ * can persist + show the same "save failed" feedback line.
+ */
+export async function persistState(
   state: MasterState,
   addMessage: (m: StoryMessage) => void
 ): Promise<void> {
@@ -891,6 +926,128 @@ export function useGameLoop() {
         });
       }
 
+      // ── 4a-Day21. Container search short-circuit ───────────────────────────
+      // Day 21 — INTERACT against a Tier 1 LocationObject with a known
+      // type ("container" / "fixture" / "lore" / "trigger") never burns
+      // an LLM call. Container hits resolve loot and drop a FloorLootEntry;
+      // non-containers return a templated empty / lore beat. Fall-through
+      // (object missing or untyped) continues into the narrator path below.
+      if (resolution.outcome_type === "CONTAINER_SEARCH") {
+        const ctxName  = String(resolution.narrative_context?.object_name ?? "the container");
+        const nodeId   = String(
+          resolution.narrative_context?.container_node_id
+          ?? updatedState.world_state.current_node_id
+          ?? updatedState.world_state.current_location_id
+        );
+        const containerId = String(resolution.narrative_context?.container_id ?? "");
+        const lootRes = resolveLoot({
+          loot_table_id:     `container_${containerId}_loot`,
+          is_boss:           false,
+          genre:             updatedState.metadata.genre,
+          world_loot_items:  updatedState.metadata.world_bible?.world_loot_items,
+          region_loot_items: pickRegionLootItemsForNode(updatedState, nodeId),
+        });
+        const entry: FloorLootEntry = {
+          id:      crypto.randomUUID(),
+          node_id: nodeId,
+          items:   lootRes.items,
+          gold:    lootRes.gold,
+          owner:   null,
+          source:  "container",
+        };
+        updatedState = {
+          ...updatedState,
+          floor_loot: [...(updatedState.floor_loot ?? []), entry],
+        };
+        const beat = getSearchNarrative(ctxName, lootRes.items, lootRes.gold, updatedState.metadata.genre);
+        store.addMessage(makeMessage("NARRATIVE", beat));
+        store.setLastNarrativeText(beat);
+        updatedState = persistLogEntry(
+          updatedState,
+          LogEntryType.DISCOVERY,
+          `Searched ${ctxName}: ${lootRes.items.length} items, ${lootRes.gold} gold.`
+        );
+        const stampedContainer: MasterState = {
+          ...updatedState,
+          metadata: { ...updatedState.metadata, last_played: new Date().toISOString() },
+        };
+        store.setMasterState(stampedContainer);
+        await persistState(stampedContainer, store.addMessage);
+        store.setProcessing(false);
+        return;
+      }
+
+      if (
+        resolution.outcome_type === "CONTAINER_ALREADY_SEARCHED" ||
+        resolution.outcome_type === "INTERACT_NON_CONTAINER"
+      ) {
+        const ctxName  = String(resolution.narrative_context?.object_name ?? "it");
+        const ctxType  = typeof resolution.narrative_context?.object_type === "string"
+          ? (resolution.narrative_context.object_type as string)
+          : undefined;
+        const beat = getEmptyContainerTemplate(ctxName, ctxType);
+        store.addMessage(makeMessage("NARRATIVE", beat));
+        store.setLastNarrativeText(beat);
+        updatedState = persistLogEntry(
+          updatedState,
+          LogEntryType.STORY,
+          `Interacted with ${ctxName} — nothing to take.`
+        );
+        const stampedNon: MasterState = {
+          ...updatedState,
+          metadata: { ...updatedState.metadata, last_played: new Date().toISOString() },
+        };
+        store.setMasterState(stampedNon);
+        await persistState(stampedNon, store.addMessage);
+        store.setProcessing(false);
+        return;
+      }
+
+      // ── 4a-Dungeon. FIX 3 — dungeon key item text-path unlock ─────────────
+      // resolveUseItem detects is_key_item on adjacent locked rooms and
+      // returns DUNGEON_KEY_USE (success) or DUNGEON_KEY_USE_FAIL. Both
+      // are fully templated — no narrator call. Success also flips
+      // lock.unlocked on the world_graph (state_delta can't carry that).
+      if (
+        resolution.outcome_type === "DUNGEON_KEY_USE" ||
+        resolution.outcome_type === "DUNGEON_KEY_USE_FAIL"
+      ) {
+        if (resolution.success) {
+          const roomId   = String(resolution.narrative_context.room_id ?? "");
+          const keyName  = String(resolution.narrative_context.item_name ?? "the key");
+          const ds2      = updatedState.dungeon_state;
+          const graph2   = updatedState.world_graph;
+          if (ds2 && graph2 && roomId) {
+            const dn2 = graph2.nodes[ds2.node_id];
+            if (dn2) {
+              const unlocked2 = markRoomUnlocked(dn2, roomId);
+              updatedState = {
+                ...updatedState,
+                world_graph: { ...graph2, nodes: { ...graph2.nodes, [dn2.id]: unlocked2 } },
+              };
+            }
+          }
+          const beat = `You fit the ${keyName} into the socket. The mechanism turns.`;
+          store.addMessage(makeMessage("NARRATIVE", beat));
+          store.setLastNarrativeText(beat);
+          updatedState = persistLogEntry(updatedState, LogEntryType.STORY, beat);
+        } else {
+          const keyName = String(resolution.narrative_context.item_name ?? "the key");
+          const beat = `There's no lock here that the ${keyName} will open.`;
+          store.addMessage(makeMessage("NARRATIVE", beat));
+          store.setLastNarrativeText(beat);
+          updatedState = persistLogEntry(updatedState, LogEntryType.STORY, beat);
+        }
+        const stamped4dk: MasterState = {
+          ...updatedState,
+          metadata: { ...updatedState.metadata, last_played: new Date().toISOString() },
+        };
+        store.setMasterState(stamped4dk);
+        await persistState(stamped4dk, store.addMessage);
+        store.setProcessing(false);
+        return;
+      }
+
       // ── 4b. Fast path — inventory management actions skip the Narrator ─────
       if (!isNarrativeAction(parsedAction, state)) {
         const finalState = handleFastPath(parsedAction, resolution, updatedState, store, state);
@@ -1195,14 +1352,41 @@ export function useGameLoop() {
               .map((r) => r.name),
           ];
 
-          // Cache hit short-circuits the AI call entirely (~5s saved).
-          const cached = getCachedRegionalBible(sessionId, matchedOutline.id);
+          // V8.53 — awaitRegionalBible adds in-flight dedup on top of
+          // the cache hit check. If a pregen is mid-flight for this
+          // outline (most likely from the wizard's post-apply burst),
+          // we await its existing promise rather than racing a
+          // duplicate /api/game/generate-regional-bible call. Pre-V8.53
+          // logs showed both fetches completing and the live one's
+          // result silently overwriting the pregen's after-the-fact.
+          const cached = await awaitRegionalBible(sessionId, matchedOutline.id);
           let regionBible: RegionBible | null = cached;
           // FIX 2 — track which step failed so the failure handler can
           // roll back the player and skip narration for this turn.
           let expansionFailed = false;
 
           if (!regionBible) {
+            // Day 23B — pick the first unanchored floating breadcrumb (act 2 or
+            // 3) from quest_threads so the RegionBible prompt can seed it via
+            // an NPC, dungeon lore object, or landmark in the new region.
+            // Skips when quest_threads is missing (legacy save) or every
+            // floating breadcrumb is already anchored.
+            const floatingBreadcrumb = (() => {
+              const bcs = updatedState.quest_threads?.main_quest?.breadcrumbs ?? [];
+              const candidate = bcs.find(
+                (b) =>
+                  b.anchor_type === "floating" &&
+                  !b.anchor_location_id &&
+                  (b.act === 2 || b.act === 3)
+              );
+              if (!candidate) return undefined;
+              return {
+                id:          candidate.id,
+                act:         candidate.act,
+                content:     candidate.content,
+                anchor_type: candidate.anchor_type,
+              };
+            })();
             try {
               const genRes = await fetch("/api/game/generate-regional-bible", {
                 method:  "POST",
@@ -1215,6 +1399,7 @@ export function useGameLoop() {
                   genre:                 updatedState.metadata.genre,
                   wcd:                   wcdRegion,
                   existing_region_names: existingRegionNames,
+                  ...(floatingBreadcrumb ? { floating_breadcrumb: floatingBreadcrumb } : {}),
                 }),
               });
               if (genRes.ok) {
@@ -1267,6 +1452,9 @@ export function useGameLoop() {
                   starting_node_id?:    string;
                   region_zone_id?:      string;
                   updated_world_graph?: WorldGraph;
+                  /** Day 23D — server's authoritative quest_threads after
+                   *  applying breadcrumb anchors + side-quest appends. */
+                  quest_threads?:       import("@/types/game").QuestThreads;
                 };
                 if (applied.starting_node_id && applied.updated_world_graph) {
                   // Architecture CHANGE 1 — land at the geographic region
@@ -1304,6 +1492,14 @@ export function useGameLoop() {
                       location_status: LocationStatus.ARRIVING,
                     },
                     world_graph: newGraph,
+                    // Day 23D — mirror the server's updated quest_threads
+                    // (breadcrumb anchors + side-quest appends). Without
+                    // this, the local masterState would lag the DB until
+                    // reload and the DIALOGUE discovery trigger would
+                    // never see the new side_quests.
+                    ...(applied.quest_threads
+                      ? { quest_threads: applied.quest_threads }
+                      : {}),
                   };
                   // Refresh locationAssets for the new region zone so
                   // later steps (narrator, highlight) see real Tier 1 data.
@@ -1550,11 +1746,39 @@ export function useGameLoop() {
         updatedState.world_state.location_status === LocationStatus.ARRIVING ||
         resolutionForNarrator.narrative_context.movement_mandatory === true;
       const arriveLocId = updatedState.world_state.current_location_id;
+
+      // UX (V8.47+) — Revisit suppression. The first arrival at a node
+      // emits its full physical_description; without this gate every
+      // subsequent arrival would re-emit the same prose (stacking
+      // duplicate descriptions in the feed as the player navigates
+      // back-and-forth). Detect revisit via
+      // `world_graph.nodes[id].discovered`:
+      //   • Settlement nodes initialize `discovered: true` at apply-time
+      //     (apply-world-bible:675 via loc.is_settlement_node). The
+      //     player already saw the start narrative for the spawn
+      //     settlement, so the first MOVE back is genuinely a revisit
+      //     and we suppress.
+      //   • Sub-locations / dungeons / region zones initialize false.
+      //     First MOVE → discovered: false → full description shown.
+      //     End-of-step-7 safety net flips it true unconditionally.
+      //     Subsequent MOVE → discovered: true → suppressed.
+      // The flag is read here BEFORE step 7's flip, so it reflects the
+      // pre-arrival state. Monotonic — never reverts.
+      const arrivedGraphNode = arriveLocId
+        ? updatedState.world_graph?.nodes[arriveLocId]
+        : undefined;
+      const arrivedNodeIsRevisit =
+        isArrivingAction &&
+        parsedAction.action_type === ActionType.MOVE &&
+        arrivedGraphNode?.discovered === true;
+      const arrivedNodeName = arrivedGraphNode?.name ?? null;
+
       let cachedArrivalText: string | null = null;
       if (
         isArrivingAction &&
         arriveLocId &&
-        parsedAction.action_type === ActionType.MOVE
+        parsedAction.action_type === ActionType.MOVE &&
+        !arrivedNodeIsRevisit
       ) {
         const liveForCache = useGameStore.getState().locationAssets;
         const locAsset = liveForCache.find(
@@ -1588,7 +1812,35 @@ export function useGameLoop() {
       // implies the destination's world_asset already exists, so 7-C
       // will not fire either.
       let narratorResponse;
-      if (cachedArrivalText) {
+      if (arrivedNodeIsRevisit) {
+        // UX (V8.47+) — Revisit: synthesize a one-line "You return to
+        // X." beat instead of re-emitting the full physical_description.
+        // The rest of the pipeline (graph maintenance, asset refresh,
+        // arrival header) runs unchanged so navigation + map + nav
+        // cards still update. Skips both the cache-hit prose and the
+        // narrator API entirely.
+        console.log(
+          "[GameLoop/5] Revisit detected — suppressing arrival description for",
+          arriveLocId
+        );
+        const returnLine = arrivedNodeName
+          ? `You return to ${arrivedNodeName}.`
+          : "You return.";
+        narratorResponse = {
+          response_tier:      1 as const,
+          narrative_text:     returnLine,
+          ascii_art:          null,
+          sound_id:           null,
+          new_npcs:           [],
+          items_acquired:     [],
+          points_of_interest: [],
+          codex_entries:      [],
+          log_summary:        undefined,
+          dialogue_options:   [],
+          trust_changes:      [],
+          items_for_sale:     [],
+        };
+      } else if (cachedArrivalText) {
         console.log(
           "[GameLoop/5] Arrival cache hit — synthesizing response, skipping narrator API for",
           arriveLocId
@@ -2371,7 +2623,16 @@ export function useGameLoop() {
         // enemies without rolling. Splices a CombatState into
         // master_state on success — the UI in Prompt 3 reacts to
         // combat?.active === true and takes over the action bar.
-        if (arrivedNode) {
+        //
+        // GUARD A — encounters at dungeon nodes are SKIPPED here.
+        // Dungeons use per-room encounter rolls fired by
+        // useDungeonRuntime.navigateToRoom on first visit (rule 100).
+        // Firing at node level would double-trigger (node + entrance
+        // room) and corrupt useCombat state by colliding with
+        // useDungeonRuntime's auto-entry mutation. Skip cleanly here.
+        if (arrivedNode && isDungeonNode(arrivedNode)) {
+          // intentional no-op — per-room encounters via useDungeonRuntime
+        } else if (arrivedNode) {
           const forced = consumeForcedEncounter();
           const willTry = forced !== null || shouldRollEncounter(arrivedNode, updatedState.combat);
           if (willTry) {
@@ -2497,7 +2758,10 @@ export function useGameLoop() {
               updatedState,
               key,
               matchingAsset?.name ?? tc.npc_key,
-              matchingAsset?.constitution.role
+              matchingAsset?.constitution.role,
+              // Day 23.5C — pass the asset so the species disposition
+              // seed + per-NPC species modifier feed the initial trust.
+              matchingAsset ?? null,
             );
           }
           updatedState = updateNPCTrust(updatedState, key, tc.delta);
@@ -2631,7 +2895,9 @@ export function useGameLoop() {
               updatedState,
               npcRegistryKey,
               npcName,
-              matchingAsset?.constitution.role
+              matchingAsset?.constitution.role,
+              // Day 23.5C — species-aware initial trust seed.
+              matchingAsset ?? null,
             );
             console.log(`[GameLoop/7g] Seeded npc_registry entry for ${npcName} → ${npcRegistryKey}`);
 
@@ -2875,40 +3141,36 @@ export function useGameLoop() {
       }
 
       // ── 8. Merge new NPCs into registry ────────────────────────────────────
-      // 8b. Add any items the narrator granted — guarded against management actions.
-      const isLoreAction =
-        parsedAction.action_type === ActionType.USE_ITEM &&
-        (() => {
-          const lookup = (parsedAction.item_used ?? parsedAction.primary_target ?? "").trim().toLowerCase();
-          const item = updatedState.player_state.inventory.find(
-            (i) => i.id === lookup || i.name.toLowerCase() === lookup
-          );
-          return item?.type === ItemType.LORE;
-        })();
-      const isMgmtIntent = /\b(equip|unequip|drop|read)\b/i.test(parsedAction.inferred_intent);
-
+      // 8b. Narrator items_acquired — HARD-IGNORED (FIX 1, rule 107).
+      //
+      // acceptNarratorItemsAcquired returns [] unconditionally. The narrator
+      // is not authorized to grant items; only resolveLoot (containers),
+      // handleVictory (combat drops), and buyItem (merchant) may. The
+      // accepted-items array always being empty means the for-loop below
+      // is structurally dead code — kept as the canonical "this is where
+      // narrator items would have landed" anchor so future audits find
+      // rule 107 immediately. A diagnostic warn fires when the narrator
+      // tried to grant something, so prompt tuning is visible.
       if (
-        !isLoreAction &&
-        !isMgmtIntent &&
         narratorResponse.items_acquired &&
         narratorResponse.items_acquired.length > 0
       ) {
-        for (const item of narratorResponse.items_acquired) {
-          updatedState = addToInventory(updatedState, item);
-          store.addMessage(
-            makeMessage(
-              "SYSTEM",
-              `[ ${item.rarity} item added to pack: ${item.name} ]`
-            )
-          );
-          // DISCOVERY log entry per item acquired.
-          const rarityLabel = RARITY_LABELS[item.rarity] ?? item.rarity;
-          updatedState = persistLogEntry(
-            updatedState,
-            LogEntryType.DISCOVERY,
-            `Found: ${item.name} (${rarityLabel})`
-          );
-        }
+        console.warn(
+          "[GameLoop/8b] narrator emitted items_acquired — ignoring per rule 107. " +
+          "Items must come from containers (resolveLoot) or combat (floor_loot).",
+          {
+            count: narratorResponse.items_acquired.length,
+            names: narratorResponse.items_acquired.map((i) => i.name),
+          }
+        );
+      }
+      const acceptedItems = acceptNarratorItemsAcquired(narratorResponse.items_acquired);
+      for (const item of acceptedItems) {
+        // Unreachable while acceptNarratorItemsAcquired returns []. Kept
+        // as the structural inventory-grant anchor so the rule is one
+        // edit away from being relaxed in a future round, AND so static
+        // analyzers see the import is not dead.
+        updatedState = addToInventory(updatedState, item);
       }
 
       // (new_npcs handling moved to step 7b-2 — Issues J + D + N.)
@@ -2951,6 +3213,76 @@ export function useGameLoop() {
           ?? lastQuote
           ?? firstSentence;
         updatedState = persistLogEntry(updatedState, LogEntryType.DIALOGUE, `${npcLabel}${quotedText}`);
+
+        // V8.64 TRIGGER A — first successful NPC conversation flags the
+        // Act 1 breadcrumb for deferred discovery. The pipeline waits
+        // until the dialogue panel closes (currentDialogueNpc → null)
+        // so the revelation moment lands AFTER the conversation, not
+        // during it. useDeferredQuestReveal observes the close signal
+        // and fires runActOneDiscovery — which mutates state, emits the
+        // ✦ feed beat, opens the modal, writes the QUEST log entry,
+        // and POSTs the journal entry. TRIGGER B (boss clear) lives in
+        // useDungeonRuntime and uses the immediate 1200ms-delay path
+        // since there's no dialogue panel to wait on.
+        if (resolution.success && shouldTriggerDialogueDiscovery(updatedState)) {
+          store.setPendingAct1Reveal(true);
+          console.log(
+            `[GameLoop/9-quest] Act 1 discovery deferred via NPC dialogue (${parsedAction.primary_target ?? "unknown"}) — fires on dialogue close.`
+          );
+        }
+
+        // Day 23D — Side quest discovery (V8.66). Independent from the
+        // Act 1 main quest trigger above. Resolves the active NPC's
+        // asset id from locationAssets (matching by case-insensitive
+        // name), then asks the pure helper whether any undiscovered
+        // side_quest has source_id === that asset id. If yes: mark
+        // discovered, emit a ✦ side_quest_discovery beat IMMEDIATELY
+        // (no defer, no modal — rule 116), write a QUEST log entry,
+        // persist via saveQuestThreadsAsync. Idempotent — the helper
+        // returns null when the quest is already discovered.
+        if (resolution.success && parsedAction.primary_target) {
+          const npcName = parsedAction.primary_target.toLowerCase();
+          const npcAsset = useGameStore.getState().locationAssets.find(
+            (a) =>
+              a.category === AssetCategory.CHARACTER &&
+              a.name.toLowerCase() === npcName,
+          );
+          const npcId = npcAsset?.id ?? null;
+          if (npcId) {
+            const undiscovered = findUndiscoveredSideQuestForNpc(
+              updatedState.quest_threads, npcId,
+            );
+            if (undiscovered) {
+              const nextQt = markSideQuestDiscovered(
+                updatedState.quest_threads, undiscovered.id,
+              );
+              if (nextQt) {
+                updatedState = { ...updatedState, quest_threads: nextQt };
+                updatedState = persistLogEntry(
+                  updatedState,
+                  LogEntryType.QUEST,
+                  `QUEST — ${undiscovered.title}: ${undiscovered.current_objective}`,
+                );
+                store.addMessage(
+                  makeMessage(
+                    "SYSTEM",
+                    `${undiscovered.title} — ${undiscovered.current_objective}`,
+                    {
+                      side_quest_discovery: true,
+                      quest_id:             undiscovered.id,
+                      source_id:            undiscovered.source_id,
+                      region_id:            undiscovered.region_id ?? null,
+                    },
+                  ),
+                );
+                saveQuestThreadsAsync(updatedState.metadata.session_id, nextQt);
+                console.log(
+                  `[GameLoop/9-quest] Side quest discovered: ${undiscovered.title} (npc: ${parsedAction.primary_target}).`
+                );
+              }
+            }
+          }
+        }
       } else {
         // STORY entry: use narrator's log_summary when present, else first sentence.
         const storyContent = narratorResponse.log_summary ?? firstSentence;

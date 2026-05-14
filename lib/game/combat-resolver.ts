@@ -1,4 +1,9 @@
-import type { CombatEventRolls, Enemy } from "@/types/game";
+import type {
+  ActiveStatusEffect,
+  CombatEventRolls,
+  Enemy,
+  StatusEffectId,
+} from "@/types/game";
 
 /**
  * Day 20 Combat — pure math layer (combat-spec §5).
@@ -293,6 +298,124 @@ export function resolveFlee({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Status effects (Prompt 1 — combat ailments + buffs)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface StatusSaveResult {
+  saved: boolean;
+  roll:  number;
+  total: number;
+  dc:    number;
+  rolls: CombatEventRolls;
+}
+
+/**
+ * End-of-turn status save. d20 + stat modifier vs effect.save_dc.
+ * Buffs use save_dc 0 — they'll always "save" if this is called on
+ * them, so the engine routes buffs to a duration-only path and never
+ * invokes this for them.
+ */
+export function rollStatusSave(
+  effect:  ActiveStatusEffect,
+  statMod: number,
+  rng:     Rng = DEFAULT_RNG,
+): StatusSaveResult {
+  const roll  = rollD20(rng);
+  const total = roll + statMod;
+  return {
+    saved: total >= effect.save_dc,
+    roll,
+    total,
+    dc:    effect.save_dc,
+    rolls: { d20: roll, d20_modifier: statMod, target_dc: effect.save_dc },
+  };
+}
+
+export interface StatusApplicationResult {
+  applied:         boolean;
+  damage_per_tick: number;
+}
+
+/**
+ * Probabilistic status application. Rolls rng() against `chance` (a
+ * 0-1 probability). When the effect carries DoT (poisoned: 1d4,
+ * burning: 1d6) the damage_per_tick is rolled at application time and
+ * stored on the ActiveStatusEffect for every subsequent tick.
+ */
+export function rollStatusApplication(
+  effectId: StatusEffectId,
+  chance:   number,
+  rng:      Rng = DEFAULT_RNG,
+): StatusApplicationResult {
+  if (rng() >= chance) return { applied: false, damage_per_tick: 0 };
+  let damage_per_tick = 0;
+  if (effectId === "poisoned") damage_per_tick = rollDamageDie("1d4", rng);
+  if (effectId === "burning")  damage_per_tick = rollDamageDie("1d6", rng);
+  return { applied: true, damage_per_tick };
+}
+
+/**
+ * Construct an ActiveStatusEffect with canonical duration / DC /
+ * stat_modifier for the given id. Pure — no rng dependence. Callers
+ * roll damage_per_tick separately (via rollStatusApplication) and
+ * pass it in for DoT effects; pass 0 for non-DoT or unknown.
+ */
+export function buildStatusEffect(
+  id:               StatusEffectId,
+  source:           string,
+  damage_per_tick = 0,
+): ActiveStatusEffect {
+  switch (id) {
+    case "poisoned":
+      return {
+        id, source, rounds_remaining: 3, damage_per_tick,
+        save_dc: 12, save_stat: "agility",
+      };
+    case "burning":
+      return {
+        id, source, rounds_remaining: 2, damage_per_tick,
+        save_dc: 14, save_stat: "agility",
+      };
+    case "chilled":
+      return {
+        id, source, rounds_remaining: 2, save_dc: 11,
+        save_stat: "strength",
+        stat_modifier: { stat: "all_rolls", amount: -2 },
+      };
+    case "weakened":
+      return {
+        id, source, rounds_remaining: 2, save_dc: 10,
+        save_stat: "strength",
+        stat_modifier: { stat: "strength", amount: -3 },
+      };
+    case "frightened":
+      return {
+        id, source, rounds_remaining: 2, save_dc: 12,
+        save_stat: "charisma",
+        stat_modifier: { stat: "all_rolls", amount: -2 },
+      };
+    case "fortified":
+      return {
+        id, source, rounds_remaining: 3, save_dc: 0,
+        save_stat: "strength",
+        stat_modifier: { stat: "armor", amount: 3 },
+      };
+    case "hastened":
+      return {
+        id, source, rounds_remaining: 2, save_dc: 0,
+        save_stat: "agility",
+        stat_modifier: { stat: "all_rolls", amount: 3 },
+      };
+    case "focused":
+      return {
+        id, source, rounds_remaining: 2, save_dc: 0,
+        save_stat: "intelligence",
+        stat_modifier: { stat: "intelligence", amount: 3 },
+      };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Use item (spec §5.4)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -306,38 +429,118 @@ export interface UseItemResult {
   /** Day 20.4 — granular roll detail. Populated for the basic health
    *  potion (1d8 + 4). Empty for unknown items (no-op resolution). */
   rolls?:         CombatEventRolls;
+  // ── Prompt 1 — Status effect consumables ─────────────────────────────────
+  /** Defensive consumable (Antidote, Smelling Salts, etc.) — id of
+   *  the ailment to clear on the player. */
+  cured_status?:   StatusEffectId;
+  /** Offensive / buff consumable — the effect to apply. The caller
+   *  decides whether to target self or an enemy via item_effect
+   *  .apply_status_target. */
+  applied_status?: ActiveStatusEffect;
+  /** Offensive consumable burst damage (Fire Bomb etc.) — flat damage
+   *  dealt to the target before the status applies. */
+  burst_damage?:   number;
 }
 
 export function resolveUseItem({
-  item_id, player, rng = DEFAULT_RNG,
+  item_id, item_effect, player, rng = DEFAULT_RNG,
 }: {
-  item_id: string;
-  player:  { current_hp: number; max_hp: number };
-  rng?:    Rng;
+  item_id:      string;
+  /** V8.49 — Item.effect from the inventory entry. When present and
+   *  effect.heal is a finite number, used as a flat heal amount. This
+   *  is the primary heal path: loot-resolver stamps unique
+   *  crypto.randomUUID() ids on every drop so the legacy
+   *  BASIC_HEALTH_POTION_ID equality check could never match a looted
+   *  potion. Passing the effect object through removes the dependency
+   *  on item id matching. */
+  item_effect?: Record<string, unknown>;
+  player:       { current_hp: number; max_hp: number };
+  rng?:         Rng;
 }): UseItemResult {
-  // Day 20 only resolves the basic health potion. Other consumables
-  // pass through as no-ops; Day 21's Container + Loot system adds
-  // antidotes and buff items.
-  if (item_id !== BASIC_HEALTH_POTION_ID) {
+  // V8.49 path 1 — effect.heal carries a flat heal value. Works for
+  // every health potion regardless of id (starting equipment, world
+  // loot, region loot, boss drops), because the effect field is
+  // populated by the loot table author / starting-equipment author at
+  // construction time.
+  const effectHeal = item_effect?.heal;
+  if (typeof effectHeal === "number" && Number.isFinite(effectHeal) && effectHeal > 0) {
+    const new_hp = Math.min(player.max_hp, player.current_hp + effectHeal);
+    const actual = new_hp - player.current_hp;
+    return {
+      healed_amount: actual,
+      new_hp,
+      item_consumed: true,
+      rolls: {
+        // Flat heal — no die notation. Story-feed templates surface the
+        // actual healed amount via damage_die_roll. Omitting damage_die
+        // signals "flat" to the template renderer.
+        damage_die_roll: actual,
+      },
+    };
+  }
+
+  // V8.49 path 2 — Day 20 BASIC_HEALTH_POTION_ID fallback for any
+  // starting-equipment potion that was created before effect fields
+  // were normalised. Kept for backwards compatibility; the same 1d8+4
+  // die-roll behaviour as the original implementation.
+  if (item_id === BASIC_HEALTH_POTION_ID) {
+    const dieRoll = rollDamageDie("1d8", rng);
+    const heal    = dieRoll + 4;
+    const new_hp  = Math.min(player.max_hp, player.current_hp + heal);
+    const actual  = new_hp - player.current_hp;
+    return {
+      healed_amount: actual,
+      new_hp,
+      item_consumed: true,
+      rolls: {
+        damage_die:      "1d8",
+        damage_die_roll: dieRoll,
+        // No d20 / target_dc on heals; +4 is a flat bonus, not a STR modifier.
+      },
+    };
+  }
+
+  // Prompt 1 — Cure status. Item.effect.cure_status names the ailment
+  // to clear on the player; the engine consumes the item and removes
+  // the matching ActiveStatusEffect from player_status_effects.
+  const cureStatus = item_effect?.cure_status;
+  if (typeof cureStatus === "string") {
     return {
       healed_amount: 0,
       new_hp:        player.current_hp,
-      item_consumed: false,
+      item_consumed: true,
+      cured_status:  cureStatus as StatusEffectId,
     };
   }
-  // Heal 1d8 + 4, capped at max_hp.
-  const dieRoll = rollDamageDie("1d8", rng);
-  const heal    = dieRoll + 4;
-  const new_hp  = Math.min(player.max_hp, player.current_hp + heal);
-  const actual  = new_hp - player.current_hp;
+
+  // Prompt 1 — Offensive / buff consumable. effect.apply_status names
+  // the effect to roll, apply_status_chance gates application (default
+  // 1.0), and burst_damage adds flat damage applied by the engine
+  // before the status. apply_status_target determines who receives
+  // the effect (self for buffs, enemy for offensive items).
+  const applyStatusId = item_effect?.apply_status;
+  if (typeof applyStatusId === "string") {
+    const chance   = typeof item_effect?.apply_status_chance === "number"
+                       ? (item_effect.apply_status_chance as number) : 1.0;
+    const burstDmg = typeof item_effect?.burst_damage === "number"
+                       ? (item_effect.burst_damage as number) : 0;
+    const app = rollStatusApplication(applyStatusId as StatusEffectId, chance, rng);
+    return {
+      healed_amount: 0,
+      new_hp:        player.current_hp,
+      item_consumed: true,
+      burst_damage:  burstDmg > 0 ? burstDmg : undefined,
+      applied_status: app.applied
+        ? buildStatusEffect(applyStatusId as StatusEffectId, item_id, app.damage_per_tick)
+        : undefined,
+    };
+  }
+
+  // Non-healing consumables (Antidote, Trail Rations with effect: {})
+  // and unknown items: no-op. Day 22+ wires their effects in.
   return {
-    healed_amount: actual,
-    new_hp,
-    item_consumed: true,
-    rolls: {
-      damage_die:      "1d8",
-      damage_die_roll: dieRoll,
-      // No d20 / target_dc on heals; +4 is a flat bonus, not a STR modifier.
-    },
+    healed_amount: 0,
+    new_hp:        player.current_hp,
+    item_consumed: false,
   };
 }

@@ -5,6 +5,8 @@ import { saveMasterState } from "@/lib/game/state-persistence";
 import { Genre, Difficulty } from "@/types/game";
 import type { Attributes } from "@/types/game";
 import { BACKGROUND_CONFIGS, buildItem } from "@/lib/game/starting-equipment";
+import { buildStartingAttributes } from "@/lib/game/archetypes";
+import { STAT_CAP } from "@/lib/game/constants";
 
 /**
  * Day 20.1 — combat-functional starting equipment now lives in
@@ -16,7 +18,11 @@ interface NewGameBody {
   genre: Genre;
   characterName: string;
   background: string;
-  attributes: Attributes;
+  /** Day 22 — attributes payload is no longer authoritative. The
+   *  archetype map deterministically computes starting stats from
+   *  `background`. Field kept optional purely so older clients that
+   *  still send it don't 400. The route IGNORES the value. */
+  attributes?: Attributes;
 }
 
 export async function POST(request: NextRequest) {
@@ -33,9 +39,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { genre, characterName, background, attributes } = body;
+  const { genre, characterName, background } = body;
 
-  if (!genre || !characterName || !background || !attributes) {
+  if (!genre || !characterName || !background) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
@@ -48,29 +54,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid character name" }, { status: 400 });
   }
 
-  const totalPoints = Object.values(attributes).reduce((sum, v) => sum + v, 0);
-  if (totalPoints !== 20) {
-    return NextResponse.json({ error: "Attributes must total exactly 20 points" }, { status: 400 });
-  }
-
-  for (const val of Object.values(attributes)) {
-    if (val < 1 || val > 8) {
-      return NextResponse.json({ error: "Each attribute must be between 1 and 8" }, { status: 400 });
-    }
-  }
+  // Day 22 — point-buy validation removed. Starting attributes are
+  // deterministically computed from the archetype map: base 2 across
+  // the board, +2 to primary, +1 to secondary. body.attributes (if
+  // sent by an older client) is ignored — the archetype IS the spec.
 
   const state = createNewMasterState(genre, characterName.trim(), background, Difficulty.NORMAL);
 
-  // Override default attributes with player's chosen distribution
-  state.player_state.attributes = { ...attributes };
+  // Day 22 — archetype-deterministic starting attributes (replaces the
+  // legacy +2 bonusAttribute bump on top of a point-buy distribution).
+  state.player_state.attributes = buildStartingAttributes(background);
+  state.player_state.level = 1;
+  state.player_state.xp = 0;
+  state.player_state.pending_level_up = false;
+  state.player_state.stat_cap = STAT_CAP;
 
-  // Apply background bonus and add starting items.
+  // Starting items continue to flow through BACKGROUND_CONFIGS unchanged.
+  // The bonusAttribute field on BackgroundConfig is now redundant with
+  // the archetype map (primary stat in both); it stays on the type for
+  // back-compat but is no longer read here.
   const bgConfig = BACKGROUND_CONFIGS[genre]?.[background];
   if (bgConfig) {
-    state.player_state.attributes[bgConfig.bonusAttribute] = Math.min(
-      10,
-      state.player_state.attributes[bgConfig.bonusAttribute] + 2
-    );
     for (const spec of bgConfig.startingItems) {
       state.player_state.inventory.push(buildItem(spec));
     }

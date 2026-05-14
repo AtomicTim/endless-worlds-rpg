@@ -18,15 +18,70 @@ const SYSTEM_PROMPT =
   "will be constrained by these facts. Respond ONLY with valid JSON matching " +
   "the schema exactly. No markdown, no code fences, no explanation. Pure JSON only.";
 
-function buildUserPrompt(body: Required<Omit<RequestBody, "creation_choices">> & { creation_choices?: string }): string {
+function buildUserPrompt(body: {
+  genre:             Genre;
+  character_name?:   string;
+  character_class?:  string;
+  creation_choices?: string;
+}): string {
   const ccLine = body.creation_choices
     ? `\nAdditional context: ${body.creation_choices}`
     : "";
+  // Day 23.5B — character_name / character_class are now optional. The
+  // new wizard fires WCD on genre select (before name/class are chosen)
+  // so the WCD generates world identity (species, atmosphere, factions)
+  // from genre alone. The world_intro_template {name}/{class} placeholders
+  // resolve later in apply-world-bible from the character profile.
+  const hasName  = !!body.character_name  && body.character_name.trim().length  > 0;
+  const hasClass = !!body.character_class && body.character_class.trim().length > 0;
+  const characterLine =
+    hasName && hasClass
+      ? `Character: ${body.character_name}, a ${body.character_class}.`
+      : hasName
+        ? `Character: ${body.character_name}.`
+        : hasClass
+          ? `Character class: ${body.character_class}.`
+          : "";
+  const headerLine =
+    `Generate a World Consistency Document for a ${body.genre} RPG.` +
+    (characterLine ? ` ${characterLine}` : "") +
+    ccLine;
   return [
-    `Generate a World Consistency Document for a ${body.genre} RPG. Character: ${body.character_name}, a ${body.character_class}.${ccLine}`,
+    headerLine,
     "",
     "Requirements:",
-    "- world_name: a unique evocative name for this world (not Earth)",
+    "- world_name: the name of the ENTIRE GAME WORLD — the planet,",
+    "  continent, or reality that all events take place in. It is the",
+    "  word a resident would use when asked 'where are you from?' and",
+    "  gesturing at everything around them.",
+    "",
+    "  It must NOT be:",
+    "    - The name of a settlement, city, or region within the world",
+    "    - A descriptive document title or phrase",
+    "      ('The Drowned Ledger', 'The Lost Chronicle')",
+    "    - A geographic feature ('The Shattered Jetty',",
+    "      'The Cinder Threshold')",
+    "",
+    "  It MUST be:",
+    "    - A proper name that feels like a world someone inhabits",
+    "    - Genre-appropriate in scope and feel:",
+    "      FANTASY — invented world name (a single evocative word or",
+    "        short phrase that sounds like a place civilizations have",
+    "        named their whole world)",
+    "      POST-APOCALYPTIC — a name for the remnant of Earth or the",
+    "        wasteland region the game takes place in",
+    "      HORROR — the name of the isolated location, community, or",
+    "        reality the horror occupies (can be a town name if the",
+    "        game is set in one place)",
+    "      CYBERPUNK — a future city, corporate zone, or urban",
+    "        territory name (Earth-based; name it like a place people",
+    "        actually live and fight over)",
+    "      SPACE OPERA — a planet name, system name, or the name of a",
+    "        space territory/station the game centers on",
+    "",
+    "  The world_name appears at the top of the game screen and is the",
+    "  first thing every player reads. It must feel like a world, not",
+    "  a filing cabinet.",
     "- world_tagline: one atmospheric sentence capturing the world's essence",
     "- atmosphere: 1-2 sentences of tonal and sensory truth about this world",
     "- world_description: 2-3 sentences describing this world AS A WHOLE — its core premise, what makes it unique, why a player would care. NOT atmospheric prose about one place; this is the world-level summary shown when the player opens the map's World tier. Distinct from atmosphere (sensory/tonal) and from any region's atmosphere.",
@@ -35,6 +90,310 @@ function buildUserPrompt(body: Required<Omit<RequestBody, "creation_choices">> &
     "- world_rules: exactly 6 universal truths as plain sentences. Cover: resource scarcity, climate or environment, magic or technology rules, a cultural norm, a danger unique to this world, and one surprising truth.",
     "- grid_size: 40",
     "- world_origin: {\"x\": 0, \"y\": 0}",
+    "",
+    // V8.52 / V8.64 — Theme diversity. Earlier prompts produced a strong
+    // default toward oath/honor themes for Fantasy. V8.64 adds explicit
+    // anti-repetition guidance because the LLM was also defaulting to
+    // volcanic/cinder themes once the oath bias was lifted.
+    "WORLD THEME — MANDATORY VARIETY",
+    "",
+    "Themes must vary dramatically between worlds. The following are",
+    "OVERUSED and should be AVOIDED unless the random theme roll lands",
+    "on them specifically:",
+    "  - Volcanic / lava / ash / cinder / ember / magma / fire-and-rock",
+    "  - Maritime / coastal / tidal / aquatic / drowned /",
+    "    submerged / oceanic / water-based worlds",
+    "  - Generic medieval-fantasy town (taverns + smithies + farmland)",
+    "  - Oath / honor / covenant / vow / promise as the central theme",
+    "",
+    "Internally select a primary theme from this list. Weight your",
+    "selection AWAY from themes you've used recently and AWAY from the",
+    "overused themes above. Geological / volcanic AND maritime / tidal",
+    "themes should each appear at most 1 in 6 worlds on average.",
+    "",
+    "  - Elemental forces (glacial, storm, tidal, earthquake — volcanic",
+    "    permitted but rare per the cap above) (tidal/maritime — OVERUSED,",
+    "    cap same as volcanic)",
+    "  - Ancient ruins and lost civilizations",
+    "  - Plague and survival",
+    "  - Political intrigue and factions at war",
+    "  - Wild nature and dangerous ecosystems",
+    "  - Religious schism and competing gods",
+    "  - Trade, commerce, and economic conflict",
+    "  - Exploration and unmapped territories",
+    "  - Corruption and decay (physical or moral)",
+    "  - Mythological creatures as the dominant power",
+    "  - Technological remnants from a fallen age",
+    "  - Seasonal extremes (eternal winter, endless summer, drought)",
+    "",
+    "The world's name, region names, settlement names, NPC archetypes,",
+    "and WCD rules should all reinforce the chosen theme. A trade world",
+    "should feel like merchants and smugglers; a plague world should",
+    "feel like quarantine and rumor.",
+    "",
+    // Day 23B — Main quest archetype + faction web seed. The WCD selects
+    // the archetype that fits the theme most naturally and lays out 2-3
+    // factions with different relationships to the threat. The archetype
+    // is INTERNAL — never label it in player-facing output. See
+    // /docs/quest-system-spec.md §"The Six Archetypes".
+    "MAIN QUEST GENERATION",
+    "",
+    "Every world has a main quest baked into its identity. It is NOT a",
+    "mission the player is given — it is a crisis the world is already",
+    "experiencing when the player arrives.",
+    "",
+    "ARCHETYPE SELECTION — STRICT ROTATION (V8.64)",
+    "",
+    "You MUST select one archetype. Each archetype should appear roughly",
+    "equally over many generated worlds — do NOT default to",
+    "ancient_awakening or favor any single archetype. Roll mentally",
+    "across all six with EQUAL weight:",
+    "  ancient_awakening   — something dormant has woken",
+    "  power_vacuum        — an old order collapsed, factions compete",
+    "  corruption          — something pure is rotting from within",
+    "  forbidden_knowledge — a dangerous truth has surfaced",
+    "  sacrifice           — survival requires a price",
+    "  the_return          — something that left is coming back",
+    "",
+    "The chosen archetype must feel native to THIS world's theme — the",
+    "world was built around it, not the other way around. But do NOT",
+    "let 'what fits' bias the selection toward the same archetype",
+    "repeatedly. Force variety.",
+    "",
+    "Generate 2-3 factions with different relationships to the threat:",
+    "  defenders  — trying to stop it the 'right' way",
+    "  exploiters — see it as an opportunity for power",
+    "  deniers    — refuse to acknowledge it or suppress knowledge of it",
+    "",
+    "Each faction needs id (slug), name, role, and a 1-2 sentence description.",
+    "",
+    "FINALE TYPE SELECTION (V8.64)",
+    "",
+    "Select one: confrontation / choice / discovery.",
+    "",
+    "Do NOT default to confrontation. All three should appear roughly",
+    "equally over many worlds. Choose based on what would make the most",
+    "surprising and satisfying ending for THIS specific world and threat,",
+    "NOT based on archetype affinity. A power_vacuum world doesn't have",
+    "to end in choice; an ancient_awakening world doesn't have to end in",
+    "confrontation. Variety beats template fit.",
+    "",
+    "DO NOT label the archetype in any player-facing content. The threat",
+    "should feel native to this world, not like a template. The world AS",
+    "A WHOLE should read as if this archetype has always been true — its",
+    "names, atmosphere, factions, and rules all reinforce the threat.",
+    "",
+    "Emit a main_quest object alongside the rest of the WCD:",
+    '  "main_quest": {',
+    '    "archetype": "ancient_awakening",',
+    '    "threat_description": "1-2 sentences describing what is happening RIGHT NOW in this world.",',
+    '    "factions": [',
+    '      { "id": "faction_slug_a", "name": "...", "role": "defenders",  "description": "1-2 sentences" },',
+    '      { "id": "faction_slug_b", "name": "...", "role": "exploiters", "description": "1-2 sentences" }',
+    '    ],',
+    '    "finale_type": "confrontation"',
+    '  }',
+    "",
+    // ── Day 23.5A — Species + damage type aliases ─────────────────────────
+    "SPECIES (generate 3-4 total):",
+    "",
+    "UNIQUENESS REQUIREMENT — critical:",
+    "Every species must emerge directly from THIS WCD — specifically",
+    "from world_name, atmosphere, world_rules, and the world's",
+    "unique threats and history. Two different worlds must produce",
+    "genuinely different species even within the same genre. A world",
+    "built around metallic veins and resonance must produce species",
+    "shaped by that, not by a different world's forests or ruins.",
+    "",
+    "FORBIDDEN archetypes for world-specific species (recurring",
+    "over-generated types to avoid):",
+    "- Fantasy: plant/nature-touched folk, shadow elf variants,",
+    "  stone dwarf variants, fey-touched bloodlines, dragonborn,",
+    "  chosen bloodline races",
+    "- Cyberpunk: generic chrome humans, hive-mind corporate workers,",
+    "  generic androids or synths",
+    "- Horror: half-undead lineages, blessed/cursed bloodlines,",
+    "  generic vampire-adjacent or werewolf-adjacent types",
+    "- Space Opera: grey aliens, reptilian warrior races,",
+    "  hive-mind insectoids",
+    "- Post-Apoc: generic ghouls, standard super-mutants,",
+    "  generic telepathic psychics",
+    "",
+    "ANCHOR SPECIES — generate these for every world:",
+    "",
+    "1. Human (id: \"human\", is_anchor: true, every genre):",
+    "   stat_modifiers: {} (humans are the baseline — no modifiers)",
+    "   passive_traits: exactly 1 entry, effect_type \"flavor_only\",",
+    "     describing human adaptability in THIS world's social",
+    "     context. The description must be specific to the WCD",
+    "     above — not a generic \"humans are versatile\" template.",
+    "   npc_disposition_seed: 0",
+    "",
+    "2. Genre-common second anchor (is_anchor: true):",
+    "   FANTASY: Choose Elf (if WCD has ancient/mystical/arcane/",
+    "     forest themes) OR Dwarf (if WCD has underground/craft/",
+    "     durability/mining/industrial themes). Pick based on the",
+    "     WCD — do not default to Elf every time.",
+    "     Elf: stat_modifiers {\"agility\": 1, \"strength\": -1}",
+    "     Dwarf: stat_modifiers {\"strength\": 1, \"agility\": -1}",
+    "     1 passive trait max.",
+    "     If the WCD world_rules and atmosphere fit neither Elf nor",
+    "     Dwarf (e.g. a primarily oceanic, urban, or desert world),",
+    "     skip the second anchor and generate 2 world-specific species",
+    "     instead of 1.",
+    "   CYBERPUNK: Augmented (heavily modified human)",
+    "     stat_modifiers: exactly one +1 and one -1. Pick the tradeoff",
+    "     that fits the WCD's specific augmentation culture (e.g.",
+    "     {\"strength\": 1, \"intelligence\": -1} for combat chrome,",
+    "     {\"intelligence\": 1, \"charisma\": -1} for neural overclocking).",
+    "     1 passive trait: effect_type \"combat_passive\" or",
+    "     \"environmental\" — tech-interface or physical enhancement.",
+    "   HORROR: NO second anchor. Horror requires human",
+    "     vulnerability — adding powerful second species undermines",
+    "     the genre. Generate 2 world-specific species instead.",
+    "   SPACE OPERA: 1 alien type fitting THIS WCD's specific",
+    "     stellar environment and world_rules.",
+    "     Must have at least 1 negative modifier alongside any positive.",
+    "     1 passive trait: environmental or biological adaptation.",
+    "   POST-APOC: 1 Mutant type adapted to THIS WCD's specific",
+    "     environmental hazard (read world_rules for the hazard).",
+    "     stat_modifiers derived from the adaptation — radiation",
+    "     world: {\"strength\": 1, \"intelligence\": -1}, toxic world:",
+    "     {\"strength\": 1, \"perception\": -1}, heat world:",
+    "     {\"strength\": 1, \"agility\": -1}. Match hazard to modifier.",
+    "     1 passive trait: resistance or environmental matching hazard.",
+    "",
+    "WORLD-SPECIFIC SPECIES (1-2 additional; 2 for Horror):",
+    "Ask: what long-term environmental or historical pressure",
+    "UNIQUE TO THIS WCD would produce a distinct people?",
+    "The answer must come from world_name, atmosphere, world_rules,",
+    "and threats — not from genre conventions.",
+    "",
+    "GENRE AESTHETIC CONSTRAINTS for world-specific species",
+    "(these are hard limits — violating them breaks genre):",
+    "FANTASY:",
+    "  Natural or magical origin only.",
+    "  No technology, cybernetics, mutations, or corporate history.",
+    "CYBERPUNK:",
+    "  Technological or corporate-cultural origin only.",
+    "  No magic, mystical powers, nature aesthetics, or",
+    "  woodland/arcane references.",
+    "HORROR:",
+    "  Psychological or physical warping from THIS world's specific",
+    "  horror source. Emphasize cost and vulnerability.",
+    "  No heroic framing, no power fantasy, no chosen-one aesthetics.",
+    "  Both world-specific species should feel like something went",
+    "  wrong, not like something became stronger.",
+    "SPACE OPERA:",
+    "  Biological adaptation to THIS world's specific stellar or",
+    "  environmental conditions. Scientifically plausible.",
+    "  No magic, mysticism, or fantasy aesthetics.",
+    "POST-APOC:",
+    "  Survival adaptation to THIS world's specific documented hazard.",
+    "  Adaptation must match the hazard type — do not apply",
+    "  radiation adaptations to a toxin world or vice versa.",
+    "",
+    "Valid stat keys (use these EXACT strings — no abbreviations):",
+    "  strength · agility · charisma · intelligence · perception",
+    "",
+    "Species JSON shape (ALL fields required):",
+    "{",
+    '  "id": "<world_slug_or_anchor_id>",',
+    '  "name": "<name derived from WCD, not a generic archetype>",',
+    '  "description": "<2-3 sentences from WCD atmosphere>",',
+    '  "lore_notes": "<1 sentence: how others in this world see them>",',
+    '  "is_anchor": <true|false>,',
+    '  "stat_modifiers": { "<StatKey>": 1, "<StatKey>": -1 },',
+    '  "skill_affinities": [],',
+    '  "resistances": {},',
+    '  "vulnerabilities": {},',
+    '  "passive_traits": [',
+    "    {",
+    '      "id": "<species_id>_<trait_slug>",',
+    '      "label": "<2-3 word trait name>",',
+    '      "description": "<1 sentence, player-facing>",',
+    '      "effect_type": "<TraitEffectType>",',
+    '      "effect_data": {}',
+    "    }",
+    "  ],",
+    '  "environmental_flags": [],',
+    '  "npc_disposition_seed": <integer -15 to 15>',
+    "}",
+    "",
+    "Constraints:",
+    "- passive_traits: MAX 2 per species, MAX 1 for anchor species",
+    "",
+    "- stat_modifiers: EXACTLY 2 entries maximum. No exceptions.",
+    "  Values: exactly +1 or -1 only. No +2. No -2.",
+    "  One positive entry, one negative entry.",
+    "  Shape: { ONE_STAT: 1, ANOTHER_STAT: -1 }",
+    "  Human anchor: stat_modifiers: {} (empty — Human is the baseline)",
+    "  All other species: exactly one +1 and one -1.",
+    "  This represents a meaningful tradeoff, not a stat sheet.",
+    "  A species is better at one thing and worse at another.",
+    "  Nothing more.",
+    "",
+    "- npc_disposition_seed: 0 = neutral/common, +5 to +10 =",
+    "  trusted or revered, -5 to -15 = feared or persecuted.",
+    "",
+    "  COMMITMENT RULE — npc_disposition_seed MUST match the species'",
+    "  lore_notes. Read what you wrote in lore_notes:",
+    "    If lore_notes says the species is feared, distrusted, or",
+    "    persecuted: seed must be -8 or lower (e.g. -8, -10, -12).",
+    "    If lore_notes says the species is revered, trusted, or",
+    "    privileged: seed must be +8 or higher (e.g. +8, +10, +12).",
+    "    If lore_notes says the species is unremarkable, common, or",
+    "    socially neutral: seed = 0.",
+    "  Do NOT write lore_notes that describe social tension and then",
+    "  assign seed = 0 or seed = -2. The number must commit to what",
+    "  the text says. Mild or vague feelings should be written as",
+    "  neutral (seed = 0) not assigned a small non-zero value.",
+    "",
+    "- Use effect_type \"flavor_only\" for traits whose mechanical",
+    "  systems are not yet built",
+    "",
+    "DAMAGE TYPE ALIASES:",
+    "",
+    "Emit damage_type_aliases[]. Default to [] for most worlds.",
+    "Only generate 1-2 aliases when the WCD's world_rules or",
+    "atmosphere strongly imply a renamed damage type for this",
+    "specific world (e.g. a world where corruption manifests as a",
+    "spreading silver mold might alias \"poison\" → \"silver bloom\").",
+    "",
+    "Schema for each entry:",
+    "{",
+    '  "canonical_type": "<one of: physical|fire|cold|poison|arcane|',
+    '                     holy|shadow|electric|thermal|toxic|emp|',
+    '                     viral|psychic|corruption|void|plasma|',
+    '                     radiation|sonic|acid>",',
+    '  "world_name": "<world-specific display name>",',
+    '  "description": "<1 sentence>"',
+    "}",
+    "",
+    // Prompt 2 — Status effect aliases. Same shape as damage_type_aliases:
+    // worlds opt in only when atmosphere/world_rules strongly imply a
+    // renamed effect. Defaults to []. Engine reads status_effect_aliases
+    // off metadata at narration time to skin status events with world-
+    // native names.
+    "STATUS EFFECT ALIASES",
+    "status_effect_aliases defaults to []. Only generate 1-2 entries",
+    "when the world's atmosphere or world_rules strongly imply a",
+    "thematically compelling renamed status effect — for example, a",
+    "world where an ancient cursed forest spreads its corruption might",
+    "rename \"poisoned\" → \"rootblight\". A volcanic world with living",
+    "lava spirits might rename \"burning\" → \"cindermark\". Most worlds",
+    "should output status_effect_aliases: [].",
+    "",
+    "Valid canonical_id values (use exactly as written):",
+    '  "poisoned" | "burning" | "chilled" | "weakened" | "frightened"',
+    '  "fortified" | "hastened" | "focused"',
+    "",
+    "Schema per entry:",
+    '  { "canonical_id": "<StatusEffectId>", "world_name": "<string>" }',
+    "",
+    "One alias per canonical_id. Never create aliases for status",
+    "effects that don't have a strong thematic reason specific to",
+    "this world's lore. When in doubt, output [].",
     "",
     "Make it feel original and specific to this genre and character. Avoid generic clichés. Be creative and unexpected.",
   ].join("\n");
@@ -45,6 +404,46 @@ const VALID_LANDMARK_TYPES = new Set([
 ]);
 const VALID_KNOWN_BY = new Set(["everyone", "locals", "scholars"]);
 const VALID_DISPOSITIONS = new Set(["allied", "neutral", "hostile", "unknown"]);
+
+// Day 23B — main quest seed validation tables.
+const VALID_ARCHETYPES = new Set([
+  "ancient_awakening", "power_vacuum", "corruption",
+  "forbidden_knowledge", "sacrifice", "the_return",
+]);
+const VALID_FACTION_ROLES = new Set(["defenders", "exploiters", "deniers"]);
+const VALID_FINALE_TYPES = new Set(["confrontation", "choice", "discovery"]);
+
+// Day 23.5A — species + damage-type normalization tables.
+const VALID_STAT_KEYS = new Set([
+  "strength", "agility", "charisma", "intelligence", "perception",
+]);
+const VALID_TRAIT_EFFECT_TYPES = new Set([
+  "resistance", "skill_boost", "combat_passive",
+  "environmental", "social", "regeneration", "flavor_only",
+]);
+const VALID_ENVIRONMENTAL_FLAGS = new Set([
+  "water_breathing", "heat_adapted", "cold_adapted",
+  "dark_vision", "toxin_immune", "radiation_resistant", "void_adapted",
+]);
+const VALID_DAMAGE_TYPES = new Set([
+  "physical", "fire", "cold", "poison", "arcane", "holy", "shadow",
+  "electric", "thermal", "toxic", "emp", "viral",
+  "psychic", "corruption", "void",
+  "plasma", "radiation", "sonic",
+  "acid",
+]);
+/** Maps common abbreviations the model emits despite the prompt asking
+ *  for full lowercase names. Keys are the abbreviations, values are the
+ *  canonical StatKey. CON has no equivalent in the 5-stat system; we
+ *  drop it (the species loses the CON modifier) rather than mapping it
+ *  arbitrarily. */
+const STAT_ABBREVIATIONS: Record<string, string> = {
+  STR: "strength", str: "strength",
+  AGI: "agility",  agi: "agility",
+  CHA: "charisma", cha: "charisma",
+  INT: "intelligence", int: "intelligence",
+  PER: "perception",   per: "perception",
+};
 
 function stripJsonFences(raw: string): string {
   return raw
@@ -192,6 +591,163 @@ function normalizeWcd(parsed: unknown): unknown {
     });
   }
 
+  // Day 23B — main_quest seed normalization. The WCD prompt asks for
+  // archetype + factions + finale_type. Missing pieces get safe defaults
+  // (ancient_awakening / confrontation) so the WB still has something to
+  // expand. Per-faction defaults mirror the landmark/faction loops above.
+  if (o.main_quest && typeof o.main_quest === "object" && !Array.isArray(o.main_quest)) {
+    const mq = o.main_quest as Record<string, unknown>;
+    if (typeof mq.archetype !== "string" || !VALID_ARCHETYPES.has(mq.archetype as string)) {
+      console.warn(`[normalizeWcd] main_quest.archetype invalid (${String(mq.archetype)}) — defaulting to "ancient_awakening".`);
+      mq.archetype = "ancient_awakening";
+    }
+    if (typeof mq.threat_description !== "string" || !(mq.threat_description as string).trim()) {
+      mq.threat_description = "Something is happening in this world that demands attention.";
+    }
+    if (typeof mq.finale_type !== "string" || !VALID_FINALE_TYPES.has(mq.finale_type as string)) {
+      console.warn(`[normalizeWcd] main_quest.finale_type invalid (${String(mq.finale_type)}) — defaulting to "confrontation".`);
+      mq.finale_type = "confrontation";
+    }
+    if (!Array.isArray(mq.factions)) {
+      const coerced = coerceToArray(mq.factions);
+      mq.factions = coerced ?? [];
+    }
+    mq.factions = (mq.factions as unknown[]).map((f, idx) => {
+      if (!f || typeof f !== "object") return f;
+      const faction = { ...(f as Record<string, unknown>) };
+      if (typeof faction.name !== "string" || !(faction.name as string).trim()) {
+        faction.name = `Quest Faction ${idx + 1}`;
+      }
+      if (typeof faction.id !== "string" || !(faction.id as string).trim()) {
+        faction.id = (faction.name as string).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+      }
+      if (typeof faction.role !== "string" || !VALID_FACTION_ROLES.has(faction.role as string)) {
+        // Cycle the default roles so 2-3 factions auto-cover the web when
+        // the AI emits malformed entries.
+        const roleCycle = ["defenders", "exploiters", "deniers"];
+        faction.role = roleCycle[idx % roleCycle.length];
+      }
+      if (typeof faction.description !== "string" || !(faction.description as string).trim()) {
+        faction.description = `The ${faction.name} have a stake in the world's crisis.`;
+      }
+      return faction;
+    });
+  }
+
+  // Day 23.5A — species normalization. Coerce object-shaped inputs to
+  // arrays, slug-default missing ids, fill required scalar fields with
+  // safe defaults, and remap stat_modifier abbreviations to canonical
+  // stat keys. Returned in canonical Species shape so the validator
+  // below has a stable target.
+  if (!Array.isArray(o.species)) {
+    const coerced = coerceToArray(o.species);
+    if (coerced) {
+      o.species = coerced;
+    } else {
+      o.species = [];
+    }
+  }
+  o.species = (o.species as unknown[]).map((s, idx) => {
+    if (!s || typeof s !== "object") return s;
+    const sp = { ...(s as Record<string, unknown>) };
+
+    if (typeof sp.name !== "string" || !(sp.name as string).trim()) {
+      sp.name = `Species ${idx + 1}`;
+    }
+    if (typeof sp.id !== "string" || !(sp.id as string).trim()) {
+      sp.id = (sp.name as string).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    }
+    if (typeof sp.description !== "string") sp.description = "";
+    if (typeof sp.lore_notes  !== "string") sp.lore_notes  = "";
+    if (typeof sp.is_anchor   !== "boolean") sp.is_anchor   = false;
+
+    // stat_modifiers — remap abbreviations + drop unknown keys.
+    // Day 23.5C+1 — also clamp to ±1 per entry and to MAX 2 entries
+    // total (one positive, one negative). The new prompt spec caps
+    // species at exactly two tradeoffs of magnitude 1; the model can
+    // overshoot so we enforce at the data layer too.
+    const rawMods = (sp.stat_modifiers && typeof sp.stat_modifiers === "object")
+      ? (sp.stat_modifiers as Record<string, unknown>)
+      : {};
+    const cleanedMods: Record<string, number> = {};
+    for (const [rawKey, rawVal] of Object.entries(rawMods)) {
+      const mapped = STAT_ABBREVIATIONS[rawKey] ?? rawKey.toLowerCase();
+      if (!VALID_STAT_KEYS.has(mapped)) continue;
+      if (typeof rawVal !== "number" || !Number.isFinite(rawVal)) continue;
+      const truncated = Math.trunc(rawVal);
+      if (truncated === 0) continue;
+      // Clamp magnitude to ±1.
+      cleanedMods[mapped] = truncated > 0 ? 1 : -1;
+    }
+    // Cap to 2 entries — prefer 1 positive + 1 negative when both
+    // exist. Drop extras silently (the spec is hard-rule: "no exceptions").
+    const positives = Object.entries(cleanedMods).filter(([, v]) => v > 0);
+    const negatives = Object.entries(cleanedMods).filter(([, v]) => v < 0);
+    const finalMods: Record<string, number> = {};
+    if (positives[0]) finalMods[positives[0][0]] = 1;
+    if (negatives[0]) finalMods[negatives[0][0]] = -1;
+    // If only one polarity was present, allow up to 2 of that polarity
+    // (anchor species sometimes legitimately get one tradeoff only).
+    if (!positives[0] && negatives[1]) finalMods[negatives[1][0]] = -1;
+    if (!negatives[0] && positives[1]) finalMods[positives[1][0]] = 1;
+    sp.stat_modifiers = finalMods;
+
+    if (!Array.isArray(sp.skill_affinities))   sp.skill_affinities   = [];
+    if (!sp.resistances     || typeof sp.resistances     !== "object") sp.resistances     = {};
+    if (!sp.vulnerabilities || typeof sp.vulnerabilities !== "object") sp.vulnerabilities = {};
+    if (!Array.isArray(sp.passive_traits))     sp.passive_traits     = [];
+    sp.passive_traits = (sp.passive_traits as unknown[]).map((t, tIdx) => {
+      if (!t || typeof t !== "object") return t;
+      const tr = { ...(t as Record<string, unknown>) };
+      if (typeof tr.label === "string" && tr.label && (typeof tr.id !== "string" || !(tr.id as string).trim())) {
+        tr.id = `${sp.id}_${(tr.label as string).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`;
+      }
+      if (typeof tr.id !== "string" || !(tr.id as string).trim()) {
+        tr.id = `${sp.id}_trait_${tIdx + 1}`;
+      }
+      if (typeof tr.label       !== "string") tr.label       = "Trait";
+      if (typeof tr.description !== "string") tr.description = "";
+      if (typeof tr.effect_type !== "string" || !VALID_TRAIT_EFFECT_TYPES.has(tr.effect_type as string)) {
+        tr.effect_type = "flavor_only";
+      }
+      if (!tr.effect_data || typeof tr.effect_data !== "object") tr.effect_data = {};
+      return tr;
+    });
+    if (!Array.isArray(sp.environmental_flags)) sp.environmental_flags = [];
+    sp.environmental_flags = (sp.environmental_flags as unknown[])
+      .filter((f) => typeof f === "string" && VALID_ENVIRONMENTAL_FLAGS.has(f as string));
+    if (typeof sp.npc_disposition_seed !== "number" || !Number.isFinite(sp.npc_disposition_seed)) {
+      sp.npc_disposition_seed = 0;
+    } else {
+      const n = Math.trunc(sp.npc_disposition_seed as number);
+      sp.npc_disposition_seed = Math.max(-15, Math.min(15, n));
+    }
+
+    return sp;
+  });
+
+  // damage_type_aliases normalization. Default to [] when missing; drop
+  // entries whose canonical_type isn't in the canonical set.
+  if (!Array.isArray(o.damage_type_aliases)) {
+    o.damage_type_aliases = [];
+  }
+  o.damage_type_aliases = (o.damage_type_aliases as unknown[])
+    .filter((a) => {
+      if (!a || typeof a !== "object") return false;
+      const al = a as Record<string, unknown>;
+      return (
+        typeof al.canonical_type === "string" &&
+        VALID_DAMAGE_TYPES.has(al.canonical_type as string) &&
+        typeof al.world_name === "string" &&
+        (al.world_name as string).trim().length > 0
+      );
+    })
+    .map((a) => {
+      const al = { ...(a as Record<string, unknown>) };
+      if (typeof al.description !== "string") al.description = "";
+      return al;
+    });
+
   // Ensure grid_size
   if (typeof o.grid_size !== "number") {
     o.grid_size = 40;
@@ -283,17 +839,43 @@ function validateWcd(parsed: unknown): { ok: true; wcd: WorldConsistencyDocument
   return { ok: true, wcd: parsed as WorldConsistencyDocument };
 }
 
+// V8.69 — revert to sonnet + raise max_tokens to 4000.
+// V8.68 switched the model to haiku and left max_tokens at 2000.
+// Haiku truncated the WCD JSON before it finished emitting all
+// required fields (factions[], main_quest seed, world_rules), so
+// every new-game creation 500'd at the WCD layer.
+//
+// Sonnet handles the structured WCD output cleanly. 4000 tokens
+// gives headroom for future schema additions (e.g. Day 23.5
+// species generation) without hitting the cap again.
+const WCD_MODEL      = "claude-sonnet-4-5";
+const WCD_MAX_TOKENS = 4000;
+
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
+  const promptTokens = Math.ceil((SYSTEM_PROMPT.length + userPrompt.length) / 4);
+  console.log(
+    `[GEN_TIMING] generate-wcd start — model: ${WCD_MODEL}, prompt_tokens: ${promptTokens}`
+  );
+  const startedAt = Date.now();
   const message = await client.messages.create({
-    model:      "claude-sonnet-4-5",
-    max_tokens: 2000,
+    model:      WCD_MODEL,
+    max_tokens: WCD_MAX_TOKENS,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });
-  return message.content[0]?.type === "text" ? message.content[0].text : "";
+  const text = message.content[0]?.type === "text" ? message.content[0].text : "";
+  const outputTokens = message.usage?.output_tokens ?? Math.ceil(text.length / 4);
+  const elapsed = Date.now() - startedAt;
+  console.log(
+    `[GEN_TIMING] generate-wcd complete — elapsed: ${elapsed}ms, output_tokens: ${outputTokens}`
+  );
+  return text;
 }
 
 export async function POST(request: NextRequest) {
+  console.log("[GEN_TIMING] generate-wcd called");
+  console.log("[GEN_TIMING] generate-wcd using sonnet model");
+  console.log(`[GEN_TIMING] generate-wcd max_tokens: ${WCD_MAX_TOKENS}`);
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
@@ -308,9 +890,9 @@ export async function POST(request: NextRequest) {
   }
 
   const { genre, character_name, character_class, creation_choices } = body;
-  if (!genre || !character_name || !character_class) {
+  if (!genre) {
     return NextResponse.json(
-      { error: "Missing required fields: genre, character_name, character_class" },
+      { error: "Missing required field: genre" },
       { status: 400 }
     );
   }
@@ -318,6 +900,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid genre" }, { status: 400 });
   }
 
+  // Day 23.5B — character_name / character_class are now optional. The
+  // new wizard fires WCD on genre select. buildUserPrompt omits the
+  // character line when neither field is provided.
   const userPrompt = buildUserPrompt({
     genre,
     character_name,
@@ -363,6 +948,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  console.log(`[WCD] Generated: ${validated.wcd.world_name}`);
+  // Day 23B — surface the main quest seed in logs so a missing archetype or
+  // empty faction array shows up at the WCD layer instead of waiting for
+  // the WorldBible expansion to fail.
+  const mqLog = validated.wcd.main_quest;
+  if (mqLog) {
+    console.log(
+      `[WCD] Generated: ${validated.wcd.world_name} | main_quest: ${mqLog.archetype}, ` +
+      `${mqLog.factions.length} factions, finale: ${mqLog.finale_type}`
+    );
+  } else {
+    console.log(`[WCD] Generated: ${validated.wcd.world_name} | main_quest: <missing — WB will run with default>`);
+  }
+  // Day 23.5A — species + damage_type_aliases data point. Surfaces at the
+  // WCD layer so a missing/empty species array is visible immediately
+  // (the character creation UI in 23.5B reads from metadata.species and
+  // breaks silently when empty).
+  const speciesCount   = validated.wcd.species?.length ?? 0;
+  const aliasCount     = validated.wcd.damage_type_aliases?.length ?? 0;
+  const speciesNames   = (validated.wcd.species ?? []).map((s) => s.name).join(", ");
+  console.log(
+    `[WCD] Species count: ${speciesCount}, damage_type_aliases: ${aliasCount}` +
+    (speciesCount > 0 ? ` | species: ${speciesNames}` : "")
+  );
   return NextResponse.json({ wcd: validated.wcd });
 }

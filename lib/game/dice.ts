@@ -30,9 +30,22 @@ export function rollD4(seed?: number): number {
   return rollDie(4, seed);
 }
 
-/** D&D-style ability modifier: floor((score - 10) / 2). */
+/**
+ * Ability modifier calibrated for our 2-10 stat range (V8.51+).
+ *
+ *   score 2-3 → +0    score 6-7 →  +2
+ *   score 4-5 → +1    score 8-9 →  +3
+ *   score 10  → +4    (max achievable)
+ *
+ * NOT the D&D 5e formula. Our stats span 2-10 with archetype starting
+ * values around 2-4; the D&D formula `floor((score - 10) / 2)` would
+ * give every starting character a negative modifier on most checks.
+ * Combat / stat-check / CharacterSheet display all read through this
+ * helper or combat-engine's internal `abilityMod` (same formula),
+ * so display + math stay consistent.
+ */
 export function getAttributeModifier(score: number): number {
-  return Math.floor((score - 10) / 2);
+  return Math.floor((score - 2) / 2);
 }
 
 export function rollWithAdvantage(seed?: number): number {

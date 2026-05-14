@@ -1,5 +1,8 @@
 import { ActionType, ItemType, LocationStatus } from "@/types/game";
-import type { ActiveBuff, Attributes, MasterState, ParsedAction, ResolutionResult } from "@/types/game";
+import type {
+  ActiveBuff, Attributes, LocationDefinition, LocationObject,
+  MasterState, ParsedAction, ResolutionResult,
+} from "@/types/game";
 import { rollD20, rollD6, getAttributeModifier } from "./dice";
 import { equipItem, unequipItem, updateHealth, updateSanity, findNpcInRegistry } from "./state-utils";
 import { normalizeLocationId } from "./codex";
@@ -367,6 +370,71 @@ function isTradeInteraction(action: ParsedAction): boolean {
   return TRADE_KEYWORDS.some((k) => haystack.includes(k));
 }
 
+/**
+ * Day 21 — find the LocationObject at the player's current node
+ * matching the player's target string. Returns the matched object,
+ * its parent LocationDefinition, and the bible-side container index
+ * so callers can address them. Returns null when no match.
+ *
+ * Resolution priority:
+ *   1. world_bible.starting_region.locations[]
+ *   2. world_bible.starting_region.region_locations[]
+ *   3. region_bibles[*].locations[]
+ *   4. region_bibles[*].region_locations[]
+ *
+ * Target matching is order-tolerant:
+ *   - Exact slug match (target === object.id)
+ *   - Normalized-name match (slugified object.name === target)
+ *   - Substring fallback (target is included in name, or vice versa)
+ */
+interface LocatedObject {
+  object:   LocationObject;
+  location: LocationDefinition;
+}
+
+function findLocationObject(
+  state:           MasterState,
+  currentNodeId:   string,
+  targetSlugified: string,
+  targetRaw:       string
+): LocatedObject | null {
+  if (!targetSlugified) return null;
+  const allLocations: LocationDefinition[] = [];
+  const sr = state.metadata.world_bible?.starting_region;
+  if (sr) {
+    if (Array.isArray(sr.locations)) allLocations.push(...sr.locations);
+    if (Array.isArray(sr.region_locations)) allLocations.push(...sr.region_locations);
+  }
+  const regionBibles = state.metadata.region_bibles ?? {};
+  for (const rb of Object.values(regionBibles)) {
+    if (Array.isArray(rb.locations)) allLocations.push(...rb.locations);
+    if (Array.isArray(rb.region_locations)) allLocations.push(...rb.region_locations);
+  }
+
+  const here = allLocations.find((l) => l && l.id === currentNodeId);
+  if (!here || !Array.isArray(here.objects) || here.objects.length === 0) return null;
+
+  const rawLower = targetRaw.trim().toLowerCase();
+  for (const obj of here.objects) {
+    if (!obj) continue;
+    if (obj.id === targetSlugified) return { object: obj, location: here };
+    const nameSlug = normalizeKey(obj.name ?? "");
+    if (nameSlug && nameSlug === targetSlugified) return { object: obj, location: here };
+  }
+  // Substring fallback so casual targets ("chest", "the bones") still match.
+  if (rawLower) {
+    for (const obj of here.objects) {
+      if (!obj) continue;
+      const nameLower = (obj.name ?? "").toLowerCase();
+      if (!nameLower) continue;
+      if (nameLower.includes(rawLower) || rawLower.includes(nameLower)) {
+        return { object: obj, location: here };
+      }
+    }
+  }
+  return null;
+}
+
 function resolveInteract(action: ParsedAction, state: MasterState): ResolutionResult {
   const targetRaw = action.primary_target ?? "";
   const target    = normalizeKey(targetRaw);
@@ -402,6 +470,81 @@ function resolveInteract(action: ParsedAction, state: MasterState): ResolutionRe
         relevant_flags: relevant,
       },
     };
+  }
+
+  // ── Day 21 — Container / fixture / lore short-circuit ──────────────────
+  // Look up the actual LocationObject the player is interacting with.
+  // Containers route to the loot resolver via the game loop. Non-
+  // container is_interactable objects return a templated empty/lore
+  // response (no LLM call). When no LocationObject matches, fall
+  // through to the legacy INTERACT_SUCCESS path so narrator drives
+  // free-form interactions (push the door, pull the lever, etc.).
+  const currentNodeId =
+    state.world_state.current_node_id ?? state.world_state.current_location_id;
+  const located = findLocationObject(state, currentNodeId, target, targetRaw);
+  if (located) {
+    const { object } = located;
+    const containerSearchedFlag = `searched_${object.id}`;
+    const alreadySearched = state.world_state.flags[containerSearchedFlag] === true;
+
+    if (object.type === "container") {
+      if (alreadySearched) {
+        return {
+          success: true,
+          outcome_type: "CONTAINER_ALREADY_SEARCHED",
+          state_delta: { world_state: PRESENT },
+          narrative_context: {
+            target,
+            object_confirmed: true,
+            object_name:      object.name,
+            object_type:      object.type,
+            container_id:     object.id,
+          },
+        };
+      }
+      // Mark searched + signal the game loop to resolve loot.
+      return {
+        success: true,
+        outcome_type: "CONTAINER_SEARCH",
+        state_delta: {
+          world_state: {
+            flags: {
+              ...state.world_state.flags,
+              [containerSearchedFlag]: true,
+            },
+            location_status: LocationStatus.PRESENT,
+          },
+        },
+        narrative_context: {
+          target,
+          object_confirmed:       true,
+          object_name:            object.name,
+          object_type:            object.type,
+          container_id:           object.id,
+          container_node_id:      currentNodeId,
+          needs_loot_resolution:  true,
+        },
+      };
+    }
+
+    if (
+      object.type === "fixture" ||
+      object.type === "lore" ||
+      object.type === "trigger"
+    ) {
+      return {
+        success: true,
+        outcome_type: "INTERACT_NON_CONTAINER",
+        state_delta: { world_state: PRESENT },
+        narrative_context: {
+          target,
+          object_confirmed: true,
+          object_name:      object.name,
+          object_type:      object.type,
+        },
+      };
+    }
+    // object.type undefined — fall through to legacy INTERACT_SUCCESS.
   }
 
   const newFlags = { ...state.world_state.flags, [completeFlag]: true };
@@ -454,6 +597,69 @@ function resolveUseItem(action: ParsedAction, state: MasterState): ResolutionRes
       outcome_type: "USE_ITEM_NOT_FOUND",
       state_delta: { world_state: PRESENT },
       narrative_context: { item_not_found: true, attempted: lookup },
+    };
+  }
+
+  // ── DUNGEON KEY ITEM — text-path unlock (FIX 3) ───────────────────────────
+  // Text path: "use [key] on [hatch]" or just "use [key]". When the item is
+  // a dungeon key (is_key_item + unlocks_node), check whether the player is
+  // standing in a dungeon room that is adjacent to the locked room this key
+  // opens. If yes: consume item, return DUNGEON_KEY_USE (game loop flips the
+  // lock + emits templated beat). If no: return DUNGEON_KEY_USE_FAIL.
+  // Both outcome_types are handled in the game loop without a narrator call.
+  if (item.is_key_item === true && item.unlocks_node) {
+    const ds         = state.dungeon_state;
+    const graph      = state.world_graph;
+    const curNodeId  = graph?.current_node_id ?? state.world_state.current_node_id;
+
+    if (ds && ds.node_id === curNodeId && graph) {
+      const dungeonNode  = graph.nodes[ds.node_id];
+      const currentRoom  = (dungeonNode?.dungeon_rooms ?? [])
+        .find((r) => r.id === ds.current_room_id);
+      const targetRoomId = item.unlocks_node;
+
+      // Room must be adjacent to the current room AND still locked.
+      const adjacentRoom = currentRoom
+        ? (dungeonNode?.dungeon_rooms ?? []).find(
+            (r) => r.id === targetRoomId &&
+                   currentRoom.connections.includes(r.id)
+          )
+        : undefined;
+
+      if (adjacentRoom?.lock && !adjacentRoom.lock.unlocked) {
+        const qty = (item.quantity ?? 1) - 1;
+        const newInventory = qty > 0
+          ? state.player_state.inventory.map((i) =>
+              i.id === item.id ? { ...i, quantity: qty } : i
+            )
+          : state.player_state.inventory.filter((i) => i.id !== item.id);
+        return {
+          success:      true,
+          outcome_type: "DUNGEON_KEY_USE",
+          state_delta:  {
+            player_state: { ...state.player_state, inventory: newInventory },
+            world_state:  PRESENT,
+          },
+          narrative_context: {
+            item_id:       item.id,
+            item_name:     item.name,
+            room_id:       adjacentRoom.id,
+            key_item_name: adjacentRoom.lock.key_item_name,
+          },
+        };
+      }
+    }
+
+    // Not adjacent to a matching unlocked lock — wrong room, already open,
+    // or not in a dungeon at all.
+    return {
+      success:      false,
+      outcome_type: "DUNGEON_KEY_USE_FAIL",
+      state_delta:  { world_state: PRESENT },
+      narrative_context: {
+        item_id:   item.id,
+        item_name: item.name,
+      },
     };
   }
 

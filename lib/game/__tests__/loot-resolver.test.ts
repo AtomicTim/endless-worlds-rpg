@@ -210,17 +210,17 @@ describe("resolveLoot — boss path", () => {
     }
   });
 
-  it("boss gold is 3× the normal tier roll", () => {
-    // With rng=0, the gold roll lands at the FIRST tier (highest
-    // weight) min value (because tier-internal Math.floor(0 * span)
-    // = 0). For fantasy tier 1 that's 3 — so boss gold = 9.
+  it("boss gold is in the 15-30 calibrated band", () => {
+    // Prompt 1 — boss gold is now a flat random 15-30 (was 3× a
+    // pool.gold_drops weighted roll). With rng=0 the formula
+    // Math.floor(0 * 16) + 15 = 15.
     const out = resolveLoot({
       loot_table_id: "stub",
       is_boss:       true,
       genre:         Genre.FANTASY,
       rng:           rngAlwaysZero(),
     });
-    expect(out.gold).toBe(9);  // 3 * 3 = 9
+    expect(out.gold).toBe(15);
   });
 
   it("boss path does not auto-add gold to player resources (resolver is pure)", () => {

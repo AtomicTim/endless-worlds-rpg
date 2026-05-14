@@ -1,4 +1,9 @@
-import type { CombatEventRolls, Enemy } from "@/types/game";
+import type {
+  ActiveStatusEffect,
+  CombatEventRolls,
+  Enemy,
+  StatusEffectId,
+} from "@/types/game";
 
 /**
  * Day 20 Combat — pure math layer (combat-spec §5).
@@ -293,6 +298,124 @@ export function resolveFlee({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Status effects (Prompt 1 — combat ailments + buffs)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface StatusSaveResult {
+  saved: boolean;
+  roll:  number;
+  total: number;
+  dc:    number;
+  rolls: CombatEventRolls;
+}
+
+/**
+ * End-of-turn status save. d20 + stat modifier vs effect.save_dc.
+ * Buffs use save_dc 0 — they'll always "save" if this is called on
+ * them, so the engine routes buffs to a duration-only path and never
+ * invokes this for them.
+ */
+export function rollStatusSave(
+  effect:  ActiveStatusEffect,
+  statMod: number,
+  rng:     Rng = DEFAULT_RNG,
+): StatusSaveResult {
+  const roll  = rollD20(rng);
+  const total = roll + statMod;
+  return {
+    saved: total >= effect.save_dc,
+    roll,
+    total,
+    dc:    effect.save_dc,
+    rolls: { d20: roll, d20_modifier: statMod, target_dc: effect.save_dc },
+  };
+}
+
+export interface StatusApplicationResult {
+  applied:         boolean;
+  damage_per_tick: number;
+}
+
+/**
+ * Probabilistic status application. Rolls rng() against `chance` (a
+ * 0-1 probability). When the effect carries DoT (poisoned: 1d4,
+ * burning: 1d6) the damage_per_tick is rolled at application time and
+ * stored on the ActiveStatusEffect for every subsequent tick.
+ */
+export function rollStatusApplication(
+  effectId: StatusEffectId,
+  chance:   number,
+  rng:      Rng = DEFAULT_RNG,
+): StatusApplicationResult {
+  if (rng() >= chance) return { applied: false, damage_per_tick: 0 };
+  let damage_per_tick = 0;
+  if (effectId === "poisoned") damage_per_tick = rollDamageDie("1d4", rng);
+  if (effectId === "burning")  damage_per_tick = rollDamageDie("1d6", rng);
+  return { applied: true, damage_per_tick };
+}
+
+/**
+ * Construct an ActiveStatusEffect with canonical duration / DC /
+ * stat_modifier for the given id. Pure — no rng dependence. Callers
+ * roll damage_per_tick separately (via rollStatusApplication) and
+ * pass it in for DoT effects; pass 0 for non-DoT or unknown.
+ */
+export function buildStatusEffect(
+  id:               StatusEffectId,
+  source:           string,
+  damage_per_tick = 0,
+): ActiveStatusEffect {
+  switch (id) {
+    case "poisoned":
+      return {
+        id, source, rounds_remaining: 3, damage_per_tick,
+        save_dc: 12, save_stat: "agility",
+      };
+    case "burning":
+      return {
+        id, source, rounds_remaining: 2, damage_per_tick,
+        save_dc: 14, save_stat: "agility",
+      };
+    case "chilled":
+      return {
+        id, source, rounds_remaining: 2, save_dc: 11,
+        save_stat: "strength",
+        stat_modifier: { stat: "all_rolls", amount: -2 },
+      };
+    case "weakened":
+      return {
+        id, source, rounds_remaining: 2, save_dc: 10,
+        save_stat: "strength",
+        stat_modifier: { stat: "strength", amount: -3 },
+      };
+    case "frightened":
+      return {
+        id, source, rounds_remaining: 2, save_dc: 12,
+        save_stat: "charisma",
+        stat_modifier: { stat: "all_rolls", amount: -2 },
+      };
+    case "fortified":
+      return {
+        id, source, rounds_remaining: 3, save_dc: 0,
+        save_stat: "strength",
+        stat_modifier: { stat: "armor", amount: 3 },
+      };
+    case "hastened":
+      return {
+        id, source, rounds_remaining: 2, save_dc: 0,
+        save_stat: "agility",
+        stat_modifier: { stat: "all_rolls", amount: 3 },
+      };
+    case "focused":
+      return {
+        id, source, rounds_remaining: 2, save_dc: 0,
+        save_stat: "intelligence",
+        stat_modifier: { stat: "intelligence", amount: 3 },
+      };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Use item (spec §5.4)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -306,6 +429,17 @@ export interface UseItemResult {
   /** Day 20.4 — granular roll detail. Populated for the basic health
    *  potion (1d8 + 4). Empty for unknown items (no-op resolution). */
   rolls?:         CombatEventRolls;
+  // ── Prompt 1 — Status effect consumables ─────────────────────────────────
+  /** Defensive consumable (Antidote, Smelling Salts, etc.) — id of
+   *  the ailment to clear on the player. */
+  cured_status?:   StatusEffectId;
+  /** Offensive / buff consumable — the effect to apply. The caller
+   *  decides whether to target self or an enemy via item_effect
+   *  .apply_status_target. */
+  applied_status?: ActiveStatusEffect;
+  /** Offensive consumable burst damage (Fire Bomb etc.) — flat damage
+   *  dealt to the target before the status applies. */
+  burst_damage?:   number;
 }
 
 export function resolveUseItem({
@@ -363,6 +497,42 @@ export function resolveUseItem({
         damage_die_roll: dieRoll,
         // No d20 / target_dc on heals; +4 is a flat bonus, not a STR modifier.
       },
+    };
+  }
+
+  // Prompt 1 — Cure status. Item.effect.cure_status names the ailment
+  // to clear on the player; the engine consumes the item and removes
+  // the matching ActiveStatusEffect from player_status_effects.
+  const cureStatus = item_effect?.cure_status;
+  if (typeof cureStatus === "string") {
+    return {
+      healed_amount: 0,
+      new_hp:        player.current_hp,
+      item_consumed: true,
+      cured_status:  cureStatus as StatusEffectId,
+    };
+  }
+
+  // Prompt 1 — Offensive / buff consumable. effect.apply_status names
+  // the effect to roll, apply_status_chance gates application (default
+  // 1.0), and burst_damage adds flat damage applied by the engine
+  // before the status. apply_status_target determines who receives
+  // the effect (self for buffs, enemy for offensive items).
+  const applyStatusId = item_effect?.apply_status;
+  if (typeof applyStatusId === "string") {
+    const chance   = typeof item_effect?.apply_status_chance === "number"
+                       ? (item_effect.apply_status_chance as number) : 1.0;
+    const burstDmg = typeof item_effect?.burst_damage === "number"
+                       ? (item_effect.burst_damage as number) : 0;
+    const app = rollStatusApplication(applyStatusId as StatusEffectId, chance, rng);
+    return {
+      healed_amount: 0,
+      new_hp:        player.current_hp,
+      item_consumed: true,
+      burst_damage:  burstDmg > 0 ? burstDmg : undefined,
+      applied_status: app.applied
+        ? buildStatusEffect(applyStatusId as StatusEffectId, item_id, app.damage_per_tick)
+        : undefined,
     };
   }
 

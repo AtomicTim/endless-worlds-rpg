@@ -138,6 +138,13 @@ const FALLBACK_TEXT_BY_TYPE: Record<CombatEvent["type"], string> = {
   victory:           "The last foe falls. The clearing is yours.",
   defeat:            "Darkness closes in. You fall.",
   flee_success:      "You break free into the open.",
+  // Prompt 1 — status effect events. These are surfaced client-side
+  // via templated story-feed beats; the narrate-combat route doesn't
+  // generate prose for them, but the Record must cover every type.
+  status_applied:    "",
+  status_tick:       "",
+  status_saved:      "",
+  status_expired:    "",
 };
 
 export async function POST(request: NextRequest) {

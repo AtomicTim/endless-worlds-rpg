@@ -52,6 +52,50 @@ export enum ItemRarity {
   LEGENDARY = "LEGENDARY",
 }
 
+// ---------------------------------------------------------------------------
+// Status effects (Prompt 1 — combat ailments + buffs)
+// ---------------------------------------------------------------------------
+
+/** Canonical status effect ids. Ailments are inflicted by enemy hits or
+ *  offensive consumables; buffs come from defensive consumables. Save
+ *  DCs / durations / stat modifiers are defined in
+ *  lib/game/combat-resolver.buildStatusEffect. */
+export type StatusEffectId =
+  | "poisoned"    // 1d4 DoT / 3r / AGI DC 12
+  | "burning"     // 1d6 DoT / 2r / AGI DC 14
+  | "chilled"     // -2 atk+saves / 2r / STR DC 11
+  | "weakened"    // -3 STR rolls / 2r / STR DC 10
+  | "frightened"  // -2 ALL d20 rolls / 2r / CHA DC 12
+  | "fortified"   // +3 armor / 3r (buff)
+  | "hastened"    // +3 atk / 2r (buff)
+  | "focused";    // +3 INT/PER / 2r (buff)
+
+/** A status effect actively applied to a combatant. damage_per_tick is
+ *  rolled at application time (poisoned=1d4, burning=1d6) and re-applied
+ *  every round-start until the effect saves or expires. stat_modifier
+ *  carries the per-round mechanical effect for non-DoT entries. */
+export interface ActiveStatusEffect {
+  id:               StatusEffectId;
+  rounds_remaining: number;
+  /** Pre-rolled DoT damage (poisoned/burning); omitted for other ids. */
+  damage_per_tick?: number;
+  /** Per-round mechanical modifier. amount is negative for debuffs and
+   *  positive for buffs. `"all_rolls"` covers d20 rolls universally;
+   *  `"armor"` adjusts the armor bonus only. */
+  stat_modifier?: {
+    stat:   keyof Attributes | "all_rolls" | "armor";
+    amount: number;
+  };
+  /** DC the target rolls against at end-of-turn to break the effect.
+   *  Buffs use 0 (cannot be saved against). */
+  save_dc:   number;
+  /** Stat used for the save roll. Buffs use a placeholder — they expire
+   *  by duration only, no save. */
+  save_stat: keyof Attributes;
+  /** Narrative label of the source — enemy name, item name, etc. */
+  source:    string;
+}
+
 export enum LocationStatus {
   PRESENT  = "PRESENT",   // player is here, acting within this location
   ARRIVING = "ARRIVING",  // player just moved here this turn
@@ -86,6 +130,15 @@ export interface Item {
   type:        ItemType;
   rarity:      ItemRarity;
   description: string;
+  /** Free-form effect map. Engine-consumed keys (Prompt 1):
+   *    heal                 number          — flat HP restored on USE
+   *    damage_die           "1d6" etc.      — weapon-only
+   *    armor_bonus          number          — armor-only
+   *    cure_status          StatusEffectId  — clear this ailment on USE
+   *    apply_status         StatusEffectId  — apply to target on USE
+   *    apply_status_chance  number          — 0-1, default 1.0
+   *    apply_status_target  string          — "enemy"|"self", default "self"
+   *    burst_damage         number          — flat damage dealt first (Fire Bomb) */
   effect?:     Record<string, number | string>;
   quantity:    number;
   genre_skin?: string;
@@ -107,6 +160,13 @@ export interface Item {
   /** Day 23A — node id this key unlocks. Set on the Item alongside
    *  is_key_item. Consumed on USE-key, then removed from inventory. */
   unlocks_node?: string;
+  // ── Prompt 1 — Status effects + damage types ─────────────────────────────
+  /** Weapon: chance to inflict a status effect on hit (0-1). */
+  on_hit_status?:      { id: StatusEffectId; chance: number };
+  /** Armor: incoming-damage reductions by canonical damage type. */
+  damage_resistances?: Partial<Record<DamageType, number>>;
+  /** Armor / accessory: status effects this item prevents outright. */
+  status_immunities?:  StatusEffectId[];
 }
 
 export interface EquippedLoadout {
@@ -811,6 +871,16 @@ export interface Enemy {
    *  "ranged ambusher", "defensive caster"). Not mechanically dispatched
    *  in Day 20 — every enemy just attacks each turn. */
   behavior_flavor:  string;
+  // ── Prompt 1 — Status effects + damage types ─────────────────────────────
+  /** Bestiary-declared canonical damage type for this enemy's attacks.
+   *  Used by armor.damage_resistances at the engine layer. */
+  primary_damage_type?: DamageType;
+  /** On-hit status application from bestiary. id + chance (0-1). */
+  status_effect?:       { id: StatusEffectId; chance: number };
+  /** Convenience flag for STR-themed enemies. When true and
+   *  status_effect is absent, the engine spawns with a 20% WEAKENED
+   *  status_effect on hit. */
+  can_weaken?:          boolean;
 }
 
 export interface RegionExit {
@@ -1388,7 +1458,11 @@ export interface FloorLootEntry {
    *  resolution doesn't need the bestiary at search time. */
   pending?: {
     enemy_instance_ids: string[];
-    enemy_loot_refs:    Array<{ loot_table_id: string; is_boss: boolean }>;
+    /** Prompt 1 — xp_value is propagated so loot-resolver can pick the
+     *  correct gold tier (Tier 2 fires when xp_value >= 20). Optional
+     *  for backwards-compat with pending entries persisted before this
+     *  field existed. */
+    enemy_loot_refs:    Array<{ loot_table_id: string; is_boss: boolean; xp_value?: number }>;
   };
 }
 
@@ -1422,6 +1496,15 @@ export interface CombatEnemyInstance {
   /** False once current_hp <= 0. Dead enemies stay in the array so
    *  the combat log keeps a stable reference to them. */
   alive:           boolean;
+  // ── Prompt 1 — Status effects + damage types ─────────────────────────────
+  /** On-hit status application (mirrored from Enemy at spawn time). */
+  status_effect?:       { id: StatusEffectId; chance: number };
+  /** Canonical damage type (mirrored from Enemy at spawn time). */
+  primary_damage_type?: DamageType;
+  /** Effects currently applied to this enemy. Reserved for future
+   *  player-→-enemy status application; engine currently writes to
+   *  CombatState.player_status_effects only. */
+  status_effects?:      ActiveStatusEffect[];
 }
 
 /**
@@ -1436,7 +1519,9 @@ export interface CombatEvent {
                          | "defend"       | "use_item"
                          | "flee_attempt"
                          | "kill"         | "victory"
-                         | "defeat"       | "flee_success";
+                         | "defeat"       | "flee_success"
+                         | "status_applied" | "status_tick"
+                         | "status_saved"   | "status_expired";
   /** Date.now() at event emission. */
   timestamp:             number;
   /** "PLAYER" or an enemy `instance_id`. */
@@ -1533,6 +1618,11 @@ export interface CombatState {
   origin_node_id:     string;
   /** Player.xp at combat start. Restored verbatim on defeat (§9). */
   pre_combat_xp:      number;
+  // ── Prompt 1 — Status effects ────────────────────────────────────────────
+  /** Effects currently applied to the player. Ticks at start of player
+   *  turn; saves rolled at end of player turn. Dismissed with the rest
+   *  of CombatState on victory / defeat / flee (rule 29). */
+  player_status_effects?: ActiveStatusEffect[];
 }
 
 // ---------------------------------------------------------------------------

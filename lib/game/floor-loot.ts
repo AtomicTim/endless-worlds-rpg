@@ -61,6 +61,10 @@ export function applySearchRemains(
     const res = resolveLoot({
       loot_table_id:     ref.loot_table_id,
       is_boss:           ref.is_boss,
+      // Prompt 1 — Tier 2 gold (xp_value >= 20) requires the
+      // per-enemy xp_value to make it here. Pre-Prompt-1 pending
+      // entries may omit it; resolveLoot treats that as Tier 1.
+      xp_value:          ref.xp_value,
       genre:             state.metadata.genre,
       world_loot_items:  ctx.world_loot_items,
       region_loot_items: ctx.region_loot_items,

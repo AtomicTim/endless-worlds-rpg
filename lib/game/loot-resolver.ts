@@ -4,7 +4,6 @@ import { getLootPool } from "./loot-tables";
 import type {
   LootPool,
   PoolItem,
-  WeightedGold,
   WeightedItem,
   WeightedItemWithRarity,
 } from "./loot-tables/types";
@@ -48,6 +47,11 @@ export interface LootParams {
   world_loot_items?:  Item[];
   region_loot_items?: Item[];
   boss_drop_item?:    Item;
+  /** Prompt 1 — enemy.xp_value at drop time. Drives the gold tier:
+   *  Tier 2 (6-12 gold) fires when xp_value >= 20 and the drop isn't
+   *  from a boss. Optional for back-compat with container drops and
+   *  pre-Prompt-1 saves. */
+  xp_value?:          number;
   rng?:               Rng;
 }
 
@@ -66,7 +70,7 @@ const NORMAL_GEAR_RATE        = 0.05;
 
 const BOSS_GEAR_RATE          = 0.60;
 const BOSS_CONSUMABLE_RATE    = 0.40;
-const BOSS_GOLD_MULTIPLIER    = 3;
+// Prompt 1 — BOSS_GOLD_MULTIPLIER removed (boss gold now 15-30 flat).
 
 /**
  * Resolve loot for one enemy / container. Pure: same params + same
@@ -84,8 +88,10 @@ export function resolveLoot(params: LootParams): LootResult {
     if (params.boss_drop_item) {
       items.push(stampItem(params.boss_drop_item, rng));
     }
-    // Boss gold always rolls; 3× the rolled tier.
-    gold = rollGold(pool.gold_drops, rng) * BOSS_GOLD_MULTIPLIER;
+    // Prompt 1 — boss gold tier: 15-30 inclusive. Replaces the prior
+    // `rollGold(pool.gold_drops) * 3` formula (which produced wildly
+    // varying amounts depending on the genre's table tiers).
+    gold = Math.floor(rng() * 16) + 15;
 
     // 60% weapon/armor (preferring higher rarity).
     if (rng() < BOSS_GEAR_RATE) {
@@ -104,8 +110,17 @@ export function resolveLoot(params: LootParams): LootResult {
   }
 
   // ── Normal path ────────────────────────────────────────────────────────────
+  // Prompt 1 — tiered enemy gold by xp_value. Replaces the
+  // pool.gold_drops weighted table for non-boss enemy drops:
+  //   Tier 2 (xp_value >= 20): 6-12 gold
+  //   Tier 1 (default):        2-5 gold
+  // Gold still gates on NORMAL_GOLD_RATE (80%) for thematic
+  // consistency with container drops.
   if (rng() < NORMAL_GOLD_RATE) {
-    gold = rollGold(pool.gold_drops, rng);
+    const xp = params.xp_value ?? 0;
+    gold = xp >= 20
+      ? Math.floor(rng() * 7) + 6
+      : Math.floor(rng() * 4) + 2;
   }
 
   if (rng() < NORMAL_CONSUMABLE_RATE) {
@@ -141,25 +156,6 @@ export function resolveLoot(params: LootParams): LootResult {
 // Helpers — kept private to avoid polluting the export surface.
 // Tests cover them through resolveLoot's behavior.
 // ─────────────────────────────────────────────────────────────────────────────
-
-/** Roll a gold amount from a weighted tier table. Picks a tier by
- *  weight, then rolls uniform within [min, max] inclusive. */
-function rollGold(table: WeightedGold[], rng: Rng): number {
-  if (table.length === 0) return 0;
-  const totalWeight = table.reduce((s, t) => s + t.weight, 0);
-  if (totalWeight <= 0) return 0;
-  let r = rng() * totalWeight;
-  for (const tier of table) {
-    r -= tier.weight;
-    if (r <= 0) {
-      const span = Math.max(0, tier.max - tier.min);
-      return tier.min + Math.floor(rng() * (span + 1));
-    }
-  }
-  // Fallback — shouldn't be reachable with positive weights.
-  const last = table[table.length - 1];
-  return last.min;
-}
 
 /** Merge the static pool's category with world/region items of the
  *  matching ItemType. World/region items get weight 30 by default

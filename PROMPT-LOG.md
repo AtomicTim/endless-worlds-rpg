@@ -2,9 +2,9 @@
 # Updated after every prompt. Claude.ai owns this file.
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
-**CLAUDE.md version:** 8.80
-**Last code commit:** 16e990d (HF1 — Combat UX + Dungeon Nav + Quest Pipeline)
-**jest baseline:** 593 (authoritative)
+**CLAUDE.md version:** 8.81
+**Last code commit:** 7439cb8 (P5 — combat UX status display)
+**jest baseline:** 605 (authoritative)
 **tsc:** clean
 
 ## Implementation Arc
@@ -16,7 +16,7 @@
 | HF1 | Combat UX + Dungeon Nav + Quest Pipeline | 16e990d | ✅ 593 tests |
 | P3 | Merchant Trading + Inn Rest | — | ⏳ NEXT |
 | P4 | Quest Completion Gate Enforcement | — | ⏳ |
-| P5 | Combat UX: Status Effect Display | — | ⏳ |
+| P5 | Combat UX: Status Effect Display | 7439cb8 | ✅ 605 tests |
 | P6 | Ability System — Foundation | — | ⏳ |
 | P7 | Ability System — Combat + Attunement UI | — | ⏳ |
 | P8 | Perks System | — | ⏳ |
@@ -38,3 +38,6 @@
 **P2 — nice to have, not blocking:**
 - Generate a new world → inspect WorldBible output for typed enemies with status_effect field
 - Confirm starting settlement shop/library has 3 lore objects (profession manuals)
+
+**P5 — required before P6:**
+- Enter combat with a status-capable enemy → confirm status pill appears below HP bar, DoT tick shows in feed with correct template text, DoT floating number appears.

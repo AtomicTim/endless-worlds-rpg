@@ -1,6 +1,6 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.82  |  **Build status → see PROMPT-LOG.md**
+**Version:** 8.83  |  **Build status → see PROMPT-LOG.md**
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -26,7 +26,7 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 **Per-prompt protocols:**
 - **V8.40** — Investigation-before-patching.
 - **V8.41** — Origin/main baseline check: `git fetch origin && git log origin/main --oneline -5` as step 1.
-- **V8.82** — jest baseline = 605. See rule 91.
+- **V8.83** — jest baseline = 626. See rule 91.
 - **V8.69** — No token cap changes without confirmed output_tokens data first.
 - **V8.78** — Prompts for Claude Code are written directly in the Claude.ai conversation, not in Drive docs.
 
@@ -58,14 +58,14 @@ Post-Day 25: **Genre Session** (world theme taxonomy + world structure per-genre
 
 ---
 
-## Design Session Decisions (V8.77–V8.82) — Full index
+## Design Session Decisions (V8.77–V8.83) — Full index
 
 ### DEATH PENALTY (locked — ✅ shipped P1)
 - Gold loss: 10% of current gold, cap 50, floor 0
 - HP on spawn: Math.floor(max_health * 0.75) — 75%, not 100%
 - XP: preserved (rule 31)
 - Items: not lost
-- Inn Rest: innkeeper NPC → dialogue type "rest" → 10 gold → HP to max_health (P3)
+- Inn Rest: innkeeper NPC → dialogue type "rest" → 10 gold → HP to max_health ✅ P3
 - Horror: 75% HP only, no gold penalty (Marks deferred to Genre Session)
 
 ### ECONOMY BASELINE (locked — ✅ gold drops shipped P1)
@@ -74,11 +74,12 @@ Post-Day 25: **Genre Session** (world theme taxonomy + world structure per-genre
 - Item tiers: Common consumable 8–15g · Uncommon 20–40g · Common weapon 30–60g · Uncommon weapon 80–150g
 - Starting equipment sell value = 0
 
-### MERCHANT TRADING (locked — P3 in progress)
+### MERCHANT TRADING (locked — ✅ shipped P3)
 - Inventory seeded at WorldBible/RegionBible time — never narrator-generated
 - Trust pricing: 0–40 = +25% · 41–60 = base · 61–80 = −10% · 81–100 = −20%
 - Speciality-filtered selling; VALUABLE sells to any merchant
-- Quest completion gates (type === "item") must be mechanically enforced
+- Quest completion gates (type === "item") must be mechanically enforced (P4)
+- openTrade is synchronous — no AI call. Narrator items_for_sale path discarded; world-asset inventory used.
 
 ### STATUS EFFECTS (designed — ✅ engine P1, generation P2, UI P5)
 - 5 ailments: POISONED (1d4/3r AGI DC12) · BURNING (1d6/2r AGI DC14) · CHILLED (−2atk+saves/2r STR DC11) · WEAKENED (−3STR/2r STR DC10) · FRIGHTENED (−2all/2r CHA DC12)
@@ -196,7 +197,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 51. Inventory detail: WEAPON Damage, ARMOR Armor (+0 shown), CONSUMABLE Heal. EQUIPPED pill. (V8.36)
 52. Combat input button-only. INTERIM until Day 20.5. (V8.37)
 53. Use Item templated: "You use {item}. Restored N HP." Out-of-combat: direct-dispatch via handleDirectConsumeItem. (V8.37+58)
-54. **Crit: one templated line only. No LLM call.** The damage number + CRITICAL HIT label is sufficient. isCritProse render branch kept as defensive no-op for stale messages. (V8.37→V8.81)
+54. **Crit: one templated line only. No LLM call.** isCritProse branch kept as defensive no-op. (V8.37→V8.81)
 55. planEventSuppression pre-scans batches. Victory: kill events dropped. (V8.37+81)
 56. Resolution events: two-line centered block, ≤20-word LLM prose, max_tokens 120. (V8.37)
 57. CombatEvent.rolls on every event. (V8.38)
@@ -224,7 +225,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 79. **Prompt-template hardcoded IDs are a recurring bug class.** (V8.42)
 80. **Nav card dedup at region zone.** DEEPER suppresses settlement if matches BACK. (V8.43–44)
 81. **Map tier auto-switch on every arrival.** Region zone → tier 2, else → tier 1. (V8.43–44)
-82. **jest baseline history.** 393→…→552→567→580→593→605. (V8.47–V8.82)
+82. **jest baseline history.** 393→…→552→567→580→593→605→626. (V8.47–V8.83)
 83. **Loot never auto-credits.** All drops go to floor_loot[]. (V8.47)
 84. **Container search is engine-resolved, zero LLM calls.** (V8.47)
 85. **Currency + inventory cap canonical.** INVENTORY_CAP = 20. (V8.47)
@@ -233,7 +234,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 88. **resolveUseItem resolves heal by effect, not id.** (V8.49)
 89. **Archetype system in archetypes.ts.** 25 classes. STAT_BASE=2, primary +2, secondary +1. (V8.50)
 90. **Level-up post-combat, player-driven.** LevelUpModal + 5-button picker. (V8.50)
-91. **jest baseline = 605 (V8.82).** P5 added 12 tests (593→605). 605 is authoritative. (V8.82)
+91. **jest baseline = 626 (V8.83).** P3 added 21 tests (605→626). 626 is authoritative. (V8.83)
 92. **Ability modifier: floor((score-2)/2).** (V8.51)
 93. **Enemy stat budgets: tier-1 agi_mod ≤1, hp min ≤8.** (V8.51)
 94. **RegionBibleCache in-flight dedup via Map<string, Promise>.** (V8.53)
@@ -242,7 +243,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 97. **LLM generation prompt skeleton anchors output.** Update skeleton + enforcement + logging together. (V8.55)
 98. **Nav card type label via nodeTypeLabel().** settlement_hub→SETTLEMENT · outpost→OUTPOST · wilderness→WILDERNESS · dungeon→DUNGEON · landmark→LANDMARK · abandoned_settlement→RUINS. (V8.56+63)
 99. **Dungeon runtime in hooks/useDungeonRuntime.ts.** Separate hook. (V8.57)
-100. **Room navigation semantics.** First-visit encounter; revisit suppresses. BACK from dungeon entrance → region zone (not settlement). resolveDungeonExitTarget walks zone_id chain. (V8.57+81)
+100. **Room navigation semantics.** First-visit encounter; revisit suppresses. BACK from dungeon entrance → region zone. resolveDungeonExitTarget walks zone_id chain. (V8.57+81)
 101. **DungeonLockPopover.** Locked boss card → hint + [USE key] + [FORCE STR ≥ 6] + Close. (V8.57)
 102. **Dungeon narrator context.** CURRENT ROOM injected, inventory stripped, adjacent rooms only. (V8.58)
 103. **Quest schema types.** QuestArchetype (6), FinaleType, QuestStatus, QuestFaction, QuestBreadcrumb, QuestResolution, MainQuest, SideQuest, QuestEntry, QuestThreads. (V8.59)
@@ -298,10 +299,10 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 153. **World theme taxonomy designed.** 54 themes in Drive: "world-theme-taxonomy". Genre Session implementation. (V8.76)
 154. **Death penalty designed + shipped P1.** 10% gold (cap 50) + 75% HP spawn + Inn Rest (10g → HP to max). (V8.77+79)
 155. **Economy baseline designed.** Price tiers, enemy gold drops, merchant seeding rules. Drive: "economy-and-progression-design-spec". (V8.77)
-156. **Merchant trading architecture designed.** World-asset-backed inventory, trust pricing, speciality selling. P3 in progress. (V8.77)
-157. **Status effects fully shipped.** Engine P1. World aliases P2. UI P5 (pills + feed templates + DoT floats + getStatusDisplayName with alias resolution). StatusEffectAlias type + WCD.status_effect_aliases? added to types/game.ts in P5. (V8.77+79+80+82)
+156. **Merchant trading shipped P3.** lib/game/trade-resolver.ts (pure): findMerchantNpc, openTrade (synchronous, no AI), buyItem (trust-banded, stock depletion, INVENTORY_CAP), sellItem (speciality filter, VALUABLE universal, 50% buyback), resolveInnRest (10g → full HP). TradeModal rewritten with Buy/Sell tabs, trust prices, type pills, Sold Out states. restCompleteSignal in game-store.ts is P7 attunement hook — nothing reads it yet. (V8.77+83)
+157. **Status effects fully shipped.** Engine P1. World aliases P2. UI P5. (V8.77+79+80+82)
 158. **Damage type system designed + shipped.** P1 engine. P2 generation guidance. (V8.77+79+80)
-159. **Abilities system designed.** 125 templates + LLM flavor; learned pool vs equipped slots; stat gates; 3 acquisition paths. P6–P7 scope. Flavor names deferred to P7. (V8.77+80)
+159. **Abilities system designed.** 125 templates + LLM flavor; learned pool vs equipped slots; stat gates; 3 acquisition paths. P6–P7 scope. (V8.77+80)
 160. **Perks system designed.** ~20 pool, every 4 combat levels (4/8/12/16/20). P8 scope. (V8.77)
 161. **Professions system designed.** 3 professions, 20 levels, RuneScape-inspired, MATERIAL ItemType. P9–P11 Day 25. (V8.77)
 162. **Horror genre deferred.** Sanity = declared stub. Marks = codebase inconsistency. Genre Session. (V8.77)
@@ -316,16 +317,17 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 171. **Post-quest world state.** End Chapter OR Continue Exploring. QUEST_STATUS: resolved_[id] in narrator permanently. Zero content locks. (V8.78)
 172. **Ability library v1 complete.** Drive: "ability-library-v1-all-25-classes". Variant pools v2 pending before P6. (V8.78)
 173. **Ability system architecture final.** Drive: "ability-system-architecture-v2-final". (V8.78)
-174. **Status effect world aliases.** WCD.status_effect_aliases — rootblight rule. ✅ P2 generation, ✅ P5 UI resolution. (V8.78+80+82)
+174. **Status effect world aliases.** WCD.status_effect_aliases — rootblight rule. ✅ P2 generation, ✅ P5 UI. (V8.78+80+82)
 175. **Prompt workflow.** Prompts written in Claude.ai conversation. Drive = design specs only. (V8.78)
 176. **11-prompt implementation arc defined.** P1–P8 active; P9–P11 Day 25. (V8.78)
-177. **P1 shipped d577359.** Full status effects engine + death penalty rebalance + 3-tier gold. 567→580 tests. (V8.79)
-178. **P2 shipped 354a013.** WCD status_effect_aliases. WB/RB enemy type guidance + profession manuals mandatory. Prompt-text only. (V8.80)
-179. **PROMPT-LOG.md introduced.** Volatile build state lives in PROMPT-LOG.md. CLAUDE.md only updated when rules change. (V8.80)
-180. **HF1 shipped 16e990d.** Crit LLM removed. Encounter banner restored. Dungeon exit → region zone fixed. act1RevealFiredRef permanent latch. 580→593 tests. (V8.81)
-181. **Dungeon exit target resolution.** resolveDungeonExitTarget walks zone_id chain past settlement to region zone. (V8.81)
-182. **act1RevealFiredRef is permanent.** Set once per session, never reset. Fires exactly once. (V8.81)
-183. **P5 shipped 7439cb8.** StatusEffectPills component (color-coded, ailments solid/buffs ghost, rounds remaining). Feed templates for status_applied/tick/saved/expired. getStatusDisplayName with alias resolution. DoT floats #fb923c. StatusEffectAlias type + WCD.status_effect_aliases? added to types/game.ts (tsc-forced, purely additive). 593→605 tests. (V8.82)
+177. **P1 shipped d577359.** Status effects engine + death penalty + 3-tier gold. 567→580. (V8.79)
+178. **P2 shipped 354a013.** WCD/WB/RB generation prompts. Prompt-text only. (V8.80)
+179. **PROMPT-LOG.md introduced.** Volatile state in PROMPT-LOG.md; CLAUDE.md only on rule changes. (V8.80)
+180. **HF1 shipped 16e990d.** Crit LLM removed. Encounter banner. Dungeon exit fixed. Quest latch. 580→593. (V8.81)
+181. **Dungeon exit target resolution.** resolveDungeonExitTarget walks zone_id chain to region zone. (V8.81)
+182. **act1RevealFiredRef is permanent.** Once true, never resets. Fires exactly once per session. (V8.81)
+183. **P5 shipped 7439cb8.** StatusEffectPills, feed templates, getStatusDisplayName, DoT floats. StatusEffectAlias type added to types/game.ts. 593→605. (V8.82)
+184. **P3 shipped 0219bec.** lib/game/trade-resolver.ts (pure, 21 tests). TradeModal rewritten. openTrade synchronous (no AI). Inn rest wired. Type fields (merchant_inventory, merchant_speciality, Item.starting_item, DialogueOption "rest") landed under P5 hash due to parallel execution — functionally present. restCompleteSignal in game-store.ts is P7 attunement consumer hook. 605→626. (V8.83)
 
 ---
 
@@ -400,7 +402,7 @@ Claude.ai owns CLAUDE.md and PROMPT-LOG.md. After every prompt: update PROMPT-LO
 
 Round flow: Claude Code pushes → Tim reports → Claude.ai updates PROMPT-LOG.md → Tim verifies → next prompt.
 
-**Protocols:** Origin/main baseline check (rule 76) · Investigation-before-patching (V8.40) · No token cap changes without output_tokens data (V8.69) · Prompts written in Claude.ai conversation (rule 175). **npx jest (no pattern) = authoritative count. Baseline = 605 (rule 91).**
+**Protocols:** Origin/main baseline check (rule 76) · Investigation-before-patching (V8.40) · No token cap changes without output_tokens data (V8.69) · Prompts written in Claude.ai conversation (rule 175). **npx jest (no pattern) = authoritative count. Baseline = 626 (rule 91).**
 
 **Note:** Remote URL `https://github.com/AtomicTim/endless-worlds-rpg.git` (capitalized).
 

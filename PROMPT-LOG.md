@@ -3,8 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.80
-**Last code commit:** 354a013 (P2 — generation prompts)
-**jest baseline:** 580 (authoritative)
+**Last code commit:** 16e990d (HF1 — Combat UX + Dungeon Nav + Quest Pipeline)
+**jest baseline:** 593 (authoritative)
 **tsc:** clean
 
 ## Implementation Arc
@@ -13,6 +13,7 @@
 |---|--------|--------|--------|
 | P1 | Status Effects + Death Penalty + Gold Calibration | d577359 | ✅ 580 tests |
 | P2 | Generation Prompts (WCD + WorldBible + RegionBible) | 354a013 | ✅ 580 tests |
+| HF1 | Combat UX + Dungeon Nav + Quest Pipeline | 16e990d | ✅ 593 tests |
 | P3 | Merchant Trading + Inn Rest | — | ⏳ NEXT |
 | P4 | Quest Completion Gate Enforcement | — | ⏳ |
 | P5 | Combat UX: Status Effect Display | — | ⏳ |
@@ -25,11 +26,14 @@
 
 ## Manual Verification Pending
 
-**P1 — required before P3:**
-- Die in combat → confirm HP on respawn = 75% of max (not 50%)
-- Die holding 200g → confirm gold loss = 20g (10%, under cap)
-- Die holding 1000g → confirm gold loss = 50g (capped)
-- DoT in combat: get hit by a status-capable enemy and confirm story feed shows tick events
+**HF1 + P1 — required before P3:**
+- Die in combat → confirm 75% HP respawn (NOT 50%).
+- Die holding 200g → confirm lose 20g (10%, under 50g cap).
+- Die holding 1000g → confirm lose 50g (capped).
+- Enter combat → confirm encounter banner appears in feed.
+- Get a crit landed on you → confirm NO LLM paragraph, just the templated line.
+- Exit any dungeon → confirm landing in region zone, not settlement.
+- Talk to a quest NPC twice → confirm main quest banner appears only once.
 
 **P2 — nice to have, not blocking:**
 - Generate a new world → inspect WorldBible output for typed enemies with status_effect field

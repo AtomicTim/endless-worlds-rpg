@@ -1,7 +1,7 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.78
-**Status:** Design complete — Prompt 1 written, ready for Claude Code
+**Version:** 8.79
+**Status:** P1 complete (d577359, 580 tests) — P2 ready
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
@@ -27,9 +27,9 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 **Per-prompt protocols:**
 - **V8.40** — Investigation-before-patching.
 - **V8.41** — Origin/main baseline check: `git fetch origin && git log origin/main --oneline -5` as step 1.
-- **V8.66** — jest baseline = 567. See rule 91.
+- **V8.79** — jest baseline = 580. See rule 91.
 - **V8.69** — No token cap changes without confirmed output_tokens data first.
-- **V8.78** — Prompts for Claude Code are written directly in the Claude.ai conversation, not in Drive docs. Drive is for design specs and living reference material only.
+- **V8.78** — Prompts for Claude Code are written directly in the Claude.ai conversation, not in Drive docs.
 
 ---
 
@@ -57,8 +57,8 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 
 | # | Prompt | Files | Status |
 |---|--------|-------|--------|
-| P1 | Status Effects + Damage Types + Death Penalty + Gold | types · combat-resolver · combat-engine · loot-resolver | ⏳ WRITTEN — READY |
-| P2 | Generation Prompts (WCD + WorldBible + RegionBible) | generation prompt files | ⏳ |
+| P1 | Status Effects + Damage Types + Death Penalty + Gold | types · combat-resolver · combat-engine · loot-resolver | ✅ d577359 · 580 tests |
+| P2 | Generation Prompts (WCD + WorldBible + RegionBible) | generation prompt files | ⏳ NEXT |
 | P3 | Merchant Trading + Inn Rest | NPCDefinition · openTrade route · trade modal | ⏳ |
 | P4 | Quest Completion Gate Enforcement | quest completion logic · NPC dialogue | ⏳ |
 | P5 | Combat UX: Status Effect Display | story feed templates · combat UI | ⏳ |
@@ -76,48 +76,48 @@ Post-Day 25: **Genre Session** (world theme taxonomy + world structure per-genre
 
 ## Current Status
 
-**Phase:** Design session complete. Prompt 1 written and ready for Claude Code.
-**Last commit:** ba718d56 (CLAUDE.md v8.77)
-**jest baseline:** 567 (authoritative, rule 91)
+**Phase:** P1 complete. Status effects engine, death penalty, gold calibration all shipped.
+**Last commit:** d577359 (P1 — status effects + damage types + death penalty + gold)
+**jest baseline:** 580 (authoritative — updated from 567 by P1's 13 new tests)
 **Stack:** Next.js 14 / Tailwind / shadcn/ui / Supabase / Claude API / Stripe / Vercel · **Repo:** AtomicTim/endless-worlds-rpg
 
 ---
 
-## Design Session Decisions (V8.77–V8.78) — Full index
+## Design Session Decisions (V8.77–V8.79) — Full index
 
-### DEATH PENALTY (locked)
+### DEATH PENALTY (locked — ✅ shipped P1)
 - Gold loss: 10% of current gold, cap 50, floor 0
 - HP on spawn: Math.floor(max_health * 0.75) — 75%, not 100%
 - XP: preserved (rule 31)
 - Items: not lost
-- Inn Rest: innkeeper NPC → dialogue type "rest" → 10 gold → HP to max_health
+- Inn Rest: innkeeper NPC → dialogue type "rest" → 10 gold → HP to max_health (P3)
 - Horror: 75% HP only, no gold penalty (Marks deferred to Genre Session)
 
-### ECONOMY BASELINE (locked)
+### ECONOMY BASELINE (locked — ✅ gold drops shipped P1)
 - Starting gold: Fantasy 10 · Cyberpunk 500 · Post-Apoc 25 caps · Space Opera 100 SU
 - Enemy drops: Tier 1 = 2–5g · Tier 2 = 6–12g · Boss = 15–30g
 - Item tiers: Common consumable 8–15g · Uncommon 20–40g · Common weapon 30–60g · Uncommon weapon 80–150g
 - Starting equipment sell value = 0
 
-### MERCHANT TRADING (locked)
+### MERCHANT TRADING (locked — P3)
 - Inventory seeded at WorldBible/RegionBible time — never narrator-generated
 - Trust pricing: 0–40 = +25% · 41–60 = base · 61–80 = −10% · 81–100 = −20%
 - Speciality-filtered selling; VALUABLE sells to any merchant
 - Quest completion gates (type === "item") must be mechanically enforced
 
-### STATUS EFFECTS (designed)
+### STATUS EFFECTS (designed — ✅ engine shipped P1)
 - 5 ailments: POISONED (1d4/3r AGI DC12) · BURNING (1d6/2r AGI DC14) · CHILLED (−2atk+saves/2r STR DC11) · WEAKENED (−3STR/2r STR DC10) · FRIGHTENED (−2all/2r CHA DC12)
 - 3 buffs: FORTIFIED (+3 armor/3r) · HASTENED (+3 atk/2r) · FOCUSED (+3 INT-PER/2r)
 - One-curse limit (ailments). Boss resistance: max 1 tick, 2-round immunity after.
 - Save: d20 + stat vs DC at END of player turn.
-- World aliases: WCD.status_effect_aliases (only when thematically compelling — "rootblight" rule)
+- World aliases: WCD.status_effect_aliases (only when thematically compelling — "rootblight" rule) — P2
 
-### DAMAGE TYPES (designed)
+### DAMAGE TYPES (designed — ✅ shipped P1)
 - Enemy gains primary_damage_type?: DamageType
 - Item additions: on_hit_status (RARE+ weapons) · damage_resistances (UNCOMMON+ armor, flat) · status_immunities (UNCOMMON+ armor) · apply_status + burst_damage (throwable consumables)
 - Character build loop: scout → learn threat type → buy/find resistance gear → prepared
 
-### ABILITIES (designed — UPDATED)
+### ABILITIES (designed)
 - Level cap: **20**. Slot unlocks: **level 5** (Slot 2) · **level 10** (Slot 3) · **level 15** (Slot 4).
 - **No mana system.** Cross-class stat requirements (INT/STR/AGI/CHA ≥ 6) gate ability use. Item gates: UNCOMMON stat ≥ 4, RARE ≥ 6, LEGENDARY ≥ 8 or class-locked.
 - LEARNED POOL (5–7 abilities per playthrough) vs EQUIPPED SLOTS (always exactly 4).
@@ -138,13 +138,13 @@ Post-Day 25: **Genre Session** (world theme taxonomy + world structure per-genre
 ### LORE ITEMS (expanded purpose)
 - Functions: (1) flavor/breadcrumb (existing), (2) teaches_ability, (3) teaches_profession {id, xp_grant}
 - Rarity rule: COMMON/UNCOMMON = max 1 special function. RARE = up to 2. LEGENDARY = up to 2 + guaranteed breadcrumb.
-- Guaranteed basic profession manuals (all 3) in every starting settlement shop/library (WorldBible-seeded). Discovery moment required — not available without finding them.
+- Guaranteed basic profession manuals (all 3) in every starting settlement shop/library (WorldBible-seeded).
 
-### PERKS (designed — UPDATED)
-- ~20 pool. Unlock every **4** combat levels (4, 8, 12, 16, 20) = 5 total. Choose 1 of 3. Permanent. Universal (not class-locked).
+### PERKS (designed)
+- ~20 pool. Unlock every **4** combat levels (4, 8, 12, 16, 20) = 5 total. Choose 1 of 3. Permanent. Universal.
 - Categories: Combat · Status · Ability · World
 
-### PROFESSIONS (designed)
+### PROFESSIONS (designed — Day 25 scope)
 - 3 for MVP: Alchemy · Smithing · Lore (genre-variant names)
 - 20 levels each. Tiers: Novice (1–5) · Apprentice (6–10) · Journeyman (11–15) · Expert (16–19) · Master (20)
 - Advance by DOING. Level 5 reachable in 30–45 min focused session. Master = long-term prestige.
@@ -154,75 +154,61 @@ Post-Day 25: **Genre Session** (world theme taxonomy + world structure per-genre
 ### POST-QUEST WORLD STATE (designed)
 - Player chooses End Chapter OR Continue Exploring after main quest resolution.
 - QUEST_STATUS: resolved_[resolution_id] injected permanently into narrator context.
-- NPCs shift tone based on resolution. Resolution tone (hopeful/dark/ambiguous) colors all subsequent narrator output.
-- Zero content locks — professions, side quests, exploration continue normally.
+- NPCs shift tone based on resolution. Zero content locks.
 - World becomes the aftermath of the story told.
 
 ### HORROR GENRE (deferred)
-- Sanity: declared stub (100/100 initialized, items reference it, combat doesn't drain it).
-- Marks: inconsistent codebase. Full design: Genre Session.
+- Sanity: declared stub. Marks: inconsistent codebase. Full design: Genre Session.
 
 ---
 
 ## 11-Prompt Implementation Arc (detail)
 
-**P1 — Status Effects + Damage Types + Death Penalty + Gold Calibration**
+**P1 — Status Effects + Damage Types + Death Penalty + Gold Calibration** ✅ d577359
 types/game.ts · combat-resolver.ts · combat-engine.ts · loot-resolver.ts
-- New types: StatusEffectId, ActiveStatusEffect; extend Item, Enemy, CombatEnemyInstance, CombatState, CombatEvent
-- New resolver functions: rollStatusSave, rollStatusApplication, buildStatusEffect; extend resolveUseItem
-- Engine wiring: tick at player turn start, save at turn end, application on enemy hit, damage resistance, effective stat mods
-- Fix handleDefeat: 50% HP → 75% HP; gold loss capped at 50
-- Calibrate loot-resolver: Tier 1 = 2–5g, Tier 2 = 6–12g, Boss = 15–30g
+- StatusEffectId, ActiveStatusEffect; Item/Enemy/CombatEnemyInstance/CombatState/CombatEvent extended
+- rollStatusSave, rollStatusApplication, buildStatusEffect; resolveUseItem extended (cure/apply/burst)
+- Engine: tick at turn start, save at turn end, application on hit, damage resistance, effective stat mods
+- handleDefeat: 75% HP respawn, gold loss min(50, 10%)
+- Loot: Tier 1=2–5g, Tier 2=6–12g, Boss=15–30g
+- Claude Code additions: enemy_loot_refs carries xp_value for Tier-2 band; narrate-combat FALLBACK_TEXT_BY_TYPE exhausted for 4 new status event types; 2 existing tests updated for new formulas
+- 567 → 580 tests
 
-**P2 — Generation Prompts (WCD + WorldBible + RegionBible)**
+**P2 — Generation Prompts (WCD + WorldBible + RegionBible)** ⏳ NEXT
 WCD prompt · WorldBible prompt · RegionBible prompt
-- WCD: status_effect_aliases generation; ability flavor name stubs per class per world
+- WCD: status_effect_aliases (rootblight rule); ability flavor names per class per world
 - WorldBible: primary_damage_type + status_effect on enemies; guaranteed profession manuals in starting settlement
-- RegionBible: status_effect + primary_damage_type on enemies; material_nodes seeding; teaches_ability on 0–1 master NPCs per region
+- RegionBible: status_effect + primary_damage_type on enemies; material_nodes (2–4 per region); teaches_ability on 0–1 master NPCs
 
 **P3 — Merchant Trading + Inn Rest**
 NPCDefinition · openTrade route · trade modal · innkeeper dialogue
-- NPCDefinition.merchant_inventory: Item[]
-- openTrade() reads world_asset, never narrator
-- buyItem(): trust-based pricing; sellItem(): speciality-filtered
+- NPCDefinition.merchant_inventory: Item[]; openTrade() reads world_asset
+- Trust-based pricing; speciality-filtered selling
 - Trade modal: real inventory, trust-adjusted prices, depleting stock
 - Inn rest: dialogue type "rest" → 10g → HP to max_health
 
 **P4 — Quest Completion Gate Enforcement**
-Quest completion logic · NPC dialogue handler
-- QuestCompletionCondition.type === "item" enforced mechanically
-- Inventory check before quest advance; item consumed on completion
-- NPC deflects if item missing; quest stays active
+- QuestCompletionCondition.type === "item" enforced; inventory check; item consumed; NPC deflects
 
 **P5 — Combat UX: Status Effect Display**
-Story feed templates · combat UI components
-- Templates for status_applied, status_tick, status_saved, status_expired events
-- Active ailment/buff indicator in combat UI (pills showing effect + rounds remaining)
-- Floating damage numbers for DoT ticks (extending existing float system)
+- Story feed templates for status_applied/tick/saved/expired
+- Active ailment/buff pills in combat UI; floating DoT numbers
 
 **P6 — Ability System: Foundation**
 types/game.ts · lib/game/abilities.ts · PlayerState
-- AbilityTemplate interface; lib/game/abilities.ts with all 125 templates
-- PlayerState: learned_abilities[], equipped_ability_slots[4]
-- Level gate unlock logic (slots at 5/10/15; Slot 2 random, Slots 3–4 show 2 options)
-- teaches_ability on Item and NPCDefinition; teaches_profession on Item
+- AbilityTemplate interface; 125 templates; PlayerState.learned_abilities + equipped_ability_slots[4]
+- Level gate unlock logic; teaches_ability + teaches_profession on Item/NPCDefinition
 
 **P7 — Ability System: Combat + Attunement UI**
-combat-engine.ts · combat UI components · attunement modal
-- 5th combat button → ability panel (name, charges, description)
-- Ability execution: charge consumption, damage + stat mod, status application, heal
-- Charge scaling: +1 per 2 levels in charge_stat; level 5 Slot 1 bonus charge
-- Attunement modal at settlements/inn rest; locked abilities shown with stat tooltip
+- 5th combat button → ability panel; ability execution (charges, damage, status, heal)
+- Charge scaling; attunement modal at settlements/inn rest
 
 **P8 — Perks System**
-types/game.ts · lib/game/perks.ts · LevelUpModal
-- Perk interface; 20-perk pool across 4 categories
-- PlayerState.perks: string[]
-- LevelUpModal: Perk selection step at levels 4, 8, 12, 16, 20 (3 options, pick 1)
+- Perk interface; 20-perk pool; PlayerState.perks; LevelUpModal Perk step at levels 4/8/12/16/20
 
 **P9–P11 — Professions (Day 25 scope)**
 P9: MATERIAL ItemType, ProfessionId, PlayerState.professions, RegionBible material_nodes
-P10: Craft-via-dialogue flow, profession XP + milestone system
+P10: Craft-via-dialogue, profession XP + milestones
 P11: Character sheet profession panel
 
 ---
@@ -317,7 +303,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 79. **Prompt-template hardcoded IDs are a recurring bug class.** (V8.42)
 80. **Nav card dedup at region zone.** DEEPER suppresses settlement if matches BACK. (V8.43–44)
 81. **Map tier auto-switch on every arrival.** Region zone → tier 2, else → tier 1. (V8.43–44)
-82. **jest baseline history.** 393→…→552→567 (+15 Day 23D). See rule 91. (V8.47–V8.66)
+82. **jest baseline history.** 393→…→552→567→580. (V8.47–V8.79)
 83. **Loot never auto-credits.** All drops go to floor_loot[]. (V8.47)
 84. **Container search is engine-resolved, zero LLM calls.** (V8.47)
 85. **Currency + inventory cap canonical.** INVENTORY_CAP = 20. (V8.47)
@@ -326,7 +312,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 88. **resolveUseItem resolves heal by effect, not id.** (V8.49)
 89. **Archetype system in archetypes.ts.** 25 classes. STAT_BASE=2, primary +2, secondary +1. (V8.50)
 90. **Level-up post-combat, player-driven.** LevelUpModal + 5-button picker. (V8.50)
-91. **jest baseline = 567 (V8.66).** Day 23D added 15 tests (552→567). 567 is authoritative. (V8.66)
+91. **jest baseline = 580 (V8.79).** P1 added 13 tests (567→580). 580 is authoritative. (V8.79)
 92. **Ability modifier: floor((score-2)/2).** (V8.51)
 93. **Enemy stat budgets: tier-1 agi_mod ≤1, hp min ≤8.** (V8.51)
 94. **RegionBibleCache in-flight dedup via Map<string, Promise>.** (V8.53)
@@ -348,7 +334,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 110. **World intro cinematic modal** — see rule 42. (V8.75)
 111. **Act 1 breadcrumb discovery.** Two triggers: DIALOGUE + boss clear. (V8.62)
 112. **Sub-location node_type fix.** (V8.63)
-113. **Quest discovery pipeline.** Boss-clear 1200ms. Dialogue: pendingAct1Reveal → useDeferredQuestReveal → currentDialogueNpc null gate → act1RevealFiredRef latch → 2500ms. Double-fire fixed in 94810ec. (V8.63+64+65+76)
+113. **Quest discovery pipeline.** Boss-clear 1200ms. Dialogue: pendingAct1Reveal → useDeferredQuestReveal → currentDialogueNpc null gate → act1RevealFiredRef latch → 2500ms. (V8.63+64+65+76)
 114. **JournalModal + journal entry generation.** 4 tabs. haiku 200 tokens. CHARACTER VOICE block. (V8.63+65+66+73)
 115. **Codex concurrent-write race guard.** (V8.65)
 116. **Side quest generation (Day 23D).** Synchronous in apply-regional-bible. (V8.66)
@@ -372,9 +358,9 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 134. **save-character-profile route.** Atomic read→patch→write. (V8.71)
 135. **Origin generation fires on class select.** (V8.71)
 136. **Appearance generation: gender-aware cache.** Gender toggle on appearance step only. (V8.71+72)
-137. **Motivation step UX.** "I came to this world to…". Skip: "Play as a blank slate". Randomize (120 char cap). Character summary card. (V8.72+76)
+137. **Motivation step UX.** "I came to this world to…". Skip: "Play as a blank slate". Randomize (120 char cap). (V8.72+76)
 138. **Random mode.** Full coherent character, lands on name step. Appearance summary name-agnostic. (V8.71+76)
-139. **WorldBible fires in background after WCD completes.** Root cause of 400 fixed. (V8.72+74)
+139. **WorldBible fires in background after WCD completes.** (V8.72+74)
 140. **PLAYER CHARACTER narrator block.** formatPlayerCharacterBlock(state). Between WCD and HARD RULES. COMBAT exempt. (V8.73)
 141. **Trust formula: computeInitialTrust(state, npcAsset).** 50 + species.npc_disposition_seed + disposition_modifiers, clamped 0–100. (V8.73)
 142. **{motivation} resolved in world_intro_template.** (V8.73)
@@ -389,29 +375,30 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 151. **Motivation char limit enforced.** Prompt + server-side slice(0,120). (V8.76)
 152. **Appearance summary name-agnostic.** Prompt rule + normalizeCharacter regex strip. (V8.76)
 153. **World theme taxonomy designed.** 54 themes in Drive: "world-theme-taxonomy". Genre Session implementation. (V8.76)
-154. **Death penalty designed.** 10% gold (cap 50) + 75% HP spawn + Inn Rest (10g → HP to max). Horror: 75% HP only. (V8.77)
+154. **Death penalty designed + shipped.** 10% gold (cap 50) + 75% HP spawn + Inn Rest (10g → HP to max). P1 d577359. (V8.77+79)
 155. **Economy baseline designed.** Price tiers, enemy gold drops, merchant seeding rules. Drive: "economy-and-progression-design-spec". (V8.77)
-156. **Merchant trading architecture designed.** World-asset-backed inventory, trust pricing, speciality selling. (V8.77)
-157. **Status effects designed.** 5 ailments + 3 buffs, one-curse limit, save mechanic, world aliases. Drive: "status-effects-and-abilities-design-spec-v2". (V8.77)
-158. **Damage type system designed.** primary_damage_type on enemies; resistances/immunities/on_hit_status on items. (V8.77)
-159. **Abilities system designed.** 125 templates + LLM flavor; learned pool (5–7) vs equipped slots (4); stat gates; attunement; 3 acquisition paths. Drive: "ability-library-v1-all-25-classes" + "ability-system-architecture-v2-final". (V8.77)
-160. **Perks system designed.** ~20 pool, every 4 combat levels (4/8/12/16/20), 4 categories. Renamed from "skills (combat)". (V8.77)
-161. **Professions system designed.** 3 professions, 20 levels, RuneScape-inspired pacing, MATERIAL ItemType, no world carryover. Drive: "professions-perks-and-ability-acquisition-spec-v2". (V8.77)
+156. **Merchant trading architecture designed.** World-asset-backed inventory, trust pricing, speciality selling. P3 scope. (V8.77)
+157. **Status effects designed + shipped.** 5 ailments + 3 buffs, one-curse limit, save mechanic, world aliases. Engine in P1 d577359. UI in P5. (V8.77+79)
+158. **Damage type system designed + shipped.** primary_damage_type on enemies; resistances/immunities/on_hit_status on items. P1 d577359. (V8.77+79)
+159. **Abilities system designed.** 125 templates + LLM flavor; learned pool (5–7) vs equipped slots (4); stat gates; attunement; 3 acquisition paths. Drive: "ability-library-v1-all-25-classes" + "ability-system-architecture-v2-final". P6–P7 scope. (V8.77)
+160. **Perks system designed.** ~20 pool, every 4 combat levels (4/8/12/16/20), 4 categories. P8 scope. (V8.77)
+161. **Professions system designed.** 3 professions, 20 levels, RuneScape-inspired pacing, MATERIAL ItemType, no world carryover. Drive: "professions-perks-and-ability-acquisition-spec-v2". P9–P11 Day 25 scope. (V8.77)
 162. **Horror genre deferred.** Sanity = declared stub. Marks = codebase inconsistency. Full design: Genre Session. (V8.77)
 163. **Comprehensive build order.** 33 steps. Drive: "design-session-master-summary-2026-05-13". (V8.77)
 164. **Level cap: 20.** Ability slots unlock at levels 5/10/15. Perk gates at 4/8/12/16/20. Item rarity gates: UNCOMMON level 5 + stat ≥ 4; RARE level 10 + stat ≥ 6; LEGENDARY level 15 + stat ≥ 8 or class-locked. (V8.78)
-165. **No mana system.** Cross-class ability stat requirements gate use (INT/STR/AGI/CHA ≥ 6). Class abilities require no stat gate. Item stat requirements: UNCOMMON primary stat ≥ 4, RARE ≥ 6, LEGENDARY ≥ 8 or class-locked. (V8.78)
+165. **No mana system.** Cross-class ability stat requirements gate use (INT/STR/AGI/CHA ≥ 6). Class abilities require no stat gate. (V8.78)
 166. **Ability pool model.** LEARNED POOL (4 class + 1–3 world-exclusive = 5–7 total) vs EQUIPPED SLOTS (always exactly 4). Attunement at settlements/Inn Rest. Locked during combat. (V8.78)
-167. **Ability slot assignment.** Slot 1: fixed class signature. Slot 2: random from class variant pool at level 5. Slot 3: pick 1 of 2 at level 10 (Option A standard class, Option B world-influenced WCD variant). Slot 4: pick 1 of 2 at level 15. Class variant pool = 8–10 abilities; 3 drawn per playthrough. (V8.78)
-168. **Ability acquisition.** (1) Class leveling — hardcoded identity; (2) World-learnable lore items — WCD seeds 1–3 per world, teaches_ability on Item, stat-gated; (3) NPC-taught — RegionBible assigns, trust ≥ 70–80. Runtime-generated abilities: NEVER. (V8.78)
-169. **Lore item rarity rule.** COMMON/UNCOMMON = max 1 special function beyond flavor. RARE = up to 2. LEGENDARY (boss drops) = up to 2 + guaranteed breadcrumb. teaches_ability and teaches_profession are the two special function types. (V8.78)
-170. **Profession access.** Guaranteed basic profession manuals (all 3) in every starting settlement shop/library (WorldBible-seeded). Discovery moment required — not available from day 1 without finding them. (V8.78)
-171. **Post-quest world state.** Player chooses End Chapter OR Continue Exploring. QUEST_STATUS: resolved_[resolution_id] permanently injected into narrator context. NPCs shift tone per resolution. Zero content locks. World becomes aftermath of the story told. (V8.78)
-172. **Ability library v1 complete.** All 25 classes × 4 active + 1 passive designed. Drive: "ability-library-v1-all-25-classes". Variant pools of 8–10 per class to be expanded in v2 before P6 prompt is written. (V8.78)
-173. **Ability system architecture final.** Drive: "ability-system-architecture-v2-final". Level cap 20, no mana, stat gates, pool/slot model fully specified. (V8.78)
-174. **Status effect world aliases.** WCD gains status_effect_aliases (mirrors damage_type_aliases pattern). Only when thematically compelling — "rootblight rule": most worlds use default names. (V8.78)
-175. **Prompt workflow.** Claude Code prompts are written directly in the Claude.ai conversation for copy-paste. Drive is for design specs and living reference docs only. (V8.78)
-176. **11-prompt implementation arc defined.** P1–P8 active; P9–P11 Day 25 scope. See Sequence table. (V8.78)
+167. **Ability slot assignment.** Slot 1: fixed. Slot 2: random at level 5. Slot 3: pick 1 of 2 at level 10. Slot 4: pick 1 of 2 at level 15. Option B is world-influenced WCD variant. Class variant pool = 8–10 abilities; 3 drawn per playthrough. (V8.78)
+168. **Ability acquisition.** (1) Class leveling — hardcoded; (2) World-learnable lore items — WCD seeds 1–3 per world, teaches_ability on Item, stat-gated; (3) NPC-taught — trust ≥ 70–80. Runtime-generated: NEVER. (V8.78)
+169. **Lore item rarity rule.** COMMON/UNCOMMON = max 1 special function. RARE = up to 2. LEGENDARY = up to 2 + guaranteed breadcrumb. (V8.78)
+170. **Profession access.** Guaranteed basic profession manuals in every starting settlement (WorldBible-seeded). Discovery moment required. (V8.78)
+171. **Post-quest world state.** Player chooses End Chapter OR Continue Exploring. QUEST_STATUS: resolved_[id] permanently in narrator context. NPCs shift tone. Zero content locks. (V8.78)
+172. **Ability library v1 complete.** Drive: "ability-library-v1-all-25-classes". Variant pools of 8–10 per class pending for v2 before P6. (V8.78)
+173. **Ability system architecture final.** Drive: "ability-system-architecture-v2-final". (V8.78)
+174. **Status effect world aliases.** WCD.status_effect_aliases — only when thematically compelling. (V8.78)
+175. **Prompt workflow.** Claude Code prompts written in Claude.ai conversation. Drive = design specs only. (V8.78)
+176. **11-prompt implementation arc defined.** P1–P8 active; P9–P11 Day 25. (V8.78)
+177. **P1 shipped d577359.** StatusEffectId/ActiveStatusEffect/buildStatusEffect/rollStatusSave/rollStatusApplication in resolver. Engine: tick→save→application→resistance. handleDefeat 75% HP + capped gold. Loot 3-tier gold. 567→580 tests. Claude Code bonus: enemy_loot_refs xp_value threading for Tier-2 band; narrate-combat FALLBACK_TEXT_BY_TYPE exhausted for 4 new status event types. (V8.79)
 
 ---
 
@@ -482,7 +469,7 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint
 
 Claude.ai owns all CLAUDE.md updates. Round flow: Claude Code pushes → Tim reports → Claude.ai updates docs → Tim verifies → next prompt.
 
-**Protocols:** Origin/main baseline check (rule 76) · Investigation-before-patching (V8.40) · No token cap changes without output_tokens data (V8.69) · Prompts written in Claude.ai conversation, not Drive (rule 175). **npx jest (no pattern) = authoritative count. Baseline = 567 (rule 91).**
+**Protocols:** Origin/main baseline check (rule 76) · Investigation-before-patching (V8.40) · No token cap changes without output_tokens data (V8.69) · Prompts written in Claude.ai conversation, not Drive (rule 175). **npx jest (no pattern) = authoritative count. Baseline = 580 (rule 91).**
 
 **Note:** Remote URL `https://github.com/AtomicTim/endless-worlds-rpg.git` (capitalized).
 

@@ -3,7 +3,7 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 51587a8 (UI-9b — nav card layout cleanup)
+**Last code commit:** 8749056 (UI-8 — loot flow)
 **jest baseline:** 734 (authoritative)
 **tsc:** clean
 
@@ -24,7 +24,7 @@
 | UI-1–UI-5 | (see history) | — | — | ✅ |
 | UI-6 | NPC Dialogue | — | — | ⏳ IN PROGRESS |
 | UI-7 | Codex + Journal/Quests | — | — | ⏳ (after UI-6) |
-| UI-8 | Loot Flow | — | — | ⏳ |
+| UI-8 | Loot Flow | 8749056 | 734 | ✅ |
 | UI-9 | Character Panel | f811645 | 734 | ✅ |
 | UI-9b | Nav Card Layout Cleanup | 51587a8 | 734 | ✅ |
 | UI-10 | Combat UI Overhaul | — | — | ⏳ (after HF2 verify) |
@@ -41,6 +41,11 @@
 - **Tabler icon font not installed (UI-9).** Unicode fallbacks in CharacterPanel. Fixed in UI-12.
 - **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in a cleanup pass.
 - **Sidebar width 280px (UI-9).** Spec is 196/160px. LogBook co-tenant blocks narrowing now.
+- **FloorLootStrip still rendered (UI-8).** Visual overlap with the new feed-embedded loot UI.
+  Retire when convenient — engine pipeline unchanged either way.
+- **Per-item ✓ on taken loot deferred (UI-8).** Taken items drop from the rendered list; the
+  "All collected ✓" footer covers the all-done state. Per-item ✓ would need a searched-snapshot
+  on FloorLootEntry. Polish patch.
 
 ## Key Implementation Notes
 
@@ -58,3 +63,14 @@
 **UI-9:** Visual — new sidebar layout, HP colour states, pack grid inline expand. Not blocking.
 **UI-9b:** Visual — nav cards stack vertically (one per row), readable name + type badge, no
   horizontal scroll. Confirm at 1280px the cards span the full nav-bar width with breathing room.
+**UI-8:**
+- Win a fight → confirm Victory banner now shows "Search the remains →" link beneath the
+  destination row. Tap → link becomes "Searched ✓" + LootList expands with the gold row +
+  item cards + Take All button.
+- Tap Take on a single item → item disappears from list, item added to inventory.
+- Tap Take All → all items + gold land at once; footer flips to "All collected ✓".
+- Fill inventory to 20/20 → confirm orange "Pack full" banner above items + Take buttons
+  swap to disabled "Inventory full" pills. Gold rows still take normally.
+- Walk away without searching, come back → Context Panel shows "Remains · Search". Tap → loot
+  modal opens with the same item card list + Take All. Tap ✕ or backdrop → modal closes.
+- Empty loot pile (all taken via either path) → Context Panel entry disappears.

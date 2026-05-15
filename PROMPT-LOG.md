@@ -3,7 +3,7 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 334c6b5 (P7 — ability system: combat + attunement UI)
+**Last code commit:** 311ae99 (PROMPT-LOG: P7 complete)
 **jest baseline:** 699 (authoritative)
 **tsc:** clean
 
@@ -19,7 +19,7 @@
 | P5 | Combat UX: Status Effect Display | 7439cb8 | 605 | ✅ |
 | P6 | Ability System — Foundation | 87741fb | 678 | ✅ |
 | P7 | Ability System — Combat + Attunement UI | 334c6b5 | 699 | ✅ |
-| P8 | Perks System | — | — | ⏳ NEXT |
+| P8 | Perks System | — | — | ⏳ NEXT (after P7 manual verify) |
 | P9 | Professions Foundation | — | — | ⏳ Day 25 |
 | P10 | Professions Crafting + XP + Milestones | — | — | ⏳ Day 25 |
 | P11 | Professions Character Sheet UI | — | — | ⏳ Day 25 |
@@ -29,51 +29,47 @@
 | # | Prompt | Commit | Tests | Status |
 |---|--------|--------|-------|--------|
 | UI-1 | Design Token + Genre System | c7d0370 | 648 | ✅ |
-| UI-2 | Top Bar | — | — | ⏳ IN PROGRESS |
-| UI-3 | Context Panel | — | — | ⏳ (after UI-2) |
-| UI-4 | Story Panel Typography + Streaming | — | — | ⏳ |
+| UI-2 | Top Bar | 463a593 | 678 | ✅ |
+| UI-3 | Context Panel | — | — | ⏳ IN PROGRESS |
+| UI-4 | Story Panel Typography + Streaming | — | — | ⏳ (after UI-3) |
 | UI-5 | Navigation Cards | — | — | ⏳ |
 | UI-6 | NPC Dialogue | — | — | ⏳ |
 | UI-7 | Codex + Journal/Quests | — | — | ⏳ |
 | UI-8 | Loot Flow | — | — | ⏳ (after UI-3) |
 | UI-9 | Character Panel | — | — | ⏳ (coordinate with P8) |
-| UI-10 | Combat UI Overhaul | — | — | ⏳ (after P7) |
+| UI-10 | Combat UI Overhaul | — | — | ⏳ (after P7 verify) |
 | UI-11 | Transitions + Toast System | — | — | ⏳ |
 | UI-12 | Character Creation Wizard | — | — | ⏳ |
 | UI-13 | Main Menu + Save Slots | — | — | ⏳ |
 
+## Known Gaps (non-blocking, tracked)
+
+- **Enemy-side status ticks not running (P7).** target_status writes land on enemy.status_effects[]
+  but engine only ticks player side. Enemy DoT/debuff ticking is a follow-up HF before UI-10.
+- **Variant pools v2 deferred (P7).** 1 candidate per slot per class. getSlotCandidatesForLevelUp
+  is the seam. LevelUpModal handles both 1 and 2 candidate cases. Full pool is Genre Session scope.
+
 ## Key Implementation Notes
 
-**UI-1 findings (inform all future UI prompts):**
-- genreClassName() in lib/game/genre-slug.ts — returns long-form class (genre-fantasy etc.).
-  Use in every component that needs the genre class. Never derive inline.
-- GameLayout.tsx applies both data-genre (owns --accent) AND genre-X class (owns card/content vars).
-  Both must coexist. Do not remove data-genre.
-- .ol-scan/.ol-grid/.ol-tex inert until surface opts in. Add three overlay divs per surface prompt.
-- .ui-label selectors are forward-looking — no current matches. Components must add the class.
-
-**P6 findings (inform P7):**
-- ABILITY_LIBRARY: 125 entries keyed by AbilityId. 25 classes × 5 (4 active slots + 1 passive).
-- PlayerState: learned_abilities[], equipped_ability_slots [null,null,null,null], passive_ability null.
-  All required fields with safe defaults in state-factory.ts.
-- restCompleteSignal in game-store.ts is the existing P7 attunement hook (rule 156).
-- teaches_ability?: AbilityId on both Item and NPCDefinition — ready for acquisition paths.
-- docs/ability-library.md header says "level 3/6/9" for slot unlocks — stale doc. Code uses 5/10/15.
+**UI-1:** genreClassName() in lib/game/genre-slug.ts. data-genre + genre-X class both on root.
+  .ol-scan/.ol-grid/.ol-tex inert until surface opts in. .ui-label selectors forward-looking.
+**UI-2:** Save & Exit preserved (no other exit path until UI-13). Hamburger wired in UI-3.
+**P6:** ABILITY_LIBRARY 125 entries. PlayerState fields required with safe defaults in state-factory.
+  teaches_ability on Item + NPCDefinition ready. docs/ability-library.md "level 3/6/9" header stale.
+**P7:** AbilityTemplate.effects added (additive). restCompleteSignal → AttunementModal.
+  Enemy-side status ticks gap noted above. LevelUpModal now 2-step at L5/10/15.
+  Variant pools v2 deferred — 1 candidate per slot in v1.
 
 ## Manual Verification Pending
 
 **P4:** Quest item gate — deflect without item, complete + consume with item, narrator silent.
-**P5:** Status pill below HP bar, DoT in feed, floating DoT number.
-**P6:** Data layer only — jest covers it. Spot-check ability library entries if desired, not blocking.
-**UI-1:** Visual — Fantasy accent warmer amber (#c4943a). Not blocking.
-**P7:**
-- Start a new game → confirm slot 1 + passive are seeded (Character sheet / log inspection).
-- Enter combat → tap Abilities → confirm 4-slot panel renders, slot 1 has a name + N/M charges,
-  slots 2/3/4 read "— locked" at level 1, Back returns to action bar.
-- Use a damage ability with a target enemy → confirm target HP drops, charge counter decrements.
-- Use a self heal/buff ability → confirm HP / status pill update, charge counter decrements.
-- Exhaust an ability → confirm "No charges" flash + the turn is NOT consumed.
-- Inn Rest → confirm AttunementModal opens automatically after the rest beat.
-- At a settlement_hub (not in combat) → confirm an "Attune" button is visible; tap → modal opens.
-- Reach level 5 → confirm Level Up modal advances to a slot-2 "Continue" page with War Cry (Knight).
-- Reach level 10/15 → confirm slot-3/4 candidate picker (v1: single auto-confirmable card).
+**P5:** Status pill, DoT in feed, floating DoT number.
+**P7 — required before P8 (both touch LevelUpModal):**
+- Enter combat → Abilities → 4-slot panel, slot 1 named + N/M charges, slots 2/3/4 locked, Back works.
+- Use damage ability → enemy HP drops, charge decrements.
+- Use heal/buff ability → player HP/status updates, charge decrements.
+- Exhaust ability → no-charges flash, turn does NOT advance.
+- Inn Rest → AttunementModal opens automatically.
+- Settlement hub (not in combat) → Attune button visible, tap opens modal.
+- Level 5 → LevelUpModal slot-2 auto-assign step appears after stat step.
+- Level 10/15 → slot-3/4 candidate picker appears.

@@ -3,7 +3,7 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 8a9ee1e (PROMPT-LOG: UI-12 complete — via Claude Code)
+**Last code commit:** a11d82b (UI-10 — combat UI overhaul)
 **jest baseline:** 734 (authoritative)
 **tsc:** clean
 
@@ -20,7 +20,7 @@
 | # | Prompt | Commit | Tests | Status |
 |---|--------|--------|-------|--------|
 | UI-1–UI-9b | (see history) | — | — | ✅ |
-| UI-10 | Combat UI Overhaul | — | — | ⏳ (after HF2 manual verify) |
+| UI-10 | Combat UI Overhaul | a11d82b | 734 | ✅ |
 | UI-11 | Transitions + Toast System | d4a99e5 | 734 | ✅ |
 | UI-12 | Character Creation Wizard | beeb2ef | 734 | ✅ |
 | UI-13 | Main Menu + Save Slots | — | — | ⏳ IN PROGRESS |
@@ -54,4 +54,9 @@
 **UI-8:** Loot flow — win fight, search, take, take all, full inventory, Context Panel revisit.
 **UI-11:** Toasts fire on codex/quest/level-up/victory. Modal scale-in animation visible.
 **UI-12:** Walk through wizard — class icons, stat colours, step dots, accent caret on inputs.
+**UI-10:** Visual — enter combat → 380ms panel rise; HP bars use 5-tier threshold ladder
+  (#4a8a4a → #e03030 pulse ≤10%); kill an enemy → greyscale + compress; action buttons use
+  --card-bg/--card-border with genre-accent hover border; turn badge "YOUR TURN" / "ENEMY TURN"
+  (accent / red); dice line ("16 vs 12 · hit") appears below combatants on each roll with
+  80ms fade. Not blocking.
 (None of the above block UI-13 or UI-10 once HF2 verified.)

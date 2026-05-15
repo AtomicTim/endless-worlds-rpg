@@ -1,6 +1,6 @@
 # Endless Worlds RPG — UI Design Reference
 
-**Version:** 2.2  
+**Version:** 2.3  
 **Status:** Design complete, ready for implementation  
 **Covers:** All designed UI surfaces as of May 2026
 
@@ -133,7 +133,7 @@ Horror uses BOTH `.ol-grid` (fog) AND `.ol-scan` (dots) simultaneously.
 ### Card Treatment Per Genre
 
 | Genre | Radius | Border | Shadow | Decorative element |
-|-------|--------|--------|--------|--------------------|
+|-------|--------|--------|--------|---|
 | Fantasy | 7–8px | `rgba(196,148,58,.28)` | Warm inner glow + 0 0 0 .5px outer ring | `✦` Unicode mark, top-right |
 | Cyberpunk | 0px | `rgba(34,211,238,.17)` | Cyan outer glow | Hard corners, no decoration |
 | Horror | 2px | `rgba(45,65,40,.32)` | Crushing inward shadow (inset 0 0 32px) | Near-invisible border |
@@ -160,7 +160,7 @@ Horror uses BOTH `.ol-grid` (fog) AND `.ol-scan` (dots) simultaneously.
 | Space Opera | `system-ui, sans-serif`, `font-style: normal`, `letter-spacing: .14–.18em` | Georgia italic (unchanged) |
 | Post-Apoc | System sans-serif, `letter-spacing: .18–.22em`, `font-size: 6.5px` | Georgia italic (unchanged) |
 
-**Critical rule:** Narrative prose (story text, NPC speech, journal entries, quest descriptions) always uses Georgia serif italic regardless of genre. Only labels, section headers, and UI chrome change typeface. Changing prose fonts would require retroactive changes across the entire UI.
+**Critical rule:** Narrative prose always uses Georgia serif italic regardless of genre. Only labels, section headers, and UI chrome change typeface. Changing prose fonts would require retroactive changes across the entire UI.
 
 ### Text Glow Per Genre
 
@@ -173,8 +173,6 @@ Horror uses BOTH `.ol-grid` (fog) AND `.ol-scan` (dots) simultaneously.
 | Post-Apoc | None |
 
 ### Surfaces Requiring Genre Treatment
-
-The genre visual system must be applied to ALL content areas. Since the CSS class cascades from the root, this is automatic — but every component must use `var(--card-bg)`, `var(--card-radius)`, etc. rather than hardcoded values.
 
 **Surfaces that need overlay textures (three overlay divs required):**
 - Story feed / main game panel
@@ -213,7 +211,7 @@ The genre visual system must be applied to ALL content areas. Since the CSS clas
 
 **Context Panel (left):** Always-visible current location — name, type, description, NPCs present, interactable objects. NOT a map — navigation is via nav cards in the story feed.
 
-**Character Panel (right):** Fixed 196px column. Scrollable. Contains: portrait + identity, HP/XP bars, status effects, attribute block, equipped items + gold, pack inventory. See Section 14 for full spec.
+**Character Panel (right):** Fixed 196px column. Scrollable. Contains: portrait + identity, HP/XP bars, status effects, attribute block, equipped items + gold, pack inventory. See Section 13 for full spec.
 
 **Story Feed (centre):** The primary play surface. Top-down scroll. Story text, navigation cards, NPC dialogue, combat — all live here.
 
@@ -422,7 +420,7 @@ Avatar circle (initials) · Name + role · Trait tags (2–3, can gain new ones 
 
 ### Stat/Roll Mechanics (Critical)
 
-Checks are **never hard gates — always probability-based.** The UI communicates odds without locking players out:
+Checks are **never hard gates — always probability-based.**
 - `CHA · Good odds` (stat meets or exceeds requirement) — amber badge
 - `CHA · Risky` (stat close but below) — muted amber
 - `CHA · Long shot` (stat significantly below) — very muted, still tappable
@@ -458,7 +456,7 @@ Left border, icon, and type badge all use the same type colour. Scannable at a g
 ### Organisation Within Tabs
 
 - **All tab:** Section headers by entry type (type-coloured headers with icon)
-- **People tab:** Section headers by region/settlement (where you met them)
+- **People tab:** Section headers by region/settlement
 - **Places tab:** Section headers by region or parent location
 - **Lore tab:** Section headers by category (Historical, Political, Spiritual, Factional)
 - **Events tab:** Section headers by day (chronological, day markers)
@@ -466,48 +464,33 @@ Left border, icon, and type badge all use the same type colour. Scannable at a g
 Headers are **section dividers, not accordion groups.** No extra taps required.
 
 ### Notable Mark (◈)
-Removed from automatic assignment. Only appears when:
-1. AI flags as plot-critical, OR
-2. Player manually stars it
-
-Small `◈` mark in genre accent, top-right of entry card. Not a badge.
+Only appears when AI flags as plot-critical OR player manually stars it. Small `◈` mark in genre accent, top-right. Not a badge.
 
 ### NEW Badge
 Appears on unread entries. Clears on open. Codex icon in top bar shows a dot while unread entries exist.
 
 ### Related Entries
-Each entry cross-links to related entries. Tapping navigates to that entry. Builds a web of connected knowledge. Shown in detail view as a tappable list with type icons.
+Each entry cross-links to related entries. Tapping navigates to that entry. Shown in detail view as a tappable list with type icons.
 
 ### Discovery Ceremony
-Subtle toast at bottom of screen: "Added to Codex: Edran Voss" + dot on Codex icon. Small moment that makes discovery feel rewarding.
+Subtle toast at bottom of screen: "Added to Codex: Edran Voss" + dot on Codex icon.
 
 ---
 
 ## 12. Journal & Quests
 
 ### Layout
-Quests and Journal share one nav button, two tabs inside (they're both about tracking your story). Screen title: "Chronicle".
+Quests and Journal share one nav button, two tabs inside. Screen title: "Chronicle".
 
 ### Quests Tab
 
 **Section headers:** Active (with count) · Completed · Failed
 
-**Quest card shows:**
-- Quest name (italic Georgia for Fantasy/Horror/Post-Apoc; system-ui for Space; monospace for Cyberpunk)
-- `◈` mark if main quest (same mark as Codex notable)
-- Source + day discovered
-- 2-line narrative description
-- **Current objective** — the most actionable info, visible without opening detail
+**Quest card shows:** Quest name · `◈` if main quest · Source + day · 2-line description · **Current objective** (most actionable info, visible without opening detail)
 
-**Quest detail shows:**
-- Status badge (Active/Completed/Failed in appropriate colour)
-- Full narrative description
-- Objectives list — narrative-language items, NOT checkbox list. Completed: dim + strikethrough. Pending: full colour.
-- Related Codex entries (same format as Codex related entries)
+**Quest detail shows:** Status badge · Full narrative description · Objectives list (narrative-language, NOT checkbox list; completed: dim + strikethrough) · Related Codex entries
 
 ### Journal Tab
-
-Two entry types with distinct visual treatments:
 
 **Auto-logged (game's voice):**
 - Left border: muted amber `rgba(196,148,58,.38)`
@@ -517,16 +500,12 @@ Two entry types with distinct visual treatments:
 **Player-written notes (personal):**
 - Left border: brighter amber `rgba(196,148,58,.72)`
 - Label: "Personal entry" (Fantasy) / "PRIV_LOG" (Cyberpunk) / "personal" (Horror) / "PERSONAL" (Space) / "NOTE" (Post-Apoc)
-- Text: `#ceaf78` Georgia italic (warmer, slightly brighter — feels more personal)
+- Text: `#ceaf78` Georgia italic (warmer, slightly brighter)
 - Slightly warmer card background
 
-**Write-a-note flow:**
-- Triggered by "Write a note" button (always at bottom of journal list)
-- Minimal: day label auto-filled, large text area, "Save note" + "Discard" only
-- No title, no tags, no formatting tools
-- Saved note appears at top of current day section immediately
+**Write-a-note flow:** Triggered by button at bottom. Minimal: auto-filled day label, text area, Save + Discard only. No title, no tags, no formatting tools.
 
-**Day section headers:** Simple, same pattern as Codex event headers. Genre-specific date language:
+**Day section headers:** Genre-specific date language:
 - Fantasy: "— Day the Third —"
 - Cyberpunk: "// DAY_03 ///"
 - Horror: "third night" (lowercase)
@@ -537,84 +516,77 @@ Two entry types with distinct visual treatments:
 
 ## 13. Character Sheet Panel
 
-The character sheet is the right panel on desktop (fixed, always visible, 196px wide, scrollable) and a slide-in drawer on mobile (triggered by the character pill in the top bar). The player's eyes return to it constantly — it must be dense but instantly scannable.
+The character sheet is the right panel on desktop (fixed, always visible, 196px wide, scrollable) and a slide-in drawer on mobile. It must be dense but instantly scannable.
 
-**The character sheet does NOT duplicate the Journal.** It shows mechanical state only (numbers, equipment, resources). Story beats and narrative history live in the Journal/Chronicle screen exclusively.
+**The character sheet does NOT duplicate the Journal.** It shows mechanical state only. Story beats live in the Journal/Chronicle screen exclusively.
 
 ### Content Sections (top to bottom)
 
 **1. Portrait + Identity**
 - 48px avatar circle with class icon (Tabler icon, genre accent colour, genre-styled border)
 - Character name: 13px, medium weight
-- Class + Level: 8.5px Georgia italic, muted — "Investigator · Level 4"
+- Class + Level: 8.5px Georgia italic, muted
 
 **2. HP Bar**
 - 8px tall, fat bar — the most prominent element after the name
-- Uses the same colour-state system as combat HP bars (same thresholds, same colours)
-- `transition: width 300ms ease, background-color 400ms ease` — animates on every change
-- Shows `28 / 42` value right-aligned, flashes red on damage, green on heal
-- At ≤10%: CSS pulse animation (same as combat)
+- Same colour-state system as combat HP bars (same thresholds, same colours)
+- `transition: width 300ms ease, background-color 400ms ease`
+- Shows `28 / 42` value right-aligned; flashes red on damage, green on heal
+- At ≤10%: CSS pulse animation
 
 **3. XP Bar**
 - 3px tall, thin — clearly secondary to HP
 - Single colour: genre accent
-- Shows `340 / 500` value in muted text
-- Level-up sequence: bar fills to 100% (400ms ease) → brief pause → level number flashes (scale: 1 → 1.4 → 1 over 600ms) → bar resets with new target, level increments, max HP increases slightly
+- Level-up sequence: bar fills to 100% (400ms ease) → pause → level number flashes (scale 1→1.4→1, 600ms) → bar resets, level increments, max HP increases slightly
 
 **4. Status Effects**
-- Hidden entirely when no effects are active (max-height: 0, no dead space)
-- Slides open (max-height: 50px, 300ms ease) when an effect is applied
-- Each effect: small pill badge using the damage-type colour system (Poisoned green, Burning orange, Frozen blue, Shocked yellow, etc.)
-- Dismissed when the effect expires — slides closed
+- Hidden entirely when no effects active (max-height: 0, no dead space)
+- Slides open (max-height: 50px, 300ms ease) when effect applied
+- Each effect: small pill badge using damage-type colour system
 
 **5. Attribute Block — Single Inline Row**
-All five stats displayed in one horizontal row. No grid, no empty cells ever.
+All five stats in one horizontal row. No grid, no empty cells ever.
 
 ```
 [STR 8] [AGI 9] [INT 13] [PER 11] [CHA 10]
 ```
 
-Each cell: number (15–18px, neutral warm colour `#cbb888` — same for all stats, NOT colour-coded per stat), label below (6px, muted, uppercase). Subtle same-tone border on each cell. Classic D&D feel — neutral paper form, not a mobile game power indicator.
+Each cell: number (15–18px, neutral warm `#cbb888` — same for all stats, NOT colour-coded per stat), label below (6px, muted, uppercase). Subtle same-tone border. Classic D&D feel.
 
-Genre colour overrides the neutral number colour (teal for Horror, purple for Space, etc.) but stats are NEVER individually colour-coded by type.
+Genre overrides the neutral number colour (teal for Horror, purple for Space) but stats are NEVER individually colour-coded by type.
 
 **6. Equipped Items + Gold (combined section)**
-Section header: "EQUIPPED" label left-aligned, gold/currency amount right-aligned in genre accent colour.
+Section header: "EQUIPPED" left-aligned, gold/currency amount right-aligned in genre accent.
 
-**Three slots, all always shown** — never hidden even when empty:
+Three slots, all always shown — never hidden even when empty:
 - Weapon slot
 - Armour slot
 - Accessory slot (ring, necklace, trinket)
 
-Empty slot display: slot-type icon at ~25% opacity, "— empty" in dim italic, slot label. Visually distinct from a filled slot but clearly intentional — an available slot, not missing UI.
+Empty slot: slot-type icon at ~25% opacity, "— empty" in dim italic, slot label.
 
 **7. Pack Inventory**
-Section header: "Pack · N / 8" showing current/max capacity.
+Section header: "Pack · N / 8"
 
-3-column compact grid. Each item cell:
-- Icon: 13px
-- Abbreviated name: 6px below
-- Count badge: top-right corner, genre accent, only shown if count > 1
+3-column compact grid. Each cell: 13px icon, 6px abbreviated name below, count badge top-right (only if count > 1).
 
-**No empty placeholder cells.** Capacity is shown in the header; the grid only renders actual items. An empty grid means the pack is empty.
+**No empty placeholder cells.** The grid only renders actual items.
 
 ### Animation Summary
 
 | Event | Animation |
 |-------|-----------|
-| HP damage | Bar shrinks (300ms ease), value flashes red (400ms) |
-| HP heal | Bar grows (300ms ease), value flashes green (400ms) |
+| HP damage | Bar shrinks (300ms ease), value flashes red |
+| HP heal | Bar grows (300ms ease), value flashes green |
 | HP critical (≤10%) | Bar pulses continuously |
-| HP colour transition | `background-color 400ms ease` between colour states |
 | XP gain | Bar fills (400ms ease) |
-| Level up | Bar → 100% → pause → level number scale flash → bar resets |
+| Level up | Bar → 100% → pause → level flash → bar resets |
 | Status effect added | Section slides open (max-height 300ms ease) |
-| Status effect removed | Section slides closed if last effect |
 | Gold change | Value flashes green (gain) or red (spend) |
 | Mobile drawer open | Slides in from right, 300ms ease-out, backdrop fades in |
-| Mobile drawer close | Slides out right, 300ms ease-in, backdrop fades out |
+| Mobile drawer close | Slides out right, 250ms ease-in |
 
-### Genre-Specific Currency Labels
+### Genre-Specific Currency
 
 | Genre | Currency | Icon |
 |-------|----------|------|
@@ -626,7 +598,115 @@ Section header: "Pack · N / 8" showing current/max capacity.
 
 ---
 
-## 14. Implementation Notes for Claude Code
+## 14. Transitions & Micro-Interactions
+
+### Combat Entry
+
+Triggered when an enemy encounter begins (AI narrates the enemy appearing).
+
+**Sequence:**
+1. Story feed narrates the encounter (streams in as normal)
+2. Navigation cards fade out — `opacity 0, 180ms ease` — simultaneously with step 3
+3. Combat panel rises — **flex height 0 → 188px**, `380ms cubic-bezier(0.22, 1, 0.36, 1)` (spring ease-out). NOT an overlay — the combat panel is a flex item that pushes the story feed up. Nothing is hidden behind it.
+4. Player combatant card appears — `opacity 0→1, translateY 10px→0, 220ms ease-out`
+5. Enemy card(s) appear — 80ms stagger after player card, same animation
+6. Turn badge fades in — `opacity 0→1, 150ms ease`, 100ms after last card
+
+During combat: input bar remains but placeholder changes. Nav cards are hidden (zero opacity, pointer-events none).
+
+### Combat Exit — Victory
+
+**Sequence:**
+1. Kill shot: enemy card `filter: grayscale(1) brightness(.45)`, `400ms ease`
+2. Kill shot compress: card collapses — `scaleY(0)` + `height→0`, `300ms ease`
+3. Combat panel closes — height → 0, `300ms ease-in`, 750ms after kill shot starts
+4. Nav cards return — `opacity 0→1, 200ms ease`
+5. Victory card appears in story feed — `opacity 0→1, 250ms ease-out`, 1100ms after kill shot
+
+**Victory card** is a permanent part of the story feed — not a modal, not a popup. Contains:
+- "Combat resolved" header with green check-circle icon
+- XP gained + Gold gained as large numbers
+- Thin XP progress bar filling over 600ms (showing level progress)
+- Post-combat AI-generated prose line
+
+After the victory card appears, the AI continues streaming the next narrative beat below it naturally.
+
+### Combat Exit — Defeat
+
+If player HP hits 0:
+- HP bar pulses red (existing ≤10% animation)
+- Screen dims (backdrop `rgba(0,0,0,.6)`, `400ms ease`)
+- Defeat panel slides up (same spring as combat entry, ~120px)
+- Content: "You have fallen." · Options: Respawn at last safe point / Retry combat / Abandon run
+- These are permanent save-state decisions — confirm before executing
+
+### Toast Notification System
+
+Toasts appear at the **bottom of the screen, just above the input bar** (`bottom: 50px`, `z-index: 30`).
+
+**Timing:**
+- Entry: `translateY(18px) → translateY(0)` + `opacity 0→1`, `250ms cubic-bezier(0.22, 1, 0.36, 1)`
+- Persist: 3.5 seconds
+- Exit: `opacity 1→0` + `translateY(0→10px)`, `200ms ease-in`
+
+**Four toast types:**
+
+| Type | Colour | Icon | Use case |
+|------|--------|------|----------|
+| Codex discovery | `#c4943a` amber | `ti-book` | New entry added to Codex |
+| Quest complete | `#5a9a5a` green | `ti-circle-check` | Quest moves to Completed |
+| Level up | `#e8d070` bright gold | `ti-arrow-up-circle` | Character levels up |
+| Combat result | `#7abb7a` green | `ti-shield-check` | Brief XP/gold summary after combat |
+
+Level-up toast fires simultaneously with the character sheet XP bar animation. Persists 4 seconds (slightly longer). A level-up also triggers the character sheet level flash regardless of whether the sheet is open.
+
+If multiple toasts queue simultaneously, they stack vertically (5px gap, newest on top). Maximum 2 visible at once — third queues.
+
+### Screen Transitions
+
+**Desktop — Replace center column:**
+Codex, Map, Journal, Chronicle all replace the center panel content. Left and right panels remain. Top bar breadcrumb updates. No slide — content fades: `opacity 0→1, 200ms ease`.
+
+**Mobile — Full-screen slide:**
+- Open: `translateX(100%) → translateX(0)`, `300ms cubic-bezier(0.22, 1, 0.36, 1)`. Backdrop fades in simultaneously.
+- Close: `300ms ease-in` reverse. Back button or swipe-right to dismiss.
+- The game behind the overlay does NOT move (content-over-content, not push-navigation)
+
+**Tab switching within a screen** (Quests↔Journal, Codex tabs):
+- `opacity 0→1, 150ms ease` only. No slide. Fast.
+
+**Character sheet drawer (mobile):**
+- Open: slides from right, `300ms cubic-bezier(0.22, 1, 0.36, 1)`. Backdrop `rgba(0,0,0,.5)` fades in.
+- Close: `250ms ease-in`. Tapping backdrop closes.
+
+### Master Timing Reference
+
+| Interaction | Duration | Easing |
+|-------------|----------|--------|
+| Combat panel open | 380ms | `cubic-bezier(0.22, 1, 0.36, 1)` |
+| Combat panel close | 300ms | `ease-in` |
+| Combatant card appear | 220ms | `ease-out` |
+| Card stagger delay | 80ms | — |
+| Kill shot greyscale | 400ms | `ease` |
+| Kill shot compress | 300ms | `ease` |
+| Nav cards fade | 180ms | `ease` |
+| Victory card appear | 250ms | `ease-out` |
+| HP bar change | 300ms | `ease` |
+| HP colour change | 400ms | `ease` |
+| XP bar fill | 400ms | `ease` |
+| Level number flash | 600ms | `ease` |
+| Status effect slide | 300ms | `ease` |
+| Toast enter | 250ms | `cubic-bezier(0.22, 1, 0.36, 1)` |
+| Toast persist | 3500ms | — |
+| Toast exit | 200ms | `ease-in` |
+| Mobile screen open | 300ms | `cubic-bezier(0.22, 1, 0.36, 1)` |
+| Mobile screen close | 250ms | `ease-in` |
+| Tab switch | 150ms | `ease` |
+| Desktop center swap | 200ms | `ease` |
+
+---
+
+## 15. Implementation Notes for Claude Code
 
 - **Genre class on root container** — apply `genre-X` to the game root; all styling cascades. Never apply genre overrides per-component.
 - **CSS custom properties** — define all card/content variables at the genre class level; components consume `var()` references.
@@ -634,6 +714,8 @@ Section header: "Pack · N / 8" showing current/max capacity.
 - **All maps use HTML5 Canvas** — never SVG.
 - **LLM stream is the typewriter** — display tokens as they arrive, no buffering.
 - **Combat visual effects fire at fixed times** — 400ms after action, not on LLM completion.
+- **Combat panel is a flex item, not an overlay** — it pushes the story feed up as it opens. Height 0 → 188px, `380ms cubic-bezier(0.22, 1, 0.36, 1)`.
+- **Victory card lives in the story feed permanently** — not a modal. The feed continues below it.
 - **Stat/roll system is always probabilistic** — never reject an attempt at UI level.
 - **NPC dialogue: exactly 4 content slots + 1 persistent end button** — end button is structurally outside the slots.
 - **Portrait zones on combat cards have fixed pixel dimensions** — art drops in as background image, layout does not reflow.
@@ -644,4 +726,6 @@ Section header: "Pack · N / 8" showing current/max capacity.
 - **Character sheet stat block is a single inline row** — five cells in one horizontal row, no grid, no empty slots ever possible.
 - **All three equipment slots always rendered** — Weapon, Armour, Accessory shown whether filled or empty. Empty state uses dim icon + "— empty" label.
 - **Pack grid shows only actual items** — no empty placeholder cells. Capacity in section header.
-- **Character sheet has no story content** — Journal/Chronicle is the canonical record of narrative events. The character sheet shows mechanical state only.
+- **Character sheet has no story content** — Journal/Chronicle is the canonical record of narrative events.
+- **Toast z-index: 30** — always on top of combat panel (z-index: 10) and overlays.
+- **Use `requestAnimationFrame` double-frame trick for CSS transitions on dynamically inserted elements** — set element, then two rAF calls, then add the transition class. Direct class add after insertion won't animate.

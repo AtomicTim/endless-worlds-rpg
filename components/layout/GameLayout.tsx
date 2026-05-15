@@ -2,13 +2,12 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Menu, X, Save } from "lucide-react";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { UserMenu } from "@/components/layout/UserMenu";
-import { VerbosityToggle } from "@/components/game/VerbosityToggle";
 import { Genre } from "@/types/game";
 import { useGameStore } from "@/lib/stores/game-store";
-import { genreSlug, genreClassName, GENRE_LABEL } from "@/lib/game/genre-slug";
+import { genreSlug, genreClassName } from "@/lib/game/genre-slug";
+import { TopBar } from "@/components/layout/TopBar";
 
 /**
  * Three-column game layout — redesigned per /design/desktop-ui.jsx and
@@ -49,25 +48,12 @@ export function GameLayout({
   const router        = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [saveState,   setSaveState]   = useState<SaveState>("idle");
-  const mapPanelOpen   = useGameStore((s) => s.mapPanelOpen);
-  const toggleMapPanel = useGameStore((s) => s.toggleMapPanel);
+  const mapPanelOpen    = useGameStore((s) => s.mapPanelOpen);
   const setMapPanelOpen = useGameStore((s) => s.setMapPanelOpen);
-  // Day 20.4.2 TASK 4 — codex modal toggle (replaces Link navigation).
-  const codexModalOpen   = useGameStore((s) => s.codexModalOpen);
-  const toggleCodexModal = useGameStore((s) => s.toggleCodexModal);
-  // Day 23C — journal modal toggle (same pattern as codex).
-  const journalModalOpen   = useGameStore((s) => s.journalModalOpen);
-  const toggleJournalModal = useGameStore((s) => s.toggleJournalModal);
 
-  // The CSS tokens key off short slugs (fantasy / cyber / horror /
-  // space / apoc); genre is the full enum value. genreSlug maps both.
-  const slug      = genreSlug(genre);
-  const genreText = GENRE_LABEL[slug] ?? "FANTASY";
-
-  // Player avatar text — first two letters of the player's name in caps.
-  const masterState = useGameStore((s) => s.masterState);
-  const playerName  = masterState?.player_state.name ?? "Adventurer";
-  const initials    = playerName.split(/\s+/).map((w) => w[0]?.toUpperCase() ?? "").join("").slice(0, 2) || "??";
+  // Slug drives data-genre on the root; the long-form genre class (from
+  // genreClassName, UI-1) drives the per-genre CSS variable sets.
+  const slug = genreSlug(genre);
 
   // ── Save & Exit ───────────────────────────────────────────────────────────
   async function handleSaveAndExit() {
@@ -90,7 +76,7 @@ export function GameLayout({
     setSaveState("saved");
     setTimeout(() => { router.push("/dashboard"); }, 2000);
   }
-  const saveLabel =
+  const saveLabel: "SAVE" | "SAVING…" | "SAVED ✓" =
     saveState === "saving" ? "SAVING…" :
     saveState === "saved"  ? "SAVED ✓" :
     "SAVE";
@@ -112,200 +98,15 @@ export function GameLayout({
     >
       <div className="ew-grain" style={{ ["--grain" as string]: 0.25 }} />
 
-      {/* ── Header ──────────────────────────────────────────────────────── */}
-      <header
-        className="z-30 flex shrink-0 items-center"
-        style={{
-          height:       56,
-          padding:      "0 16px",
-          borderBottom: "1px solid var(--line)",
-          background:   "linear-gradient(180deg, var(--bg-1), var(--bg-0))",
-          position:     "relative",
-        }}
-      >
-        {/* Wordmark with diamond glyph */}
-        <div
-          className="ew-mono"
-          style={{
-            fontSize:      13,
-            letterSpacing: "0.32em",
-            color:         "var(--accent)",
-            fontWeight:    600,
-            display:       "flex",
-            alignItems:    "center",
-            gap:           12,
-          }}
-        >
-          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
-            <circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" strokeWidth="1.2" />
-            <path d="M 9 2 L 9 16 M 2 9 L 16 9"
-              stroke="currentColor" strokeWidth="0.6" opacity="0.5" />
-            <path d="M 9 2 Q 13 9 9 16 Q 5 9 9 2"
-              fill="none" stroke="currentColor" strokeWidth="0.8" />
-          </svg>
-          <span className="hidden sm:inline">ENDLESS WORLDS</span>
-        </div>
-
-        {/* Genre badge */}
-        <div
-          className="ml-3 hidden sm:inline-block sm:ml-7"
-          style={{
-            padding:       "3px 10px",
-            border:        "1px solid var(--accent-soft)",
-            borderRadius:  2,
-            fontFamily:    "var(--mono)",
-            fontSize:      10,
-            letterSpacing: "0.24em",
-            color:         "var(--accent)",
-          }}
-        >
-          {genreText}
-        </div>
-
-        <div style={{ flex: 1 }} />
-
-        {/* Verbosity toggle — three-segment pill */}
-        <div className="hidden md:block mr-3">
-          <VerbosityToggle />
-        </div>
-
-        {/* MAP toggle */}
-        {mapPanel && (
-          <button
-            type="button"
-            onClick={toggleMapPanel}
-            aria-label={mapPanelOpen ? "Close map" : "Open map"}
-            title={mapPanelOpen ? "Close map" : "Open map"}
-            style={chromeBtn(mapPanelOpen)}
-            className="min-h-[44px] sm:min-h-0"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-              <path d="M 1 3 L 5 5 L 9 3 L 13 5 L 13 11 L 9 9 L 5 11 L 1 9 Z"
-                stroke="currentColor" strokeWidth="1.1" fill="none" />
-            </svg>
-            <span className="hidden sm:inline">MAP</span>
-          </button>
-        )}
-
-        {/* CODEX — Day 20.4.2 TASK 4: opens as a MODAL overlay on top of
-            /game rather than navigating to /game/codex. Previous Link-based
-            approach unmounted CombatMode mid-encounter (dropping in-flight
-            floating numbers + drain pacing). The /game/codex route remains
-            for direct URL access; the modal is the primary path. */}
-        <button
-          type="button"
-          onClick={() => toggleCodexModal()}
-          aria-label="Open codex"
-          title="Codex"
-          style={chromeBtn(codexModalOpen)}
-          className="min-h-[44px] sm:min-h-0"
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-            <path d="M 2 2 L 7 1 L 12 2 L 12 12 L 7 11 L 2 12 Z M 7 1 L 7 11"
-              stroke="currentColor" strokeWidth="1.1" fill="none" />
-          </svg>
-          <span className="hidden sm:inline">CODEX</span>
-        </button>
-
-        {/* JOURNAL — Day 23C. Same overlay pattern as Codex. Sits
-            between CODEX and SAVE in the top nav. Holds the Morrowind-
-            style quest log: main / side / completed / failed. */}
-        <button
-          type="button"
-          onClick={() => toggleJournalModal()}
-          aria-label="Open journal"
-          title="Journal"
-          style={chromeBtn(journalModalOpen)}
-          className="min-h-[44px] sm:min-h-0"
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-            {/* Open-book glyph: spine + two pages with ruled lines. */}
-            <path d="M 7 2 L 2 3 L 2 12 L 7 11 L 12 12 L 12 3 L 7 2 Z M 7 2 L 7 11"
-              stroke="currentColor" strokeWidth="1.1" fill="none" />
-            <path d="M 3.5 6 L 6 5.7 M 3.5 8 L 6 7.7 M 8 5.7 L 10.5 6 M 8 7.7 L 10.5 8"
-              stroke="currentColor" strokeWidth="0.6" opacity="0.55" />
-          </svg>
-          <span className="hidden sm:inline">JOURNAL</span>
-        </button>
-
-        {/* Save & Exit — desktop only */}
-        <button
-          onClick={() => { void handleSaveAndExit(); }}
-          disabled={saveState === "saving" || saveState === "saved"}
-          className="hidden sm:inline-flex"
-          style={{
-            ...chromeBtn(false),
-            color: saveState === "saved" ? "var(--hl-pass)" : "var(--ink-2)",
-            opacity: saveState === "saving" ? 0.6 : 1,
-          }}
-        >
-          <Save className="size-3" aria-hidden />
-          {saveLabel}
-        </button>
-
-        {/* Avatar pill */}
-        <div
-          className="ml-2 hidden sm:flex"
-          style={{
-            display:        "flex",
-            alignItems:     "center",
-            gap:            10,
-            padding:        "4px 12px 4px 4px",
-            border:         "1px solid var(--line-2)",
-            borderRadius:   2,
-          }}
-        >
-          <div
-            style={{
-              width:           28,
-              height:          28,
-              background:      "var(--accent-faint)",
-              border:          "1px solid var(--accent-soft)",
-              display:         "flex",
-              alignItems:      "center",
-              justifyContent:  "center",
-              fontFamily:      "var(--mono)",
-              fontSize:        11,
-              color:           "var(--accent)",
-              letterSpacing:   "0.1em",
-            }}
-          >
-            {initials}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            <div
-              className="ew-mono"
-              style={{
-                fontSize:      11,
-                color:         "var(--ink-1)",
-                letterSpacing: "0.1em",
-              }}
-            >
-              {playerName}
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile: user menu + sidebar toggle */}
-        <div className="flex items-center sm:hidden">
-          <UserMenu />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            style={{ color: "var(--accent)" }}
-            onClick={() => setSidebarOpen((v) => !v)}
-            aria-label="Toggle character panel"
-          >
-            <Menu className="size-5" />
-          </Button>
-        </div>
-
-        {/* Desktop user menu */}
-        <div className="hidden sm:block">
-          <UserMenu />
-        </div>
-      </header>
+      {/* ── UI-2: Top bar (extracted to components/layout/TopBar.tsx). ─── */}
+      <TopBar
+        genre={genre}
+        mapPanelAvailable={!!mapPanel}
+        onToggleSidebar={() => setSidebarOpen((v) => !v)}
+        onSaveAndExit={() => { void handleSaveAndExit(); }}
+        saveLabel={saveLabel}
+        saveDisabled={saveState === "saving" || saveState === "saved"}
+      />
 
       {/* ── Content row ─────────────────────────────────────────────────── */}
       <div className="relative flex flex-1 overflow-hidden">
@@ -441,25 +242,3 @@ export function GameLayout({
   );
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function chromeBtn(active: boolean): React.CSSProperties {
-  return {
-    display:        "inline-flex",
-    alignItems:     "center",
-    justifyContent: "center",
-    gap:            6,
-    padding:        "5px 12px",
-    marginLeft:     6,
-    border:         active
-      ? "1px solid var(--accent)"
-      : "1px solid var(--line-2)",
-    borderRadius:   2,
-    background:     active ? "var(--accent-faint)" : "transparent",
-    color:          active ? "var(--accent)" : "var(--ink-2)",
-    fontFamily:     "var(--mono)",
-    fontSize:       10,
-    letterSpacing:  "0.24em",
-    cursor:         "pointer",
-  };
-}

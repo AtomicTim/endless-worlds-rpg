@@ -161,7 +161,8 @@ export function JournalModal() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center"
+      // UI-11 — shared modal entry animation (design ref §14).
+      className="fixed inset-0 z-50 flex items-start justify-center modal-backdrop-in"
       style={{ background: "rgba(0,0,0,0.82)" }}
       onClick={() => setOpen(false)}
       role="dialog"
@@ -169,7 +170,7 @@ export function JournalModal() {
       aria-modal="true"
     >
       <div
-        className="flex flex-col"
+        className="flex flex-col modal-card-in"
         style={{
           position:     "relative",
           width:        "min(580px, 96vw)",

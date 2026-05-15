@@ -39,8 +39,9 @@ export function CodexModal() {
   return (
     <div
       // UI-7 — backdrop rgba(0,0,0,.82). z-50 sits below the inner
-      // entry-detail modal (z-60 in CodexContent).
-      className="fixed inset-0 z-50 flex items-start justify-center"
+      // entry-detail modal (z-60 in CodexContent). UI-11 adds the
+      // shared modal-backdrop-in / modal-card-in entry animations.
+      className="fixed inset-0 z-50 flex items-start justify-center modal-backdrop-in"
       style={{ background: "rgba(0,0,0,0.82)" }}
       onClick={() => close(false)}
       role="dialog"
@@ -48,7 +49,7 @@ export function CodexModal() {
       aria-modal="true"
     >
       <div
-        className="flex flex-col"
+        className="flex flex-col modal-card-in"
         style={{
           position:     "relative",
           width:        "min(580px, 96vw)",

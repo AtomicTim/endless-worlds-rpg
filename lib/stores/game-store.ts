@@ -1,6 +1,14 @@
 import { create } from "zustand";
 import type { MasterState, WorldAsset, LogEntry, DialogueOption, Item } from "@/types/game";
 
+// ── UI-11 — Toast types ───────────────────────────────────────────────────────
+export type ToastType = "codex" | "quest_complete" | "level_up" | "combat_result";
+export interface ToastEntry {
+  id:      string;
+  type:    ToastType;
+  message: string;
+}
+
 // ── Message types ─────────────────────────────────────────────────────────────
 
 export type MessageType =
@@ -119,6 +127,12 @@ interface GameStore {
    *  discovered field hasn't been flipped yet). */
   pendingAct1Reveal:      boolean;
 
+  // ── UI-11 — Toast queue ──────────────────────────────────────────────────
+  /** FIFO queue of active toasts. ToastManager renders the latest two;
+   *  a 3rd push evicts the oldest. Auto-dismissed per-type by
+   *  ToastManager. */
+  toasts:                  ToastEntry[];
+
   // ── FIX (UX Round 4) — Trade panel ─────────────────────────────────────────
   /** True when the player has explicitly requested the trade panel via
    *  the merchant trade button. Independent of currentTradeItems so the
@@ -198,6 +212,11 @@ interface GameStore {
   setPendingQuestReveal:   (reveal: GameStore["pendingQuestReveal"]) => void;
   /** V8.64 — toggle the deferred Act 1 reveal flag. */
   setPendingAct1Reveal:    (pending: boolean) => void;
+  /** UI-11 — enqueue a toast. Caps the queue at 3; ToastManager
+   *  renders the latest 2. */
+  enqueueToast:            (toast: Omit<ToastEntry, "id">) => void;
+  /** UI-11 — remove a toast by id (after exit animation). */
+  dismissToast:            (id: string) => void;
   /** FIX 7 — record that the player examined a Tier 1 object so the
    *  next EXAMINE on the same target short-circuits to a canned
    *  response. Key should be the canonical landmark name (lowercased). */
@@ -260,6 +279,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   journalModalOpen:       false,
   pendingQuestReveal:     null,
   pendingAct1Reveal:      false,
+  toasts:                 [],
   tradeOpen:              false,
   examinedObjects:        [],
   generatingRegionId:     null,
@@ -400,6 +420,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setJournalModalOpen:  (open) => set({ journalModalOpen: open }),
   setPendingQuestReveal: (reveal) => set({ pendingQuestReveal: reveal }),
   setPendingAct1Reveal:  (pending) => set({ pendingAct1Reveal: pending }),
+  enqueueToast: (toast) =>
+    set((s) => {
+      const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const next = [...s.toasts, { ...toast, id }];
+      return { toasts: next.length > 3 ? next.slice(-3) : next };
+    }),
+  dismissToast: (id) =>
+    set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   markObjectExamined: (objectKey) =>
     set((s) => {
       const key = objectKey.trim().toLowerCase();
@@ -438,6 +466,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       journalModalOpen:       false,
       pendingQuestReveal:     null,
       pendingAct1Reveal:      false,
+      toasts:                 [],
       examinedObjects:        [],
       generatingRegionId:     null,
     });

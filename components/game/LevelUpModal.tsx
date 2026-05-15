@@ -16,6 +16,7 @@ import {
   isPerkLevel,
 } from "@/lib/game/perks";
 import { STAT_CAP } from "@/lib/game/constants";
+import { toast } from "@/lib/game/toasts";
 
 /**
  * Day 22 — Level-up modal.
@@ -141,6 +142,8 @@ export function LevelUpModal() {
         { level_up: true, new_level: result.new_level }
       )
     );
+    // UI-11 — fire the level-up toast alongside the story-feed beat.
+    toast({ type: "level_up", message: `Level ${result.new_level}` });
 
     // P7 — slot unlock follow-up step. After stats commit, advance the
     // modal to the slot-N picker when the new level crosses 5 / 10 / 15.
@@ -287,10 +290,10 @@ export function LevelUpModal() {
         role="dialog"
         aria-modal="true"
         aria-label="Choose a perk"
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 modal-backdrop-in"
       >
         <div
-          className="w-full max-w-md rounded-sm font-mono shadow-2xl"
+          className="w-full max-w-md rounded-sm font-mono shadow-2xl modal-card-in"
           style={{
             backgroundColor: "var(--color-bg)",
             border:          "1px solid var(--accent)",
@@ -418,10 +421,10 @@ export function LevelUpModal() {
         role="dialog"
         aria-modal="true"
         aria-label={`Slot ${slotStep.slotNum} unlocked`}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 modal-backdrop-in"
       >
         <div
-          className="w-full max-w-md rounded-sm font-mono shadow-2xl"
+          className="w-full max-w-md rounded-sm font-mono shadow-2xl modal-card-in"
           style={{
             backgroundColor: "var(--color-bg)",
             border:          "1px solid var(--accent)",
@@ -544,11 +547,11 @@ export function LevelUpModal() {
       role="dialog"
       aria-modal="true"
       aria-label={`Level up to ${result.new_level}`}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 modal-backdrop-in"
       // No backdrop dismiss — modal is gameplay state, not chrome.
     >
       <div
-        className="w-full max-w-md rounded-sm font-mono shadow-2xl"
+        className="w-full max-w-md rounded-sm font-mono shadow-2xl modal-card-in"
         style={{
           backgroundColor: "var(--color-bg)",
           border:          "1px solid var(--hl-pass)",

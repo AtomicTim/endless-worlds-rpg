@@ -122,11 +122,13 @@ export function AttunementModal({ open, onClose }: Props) {
       aria-modal="true"
       aria-label="Attunement"
       onClick={commitAndClose}
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      // UI-11 — shared modal entry animation (design ref §14).
+      className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop-in"
       style={{ background: "rgba(0,0,0,0.82)", padding: 16 }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        className="modal-card-in"
         style={{
           width:           "100%",
           maxWidth:        540,

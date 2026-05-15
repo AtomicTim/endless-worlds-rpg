@@ -19,6 +19,7 @@ import {
 } from "@/lib/game/regional-bible-cache";
 import { rollEncounterWithPlayer, shouldRollEncounter } from "@/lib/game/combat-engine";
 import { consumeForcedEncounter } from "@/hooks/useCombat";
+import { toast } from "@/lib/game/toasts";
 import { isRegionAlreadyExpanded } from "@/lib/game/region-expansion-guard";
 import { renderRoutineCombatEvent } from "@/lib/game/combat-narration/templates";
 import { resolveLoot } from "@/lib/game/loot-resolver";
@@ -2407,6 +2408,7 @@ export function useGameLoop() {
               store.addMessage(
                 makeMessage("SYSTEM", `✦ ${entry.name} added to codex`)
               );
+              toast({ type: "codex", message: `${entry.name} added to codex` });
             }
           });
         } catch (err) {
@@ -2623,6 +2625,7 @@ export function useGameLoop() {
                 store.addMessage(
                   makeMessage("SYSTEM", `✦ ${locationAsset.name} added to codex`)
                 );
+                toast({ type: "codex", message: `${locationAsset.name} added to codex` });
               }
             });
             flagsAfter[flagKey] = true;
@@ -2760,6 +2763,7 @@ export function useGameLoop() {
                     store.addMessage(
                       makeMessage("SYSTEM", `✦ ${inst.name} added to codex`)
                     );
+                    toast({ type: "codex", message: `${inst.name} added to codex` });
                   }
                 });
               }
@@ -3083,6 +3087,7 @@ export function useGameLoop() {
                   store.addMessage(
                     makeMessage("SYSTEM", `✦ ${npcCodexAsset.name} added to codex`)
                   );
+                  toast({ type: "codex", message: `${npcCodexAsset.name} added to codex` });
                 }
               });
               console.log("[GameLoop/7g] Codex entry written for NPC:", npcCodexAsset.name);
@@ -3133,6 +3138,7 @@ export function useGameLoop() {
                       store.addMessage(
                         makeMessage("SYSTEM", `✦ ${locationAsset.name} added to codex`)
                       );
+                      toast({ type: "codex", message: `${locationAsset.name} added to codex` });
                     }
                   });
                   updatedState = {
@@ -3379,6 +3385,8 @@ export function useGameLoop() {
                   },
                 ),
               );
+              // UI-11 — fire the quest-complete toast.
+              toast({ type: "quest_complete", message: live.title });
               const qt = updatedState.quest_threads;
               if (qt) {
                 saveQuestThreadsAsync(updatedState.metadata.session_id, qt);

@@ -24,6 +24,7 @@ import { FloorLootStrip } from "@/components/game/FloorLootStrip";
 import { ContextPanel } from "@/components/game/ContextPanel";
 import WorldIntroModal from "@/components/WorldIntroModal";
 import { AttunementModal } from "@/components/game/AttunementModal";
+import { ToastManager } from "@/components/game/ToastManager";
 import { useFloorLoot } from "@/hooks/useFloorLoot";
 import { AssetCategory, Genre } from "@/types/game";
 import type { MasterState } from "@/types/game";
@@ -422,6 +423,9 @@ export default function GamePage() {
           {/* Day 20.4.2 TASK 4 — Codex modal overlay. Opens on top of
               /game without changing routes, so combat / dialogue stay
               mounted while the player consults the codex. */}
+          {/* UI-11 — Toast notifications. Mounted once at the root of
+              the game view; renders nothing until a toast is queued. */}
+          <ToastManager />
           <CodexModal />
           {/* Day 23C — Journal modal overlay. Same overlay pattern as
               Codex. JOURNAL button in GameLayout toggles it. */}

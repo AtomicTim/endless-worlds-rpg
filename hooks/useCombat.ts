@@ -20,6 +20,7 @@ import {
 } from "@/lib/game/combat-narration/templates";
 import type { FloatingDamageEntry } from "@/components/game/CombatMode/CombatantRow";
 import { makeFloatingEntry } from "@/components/game/CombatMode/CombatMode";
+import { toast } from "@/lib/game/toasts";
 
 /**
  * Day 20 Combat — React hook layer.
@@ -281,6 +282,16 @@ export function useCombat() {
           result.resolution?.kind === "victory" && next.floor_loot && next.floor_loot.length > 0
             ? next.floor_loot[next.floor_loot.length - 1].id
             : undefined;
+
+        // UI-11 — combat-result toast on victory. XP delta = current xp
+        // minus pre_combat_xp captured at encounter start (rule 31).
+        if (result.resolution?.kind === "victory") {
+          const xpGained = Math.max(0, result.newPlayer.xp - (state.combat.pre_combat_xp ?? 0));
+          toast({
+            type:    "combat_result",
+            message: xpGained > 0 ? `Victory · +${xpGained} XP` : "Victory",
+          });
+        }
 
         // Project events into the story feed.
         await projectCombatEventsToFeed({

@@ -1,6 +1,6 @@
 # Endless Worlds RPG — UI Design Reference
 
-**Version:** 2.3  
+**Version:** 2.4  
 **Status:** Design complete, ready for implementation  
 **Covers:** All designed UI surfaces as of May 2026
 
@@ -472,8 +472,20 @@ Appears on unread entries. Clears on open. Codex icon in top bar shows a dot whi
 ### Related Entries
 Each entry cross-links to related entries. Tapping navigates to that entry. Shown in detail view as a tappable list with type icons.
 
-### Discovery Ceremony
-Subtle toast at bottom of screen: "Added to Codex: Edran Voss" + dot on Codex icon.
+### Discovery Ceremony — Two-Layer Notification
+
+When a new entry is added to the Codex, two things happen simultaneously:
+
+**1. Story feed inline entry** — a small card appears in the narrative scroll at the exact point of discovery:
+- Type icon + "Added to Codex · [Type]" label in genre accent
+- Entry name (medium weight)
+- Role/location sub-label
+- "View in Codex →" link
+- Fades in: `opacity 0→1, translateY 6px→0, 300ms ease`
+
+**2. Toast at the bottom** — same amber toast as before: "Added to Codex: [Name]" (3.5s). Fires simultaneously with the feed entry.
+
+The feed entry is the canonical discovery moment (it stays in the narrative scroll permanently). The toast is the notification affordance for players not looking at the feed.
 
 ---
 
@@ -625,9 +637,10 @@ During combat: input bar remains but placeholder changes. Nav cards are hidden (
 
 **Victory card** is a permanent part of the story feed — not a modal, not a popup. Contains:
 - "Combat resolved" header with green check-circle icon
-- XP gained + Gold gained as large numbers
+- **XP gained only** — gold is NOT shown here. Looting requires the player to tap a "Search" button that appears below the victory card. This is a deliberate design choice: loot is earned through an explicit action, not automatically awarded.
 - Thin XP progress bar filling over 600ms (showing level progress)
 - Post-combat AI-generated prose line
+- "Search the remains →" prompt at the bottom of the card, triggering the loot flow
 
 After the victory card appears, the AI continues streaming the next narrative beat below it naturally.
 
@@ -640,25 +653,103 @@ If player HP hits 0:
 - Content: "You have fallen." · Options: Respawn at last safe point / Retry combat / Abandon run
 - These are permanent save-state decisions — confirm before executing
 
+### Modal Events
+
+Some game milestones require explicit player acknowledgement before continuing. These use a full backdrop overlay (`rgba(0,0,0,.82)`, `300ms ease`) with a centered modal card.
+
+**Modal entry:** `scale(0.88) → scale(1)` + `opacity 0→1`, `420ms cubic-bezier(0.22, 1, 0.36, 1)` — spring scale-in feels physical and premium.
+
+**Modal exit:** Backdrop fades out `300ms ease`. Player action (Continue / Confirm / close) always required before the game resumes. Never auto-dismiss.
+
+---
+
+#### Quest Complete Modal
+
+Appears when a quest moves to the Completed state. Uses green visual language to distinguish from amber combat/codex language.
+
+**Structure:**
+- 44px green circle with check icon, centred at top
+- "Quest Complete" label in small caps, green `#5a9a5a`
+- Quest name: 16px Georgia italic, prominent
+- 2–3 sentence narrative summary of what was accomplished
+- Thin divider
+- XP reward: large number + "XP" label
+- "Continue →" button (green border/tint)
+
+The modal is the canonical completion moment. After dismissal, the quest moves to the Completed section in the Chronicle and a brief toast fires: "Quest complete · [Name]" in green.
+
+---
+
+#### Level Up Modal
+
+The most important moment in the game loop. Must feel genuinely rewarding — this is the primary dopamine beat the entire session is building toward.
+
+**Structure:**
+
+1. **Header (ambient glow)**
+   - "✦ Level Up ✦" text in genre accent with pulsing `text-shadow` glow animation (2s loop)
+   - A radial gradient behind the level number (`rgba(accent, .22)`, 130px × 90px ellipse)
+   - Previous level → new level: `"4 → 5"` displayed as small grey `4 →` followed by large prominent `5` (52px, Georgia, `#e8d5b0`)
+   - Class name in muted small caps below
+
+2. **Divider**
+
+3. **Stat picker** — single inline row of 5 stat cards (same inline layout as character sheet)
+
+   Each card shows (top to bottom):
+   - `+1` badge: top-right corner, genre accent, hidden until card is selected
+   - Current value: 17px, neutral warm, transitions to accent on selection
+   - Stat name: 6px uppercase label
+   - Two-word description: 5.5px, very muted, two lines stacked
+
+   **Stat descriptions:**
+   | Stat | Description |
+   |------|-------------|
+   | STR | Melee · Carry |
+   | AGI | Dodge · Flee |
+   | INT | Magic · Lore |
+   | PER | Detect · Scout |
+   | CHA | Speech · Trade |
+
+   **Selected state:** amber border glow, amber background tint, `+1` badge appears, number colour transitions to genre accent, description brightens slightly.
+
+4. **Confirm button** — disabled and muted until a stat is selected. Once selected:
+   - Enables with amber border + background
+   - Button text updates dynamically: "INT: 13 → 14" (shows the specific upgrade)
+   - Arrow icon fades in at right
+
+5. **On confirm:**
+   - Selected stat card flares (brighter border + glow, `480ms`)
+   - Modal closes after 480ms
+   - Toast fires: "Level 5 · INT 14 · +4 Max HP" in bright gold
+   - Character sheet updates: XP bar resets, level number flashes, stat increments
+
+**Animation:**
+- Backdrop: `rgba(0,0,0,.82)` — darker than quest modal, more dramatic
+- Modal entry: `scale(0.88) → scale(1)`, `420ms cubic-bezier(0.22, 1, 0.36, 1)`
+- "✦ Level Up ✦" glow pulse: `2s ease-in-out infinite`, alternates between `text-shadow: 0 0 12px` and `0 0 26px` with outer spread
+
+---
+
 ### Toast Notification System
 
 Toasts appear at the **bottom of the screen, just above the input bar** (`bottom: 50px`, `z-index: 30`).
 
 **Timing:**
 - Entry: `translateY(18px) → translateY(0)` + `opacity 0→1`, `250ms cubic-bezier(0.22, 1, 0.36, 1)`
-- Persist: 3.5 seconds
+- Persist: 3.5 seconds (4s for level-up toast)
 - Exit: `opacity 1→0` + `translateY(0→10px)`, `200ms ease-in`
 
 **Four toast types:**
 
 | Type | Colour | Icon | Use case |
 |------|--------|------|----------|
-| Codex discovery | `#c4943a` amber | `ti-book` | New entry added to Codex |
-| Quest complete | `#5a9a5a` green | `ti-circle-check` | Quest moves to Completed |
-| Level up | `#e8d070` bright gold | `ti-arrow-up-circle` | Character levels up |
-| Combat result | `#7abb7a` green | `ti-shield-check` | Brief XP/gold summary after combat |
+| Codex discovery | `#c4943a` amber | `ti-book` | Fires alongside the story feed entry |
+| Quest complete | `#5a9a5a` green | `ti-circle-check` | Fires after the quest modal is dismissed |
+| Level up | `#e8d070` bright gold | `ti-arrow-up-circle` | Fires after the level up modal is confirmed |
+| Combat result | `#7abb7a` green | `ti-shield-check` | XP summary after victory card appears |
 
-Level-up toast fires simultaneously with the character sheet XP bar animation. Persists 4 seconds (slightly longer). A level-up also triggers the character sheet level flash regardless of whether the sheet is open.
+Level-up toast fires simultaneously with the character sheet XP bar animation. A level-up triggers character sheet animations regardless of whether the sheet is open.
 
 If multiple toasts queue simultaneously, they stack vertically (5px gap, newest on top). Maximum 2 visible at once — third queues.
 
@@ -696,8 +787,14 @@ Codex, Map, Journal, Chronicle all replace the center panel content. Left and ri
 | XP bar fill | 400ms | `ease` |
 | Level number flash | 600ms | `ease` |
 | Status effect slide | 300ms | `ease` |
+| Modal backdrop in | 300ms | `ease` |
+| Modal card scale-in | 420ms | `cubic-bezier(0.22, 1, 0.36, 1)` |
+| Modal backdrop out | 300ms | `ease` |
+| Level-up glow pulse | 2000ms | `ease-in-out infinite` |
+| Stat card confirm flare | 480ms | `ease` |
 | Toast enter | 250ms | `cubic-bezier(0.22, 1, 0.36, 1)` |
-| Toast persist | 3500ms | — |
+| Toast persist (standard) | 3500ms | — |
+| Toast persist (level-up) | 4000ms | — |
 | Toast exit | 200ms | `ease-in` |
 | Mobile screen open | 300ms | `cubic-bezier(0.22, 1, 0.36, 1)` |
 | Mobile screen close | 250ms | `ease-in` |
@@ -715,7 +812,13 @@ Codex, Map, Journal, Chronicle all replace the center panel content. Left and ri
 - **LLM stream is the typewriter** — display tokens as they arrive, no buffering.
 - **Combat visual effects fire at fixed times** — 400ms after action, not on LLM completion.
 - **Combat panel is a flex item, not an overlay** — it pushes the story feed up as it opens. Height 0 → 188px, `380ms cubic-bezier(0.22, 1, 0.36, 1)`.
+- **Victory card shows XP only — no gold** — gold is awarded through the explicit "Search" loot flow, not automatically on kill. The victory card includes a "Search the remains →" prompt.
 - **Victory card lives in the story feed permanently** — not a modal. The feed continues below it.
+- **Codex discovery fires two notifications simultaneously** — an inline feed entry card AND a toast. Both are required.
+- **Quest complete uses a modal** — not just a toast. The modal must be dismissed before the game resumes. Toast fires after dismissal.
+- **Level up uses a full modal with stat picker** — the player must select one stat to increase and confirm before the modal closes. The confirm button is disabled until a stat is selected and updates its label dynamically to show the specific upgrade (e.g., "INT: 13 → 14"). Never auto-select.
+- **Level up modal backdrop is darker** — `rgba(0,0,0,.82)` vs `rgba(0,0,0,.72)` for other modals. The moment deserves more gravity.
+- **Stat descriptions in level up picker** — each stat card shows two brief descriptors stacked (e.g., "Magic · Lore" for INT). These help new players make informed choices.
 - **Stat/roll system is always probabilistic** — never reject an attempt at UI level.
 - **NPC dialogue: exactly 4 content slots + 1 persistent end button** — end button is structurally outside the slots.
 - **Portrait zones on combat cards have fixed pixel dimensions** — art drops in as background image, layout does not reflow.

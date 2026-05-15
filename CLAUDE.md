@@ -1,9 +1,35 @@
 # Project: Endless Worlds RPG — Master Context
 
-**Version:** 8.83  |  **Build status → see PROMPT-LOG.md**
+**Version:** 8.84  |  **Build status → see PROMPT-LOG.md**
 **Objective:** A text-based RPG that generates a unique world for every playthrough. Genre-agnostic, infinitely replayable, CRPG depth.
 
 **References:** /docs/architecture-spec.md · /docs/combat-spec.md · /docs/quest-system-spec.md · /docs/genre-reference.md · /docs/project-log.md
+
+---
+
+## ⚡ WORKFLOW — READ THIS FIRST
+
+**Three roles:**
+- **Tim** — Vision and product decisions. Verifies every prompt result manually.
+- **Claude.ai** — Architecture, design, and sequencing. Writes all prompts. Owns CLAUDE.md and PROMPT-LOG.md.
+- **Claude Code** — Implementation only. Executes prompts. Updates PROMPT-LOG.md after every prompt.
+
+**Round flow (every prompt):**
+1. Claude.ai writes the prompt in the Claude.ai conversation and gives it to Tim.
+2. Tim pastes it into Claude Code and runs it.
+3. Claude Code pushes the commit and updates PROMPT-LOG.md (version, baseline, arc status).
+4. Tim reports the commit hash and test count back to Claude.ai.
+5. Claude.ai updates CLAUDE.md **only if new rules or architecture decisions need to be captured.** Not every round.
+6. Tim verifies manually per the checklist in PROMPT-LOG.md, then Claude.ai writes the next prompt.
+
+**File ownership:**
+- `PROMPT-LOG.md` — Updated after **every** prompt. Contains: CLAUDE.md version, last commit, jest baseline (authoritative), arc status table, manual verification checklist.
+- `CLAUDE.md` — Updated **only when rules or architecture change.** Not for baseline bumps or status updates — those live in PROMPT-LOG.md.
+- `docs/project-log.md` — Trajectory notes, round history, future feature ideas, design captures. Never bloats CLAUDE.md.
+
+**jest baseline** — The authoritative number lives in PROMPT-LOG.md. Rule 91 in this file describes the policy; the current count is always in PROMPT-LOG.md.
+
+**Prompts are written in the Claude.ai conversation, not in Drive docs.** Drive is for design specs and living reference material only.
 
 ---
 
@@ -26,9 +52,9 @@ Design principles: Pickup-friendly · Mobile-first viewport · Multiple play sty
 **Per-prompt protocols:**
 - **V8.40** — Investigation-before-patching.
 - **V8.41** — Origin/main baseline check: `git fetch origin && git log origin/main --oneline -5` as step 1.
-- **V8.83** — jest baseline = 626. See rule 91.
 - **V8.69** — No token cap changes without confirmed output_tokens data first.
 - **V8.78** — Prompts for Claude Code are written directly in the Claude.ai conversation, not in Drive docs.
+- **jest baseline** — Authoritative count lives in PROMPT-LOG.md. See rule 91 for policy.
 
 ---
 
@@ -58,7 +84,7 @@ Post-Day 25: **Genre Session** (world theme taxonomy + world structure per-genre
 
 ---
 
-## Design Session Decisions (V8.77–V8.83) — Full index
+## Design Session Decisions (V8.77–V8.84) — Full index
 
 ### DEATH PENALTY (locked — ✅ shipped P1)
 - Gold loss: 10% of current gold, cap 50, floor 0
@@ -225,7 +251,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 79. **Prompt-template hardcoded IDs are a recurring bug class.** (V8.42)
 80. **Nav card dedup at region zone.** DEEPER suppresses settlement if matches BACK. (V8.43–44)
 81. **Map tier auto-switch on every arrival.** Region zone → tier 2, else → tier 1. (V8.43–44)
-82. **jest baseline history.** 393→…→552→567→580→593→605→626. (V8.47–V8.83)
+82. **jest baseline history.** 393→…→552→567→580→593→605→626→648. Authoritative current count in PROMPT-LOG.md. (V8.47–V8.84)
 83. **Loot never auto-credits.** All drops go to floor_loot[]. (V8.47)
 84. **Container search is engine-resolved, zero LLM calls.** (V8.47)
 85. **Currency + inventory cap canonical.** INVENTORY_CAP = 20. (V8.47)
@@ -234,7 +260,7 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 88. **resolveUseItem resolves heal by effect, not id.** (V8.49)
 89. **Archetype system in archetypes.ts.** 25 classes. STAT_BASE=2, primary +2, secondary +1. (V8.50)
 90. **Level-up post-combat, player-driven.** LevelUpModal + 5-button picker. (V8.50)
-91. **jest baseline = 626 (V8.83).** P3 added 21 tests (605→626). 626 is authoritative. (V8.83)
+91. **jest baseline policy.** The authoritative current number lives in PROMPT-LOG.md. Claude Code updates it after every prompt. CLAUDE.md tracks the history in rule 82 only. (V8.84)
 92. **Ability modifier: floor((score-2)/2).** (V8.51)
 93. **Enemy stat budgets: tier-1 agi_mod ≤1, hp min ≤8.** (V8.51)
 94. **RegionBibleCache in-flight dedup via Map<string, Promise>.** (V8.53)
@@ -328,6 +354,8 @@ See Drive: "world-theme-taxonomy". 54 themes across 5 genres. Implementation: Ge
 182. **act1RevealFiredRef is permanent.** Once true, never resets. Fires exactly once per session. (V8.81)
 183. **P5 shipped 7439cb8.** StatusEffectPills, feed templates, getStatusDisplayName, DoT floats. StatusEffectAlias type added to types/game.ts. 593→605. (V8.82)
 184. **P3 shipped 0219bec.** lib/game/trade-resolver.ts (pure, 21 tests). TradeModal rewritten. openTrade synchronous (no AI). Inn rest wired. Type fields (merchant_inventory, merchant_speciality, Item.starting_item, DialogueOption "rest") landed under P5 hash due to parallel execution — functionally present. restCompleteSignal in game-store.ts is P7 attunement consumer hook. 605→626. (V8.83)
+185. **P4 shipped d5ceeb1.** lib/game/quest-completion.ts (new, pure): itemMatchesCondition (lenient id matching), evaluateQuestCondition, tryCompleteSideQuest (consumes item + flips status), peekQuestGatesForNpc, buildQuestGateNarrativeContext. Narrator HARD RULES: explicit prohibition on advancing quest state. quest_gate_blocked/quest_gate_ready enrichment on narrative_context. 626→648. (V8.84)
+186. **Jest baseline in PROMPT-LOG.md only.** Current number lives in PROMPT-LOG.md. CLAUDE.md tracks history in rule 82. Rule 91 is the policy anchor. (V8.84)
 
 ---
 
@@ -396,14 +424,9 @@ COMBAT: GENRE TONE PRIMER → COMBAT EVENT → HARD RULES → length hint
 
 ---
 
-## Workflow
+## Workflow (detail)
 
-Claude.ai owns CLAUDE.md and PROMPT-LOG.md. After every prompt: update PROMPT-LOG.md (always) + CLAUDE.md (only when rules change).
-
-Round flow: Claude Code pushes → Tim reports → Claude.ai updates PROMPT-LOG.md → Tim verifies → next prompt.
-
-**Protocols:** Origin/main baseline check (rule 76) · Investigation-before-patching (V8.40) · No token cap changes without output_tokens data (V8.69) · Prompts written in Claude.ai conversation (rule 175). **npx jest (no pattern) = authoritative count. Baseline = 626 (rule 91).**
-
-**Note:** Remote URL `https://github.com/AtomicTim/endless-worlds-rpg.git` (capitalized).
+See the **⚡ WORKFLOW** section at the top of this file for the full division of labor.
 
 **Authority:** architecture-spec.md · combat-spec.md · quest-system-spec.md · Game Vision · project-log.md.
+**Note:** Remote URL `https://github.com/AtomicTim/endless-worlds-rpg.git` (capitalized).

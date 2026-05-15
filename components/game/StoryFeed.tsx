@@ -21,6 +21,9 @@ import {
 } from "./StoryComponents";
 import { StreamCursor } from "./StreamCursor";
 import { pickAtmosphericFragment } from "@/lib/game/atmospheric-fragments";
+import { LootList } from "@/components/game/loot/LootList";
+import { useFloorLoot } from "@/hooks/useFloorLoot";
+import { currencyLabelFor } from "@/lib/game/currency";
 import {
   buildExactHighlights,
   findExactHighlights,
@@ -103,6 +106,10 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
   const masterState    = useGameStore((s) => s.masterState);
   const locationAssets = useGameStore((s) => s.locationAssets);
   const dialogueOpen   = useGameStore((s) => s.currentDialogueOptions.length > 0);
+  // UI-8 — loot handlers for the inline "Search the remains" / LootList
+  // beneath the Victory banner. Pulled once at component scope and
+  // closed over by the per-message renderer below.
+  const lootHandlers   = useFloorLoot();
   const highlightCandidates = useMemo<HighlightCandidate[]>(() => {
     if (!masterState) return [];
     return buildExactHighlights(masterState, locationAssets);
@@ -195,6 +202,7 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
             genre={genre}
             highlightCandidates={highlightCandidates}
             masterState={masterState}
+            lootHandlers={lootHandlers}
           />
         ))}
 
@@ -283,9 +291,19 @@ interface MessageEntryProps {
   /** UI-4 — needed to resolve type/region labels for SceneArrival
    *  on arrival NARRATIVE messages. */
   masterState:         MasterState | null;
+  /** UI-8 — Search / Take / Take All handlers for the inline LootList
+   *  rendered below the Victory banner. Threaded from the StoryFeed
+   *  parent (single useFloorLoot() call) rather than re-invoking the
+   *  hook per message. */
+  lootHandlers:        {
+    onSearchRemains: (entry_id: string) => void;
+    onTake:          (entry_id: string, item_id: string) => void;
+    onTakeGold:      (entry_id: string) => void;
+    onTakeAll:       (entry_id: string) => void;
+  };
 }
 
-function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandidates, masterState }: MessageEntryProps) {
+function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandidates, masterState, lootHandlers }: MessageEntryProps) {
   void genre;
   const { type, content, metadata } = message;
   const restored         = metadata?.restored === true;
@@ -554,6 +572,14 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
               region_name?: string;
             }
           | undefined;
+        // UI-8 — floor_loot entry id for THIS victory. Threaded by
+        // useCombat. StoryFeed looks up the live entry below the
+        // banner to render either "Search the remains →" or the
+        // inline LootList — depending on whether the entry has been
+        // resolved yet.
+        const floorLootEntryId = typeof m.floor_loot_entry_id === "string"
+          ? m.floor_loot_entry_id
+          : null;
 
         // Day 20.3 TASK 1 — full-width turn separators. Strip the
         // V8.35 dash bookends from the templated string and render
@@ -649,6 +675,22 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
             destinationLine = `You break to ${destination.node_name}.`;
           }
 
+          // UI-8 — Resolve the live floor_loot entry for THIS victory
+          // (if any). The block below the banner renders:
+          //   • a "Search the remains →" link while entry.pending is set
+          //   • a "Searched ✓" badge + inline LootList after search
+          //   • nothing when no entry id is attached (defeat/flee or a
+          //     legacy victory message)
+          const victoryLootEntry =
+            eventType === "victory" && floorLootEntryId
+              ? masterState?.floor_loot?.find((e) => e.id === floorLootEntryId)
+              : undefined;
+          const lootIsPending  = !!victoryLootEntry?.pending;
+          const lootIsResolved = !!victoryLootEntry && !victoryLootEntry.pending;
+          const currencyWord   = masterState
+            ? currencyLabelFor(masterState.metadata.genre)
+            : "gold";
+
           return (
             <div className="message-enter combat-resolution-block">
               <div
@@ -668,6 +710,66 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
               {destinationLine && (
                 <div className="combat-resolution-destination">
                   {destinationLine}
+                </div>
+              )}
+
+              {/* UI-8 — Search-the-remains link / inline loot list. */}
+              {eventType === "victory" && victoryLootEntry && (
+                <div
+                  style={{
+                    marginTop:    10,
+                    paddingTop:   8,
+                    borderTop:    "1px solid rgba(var(--genre-accent-rgb), .14)",
+                    textAlign:    "center",
+                  }}
+                >
+                  {lootIsPending && (
+                    <button
+                      type="button"
+                      onClick={() => lootHandlers.onSearchRemains(victoryLootEntry.id)}
+                      className="ew-serif"
+                      style={{
+                        background:    "transparent",
+                        border:        "none",
+                        cursor:        "pointer",
+                        color:         "var(--genre-accent)",
+                        fontStyle:     "italic",
+                        fontSize:      13,
+                        padding:       "4px 8px",
+                      }}
+                    >
+                      Search the remains →
+                    </button>
+                  )}
+                  {lootIsResolved && (
+                    <>
+                      <div
+                        className="ew-serif"
+                        role="status"
+                        style={{
+                          color:     "#5a9a5a",
+                          fontStyle: "italic",
+                          fontSize:  12,
+                          marginBottom: 6,
+                        }}
+                      >
+                        Searched ✓
+                      </div>
+                      {masterState && (
+                        <div style={{ textAlign: "left" }}>
+                          <LootList
+                            entry={victoryLootEntry}
+                            currencyLabel={currencyWord}
+                            playerInventorySize={masterState.player_state.inventory.length}
+                            header="You search the remains"
+                            onTake={lootHandlers.onTake}
+                            onTakeGold={lootHandlers.onTakeGold}
+                            onTakeAll={lootHandlers.onTakeAll}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
             </div>

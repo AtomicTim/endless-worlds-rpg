@@ -1,7 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Package, Box, BookOpen, Skull } from "lucide-react";
+import { LootModal } from "@/components/game/loot/LootModal";
 import { AssetCategory } from "@/types/game";
 import type {
   FloorLootEntry,
@@ -137,6 +138,12 @@ function actionFor(obj: LocationObject): { label: string; verb: string; icon: "c
 export function ContextPanel({ onSubmit }: ContextPanelProps) {
   const masterState    = useGameStore((s) => s.masterState);
   const locationAssets = useGameStore((s) => s.locationAssets);
+  // UI-8 — open loot modal state. ID === null when modal is closed.
+  // Replaces the UI-3 console.log stub. The modal reads the live
+  // entry from masterState.floor_loot so taking items in the modal
+  // immediately reflects in the entry's items count + the Context
+  // Panel entry disappearing once the pile is empty.
+  const [lootModalEntryId, setLootModalEntryId] = useState<string | null>(null);
 
   // Stable identity check — render the genre-overlay shell even when
   // there's no state yet, so the panel doesn't flash blank during
@@ -220,10 +227,11 @@ export function ContextPanel({ onSubmit }: ContextPanelProps) {
           name={entry.source === "enemy" ? "Remains" : "Container"}
           icon={entry.source === "enemy" ? "remains" : "container"}
           actionLabel="Search"
-          // UI-8 will wire the loot modal. Stub until then.
-          onClick={() => {
-            console.log("[ContextPanel] loot modal stub — UI-8 wires this:", entry.id);
-          }}
+          // UI-8 — open the loot modal. The entry disappears from this
+          // list automatically once items + gold are all taken (the
+          // floor_loot filter at the top of this component drops fully-
+          // looted entries).
+          onClick={() => setLootModalEntryId(entry.id)}
         />
       ))}
     </Section>
@@ -327,6 +335,14 @@ export function ContextPanel({ onSubmit }: ContextPanelProps) {
         {/* ── Section D: IN THIS SPACE (Objects) ────────────────────────── */}
         {objectsSection}
       </div>
+
+      {/* UI-8 — Loot modal overlay. Mounts adjacent to the panel so it
+          inherits the same React subtree but lives at z-index 50 over
+          the rest of the layout. Closes on backdrop tap or ✕. */}
+      <LootModal
+        entryId={lootModalEntryId}
+        onClose={() => setLootModalEntryId(null)}
+      />
     </div>
   );
 }

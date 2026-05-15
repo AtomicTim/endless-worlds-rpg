@@ -273,6 +273,15 @@ export function useCombat() {
         );
         setMasterState(next);
 
+        // UI-8 — capture the floor_loot entry id created by THIS victory
+        // so the victory banner in the story feed can wire its
+        // "Search the remains →" link to the right entry. applyCombatResult
+        // appends the new entry to floor_loot; its id sits at the tail.
+        const victoryLootEntryId: string | undefined =
+          result.resolution?.kind === "victory" && next.floor_loot && next.floor_loot.length > 0
+            ? next.floor_loot[next.floor_loot.length - 1].id
+            : undefined;
+
         // Project events into the story feed.
         await projectCombatEventsToFeed({
           events:           result.events,
@@ -284,6 +293,7 @@ export function useCombat() {
           addMessage,
           setDisplayPhase,
           emitFloat,
+          victoryLootEntryId,
         });
 
         // After drain ends — if combat is still active, sync the pill
@@ -338,6 +348,14 @@ export function useCombat() {
         );
         setMasterState(next);
 
+        // UI-8 — kickoff can in principle reach a victory (e.g. the
+        // enemy phase that opens combat one-shots an already-dying
+        // foe). Capture the loot entry id the same way submit does.
+        const victoryLootEntryId: string | undefined =
+          result.resolution?.kind === "victory" && next.floor_loot && next.floor_loot.length > 0
+            ? next.floor_loot[next.floor_loot.length - 1].id
+            : undefined;
+
         await projectCombatEventsToFeed({
           events:           result.events,
           combat:           result.newState ?? state.combat,
@@ -348,6 +366,7 @@ export function useCombat() {
           addMessage,
           setDisplayPhase,
           emitFloat,
+          victoryLootEntryId,
         });
 
         // After drain — sync display pill to authoritative state.
@@ -438,6 +457,11 @@ interface ProjectArgs {
    *  event. Called AFTER pacing sleeps so the float pops at the same
    *  moment as the matching story-feed line lands. */
   emitFloat:        (event: CombatEvent) => void;
+  /** UI-8 — id of the floor_loot entry created by this victory (when
+   *  the resolution was a victory). Attached to the victory message
+   *  metadata so the "Search the remains →" link in the StoryFeed
+   *  victory banner can wire to the right entry. */
+  victoryLootEntryId?: string;
 }
 
 /**
@@ -573,6 +597,13 @@ export async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void
           // reads this to render "You wake at <Settlement> in
           // <Region>." or "You break to <Node>." below the prose.
           destination:          event.destination,
+          // UI-8 — for victory events, the floor_loot entry id created
+          // by THIS fight. StoryFeed reads it + looks up the live
+          // entry in masterState.floor_loot to render the
+          // "Search the remains →" link / inline loot list.
+          ...(event.type === "victory" && args.victoryLootEntryId
+            ? { floor_loot_entry_id: args.victoryLootEntryId }
+            : {}),
         })
       );
       continue;

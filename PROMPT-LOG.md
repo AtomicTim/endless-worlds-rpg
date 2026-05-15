@@ -3,8 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 995f063 (PROMPT-LOG: P8 complete — also contains UI-4 files, both on main)
-**jest baseline:** 719 (authoritative)
+**Last code commit:** 13468a0 (HF2 — dungeon enemy spawn fix)
+**jest baseline:** 734 (authoritative)
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -20,7 +20,7 @@
 | P6 | Ability System — Foundation | 87741fb | 678 | ✅ |
 | P7 | Ability System — Combat + Attunement UI | 334c6b5 | 699 | ✅ verified |
 | P8 | Perks System | b160ff4 | 719 | ✅ |
-| HF2 | Dungeon Enemy Spawn Fix | — | — | ⏳ IN PROGRESS |
+| HF2 | Dungeon Enemy Spawn Fix | 13468a0 | 734 | ✅ |
 | P9 | Professions Foundation | — | — | ⏳ Day 25 |
 | P10 | Professions Crafting + XP + Milestones | — | — | ⏳ Day 25 |
 | P11 | Professions Character Sheet UI | — | — | ⏳ Day 25 |
@@ -52,7 +52,10 @@
   prompt (UI-4b) — not blocking other UI prompts.
 - **Perk gold/xp consumers not wired (P8).** perk_gold_bonus_pct / perk_xp_bonus_pct stored on
   PlayerState but loot-resolver and handleVictory don't read them. Small follow-up patch.
-- **Dungeon enemy spawn failing (HF2 — in progress).** RegionBible enemy IDs fail 4-layer lookup.
+- **Dungeon enemy spawn safety net shipped (HF2).** Defensive prefix-shortcut in resolveEnemyLookup
+  catches zone_id corruption (session-84 Bug 2). Generic dungeon fallback fires when all roster ids
+  fail. Underlying zone_id corruption itself is not patched here — see session-84 Bug 2 for the
+  fix to the apply-regional-bible cache write path.
 - **Enemy-side status ticks not running (P7).** Follow-up after HF2.
 - **Variant pools v2 deferred (P7).** Genre Session scope.
 - **Object discovery per-flag missing (UI-3).** node.discovered fallback. Flagged in code.
@@ -72,4 +75,8 @@
 **P4:** Quest item gate — deflect without item, complete + consume with item, narrator silent.
 **P5:** Status pill, DoT in feed, floating DoT number.
 **P8:** Perk step at level 4 — 3 cards, confirm stat-bonus applies, Momentum adds charge. Not urgent.
+**HF2:** Enter a dungeon whose roster previously failed (e.g. the_seam_foothills_rockfall) → confirm
+  an encounter spawns. If the bible is present and zone_id is uncorrupted, the proper enemy spawns.
+  If both fail, the generic genre-themed fallback ("Dungeon Creature" in Fantasy) spawns instead.
+  Cross-check console: a [combat-engine] diagnostic shows nodeZoneId / regionBibleKeys etc. on miss.
 **UI-4:** Visual — prose warmer (#c0a878), scene dividers on arrival, genre cursor blinks.

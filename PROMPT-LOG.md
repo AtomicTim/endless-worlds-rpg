@@ -3,7 +3,7 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** a11d82b (UI-10 — combat UI overhaul)
+**Last code commit:** ffdedf4 (PROMPT-LOG: UI-10 complete — via Claude Code)
 **jest baseline:** 734 (authoritative)
 **tsc:** clean
 
@@ -12,51 +12,49 @@
 | # | Prompt | Commit | Tests | Status |
 |---|--------|--------|-------|--------|
 | P1–P8 | (see history) | — | — | ✅ |
-| HF2 | Dungeon Enemy Spawn Fix | 13468a0 | 734 | ✅ (verify: enter dungeon) |
+| HF2 | Dungeon Enemy Spawn Fix | 13468a0 | 734 | ✅ (verify in test session) |
 | P9–P11 | Professions | — | — | ⏳ Day 25 |
 
-## UI Implementation Arc
+## UI Implementation Arc — COMPLETE ✅
 
 | # | Prompt | Commit | Tests | Status |
 |---|--------|--------|-------|--------|
-| UI-1–UI-9b | (see history) | — | — | ✅ |
+| UI-1 | Design Token + Genre System | c7d0370 | 648 | ✅ |
+| UI-2 | Top Bar | 463a593 | 678 | ✅ |
+| UI-3 | Context Panel | 689d511 | 699 | ✅ |
+| UI-4 | Story Panel Typography + Streaming | 995f063 | 719 | ✅ |
+| UI-5 | Navigation Cards | 21e0f25 | 719 | ✅ |
+| UI-6 | NPC Dialogue | 9db1e58 | 734 | ✅ |
+| UI-7 | Codex + Journal/Quests | aa98896 | 734 | ✅ |
+| UI-8 | Loot Flow | 8749056 | 734 | ✅ |
+| UI-9 | Character Panel | f811645 | 734 | ✅ |
+| UI-9b | Nav Card Layout Cleanup | 51587a8 | 734 | ✅ |
 | UI-10 | Combat UI Overhaul | a11d82b | 734 | ✅ |
 | UI-11 | Transitions + Toast System | d4a99e5 | 734 | ✅ |
 | UI-12 | Character Creation Wizard | beeb2ef | 734 | ✅ |
-| UI-13 | Main Menu + Save Slots | — | — | ⏳ IN PROGRESS |
+| UI-13 | Main Menu + Save Slots | 913578f | 734 | ✅ |
 
-## Known Gaps / Bugs
+## Known Gaps (post-arc)
 
-- **Narrator streaming buffered (UI-4b).** Structural refactor needed. Not blocking.
+- **Narrator streaming buffered (UI-4b).** Structural refactor prompt needed.
 - **Perk gold/xp consumers not wired (P8).** Small follow-up.
-- **Enemy-side status ticks not running (P7).** Follow-up after UI-10.
-- **Bug 2 — zone_id cache leak.** HF2 defensive fix shipped. Root cause refactor pending.
+- **Enemy-side status ticks not running (P7).** Follow-up HF.
+- **Bug 2 — zone_id cache leak.** Defensive fix shipped. Root cause pending.
+- **Combat panel exit animation deferred (UI-10).** Polish patch.
 - **FloorLootStrip still rendered (UI-8).** Retire in cleanup pass.
-- **Per-item ✓ on taken loot deferred (UI-8).** Polish patch.
-- **Codex 5-tab + Journal 2-tab spec deferred (UI-7).** Data shape change needed.
-- **Sidebar width 280px (UI-9).** Fix when LogBook redesigned.
-- **Marine icon: IconAnchor (UI-12).** ti-ship absent from @tabler/icons-react v3.
+- **Codex/Journal tab restructure deferred (UI-7).** Data shape change required.
+- **Sidebar width 280px (UI-9).** LogBook co-tenant blocks narrowing.
 - **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass.
+- **OneDrive sync race (recurring).** Staged-as-you-go pattern for CombatMode files.
 
-## Key Implementation Notes
+## Next Steps
 
-**UI-12:** @tabler/icons-react@3.44.0 installed. Class cards Tabler icons in stat colours. Step
-  dots (6, no labels). CharacterPanel currency now Tabler. Marine → IconAnchor.
-**UI-11:** ToastManager bottom:50 right:16 z-30, max 2 visible, queue cap 3. 4 types wired to
-  codex write, quest complete, level-up confirm, victory XP. Modal entry animations on 4 modals.
-**UI-8:** LootItemCard + LootList + LootModal. Victory "Search →" link. Context Panel wired.
-**UI-6:** DialogueModal inline panel. 4 slots + secondary row + End outside. Odds from stat mod.
-**UI-9b:** Single-column nav cards. min-height 56px. Full-width. Typography floor 13/8px.
-
-## Manual Verification Pending
-
-**HF2:** Enter dungeon → confirm enemy spawns. BLOCKING UI-10.
-**UI-8:** Loot flow — win fight, search, take, take all, full inventory, Context Panel revisit.
-**UI-11:** Toasts fire on codex/quest/level-up/victory. Modal scale-in animation visible.
-**UI-12:** Walk through wizard — class icons, stat colours, step dots, accent caret on inputs.
-**UI-10:** Visual — enter combat → 380ms panel rise; HP bars use 5-tier threshold ladder
-  (#4a8a4a → #e03030 pulse ≤10%); kill an enemy → greyscale + compress; action buttons use
-  --card-bg/--card-border with genre-accent hover border; turn badge "YOUR TURN" / "ENEMY TURN"
-  (accent / red); dice line ("16 vs 12 · hit") appears below combatants on each roll with
-  80ms fade. Not blocking.
-(None of the above block UI-13 or UI-10 once HF2 verified.)
+1. Comprehensive test session (see Claude.ai for full checklist)
+2. Fix anything broken
+3. Cleanup pass (orphaned files, FloorLootStrip, sidebar)
+4. UI-4b narrator streaming refactor
+5. Enemy-side status tick HF
+6. Day 24 design + implementation
+7. Day 25 — P9–P11 professions + customization
+8. Genre Session
+9. In-app zoom / settings screen

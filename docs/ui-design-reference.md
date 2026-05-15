@@ -1,7 +1,7 @@
 # Endless Worlds RPG — UI Design Reference
 
-**Version:** 2.5  
-**Status:** Design complete, ready for implementation planning  
+**Version:** 3.0  
+**Status:** Design complete — all primary surfaces specced  
 **Covers:** All designed UI surfaces as of May 2026
 
 ---
@@ -29,6 +29,7 @@ Background primary:    #1c1a17  (very dark warm brown)
 Background secondary:  #1e1b16
 Background tertiary:   #141210  (top/bottom bars)
 Background card:       #221e19  (combat cards, option cards)
+Main menu background:  #08060a  (coolest/darkest — outside game)
 
 Border default:        #2d2618
 Border subtle:         #252018
@@ -194,6 +195,7 @@ Horror uses BOTH `.ol-grid` (fog) AND `.ol-scan` (dots) simultaneously.
 - Journal and Quests list
 - Loading state content areas
 - Character sheet panel
+- Context Panel
 
 **Surfaces that need card shape treatment:**
 - Story feed navigation cards
@@ -203,11 +205,13 @@ Horror uses BOTH `.ol-grid` (fog) AND `.ol-scan` (dots) simultaneously.
 - Journal entry cards, quest cards
 - Loading state new-area entry card
 - Character sheet stat block, equipment slots, pack items
+- Context Panel NPC and object rows
 
 **Surfaces already genre-specific (no additional work needed):**
 - Maps — handled via Canvas rendering, already fully genre-specific
 - Character creation wizard — genre cards and class cards already themed; inherits genre class naturally
-- Top bar — already reactive to genre accent colour; stays as dark chrome
+- Top bar — always dark chrome, genre accent only in logo mark and genre tag pill
+- Main menu — uses neutral amber regardless of genre (no active game loaded)
 
 ---
 
@@ -216,20 +220,46 @@ Horror uses BOTH `.ol-grid` (fog) AND `.ol-scan` (dots) simultaneously.
 ### Desktop (3-Panel)
 
 ```
-[Left 196px: Context Panel] [Center: Story Feed] [Right 196px: Character Panel]
+[Left: Context Panel] [Center: Story Feed] [Right: Character Panel]
 ```
 
-**Top bar:** `Endless Worlds` logo | Genre tag | Location breadcrumb (Region › Settlement › Place) | Terse/Standard/Rich toggle | Map/Codex/Journal | Character pill
+**Context Panel (left):** Always-visible current location summary. 196px at ≥1280px, 160px at 1024–1279px. See Section 18 for full spec.
 
-**Context Panel (left):** Always-visible current location — name, type, description, NPCs present, interactable objects. NOT a map — navigation is via nav cards in the story feed.
-
-**Character Panel (right):** Fixed 196px column. Scrollable. Contains: portrait + identity, HP/XP bars, status effects, attribute block, equipped items + gold, pack inventory. See Section 13 for full spec.
+**Character Panel (right):** Same widths as Context Panel. Scrollable. See Section 13 for full spec.
 
 **Story Feed (centre):** The primary play surface. Top-down scroll. Story text, navigation cards, NPC dialogue, combat — all live here.
 
-### Mobile (Single Column)
+**Top bar:** Runs full-width above all three panels. See Section 17 for full spec.
 
-Story feed fills the screen. Navigation cards appear below story text. Combat panel anchors to bottom. Character sheet accessible via the character pill in the top bar (slides in as a right-side drawer, same content as the desktop panel). Context accessible via sidebar drawer.
+### Responsive Breakpoints
+
+| Viewport | Layout |
+|----------|--------|
+| ≥ 1280px | Full 3-panel: Context Panel 196px + story feed + Character Panel 196px |
+| 1024px – 1279px | Narrow 3-panel: Context Panel 160px + story feed + Character Panel 160px. Story feed ~680px minimum. |
+| 768px – 1023px | Single column. Both sidebars become drawers. Story feed fills full width. |
+| < 768px | Full mobile — identical behaviour to 768–1023px range. |
+
+**Sidebar drawer behaviour at ≤1023px:**
+- Context Panel: hamburger icon (`ti-menu-2`) in top bar, left side. Opens as left drawer: `translateX(-100%) → translateX(0)`, `300ms cubic-bezier(0.22, 1, 0.36, 1)`. Backdrop `rgba(0,0,0,.5)`. Tapping backdrop or swiping left closes (`250ms ease-in`).
+- Character Panel: character pill in top bar. Opens as right drawer (already specced in Section 13).
+
+### Mobile Navigation
+
+No bottom tab bar. All navigation lives in the top bar. The story feed fills every available pixel — a bottom nav permanently sacrifices vertical space better used for narrative.
+
+**Mobile top bar element order (left to right):**
+1. Hamburger (`ti-menu-2`) — opens Context Panel left drawer
+2. Logo: "✦ Endless Worlds" — Cormorant Garamond italic, genre accent
+3. [flex spacer]
+4. Codex icon (`ti-book`)
+5. Journal icon (`ti-notebook`)
+6. Map icon (`ti-map`)
+7. Character pill — avatar circle + name, opens Character Panel right drawer
+
+All icons have 44px minimum tap targets (visual icon can be smaller; hit area pads to 44px).
+
+**Mobile top bar height:** 52px (vs 44px desktop).
 
 ---
 
@@ -270,7 +300,7 @@ Atmospheric fragments come from a local lookup table per genre (~20–30 phrases
 1. Location name + type badge appear instantly from game state (no LLM)
 2. `Revealing…` status + thin progress bar
 3. Description streams starting slightly before the bar completes (no dead moment at the end)
-4. Top bar location updates immediately
+4. Top bar location breadcrumb updates immediately
 
 **Pattern 3 — Background operations:**
 Small 6px pulsing dot in genre accent in the top bar. Appears when regional bible prefetch runs. Disappears quietly on completion. Invisible unless you look for it.
@@ -540,7 +570,7 @@ Quests and Journal share one nav button, two tabs inside. Screen title: "Chronic
 
 ## 13. Character Sheet Panel
 
-The character sheet is the right panel on desktop (fixed, always visible, 196px wide, scrollable) and a slide-in drawer on mobile. It must be dense but instantly scannable.
+The character sheet is the right panel on desktop (fixed, always visible, scrollable) and a slide-in drawer on mobile. It must be dense but instantly scannable.
 
 **The character sheet does NOT duplicate the Journal.** It shows mechanical state only. Story beats live in the Journal/Chronicle screen exclusively.
 
@@ -575,7 +605,7 @@ All five stats in one horizontal row. No grid, no empty cells ever.
 [STR 8] [AGI 9] [INT 13] [PER 11] [CHA 10]
 ```
 
-Each cell: number (15–18px, JetBrains Mono, neutral warm `#cbb888` — same for all stats, NOT colour-coded per stat), label below (6px Inter Tight, muted, uppercase). Subtle same-tone border. Classic D&D feel.
+Each cell: number (15–18px, JetBrains Mono, neutral warm `#cbb888` — same for all stats, NOT colour-coded per stat), label below (6px Inter Tight, muted, uppercase). Subtle same-tone border.
 
 Genre overrides the neutral number colour (teal for Horror, purple for Space) but stats are NEVER individually colour-coded by type.
 
@@ -583,18 +613,14 @@ Genre overrides the neutral number colour (teal for Horror, purple for Space) bu
 Section header: "EQUIPPED" left-aligned, gold/currency amount right-aligned in genre accent.
 
 Three slots, all always shown — never hidden even when empty:
-- Weapon slot
-- Armour slot
-- Accessory slot (ring, necklace, trinket)
+- Weapon slot · Armour slot · Accessory slot
 
 Empty slot: slot-type icon at ~25% opacity, "— empty" in dim italic Cormorant Garamond, slot label.
 
 **7. Pack Inventory**
 Section header: "Pack · N / 8"
 
-3-column compact grid. Each cell: 13px icon, 6px abbreviated name below, count badge top-right (only if count > 1).
-
-**No empty placeholder cells.** The grid only renders actual items.
+3-column compact grid. Each cell: 13px icon, 6px abbreviated name below, count badge top-right (only if count > 1). No empty placeholder cells.
 
 ### Animation Summary
 
@@ -626,95 +652,45 @@ Section header: "Pack · N / 8"
 
 ### Combat Entry
 
-Triggered when an enemy encounter begins (AI narrates the enemy appearing).
-
 **Sequence:**
 1. Story feed narrates the encounter (streams in as normal)
 2. Navigation cards fade out — `opacity 0, 180ms ease` — simultaneously with step 3
-3. Combat panel rises — **flex height 0 → 188px**, `380ms cubic-bezier(0.22, 1, 0.36, 1)` (spring ease-out). NOT an overlay — the combat panel is a flex item that pushes the story feed up. Nothing is hidden behind it.
-4. Player combatant card appears — `opacity 0→1, translateY 10px→0, 220ms ease-out`
-5. Enemy card(s) appear — 80ms stagger after player card, same animation
+3. Combat panel rises — **flex height 0 → 188px**, `380ms cubic-bezier(0.22, 1, 0.36, 1)`. NOT an overlay — flex item that pushes story feed up.
+4. Player card appears — `opacity 0→1, translateY 10px→0, 220ms ease-out`
+5. Enemy card(s) appear — 80ms stagger, same animation
 6. Turn badge fades in — `opacity 0→1, 150ms ease`, 100ms after last card
-
-During combat: input bar remains but placeholder changes. Nav cards are hidden (zero opacity, pointer-events none).
 
 ### Combat Exit — Victory
 
 **Sequence:**
 1. Kill shot: enemy card `filter: grayscale(1) brightness(.45)`, `400ms ease`
-2. Kill shot compress: card collapses — `scaleY(0)` + `height→0`, `300ms ease`
-3. Combat panel closes — height → 0, `300ms ease-in`, 750ms after kill shot starts
+2. Compress: `scaleY(0)` + `height→0`, `300ms ease`
+3. Combat panel closes — height → 0, `300ms ease-in`, 750ms after kill shot
 4. Nav cards return — `opacity 0→1, 200ms ease`
-5. Victory card appears in story feed — `opacity 0→1, 250ms ease-out`, 1100ms after kill shot
+5. Victory card in story feed — `opacity 0→1, 250ms ease-out`, 1100ms after kill shot
 
-**Victory card** is a permanent part of the story feed — not a modal, not a popup. Contains:
-- "Combat resolved" header with green check-circle icon
-- **XP gained only** — gold is NOT shown here. Looting requires the player to tap a "Search" button that appears below the victory card. This is a deliberate design choice: loot is earned through an explicit action, not automatically awarded.
-- Thin XP progress bar filling over 600ms (showing level progress)
-- Post-combat AI-generated prose line
-- "Search the remains →" prompt at the bottom of the card, triggering the loot flow
-
-After the victory card appears, the AI continues streaming the next narrative beat below it naturally.
+**Victory card** — permanent in story feed, not a modal. Contains: XP only (no gold — gold comes from "Search" loot flow), XP progress bar (fills 600ms), post-combat prose, "Search the remains →" prompt.
 
 ### Combat Exit — Defeat
 
-If player HP hits 0:
-- HP bar pulses red (existing ≤10% animation)
-- Screen dims (backdrop `rgba(0,0,0,.6)`, `400ms ease`)
-- Defeat panel slides up (same spring as combat entry, ~120px)
-- Content: "You have fallen." · Options: Respawn at last safe point / Retry combat / Abandon run
-- These are permanent save-state decisions — confirm before executing
+HP hits 0 → screen dims (backdrop `rgba(0,0,0,.6)`, `400ms`) → defeat panel slides up (~120px, same spring) → "You have fallen." · options require confirm before executing.
 
 ### Modal Events
 
-Some game milestones require explicit player acknowledgement before continuing. These use a full backdrop overlay (`rgba(0,0,0,.82)`, `300ms ease`) with a centered modal card.
-
-**Modal entry:** `scale(0.88) → scale(1)` + `opacity 0→1`, `420ms cubic-bezier(0.22, 1, 0.36, 1)` — spring scale-in feels physical and premium.
-
-**Modal exit:** Backdrop fades out `300ms ease`. Player action (Continue / Confirm / close) always required before the game resumes. Never auto-dismiss.
-
----
+Backdrop: `rgba(0,0,0,.82)`, `300ms ease`. Modal card: `scale(0.88) → scale(1)` + `opacity 0→1`, `420ms cubic-bezier(0.22, 1, 0.36, 1)`. Always requires player action to dismiss.
 
 #### Quest Complete Modal
 
-Appears when a quest moves to the Completed state. Uses green visual language to distinguish from amber combat/codex language.
-
-**Structure:**
-- 44px green circle with check icon, centred at top
-- "Quest Complete" label in small caps, green `#5a9a5a`
-- Quest name: 16px Cormorant Garamond italic, prominent
-- 2–3 sentence narrative summary of what was accomplished
-- Thin divider
-- XP reward: large number + "XP" label
-- "Continue →" button (green border/tint)
-
-The modal is the canonical completion moment. After dismissal, the quest moves to the Completed section in the Chronicle and a brief toast fires: "Quest complete · [Name]" in green.
-
----
+Green visual language. Structure: check circle icon · "Quest Complete" · quest name (16px Cormorant Garamond italic) · 2–3 sentence narrative summary · divider · XP reward · "Continue →". Toast fires after dismissal.
 
 #### Level Up Modal
 
-The most important moment in the game loop. Must feel genuinely rewarding — this is the primary dopamine beat the entire session is building toward.
+The most important moment in the game loop.
 
-**Structure:**
-
-1. **Header (ambient glow)**
-   - "✦ Level Up ✦" text in genre accent with pulsing `text-shadow` glow animation (2s loop)
-   - A radial gradient behind the level number (`rgba(accent, .22)`, 130px × 90px ellipse)
-   - Previous level → new level: `"4 → 5"` displayed as small grey `4 →` followed by large prominent `5` (52px, Cormorant Garamond, `#e8d5b0`)
-   - Class name in muted Inter Tight small caps below
-
+1. **Header:** "✦ Level Up ✦" with pulsing glow (2s loop) · ambient radial gradient · `4 → 5` level display (52px Cormorant Garamond) · class name
 2. **Divider**
+3. **Stat picker** — single inline row, 5 cards. Each card: `+1` badge (hidden until selected) · value (17px JetBrains Mono) · stat name · two-word description (stacked)
 
-3. **Stat picker** — single inline row of 5 stat cards (same inline layout as character sheet)
-
-   Each card shows (top to bottom):
-   - `+1` badge: top-right corner, genre accent, hidden until card is selected
-   - Current value: 17px JetBrains Mono, neutral warm, transitions to accent on selection
-   - Stat name: 6px Inter Tight uppercase label
-   - Two-word description: 5.5px Inter Tight, very muted, two lines stacked
-
-   **Stat descriptions:**
    | Stat | Description |
    |------|-------------|
    | STR | Melee · Carry |
@@ -723,64 +699,30 @@ The most important moment in the game loop. Must feel genuinely rewarding — th
    | PER | Detect · Scout |
    | CHA | Speech · Trade |
 
-   **Selected state:** amber border glow, amber background tint, `+1` badge appears, number colour transitions to genre accent, description brightens slightly.
+4. **Confirm button** — disabled until selection. Button text updates: "INT: 13 → 14". Arrow icon fades in. On confirm: stat flares (480ms) → modal closes → toast fires → character sheet updates.
 
-4. **Confirm button** — disabled and muted until a stat is selected. Once selected:
-   - Enables with amber border + background
-   - Button text updates dynamically: "INT: 13 → 14" (shows the specific upgrade)
-   - Arrow icon fades in at right
-
-5. **On confirm:**
-   - Selected stat card flares (brighter border + glow, `480ms`)
-   - Modal closes after 480ms
-   - Toast fires: "Level 5 · INT 14 · +4 Max HP" in bright gold
-   - Character sheet updates: XP bar resets, level number flashes, stat increments
-
-**Animation:**
-- Backdrop: `rgba(0,0,0,.82)` — darker than quest modal, more dramatic
-- Modal entry: `scale(0.88) → scale(1)`, `420ms cubic-bezier(0.22, 1, 0.36, 1)`
-- "✦ Level Up ✦" glow pulse: `2s ease-in-out infinite`, alternates between `text-shadow: 0 0 12px` and `0 0 26px` with outer spread
-
----
+Backdrop: `rgba(0,0,0,.82)` (darker than quest modal).
 
 ### Toast Notification System
 
-Toasts appear at the **bottom of the screen, just above the input bar** (`bottom: 50px`, `z-index: 30`).
+`bottom: 50px`, `z-index: 30`. Entry: `translateY(18px→0)` + `opacity 0→1`, `250ms cubic-bezier(0.22, 1, 0.36, 1)`. Persist: 3.5s (4s level-up). Exit: `opacity 0` + `translateY(10px)`, `200ms ease-in`. Stack vertically, max 2 visible.
 
-**Timing:**
-- Entry: `translateY(18px) → translateY(0)` + `opacity 0→1`, `250ms cubic-bezier(0.22, 1, 0.36, 1)`
-- Persist: 3.5 seconds (4s for level-up toast)
-- Exit: `opacity 1→0` + `translateY(0→10px)`, `200ms ease-in`
-
-**Four toast types:**
-
-| Type | Colour | Icon | Use case |
-|------|--------|------|----------|
-| Codex discovery | `#c4943a` amber | `ti-book` | Fires alongside the story feed entry |
-| Quest complete | `#5a9a5a` green | `ti-circle-check` | Fires after the quest modal is dismissed |
-| Level up | `#e8d070` bright gold | `ti-arrow-up-circle` | Fires after the level up modal is confirmed |
-| Combat result | `#7abb7a` green | `ti-shield-check` | XP summary after victory card appears |
-
-Level-up toast fires simultaneously with the character sheet XP bar animation. A level-up triggers character sheet animations regardless of whether the sheet is open.
-
-If multiple toasts queue simultaneously, they stack vertically (5px gap, newest on top). Maximum 2 visible at once — third queues.
+| Type | Colour | Icon |
+|------|--------|------|
+| Codex discovery | `#c4943a` amber | `ti-book` |
+| Quest complete | `#5a9a5a` green | `ti-circle-check` |
+| Level up | `#e8d070` bright gold | `ti-arrow-up-circle` |
+| Combat result | `#7abb7a` green | `ti-shield-check` |
 
 ### Screen Transitions
 
-**Desktop — Replace center column:**
-Codex, Map, Journal, Chronicle all replace the center panel content. Left and right panels remain. Top bar breadcrumb updates. No slide — content fades: `opacity 0→1, 200ms ease`.
+**Desktop:** Center column content fades `opacity 0→1, 200ms ease`. Left and right panels remain.
 
-**Mobile — Full-screen slide:**
-- Open: `translateX(100%) → translateX(0)`, `300ms cubic-bezier(0.22, 1, 0.36, 1)`. Backdrop fades in simultaneously.
-- Close: `300ms ease-in` reverse. Back button or swipe-right to dismiss.
-- The game behind the overlay does NOT move (content-over-content, not push-navigation)
+**Mobile:** `translateX(100%)→translateX(0)`, `300ms cubic-bezier(0.22, 1, 0.36, 1)`. Backdrop fades. Content-over-content (game doesn't move behind overlay).
 
-**Tab switching within a screen** (Quests↔Journal, Codex tabs):
-- `opacity 0→1, 150ms ease` only. No slide. Fast.
+**Tab switching within a screen:** `opacity 0→1, 150ms ease` only.
 
-**Character sheet drawer (mobile):**
-- Open: slides from right, `300ms cubic-bezier(0.22, 1, 0.36, 1)`. Backdrop `rgba(0,0,0,.5)` fades in.
-- Close: `250ms ease-in`. Tapping backdrop closes.
+**Context Panel drawer (mobile):** `translateX(-100%)→translateX(0)`, `300ms cubic-bezier(0.22, 1, 0.36, 1)`. Backdrop `rgba(0,0,0,.5)`. Close: `250ms ease-in`.
 
 ### Master Timing Reference
 
@@ -812,118 +754,256 @@ Codex, Map, Journal, Chronicle all replace the center panel content. Left and ri
 | Mobile screen close | 250ms | `ease-in` |
 | Tab switch | 150ms | `ease` |
 | Desktop center swap | 200ms | `ease` |
+| Context Panel drawer open | 300ms | `cubic-bezier(0.22, 1, 0.36, 1)` |
+| Context Panel drawer close | 250ms | `ease-in` |
 
 ---
 
 ## 15. Implementation Notes for Claude Code
 
-- **Font stack is authoritative** — Cormorant Garamond for prose/narrative, Inter Tight for UI chrome, JetBrains Mono for numbers. All three are already loaded. Never substitute system fonts for these.
-- **Fantasy accent colour is `#c4943a`** — the existing codebase uses `#f59e0b` in the CLAUDE.md tech stack table and likely in `--g-fantasy`. Update to `#c4943a`. Single CSS variable change.
-- **Genre class on root container** — apply `genre-X` to the game root; all styling cascades. Never apply genre overrides per-component.
-- **CSS custom properties** — define all card/content variables at the genre class level; components consume `var()` references.
-- **Three overlay divs** — every scrollable content area needs `.ol-scan`, `.ol-grid`, `.ol-tex` divs (absolute, inset: 0, pointer-events: none, z-index: 2). Genre CSS shows exactly one or two per genre.
+- **Font stack is authoritative** — Cormorant Garamond for prose/narrative, Inter Tight for UI chrome, JetBrains Mono for numbers. All three are already loaded. Never substitute system fonts.
+- **Fantasy accent colour is `#c4943a`** — update `--g-fantasy` and CLAUDE.md tech stack table from `#f59e0b`. Single variable change.
+- **Genre class on root container** — apply `genre-X` to the game root; all styling cascades.
+- **Three overlay divs** — every scrollable content area (including Context Panel) needs `.ol-scan`, `.ol-grid`, `.ol-tex` divs (absolute, inset: 0, pointer-events: none, z-index: 2).
 - **All maps use HTML5 Canvas** — never SVG.
 - **LLM stream is the typewriter** — display tokens as they arrive, no buffering.
 - **Combat visual effects fire at fixed times** — 400ms after action, not on LLM completion.
-- **Combat panel is a flex item, not an overlay** — it pushes the story feed up as it opens. Height 0 → 188px, `380ms cubic-bezier(0.22, 1, 0.36, 1)`.
-- **Victory card shows XP only — no gold** — gold is awarded through the explicit "Search" loot flow, not automatically on kill. The victory card includes a "Search the remains →" prompt.
-- **Victory card lives in the story feed permanently** — not a modal. The feed continues below it.
-- **Codex discovery fires two notifications simultaneously** — an inline feed entry card AND a toast. Both are required.
-- **Quest complete uses a modal** — not just a toast. The modal must be dismissed before the game resumes. Toast fires after dismissal.
-- **Level up uses a full modal with stat picker** — the player must select one stat to increase and confirm before the modal closes. The confirm button is disabled until a stat is selected and updates its label dynamically to show the specific upgrade (e.g., "INT: 13 → 14"). Never auto-select.
-- **Level up modal backdrop is darker** — `rgba(0,0,0,.82)` vs `rgba(0,0,0,.72)` for other modals. The moment deserves more gravity.
-- **Stat descriptions in level up picker** — each stat card shows two brief descriptors stacked (e.g., "Magic · Lore" for INT). These help new players make informed choices.
-- **Stat/roll system is always probabilistic** — never reject an attempt at UI level.
-- **NPC dialogue: exactly 4 content slots + 1 persistent end button** — end button is structurally outside the slots.
-- **Portrait zones on combat cards have fixed pixel dimensions** — art drops in as background image, layout does not reflow.
-- **Tabler icon names in Section 9 are verified** — use exactly those names.
-- **Never change narrative prose font** — Cormorant Garamond italic throughout, all genres. Only labels and UI chrome change typeface per genre.
-- **Observation options always tappable** — failed observation gives vaguer result, never hard-locked.
-- **Notable mark (◈) is never automatic** — only AI-flagged or player-starred entries get it.
-- **Character sheet stat block is a single inline row** — five cells in one horizontal row, no grid, no empty slots ever possible.
-- **All three equipment slots always rendered** — Weapon, Armour, Accessory shown whether filled or empty. Empty state uses dim icon + "— empty" label.
-- **Pack grid shows only actual items** — no empty placeholder cells. Capacity in section header.
-- **Character sheet has no story content** — Journal/Chronicle is the canonical record of narrative events.
-- **Toast z-index: 30** — always on top of combat panel (z-index: 10) and overlays.
-- **Use `requestAnimationFrame` double-frame trick for CSS transitions on dynamically inserted elements** — set element, then two rAF calls, then add the transition class. Direct class add after insertion won't animate.
+- **Combat panel is a flex item, not an overlay** — height 0 → 188px. Refactor existing bottom-strip.
+- **Victory card shows XP only** — no gold. "Search the remains →" prompt triggers loot flow.
+- **Codex discovery fires two notifications simultaneously** — inline feed entry card AND toast.
+- **Quest complete uses a modal** — toast fires after dismissal.
+- **Level up modal with stat picker** — confirm button disabled until stat selected, label updates dynamically. Never auto-select.
+- **Stat descriptions in level up picker** — two-word stacked descriptors per stat.
+- **LevelUpModal already exists** (CLAUDE.md rule 90) — redesign it, don't replace it.
+- **Story Feed Colors token system in CLAUDE.md is untouchable** — highlight tokens (`--hl-region`, `--hl-loc`, etc.) coexist with this doc's prose styling. Never overwrite them.
+- **Nav card group names** — BACK/DEEPER/PEER/UNDISCOVERED logic stays; only presentation changes to plain English directional labels.
+- **NPC dialogue: exactly 4 content slots + 1 persistent end button** — end button outside the slots.
+- **Portrait zones on combat cards: fixed pixel dimensions** — art drops in as background image.
+- **Tabler icons in Section 9 are verified** — use exactly those names.
+- **Prose font never changes** — Cormorant Garamond italic regardless of genre.
+- **Observation options always tappable** — failed = vaguer result, never locked.
+- **Notable mark (◈) never automatic** — only AI-flagged or player-starred.
+- **Character sheet stat block: single inline row** — five cells, no grid, never empty.
+- **All three equipment slots always rendered** — empty = dim icon + "— empty".
+- **Pack grid: actual items only** — no empty placeholders.
+- **Character sheet has no story content** — Journal/Chronicle only.
+- **Toast z-index: 30** — above combat panel (z-index: 10).
+- **`requestAnimationFrame` double-frame trick** for CSS transitions on dynamically inserted elements.
+- **Top bar hidden on main menu and character creation** — appears only when game begins.
+- **Context Panel updates from game state** — no LLM call needed on arrival.
+- **Main menu background `#08060a`** — distinct from in-game dark backgrounds.
+- **Enter World transition = World Intro Cinematic Modal** (CLAUDE.md rule 42) — don't design a separate transition.
 
 ---
 
 ## 16. Notes & Considerations for Implementation Planning
 
-*This section is written for Claude.ai review when planning Claude Code prompts. It documents resolved decisions, active conflicts with the existing codebase, design gaps that need work before prompting, and the recommended implementation approach.*
+*This section is for Claude.ai review when planning Claude Code prompts.*
 
 ---
 
 ### Resolved Decisions
 
-**Fantasy accent colour:** `#c4943a` is authoritative. The existing codebase has `#f59e0b` in the CLAUDE.md tech stack table. This must be updated when implementing the genre visual system. It is a single CSS variable replacement — no structural work required.
-
-**Narrative prose font:** `'Cormorant Garamond', Georgia, serif` — Cormorant Garamond is already loaded in the codebase. Inter Tight (already loaded) for UI chrome. JetBrains Mono (already loaded) for stat numbers, dice results, and tabular values. No new fonts need to be sourced or installed.
+- **Fantasy accent:** `#c4943a` (update `#f59e0b` in existing codebase — single variable)
+- **Font stack:** Cormorant Garamond / Inter Tight / JetBrains Mono — all already loaded
+- **Responsive breakpoints:** ≥1280px full 3-panel · 1024–1279px narrow 3-panel · ≤1023px single column with drawers
+- **Mobile navigation:** Top bar only, no bottom tab bar
+- **Context Panel:** ✅ Fully designed — Section 18
+- **Top bar:** ✅ Fully designed — Section 17
+- **Main menu + save slots:** ✅ Fully designed — Section 19
+- **Enter World transition:** ✅ Resolved — connects to existing World Intro Cinematic Modal (CLAUDE.md rule 42)
 
 ---
 
 ### Active Conflicts with the Existing Codebase
 
-These are cases where this doc's target state differs from what currently exists. Each needs to be factored into the relevant Claude Code prompt.
+**CombatMode architecture** — existing implementation is an absolute-positioned bottom strip (CLAUDE.md rule 39). This doc specifies a flex item. The bottom-strip needs to be refactored when implementing the combat panel redesign.
 
-**CombatMode is a bottom-strip, not a flex item.**
-CLAUDE.md rule 39: "CombatMode bottom-strip swap when `combat?.active === true`." The current implementation is absolute-positioned at the screen bottom. This doc specifies a flex-item that pushes the story feed up (height 0 → 188px). These are architecturally different — the bottom-strip approach needs to be refactored, not just reskinned, when the combat panel redesign prompt is written.
+**LevelUpModal already exists** — CLAUDE.md rule 90. Redesign the existing component; do not delete and recreate.
 
-**LevelUpModal already exists — redesign, not replace.**
-CLAUDE.md rule 90: "Level-up post-combat, player-driven. LevelUpModal + 5-button picker." The component exists. Section 14's level up spec is a redesign of that existing modal (pulsing glow, 4→5 display, stat descriptions, spring animation, dynamic confirm button label). Claude Code should be told explicitly to redesign the existing component.
+**Story Feed Colors token system** — CLAUDE.md has its own canonical highlight token table (`--hl-region`, `--hl-loc`, player action teal `#7ab8c8`, item highlight `#e8c547`, etc.). This coexists with this doc's prose styling. Never overwrite it.
 
-**Story Feed Colors token system in CLAUDE.md is a separate layer.**
-CLAUDE.md has its own canonical story feed colour table covering gameplay highlight tokens: player action teal `#7ab8c8`, item highlight `#e8c547`, region highlight lavender `--hl-region`, location sky-blue `--hl-loc`, etc. This system coexists with the narrative prose styling in this doc — it is not being redesigned. Prompts implementing story panel changes must leave the highlight token system untouched.
+**Nav card group names** — CLAUDE.md rule 72 uses BACK/DEEPER/PEER/UNDISCOVERED internally. Grouping logic stays; only presentation label language changes.
 
-**Nav card presentation vs. existing group logic.**
-CLAUDE.md rule 72 uses "BACK/DEEPER/PEER/UNDISCOVERED" as internal group names in code logic. This doc replaces the visible *label presentation* with plain English directional language ("The Quarry Mouth · north"). The underlying grouping logic stays unchanged. Only the UI presentation changes — make this explicit in the nav card prompt.
-
-**Design token naming conflict.**
-The existing codebase uses tokens like `--g-fantasy`, `--accent`, `var(--ink-1)`. This doc introduces tokens like `--genre-accent`, `--card-bg`, `--card-radius`. When implementing the genre visual system, Claude Code should reconcile these into a single coherent system — mapping new tokens onto or replacing existing ones — rather than introducing a parallel set.
+**Design token naming** — existing codebase uses `--g-fantasy`, `--accent`, `var(--ink-1)`. Reconcile into a single system; do not create a parallel token set.
 
 ---
 
-### Design Gaps
+### Remaining Design Gaps
 
-The following surfaces are referenced in this doc or the codebase but have not been visually designed. Prompts for these surfaces will require design decisions to be made upstream before Claude Code can be given clear instructions.
+The following surfaces still need design before Claude Code can be prompted for them:
 
-**Context Panel (left panel on desktop)**
-Described in Section 4 as showing current location name, type, description, NPCs present, and interactable objects. No visual spec, layout, or interaction model exists. Needs design before a Claude Code prompt can be written.
+- **Search / loot flow** — victory card's "Search the remains →" triggers loot UI; floor_loot[] engine exists (CLAUDE.md rules 83/84/87) but the UI is not designed
+- **Error states** — API failures, network errors, mid-stream LLM failures
+- **Settings screen** — not designed
 
-**Top bar visual layout**
-Section 4 lists the elements but provides no visual arrangement, sizing, or spacing. Needs design.
-
-**Mobile navigation pattern**
-Individual screens are specced (Codex, Journal, Map, Character Sheet as overlays). The navigation *system* on mobile — what lives at the bottom of the screen, how the player moves between primary surfaces — is not specified. Worth resolving before implementing any mobile navigation work.
-
-**Enter World transition**
-Character creation ends with "Begin Adventure." The transition to the game itself is not specced. Note: CLAUDE.md rule 42 specifies a World Intro Cinematic Modal fires on first load when `metadata.world_intro` is set. The transition design should connect to this existing mechanism rather than replace it.
-
-**Search / loot flow**
-The victory card's "Search the remains →" prompt triggers a loot interaction. CLAUDE.md rules 83/84/87 confirm the loot engine is built (floor_loot[], engine-resolved, "Search" label on container objects). The UI for what happens when the player taps "Search" — how loot is presented and confirmed — is not designed.
-
-**Error states**
-API failures, network errors, mid-stream LLM failures. Not addressed anywhere.
-
-**Main menu and save slots**
-The app entry point. Not designed.
-
-**Settings screen**
-Not designed.
+Everything else in Section 16's original gap list has been resolved or is deferred by explicit decision.
 
 ---
 
 ### Implementation Approach
 
-This doc describes the **target visual state** for a live codebase at V8.83 with 626 passing tests. It is not a spec for a greenfield build.
+This doc describes the **target visual state** for a live codebase at V8.83 with 626 passing tests. Surface-by-surface redesign integrated into the 11-prompt implementation arc — not a big-bang UI overhaul.
 
-The intended approach is **surface-by-surface redesign** integrated into the existing 11-prompt implementation arc. UI work should be scoped to the surface being addressed in each prompt — not batched into a separate "UI overhaul" prompt.
+**Authority:** CLAUDE.md governs game logic, architecture, data. This doc governs visual presentation, interaction, animation. On UI conflicts: this doc wins. On game mechanic conflicts: CLAUDE.md wins.
 
-**Authority division:** This doc and CLAUDE.md are both authoritative in their respective domains. CLAUDE.md governs game logic, architecture, data rules, and engine behaviour. This doc governs visual presentation, interaction design, and animation. In cases of conflict on UI matters, this doc takes precedence. In cases of conflict on game mechanics or data behaviour, CLAUDE.md takes precedence.
-
-**Per-prompt invariants that apply to all UI work:**
+**Per-prompt invariants:**
 - Origin/main baseline check first (CLAUDE.md rule 76)
 - Investigation-before-patching (CLAUDE.md V8.40)
 - jest baseline of 626 must be maintained (CLAUDE.md rule 91)
 - Do not break the Story Feed Colors token system
+
+---
+
+## 17. Top Bar
+
+The top bar is dark chrome (`#141210`) in all genres and at all screen sizes. It never changes colour with genre. It's the persistent UI frame the game lives inside.
+
+### Desktop Elements (left to right)
+
+| # | Element | Spec |
+|---|---------|------|
+| 1 | **Logo** | "✦ Endless Worlds" · Cormorant Garamond italic · 13–14px · genre accent colour |
+| 2 | **Genre tag** | Rounded pill · Inter Tight · 11px · uppercase · genre accent text + background + border |
+| 3 | **Location breadcrumb** | Region `›` Settlement `›` Current Location · region/settlement in `#5a4828` · current location in `#a08060` · separator `›` in `#3a2a18` · truncates left on narrow viewports (current location always visible) |
+| 4 | [flex spacer] | — |
+| 5 | **Verbosity toggle** | Three states: Terse · Standard · Rich · Active: Inter Tight 11px, genre accent, background tint + border · Inactive: `#3e3020`, no border |
+| 6 | **Background loading dot** | 6px pulsing circle, genre accent · visible only during WorldBible/RegionBible prefetch · hidden when idle |
+| 7 | **Codex icon** | `ti-book` · 15px · `#4a3828` at rest · brightens on hover · 4px dot in genre accent when unread entries exist |
+| 8 | **Journal icon** | `ti-notebook` · 15px · same states as Codex |
+| 9 | **Map icon** | `ti-map` · 15px · same states |
+| 10 | **Character pill** | 24px avatar circle (class icon, genre accent, genre-styled border) + character name (Inter Tight 11px, `#c0a878`) · `border-radius: 20px` pill shape · tapping opens Character Panel |
+
+### Desktop height: 44px · Mobile height: 52px
+
+### Behaviour Rules
+
+- Top bar never scrolls — `position: sticky` or fixed at top.
+- Breadcrumb updates immediately on navigation (from game state, no LLM call).
+- Verbosity toggle takes effect on next AI action — not retroactively.
+- Background dot is the only dynamically appearing/disappearing element.
+- **Hidden on main menu and character creation screens** — top bar appears only when game begins.
+
+---
+
+## 18. Context Panel
+
+The Context Panel is the always-visible left column on desktop (196px at ≥1280px, 160px at 1024–1279px). On ≤1023px it becomes a left drawer opened by the hamburger icon in the top bar.
+
+**The Context Panel is NOT navigational.** Navigation happens via nav cards in the story feed. The Context Panel describes the current space.
+
+### Content Sections (top to bottom)
+
+**1. Location header**
+- Name: Cormorant Garamond italic, 12–13px, `#e2cda0`
+- Type badge: Inter Tight 11px, genre accent, pill shape
+
+**2. Atmosphere prose**
+- 2–3 sentences. Cormorant Garamond italic, 11px, `#5a4020` (more muted than story feed — ambient, not narrative)
+- Line-height 1.65
+- Source: current location's `physical_description` / `atmosphere` fields from WorldBible/RegionBible — **no LLM call**
+- Updates immediately on arrival
+
+**3. Divider** — 0.5px `#252018`
+
+**4. "HERE NOW" — NPCs present**
+Hidden entirely if no NPCs present. No empty placeholder.
+
+Each NPC row (tappable — opens same dialogue flow as story feed):
+- 6px disposition dot (coloured per Section 10 disposition system)
+- Name: Cormorant Garamond italic, 11px, `#c0a878`
+- Role + disposition word: Inter Tight 11px, `#4a3828`
+- Hover: `rgba(196,148,58,.09)` background, `border-radius: 5px`
+
+**5. Divider** — hidden if either NPCs or Objects section is absent
+
+**6. "IN THIS SPACE" — interactable objects**
+Hidden entirely if no objects present. No empty placeholder.
+
+Each object row (tappable — triggers object interaction):
+- Tabler icon by category: `ti-package` (containers), `ti-news` (notices/boards), `ti-door` (doors), `ti-book` (books/lore), `ti-coins` (valuables), `ti-skull` (enemy remains) · `#4a3828` at rest
+- Name: Cormorant Garamond italic, 11px, `#c0a878`
+- Action label right-aligned: Inter Tight 11px, `#3e3020`
+
+**Action label values match CLAUDE.md rule 87 exactly:**
+- "Search" — containers, enemy remains
+- "Read" — books, notices, signs
+- "Examine" — doors, interesting objects
+- "Use" — mechanisms, switches
+
+### Interaction Model
+
+Tapping an NPC or object in the Context Panel is functionally identical to tapping the same entity in the story feed — same underlying interaction, same code path. NPCs grey out (non-tappable) while in dialogue. Objects disappear from the panel when examined/looted (game state update).
+
+### Empty States
+
+If no NPCs: entire "Here Now" section doesn't render. If no objects: entire "In This Space" section doesn't render. If both absent: just location name + type + atmosphere prose. This looks clean and intentional — never broken.
+
+### Update Behaviour
+
+Context Panel updates instantly on arrival. Data from game state only — never an LLM call. Never in a "loading" state.
+
+### Genre Treatment
+
+Context Panel uses the full genre visual system: `var(--content-bg)` background, genre typography rules for section headers, and three overlay divs (`.ol-scan`, `.ol-grid`, `.ol-tex`) — same requirement as story feed.
+
+### Mobile Drawer
+
+`translateX(-100%) → translateX(0)`, `300ms cubic-bezier(0.22, 1, 0.36, 1)`. Backdrop `rgba(0,0,0,.5)`. Close: swipe left, tap backdrop, or tap hamburger again. `250ms ease-in`. Same content as desktop.
+
+---
+
+## 19. Main Menu, Save Slots & Enter World
+
+### Main Menu
+
+**Background:** `#08060a` — coolest and darkest background in the entire app. Creates a clear mode boundary: not the game yet.
+
+**Layout (mobile):** Logo + tagline centred (upper ~30% of screen) → save slot cards stacked vertically, full-width → settings gear bottom-right.
+
+**Layout (desktop):** Logo + tagline centred → save slot cards in a horizontal row (up to 3 per row, max ~280px each, scrollable if more) → settings gear bottom-right.
+
+**Logo:** "Endless Worlds" · Cormorant Garamond italic · 28px mobile / 40px desktop · `#e2cda0` · no icon mark on main menu (just the text)
+
+**Tagline:** "An adventure generated for you" · Inter Tight · 12px · `#4a3828` · letter-spacing 0.08em
+
+**Settings gear:** `ti-settings` icon, 16px, `#2a2015` at rest, `#4a3828` on hover. Opens settings modal (not yet designed — deferred).
+
+### Save Slot Cards
+
+**Filled slot card:**
+- Genre badge pill: Inter Tight 11px, genre accent colour + border
+- Character name: Cormorant Garamond italic, 15–16px, genre-appropriate text colour
+- Class · Level: Inter Tight 12px, very muted
+- Thin divider `0.5px`
+- World name: Cormorant Garamond italic, 12px, muted
+- Current location breadcrumb: Inter Tight 11px, very muted
+- Last played: Inter Tight 11px, very muted
+- "Continue →" button: full-width, genre accent border + background tint, Inter Tight uppercase
+
+**Card background and border match the genre of that save.** A Fantasy save has a warm amber parchment card. A Cyberpunk save has a flat cyan-bordered card. The full genre card treatment from Section 3 applies.
+
+**Empty slot card:**
+- Dashed border: `rgba(196,148,58,.3)` — neutral amber regardless of genre
+- ✦ mark centred, `#3e3020`, 18px
+- "Begin a new adventure" · Cormorant Garamond italic · 13px · `#4a3828` · centred
+- Hover: border brightens to `rgba(196,148,58,.55)`, very faint amber background
+
+**Slot counts:** Free = 1 · Adventurer = 3 · Legend = unlimited (row scrolls)
+
+**Delete / manage:** Long-press (mobile) or right-click (desktop) reveals "Delete save" option. Requires confirmation modal — "Are you sure? This world is gone forever." Destructive — cannot be undone.
+
+### Enter World Transition
+
+The transition from character creation to the game connects to the existing World Intro Cinematic Modal (CLAUDE.md rule 42). No separate transition animation is designed.
+
+**Sequence:**
+1. Player taps "Begin Adventure" (final character creation step)
+2. Button enters loading state (spinner replaces arrow icon)
+3. Character profile saves (`/api/game/save-character-profile`)
+4. If WorldBible is still generating: full-screen loading state with pulsing ✦ and world name when available. Never navigate to the game with incomplete WorldBible.
+5. App transitions to game view (story feed, context panel, character panel mount)
+6. World Intro Cinematic Modal fires automatically (CLAUDE.md rule 42): full-screen overlay, world name, opening narration from `metadata.world_intro` template. Dismissed by tap or keypress.
+7. First story beat streams below the modal dismissal: "Your adventure begins."
+
+**WorldBible timing:** Generation starts at genre confirmation (character creation step 1) and runs in background through all 6 steps. In practice it completes well before the player reaches the Motivation step. The loading state in step 4 is the rare edge case, not the normal path.

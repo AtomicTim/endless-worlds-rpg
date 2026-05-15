@@ -8,8 +8,10 @@ import { InputBar, type InputBarHandle } from "@/components/game/InputBar";
 import { DialogueModal } from "@/components/game/DialogueModal";
 import { TradeModal } from "@/components/game/TradeModal";
 import { SceneArt } from "@/components/game/SceneArt";
-import { CharacterSheet } from "@/components/game/sidebar/CharacterSheet";
-import { InventoryPanel } from "@/components/game/sidebar/InventoryPanel";
+// UI-9 — CharacterSheet + InventoryPanel merged into a single unified
+// CharacterPanel. The legacy components still live in the repo (orphaned
+// imports) so any incidental caller still compiles.
+import { CharacterPanel } from "@/components/game/sidebar/CharacterPanel";
 import { LogBook } from "@/components/game/sidebar/LogBook";
 import { WorldMap } from "@/components/game/WorldMap";
 import { NavigationBar } from "@/components/game/NavigationBar";
@@ -551,8 +553,7 @@ export default function GamePage() {
       }
       sidebar={
         <>
-          <CharacterSheet />
-          <InventoryPanel onSubmit={(input) => { void submitAction(input); }} />
+          <CharacterPanel onSubmit={(input) => { void submitAction(input); }} />
           <LogBook />
         </>
       }

@@ -1,6 +1,6 @@
 # Endless Worlds RPG — UI Design Reference
 
-**Version:** 2.1  
+**Version:** 2.2  
 **Status:** Design complete, ready for implementation  
 **Covers:** All designed UI surfaces as of May 2026
 
@@ -133,7 +133,7 @@ Horror uses BOTH `.ol-grid` (fog) AND `.ol-scan` (dots) simultaneously.
 ### Card Treatment Per Genre
 
 | Genre | Radius | Border | Shadow | Decorative element |
-|-------|--------|--------|--------|-----------------|
+|-------|--------|--------|--------|--------------------|
 | Fantasy | 7–8px | `rgba(196,148,58,.28)` | Warm inner glow + 0 0 0 .5px outer ring | `✦` Unicode mark, top-right |
 | Cyberpunk | 0px | `rgba(34,211,238,.17)` | Cyan outer glow | Hard corners, no decoration |
 | Horror | 2px | `rgba(45,65,40,.32)` | Crushing inward shadow (inset 0 0 32px) | Near-invisible border |
@@ -153,7 +153,7 @@ Horror uses BOTH `.ol-grid` (fog) AND `.ol-scan` (dots) simultaneously.
 ### Typography Per Genre (Labels and UI only — prose font never changes)
 
 | Genre | UI labels / headers | Prose / narrative |
-|-------|--------------------|-----------------|
+|-------|--------------------|--------------------|
 | Fantasy | Georgia italic, `font-style: italic`, `text-transform: none`, `letter-spacing: .04em` | Georgia italic (unchanged) |
 | Cyberpunk | `"Courier New", monospace`, `font-style: normal`, wider `letter-spacing` | Georgia italic (unchanged) |
 | Horror | System sans-serif, `font-size: 6.5px`, minimal `letter-spacing` | Georgia italic (unchanged) |
@@ -192,7 +192,7 @@ The genre visual system must be applied to ALL content areas. Since the CSS clas
 - Codex entry cards
 - Journal entry cards, quest cards
 - Loading state new-area entry card
-- Character sheet stat/inventory cards
+- Character sheet stat block, equipment slots, pack items
 
 **Surfaces already genre-specific (no additional work needed):**
 - Maps — handled via Canvas rendering, already fully genre-specific
@@ -213,13 +213,13 @@ The genre visual system must be applied to ALL content areas. Since the CSS clas
 
 **Context Panel (left):** Always-visible current location — name, type, description, NPCs present, interactable objects. NOT a map — navigation is via nav cards in the story feed.
 
-**Character Panel (right):** Character name, XP/HP bars, attributes as large numerals, gold row, equipped/pack inventory, log book. Updates in real time from master state.
+**Character Panel (right):** Fixed 196px column. Scrollable. Contains: portrait + identity, HP/XP bars, status effects, attribute block, equipped items + gold, pack inventory. See Section 14 for full spec.
 
 **Story Feed (centre):** The primary play surface. Top-down scroll. Story text, navigation cards, NPC dialogue, combat — all live here.
 
 ### Mobile (Single Column)
 
-Story feed fills the screen. Navigation cards appear below story text. Combat panel anchors to bottom. Character stats accessible via the top character pill. Context accessible via sidebar drawer.
+Story feed fills the screen. Navigation cards appear below story text. Combat panel anchors to bottom. Character sheet accessible via the character pill in the top bar (slides in as a right-side drawer, same content as the desktop panel). Context accessible via sidebar drawer.
 
 ---
 
@@ -535,7 +535,98 @@ Two entry types with distinct visual treatments:
 
 ---
 
-## 13. Implementation Notes for Claude Code
+## 13. Character Sheet Panel
+
+The character sheet is the right panel on desktop (fixed, always visible, 196px wide, scrollable) and a slide-in drawer on mobile (triggered by the character pill in the top bar). The player's eyes return to it constantly — it must be dense but instantly scannable.
+
+**The character sheet does NOT duplicate the Journal.** It shows mechanical state only (numbers, equipment, resources). Story beats and narrative history live in the Journal/Chronicle screen exclusively.
+
+### Content Sections (top to bottom)
+
+**1. Portrait + Identity**
+- 48px avatar circle with class icon (Tabler icon, genre accent colour, genre-styled border)
+- Character name: 13px, medium weight
+- Class + Level: 8.5px Georgia italic, muted — "Investigator · Level 4"
+
+**2. HP Bar**
+- 8px tall, fat bar — the most prominent element after the name
+- Uses the same colour-state system as combat HP bars (same thresholds, same colours)
+- `transition: width 300ms ease, background-color 400ms ease` — animates on every change
+- Shows `28 / 42` value right-aligned, flashes red on damage, green on heal
+- At ≤10%: CSS pulse animation (same as combat)
+
+**3. XP Bar**
+- 3px tall, thin — clearly secondary to HP
+- Single colour: genre accent
+- Shows `340 / 500` value in muted text
+- Level-up sequence: bar fills to 100% (400ms ease) → brief pause → level number flashes (scale: 1 → 1.4 → 1 over 600ms) → bar resets with new target, level increments, max HP increases slightly
+
+**4. Status Effects**
+- Hidden entirely when no effects are active (max-height: 0, no dead space)
+- Slides open (max-height: 50px, 300ms ease) when an effect is applied
+- Each effect: small pill badge using the damage-type colour system (Poisoned green, Burning orange, Frozen blue, Shocked yellow, etc.)
+- Dismissed when the effect expires — slides closed
+
+**5. Attribute Block — Single Inline Row**
+All five stats displayed in one horizontal row. No grid, no empty cells ever.
+
+```
+[STR 8] [AGI 9] [INT 13] [PER 11] [CHA 10]
+```
+
+Each cell: number (15–18px, neutral warm colour `#cbb888` — same for all stats, NOT colour-coded per stat), label below (6px, muted, uppercase). Subtle same-tone border on each cell. Classic D&D feel — neutral paper form, not a mobile game power indicator.
+
+Genre colour overrides the neutral number colour (teal for Horror, purple for Space, etc.) but stats are NEVER individually colour-coded by type.
+
+**6. Equipped Items + Gold (combined section)**
+Section header: "EQUIPPED" label left-aligned, gold/currency amount right-aligned in genre accent colour.
+
+**Three slots, all always shown** — never hidden even when empty:
+- Weapon slot
+- Armour slot
+- Accessory slot (ring, necklace, trinket)
+
+Empty slot display: slot-type icon at ~25% opacity, "— empty" in dim italic, slot label. Visually distinct from a filled slot but clearly intentional — an available slot, not missing UI.
+
+**7. Pack Inventory**
+Section header: "Pack · N / 8" showing current/max capacity.
+
+3-column compact grid. Each item cell:
+- Icon: 13px
+- Abbreviated name: 6px below
+- Count badge: top-right corner, genre accent, only shown if count > 1
+
+**No empty placeholder cells.** Capacity is shown in the header; the grid only renders actual items. An empty grid means the pack is empty.
+
+### Animation Summary
+
+| Event | Animation |
+|-------|-----------|
+| HP damage | Bar shrinks (300ms ease), value flashes red (400ms) |
+| HP heal | Bar grows (300ms ease), value flashes green (400ms) |
+| HP critical (≤10%) | Bar pulses continuously |
+| HP colour transition | `background-color 400ms ease` between colour states |
+| XP gain | Bar fills (400ms ease) |
+| Level up | Bar → 100% → pause → level number scale flash → bar resets |
+| Status effect added | Section slides open (max-height 300ms ease) |
+| Status effect removed | Section slides closed if last effect |
+| Gold change | Value flashes green (gain) or red (spend) |
+| Mobile drawer open | Slides in from right, 300ms ease-out, backdrop fades in |
+| Mobile drawer close | Slides out right, 300ms ease-in, backdrop fades out |
+
+### Genre-Specific Currency Labels
+
+| Genre | Currency | Icon |
+|-------|----------|------|
+| Fantasy | gold | `ti-coins` |
+| Cyberpunk | cred | `ti-cpu` |
+| Horror | supplies | `ti-backpack` |
+| Space Opera | credits | `ti-coin` |
+| Post-Apoc | scrap | `ti-tool` |
+
+---
+
+## 14. Implementation Notes for Claude Code
 
 - **Genre class on root container** — apply `genre-X` to the game root; all styling cascades. Never apply genre overrides per-component.
 - **CSS custom properties** — define all card/content variables at the genre class level; components consume `var()` references.
@@ -550,3 +641,7 @@ Two entry types with distinct visual treatments:
 - **Never change narrative prose font** — Georgia italic throughout, all genres. Only labels and UI chrome change typeface per genre.
 - **Observation options always tappable** — failed observation gives vaguer result, never hard-locked.
 - **Notable mark (◈) is never automatic** — only AI-flagged or player-starred entries get it.
+- **Character sheet stat block is a single inline row** — five cells in one horizontal row, no grid, no empty slots ever possible.
+- **All three equipment slots always rendered** — Weapon, Armour, Accessory shown whether filled or empty. Empty state uses dim icon + "— empty" label.
+- **Pack grid shows only actual items** — no empty placeholder cells. Capacity in section header.
+- **Character sheet has no story content** — Journal/Chronicle is the canonical record of narrative events. The character sheet shows mechanical state only.

@@ -3,8 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 689d511 (UI-3 — Context Panel)
-**jest baseline:** 699 (authoritative)
+**Last code commit:** b160ff4 (P8 — perks system)
+**jest baseline:** 719 (authoritative)
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -20,7 +20,7 @@
 | P6 | Ability System — Foundation | 87741fb | 678 | ✅ |
 | P7 | Ability System — Combat + Attunement UI | 334c6b5 | 699 | ✅ verified |
 | HF2 | Dungeon Enemy Spawn Fix | — | — | ⏳ QUEUE (run when slot opens) |
-| P8 | Perks System | — | — | ⏳ NEXT |
+| P8 | Perks System | b160ff4 | 719 | ✅ |
 | P9 | Professions Foundation | — | — | ⏳ Day 25 |
 | P10 | Professions Crafting + XP + Milestones | — | — | ⏳ Day 25 |
 | P11 | Professions Character Sheet UI | — | — | ⏳ Day 25 |
@@ -52,6 +52,9 @@
   engine only ticks player side. Follow-up after HF2.
 - **Variant pools v2 deferred (P7).** 1 candidate per slot per class. Genre Session scope.
 - **Object discovery per-flag missing (UI-3).** Objects shown on node.discovered === true. Flagged.
+- **Perk gold/xp percent consumers not wired (P8).** perk_gold_bonus_pct and perk_xp_bonus_pct
+  accumulate on PlayerState but loot resolver / handleVictory XP grant don't read them yet.
+  Small follow-up to wire when convenient.
 
 ## Key Implementation Notes
 
@@ -61,9 +64,32 @@
 **UI-3:** submitAction("talk to <name>") for NPCs, submitAction("<verb> the <name>") for objects.
   Loot taps stubbed (console.log) — UI-8 wires. findLocationDefinition() walks bibles directly.
 **P7:** AbilityTemplate.effects added. LevelUpModal 2-step at L5/10/15. restCompleteSignal → modal.
+**P8:** Perk effects on PlayerState as caches (perk_charge_bonus, perk_status_resist,
+  perk_gold_bonus_pct, perk_xp_bonus_pct). applyPerkEffects does NOT push to player.perks —
+  caller does, so passive perks are a true state-unchanged no-op. computeMaxCharges +
+  maybeApplyEnemyStatus now consult perk caches. Gold/XP percentage consumers (loot
+  resolver, handleVictory XP grant) not yet wired — values stored only.
 
 ## Manual Verification Pending
 
 **P4:** Quest item gate — deflect without item, complete + consume with item, narrator silent.
 **P5:** Status pill, DoT in feed, floating DoT number.
 **P7:** ✅ Verified (abilities panel, damage, attunement modal, victory flow).
+
+**P8:**
+- Reach combat level 4 → confirm a perk-pick step appears AFTER the stat confirm, before the
+  modal closes. Three perk cards visible with name, category badge, description.
+- Confirm a stat-bonus perk (e.g. Relentless / Veteran's Eye) → confirm the named stat +1.
+- Confirm a max_hp perk (Iron Skin) → confirm max HP and current HP each +4.
+- Confirm a passive perk (Wayfarer, Quick Study, Battle Mage, Fortune's Favour) → no stat
+  change visible; perk id appears in player.perks (Character sheet eventually).
+- Reach level 5 → confirm slot-2 unlock step still fires (slot vs perk levels don't overlap;
+  this is the disjoint-set sanity check).
+- Take Momentum → enter combat → confirm ability charge totals show +1 vs baseline.
+- Take Fireproof → fight a burning-capable enemy → confirm BURNING sometimes shrugged off
+  after the enemy's roll passed (probabilistic, may need several attempts).
+
+**P8 deferred wiring (NOT required for P8 — covered by gap below):**
+- perk_gold_bonus_pct stored on PlayerState but loot resolver does not yet read it.
+- perk_xp_bonus_pct stored on PlayerState but handleVictory does not yet apply it.
+  (Both consumer hookups can land as a small follow-up patch.)

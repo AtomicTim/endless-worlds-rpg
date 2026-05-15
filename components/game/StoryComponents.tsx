@@ -155,13 +155,15 @@ interface NarrativeBlockProps {
 }
 
 export function NarrativeBlock({ children, skipQuoteWrap }: NarrativeBlockProps) {
+  // UI-4 — Story Panel typography (design ref §2 / §5):
+  //   Cormorant Garamond italic · 14px mobile, 15px md+ · line-height
+  //   1.82 · colour #c0a878 (story prose — distinct from --ink-3).
   return (
     <p
-      className="ew-serif"
+      className="ew-serif italic text-[14px] md:text-[15px]"
       style={{
-        fontSize:   16,
-        lineHeight: 1.85,
-        color:      "var(--ink-3)",
+        lineHeight: 1.82,
+        color:      "#c0a878",
         margin:     "12px 0",
       }}
     >
@@ -200,6 +202,72 @@ export function SceneDivider({ label }: SceneDividerProps) {
   );
 }
 
+// ── SceneArrival ────────────────────────────────────────────────────────────
+//
+// UI-4 — multi-line arrival header. Replaces the single-line SceneDivider
+// for arrival NARRATIVE messages (design ref §5). Layout, top to bottom:
+//   1. thin horizontal rule       1px #2d2618
+//   2. ◆ + type label             Inter Tight 7px uppercase #6a5530
+//   3. location name              Cormorant Garamond italic 13px #e2cda0
+//   4. region sub-label           Inter Tight 7px #4a3818
+//   5. thin horizontal rule       1px #2d2618
+// Missing type / region rows skip; rules + name always render.
+
+export interface SceneArrivalProps {
+  name:       string;
+  typeLabel?: string;
+  region?:    string;
+}
+
+export function SceneArrival({ name, typeLabel, region }: SceneArrivalProps) {
+  return (
+    <div
+      className="message-enter"
+      style={{ margin: "18px 0 10px", textAlign: "center" }}
+    >
+      <div style={{ height: 1, background: "#2d2618" }} aria-hidden />
+      <div
+        className="ew-sans uppercase"
+        style={{
+          marginTop:     8,
+          fontSize:      7,
+          letterSpacing: "0.14em",
+          color:         "#6a5530",
+        }}
+      >
+        ◆ {(typeLabel ?? "Location").toUpperCase()}
+      </div>
+      <div
+        className="ew-serif italic"
+        style={{
+          marginTop: 4,
+          fontSize:  13,
+          color:     "#e2cda0",
+        }}
+      >
+        {name}
+      </div>
+      {region && (
+        <div
+          className="ew-sans"
+          style={{
+            marginTop:     2,
+            fontSize:      7,
+            letterSpacing: "0.10em",
+            color:         "#4a3818",
+          }}
+        >
+          {region}
+        </div>
+      )}
+      <div
+        style={{ marginTop: 8, height: 1, background: "#2d2618" }}
+        aria-hidden
+      />
+    </div>
+  );
+}
+
 interface NPCSpeechProps {
   name: string;
   color?: string;
@@ -233,14 +301,16 @@ export function NPCSpeech({ name, color = "var(--accent)", children }: NPCSpeech
         {name.toUpperCase()}
       </div>
       <div
-        className="ew-serif"
+        // UI-4 — NPC speech body (design ref §5): Cormorant Garamond
+        // italic, weight 500, colour #f0c060 (same hex as --hl-said).
+        className="ew-serif italic"
         style={{
-          fontSize:    15,
-          lineHeight:  1.85,
-          color:       "var(--ink-2)",
+          fontSize:    13,
+          lineHeight:  1.82,
+          color:       "#f0c060",
+          fontWeight:  500,
           borderLeft:  `2px solid ${color}`,
           paddingLeft: 14,
-          opacity:     0.95,
         }}
       >
         {wrapQuotes(children)}

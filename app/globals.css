@@ -499,6 +499,70 @@
   animation: blink 1s step-end infinite;
 }
 
+/* ────────────────────────────────────────────────────────────────────────
+   UI-4 — Genre stream cursors (design ref §5).
+   Fantasy: soft amber blink. Cyberpunk: hard block on/off. Horror:
+   irregular flicker. Space: slow fade pulse. Post-Apoc: slow heavy
+   blink. Glyphs are picked in StreamCursor; colour stays
+   var(--genre-accent) from the inline style.
+   ──────────────────────────────────────────────────────────────────── */
+@keyframes ew-cursor-fantasy {
+  0%, 100% { opacity: 0; }
+  50%      { opacity: 1; }
+}
+.ew-cursor-fantasy { animation: ew-cursor-fantasy 900ms ease-in-out infinite; }
+
+@keyframes ew-cursor-cyberpunk {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.ew-cursor-cyberpunk { animation: ew-cursor-cyberpunk 400ms steps(1, end) infinite; }
+
+@keyframes ew-cursor-horror {
+  0%, 15%   { opacity: 0.25; }
+  16%       { opacity: 1; }
+  17%, 49%  { opacity: 0.25; }
+  50%       { opacity: 1; }
+  51%, 84%  { opacity: 0.25; }
+  85%       { opacity: 1; }
+  86%, 100% { opacity: 0.25; }
+}
+.ew-cursor-horror { animation: ew-cursor-horror 1500ms steps(1, end) infinite; }
+
+@keyframes ew-cursor-space {
+  0%, 100% { opacity: 0.2; }
+  50%      { opacity: 1; }
+}
+.ew-cursor-space { animation: ew-cursor-space 1400ms ease-in-out infinite; }
+
+@keyframes ew-cursor-postapoc {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.ew-cursor-postapoc { animation: ew-cursor-postapoc 1200ms steps(1, end) infinite; }
+
+@keyframes ew-progress-sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(255%); }
+}
+.ew-progress-track {
+  position:   relative;
+  overflow:   hidden;
+  height:     2px;
+  width:      100%;
+  background: rgba(var(--genre-accent-rgb), .10);
+}
+.ew-progress-track::after {
+  content:    "";
+  position:   absolute;
+  top:        0;
+  left:       0;
+  height:     100%;
+  width:      40%;
+  background: var(--genre-accent);
+  animation:  ew-progress-sweep 1.4s ease-in-out infinite;
+}
+
 .sidebar-slide-in {
   animation: slideInRight 0.25s ease-out both;
 }

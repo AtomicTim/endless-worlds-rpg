@@ -3,13 +3,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { StoryMessage } from "@/lib/stores/game-store";
 import { useGameStore } from "@/lib/stores/game-store";
-import { Genre } from "@/types/game";
-import type { PointOfInterest } from "@/types/game";
+import { Genre, LocationStatus } from "@/types/game";
+import type { MasterState, PointOfInterest } from "@/types/game";
 import { InteractionPopover } from "./InteractionPopover";
 import {
   NarrativeBlock,
   NPCSpeech,
   SceneDivider,
+  SceneArrival,
   LocationSpan,
   RegionSpan,
   NpcSpan,
@@ -18,6 +19,8 @@ import {
   StatPill,
   wrapQuotes,
 } from "./StoryComponents";
+import { StreamCursor } from "./StreamCursor";
+import { pickAtmosphericFragment } from "@/lib/game/atmospheric-fragments";
 import {
   buildExactHighlights,
   findExactHighlights,
@@ -105,6 +108,42 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
     return buildExactHighlights(masterState, locationAssets);
   }, [masterState, locationAssets]);
 
+  // UI-4 Loading Pattern 1 — atmospheric fragment after 1.2s. The
+  // narrator-client buffers the response into a single string before
+  // returning (lib/game/narrator.ts), so the feed sees a complete
+  // message today — no per-token stream lands on the UI yet. Cursor +
+  // optional fragment are the user-facing wait state until streaming-
+  // to-feed lands; the cursor + fragment will follow the live stream
+  // and unmount on completion.
+  const [fragment, setFragment]   = useState<string | null>(null);
+  const [skipSignal, setSkipSignal] = useState(false);
+  useEffect(() => {
+    if (!isLoading) {
+      setFragment(null);
+      setSkipSignal(false);
+      return;
+    }
+    setFragment(null);
+    setSkipSignal(false);
+    const t = setTimeout(
+      () => setFragment(pickAtmosphericFragment(genre)),
+      1200,
+    );
+    return () => clearTimeout(t);
+  }, [isLoading, genre]);
+
+  // UI-4 Loading Pattern 2 — new-area arrival. While navigating,
+  // location_status === ARRIVING and isLoading is true; current_node_id
+  // is already the destination, so type/region labels can be resolved
+  // without the narrator.
+  const arrivingNodeId = isLoading && masterState?.world_state.location_status === LocationStatus.ARRIVING
+    ? (masterState.world_state.current_node_id ?? masterState.world_state.current_location_id ?? null)
+    : null;
+  const arrivingLabels = useMemo(
+    () => arrivingNodeId ? resolveArrivalLabelsById(masterState, arrivingNodeId) : null,
+    [arrivingNodeId, masterState],
+  );
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
@@ -134,6 +173,13 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
         background:      "var(--bg-0)",
         fontFamily:      "var(--sans)",
       }}
+      // UI-4: tap-to-skip hook. Today (no per-token feed stream yet)
+      // this just dismisses the pending fragment + halts the visible
+      // cursor. Wires to a real stream-abort once streaming-to-feed is
+      // wired.
+      onClick={() => {
+        if (isLoading) setSkipSignal(true);
+      }}
     >
       <div
         className="ew-grain"
@@ -148,25 +194,64 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
             onNavigate={onNavigate}
             genre={genre}
             highlightCandidates={highlightCandidates}
+            masterState={masterState}
           />
         ))}
 
-        {isLoading && (
-          <div
-            className="ew-mono"
-            style={{
-              display:       "flex",
-              alignItems:    "center",
-              gap:           8,
-              fontSize:      11,
-              letterSpacing: "0.18em",
-              color:         "var(--ink-4)",
-              fontStyle:     "italic",
-              padding:       "8px 0",
-            }}
-          >
-            <span className="cursor-blink" style={{ color: "var(--accent)" }}>▋</span>
-            <span>{loadingText ?? "Thinking…"}</span>
+        {/* UI-4 — Loading state.
+            Pattern 2 (new area): SceneArrival header + Revealing… +
+            sweep progress bar. Pattern 1 (action wait): inline cursor
+            + optional 1.2s atmospheric fragment. skipSignal hides
+            cursor + fragment while preserving the layout slot. */}
+        {isLoading && arrivingLabels && (
+          <div className="message-enter">
+            <SceneArrival
+              name={arrivingLabels.name}
+              typeLabel={arrivingLabels.typeLabel}
+              region={arrivingLabels.region}
+            />
+            <div
+              className="ew-sans uppercase"
+              style={{
+                marginTop:     6,
+                fontSize:      7,
+                letterSpacing: "0.14em",
+                color:         "#4a3818",
+              }}
+            >
+              Revealing…
+            </div>
+            <div className="ew-progress-track" style={{ marginTop: 4 }} />
+          </div>
+        )}
+
+        {isLoading && !arrivingLabels && !skipSignal && (
+          <div style={{ padding: "8px 0" }}>
+            {fragment && (
+              <p
+                className="ew-serif italic"
+                style={{
+                  fontSize:   14,
+                  lineHeight: 1.82,
+                  color:      "#c0a878",
+                  margin:     "0 0 6px",
+                }}
+              >
+                {fragment}
+              </p>
+            )}
+            <span
+              className="ew-mono inline-flex items-center gap-2"
+              style={{
+                fontSize:      11,
+                letterSpacing: "0.18em",
+                color:         "var(--ink-4)",
+                fontStyle:     "italic",
+              }}
+            >
+              <StreamCursor genreOverride={genre} style={{ fontSize: 13 }} />
+              {loadingText && <span>{loadingText}</span>}
+            </span>
           </div>
         )}
 
@@ -195,9 +280,12 @@ interface MessageEntryProps {
   onNavigate?:         (nodeId: string) => void;
   genre:               Genre;
   highlightCandidates: HighlightCandidate[];
+  /** UI-4 — needed to resolve type/region labels for SceneArrival
+   *  on arrival NARRATIVE messages. */
+  masterState:         MasterState | null;
 }
 
-function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandidates }: MessageEntryProps) {
+function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandidates, masterState }: MessageEntryProps) {
   void genre;
   const { type, content, metadata } = message;
   const restored         = metadata?.restored === true;
@@ -251,14 +339,20 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
             </div>
           );
         }
-        // Arrival divider sits above the body paragraph.
+        // UI-4 — Scene arrival divider: multi-line (rule · type label ·
+        // name · region · rule) replacing the single-line ◈ banner.
+        // Type/region resolved from world_graph; partial divider when
+        // the lookup misses.
+        const arrival = locationName
+          ? resolveArrivalLabelsByName(masterState, locationName)
+          : null;
         return (
           <div className="message-enter">
-            {locationName && (
-              <SceneDivider
-                label={
-                  <span style={{ color: "var(--accent)" }}>◈ {locationName}</span>
-                }
+            {arrival && (
+              <SceneArrival
+                name={arrival.name}
+                typeLabel={arrival.typeLabel}
+                region={arrival.region}
               />
             )}
             <NarrativeBlock skipQuoteWrap>
@@ -848,4 +942,76 @@ function renderNarrativeText(
     );
   }
   return nodes;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI-4 — SceneArrival label resolvers
+//
+// Pull location type + parent-region name off the world graph so the
+// arrival divider can render its 4-row block (rule · type · name ·
+// region · rule) without the caller knowing the graph shape. ById is
+// used by the in-flight loading state (Pattern 2); ByName by rendered
+// NARRATIVE messages where only the locationName is known. Both walk
+// zone_id upward to find the self-zoned expandable region zone;
+// `region` is omitted when the node itself IS the region zone or no
+// parent region is reachable.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ArrivalLabels {
+  name:       string;
+  typeLabel?: string;
+  region?:    string;
+}
+
+function regionLabelFor(
+  state: MasterState | null,
+  startNodeId: string,
+): string | undefined {
+  if (!state?.world_graph) return undefined;
+  const nodes = state.world_graph.nodes;
+  const start = nodes[startNodeId];
+  if (!start) return undefined;
+  if (start.is_expandable === true && start.zone_id === start.id) return undefined;
+  const seen = new Set<string>([start.id]);
+  let cur = start.zone_id ? nodes[start.zone_id] : undefined;
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    if (cur.is_expandable === true && cur.zone_id === cur.id) return cur.name;
+    cur = cur.zone_id ? nodes[cur.zone_id] : undefined;
+  }
+  return undefined;
+}
+
+function arrivalFromNode(
+  state: MasterState | null,
+  nodeId: string,
+): ArrivalLabels | null {
+  if (!state?.world_graph) return null;
+  const node = state.world_graph.nodes[nodeId];
+  if (!node) return null;
+  const typeLabel = node.node_type ?? node.category ?? undefined;
+  return {
+    name:      node.name,
+    typeLabel: typeLabel ? String(typeLabel).replace(/_/g, " ") : undefined,
+    region:    regionLabelFor(state, nodeId),
+  };
+}
+
+function resolveArrivalLabelsById(
+  state:  MasterState | null,
+  nodeId: string,
+): ArrivalLabels | null {
+  return arrivalFromNode(state, nodeId);
+}
+
+function resolveArrivalLabelsByName(
+  state: MasterState | null,
+  name:  string,
+): ArrivalLabels | null {
+  if (!state?.world_graph) return { name };
+  const match = Object.values(state.world_graph.nodes).find(
+    (n) => n.name === name,
+  );
+  if (!match) return { name };
+  return arrivalFromNode(state, match.id);
 }

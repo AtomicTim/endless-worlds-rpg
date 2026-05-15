@@ -16,6 +16,7 @@ import type {
   WorldNode,
 } from "@/types/game";
 import { ABILITY_LIBRARY, remainingCharges } from "./abilities";
+import { isDungeonNode } from "./dungeon-navigation";
 import { getGenreBestiary } from "./bestiary";
 // Day 21 — rollStubDrops, makeStubItem, and the BASIC_HEALTH_POTION_ID
 // import are all removed: loot is now resolved on demand by the
@@ -143,6 +144,73 @@ export function shouldRollEncounter(
   return true;
 }
 
+// ── HF2 — Dungeon fallback enemy ──────────────────────────────────────────────
+// Per the HF2 spec, dungeon encounters must NEVER silently cancel. When every
+// roster id fails the 4-layer lookup (legacy save data, cache leakage per
+// session-84 Bug 2, etc.) we spawn a generic tier-appropriate creature so the
+// dungeon still has bite.
+//
+// Tier derivation: a dungeon whose zone_id matches world_bible.starting_region
+// .id is tier 1; everything else is tier 2 (expanded region).
+
+const FALLBACK_NAME_BY_GENRE: Record<string, string> = {
+  fantasy:             "Dungeon Creature",
+  cyberpunk:           "Rogue Drone",
+  horror_lovecraftian: "Crawling Horror",
+  space_opera:         "Void Stalker",
+  post_apocalyptic:    "Mutated Husk",
+};
+
+/** Derive a dungeon's tier from its zone_id. */
+export function dungeonTierForNode(
+  node:        WorldNode | undefined,
+  world_bible: WorldBible | undefined,
+): number {
+  const startingId = world_bible?.starting_region?.id;
+  if (startingId && node?.zone_id === startingId) return 1;
+  return 2;
+}
+
+/**
+ * HF2 — generic dungeon-tier fallback enemy. Returns an Enemy that mirrors
+ * the shape rollEncounter expects so the existing spawn pipeline can build a
+ * CombatEnemyInstance with no special-casing.
+ *
+ * Stats per HF2 spec:
+ *   hp:     15 + tier * 8         (tier 1 → 23, tier 2 → 31)
+ *   attack: 4  + tier              folded into agi_mod (1 for tier 1, 2 for 2+)
+ *                                  + damage die scaled by tier
+ *   armor:  0
+ *   behavior_flavor: "aggressive"
+ *   loot:   "fantasy_loot_basic"  (resolves to a tier-1 drop: 2–5 gold, no item)
+ *   xp_value: 25                   (tier-1 baseline; consumers don't currently
+ *                                   read tier 2 differently)
+ */
+export function buildDungeonFallbackEnemy(
+  tier:  number,
+  genre: Genre | string | undefined,
+): Enemy {
+  const t        = Math.max(1, Math.floor(tier));
+  const hp       = 15 + (t * 8);
+  const dieByTier = t >= 3 ? "1d10" : t === 2 ? "1d8" : "1d6";
+  const genreKey = typeof genre === "string" ? genre : String(genre ?? "fantasy");
+  const name     = FALLBACK_NAME_BY_GENRE[genreKey] ?? "Dungeon Creature";
+  return {
+    id:              `dungeon_fallback_tier_${t}`,
+    name,
+    description:     "A shape barely separated from the dungeon dark.",
+    hp_range:        [hp, hp],
+    agi_mod:         t,
+    str_mod:         t - 1,
+    damage_die:      dieByTier,
+    armor_bonus:     0,
+    xp_value:        25,
+    loot_table_id:   "fantasy_loot_basic",
+    is_boss:         false,
+    behavior_flavor: "aggressive",
+  };
+}
+
 /**
  * Resolve an enemy id against the layered enemy registries.
  *
@@ -172,6 +240,19 @@ export function resolveEnemyLookup(
     const currentRegionId = node?.zone_id;
     if (currentRegionId && region_bibles[currentRegionId]) {
       const found = region_bibles[currentRegionId].enemies?.find((e) => e.id === enemyId);
+      if (found) return found;
+    }
+    // HF2 — id-prefix shortcut. RegionBible enemy ids are minted with the
+    // region's id as a prefix (e.g. "the_seam_foothills_rockfall_sentinel"
+    // belongs to bible "the_seam_foothills"). When node.zone_id has been
+    // corrupted (Bug 2 in session 84 — cache leakage stamps a node's
+    // zone_id with the wrong region), the standard layer-2 lookup misses
+    // even though the bible IS present. Try every bible whose id is a
+    // prefix of the enemy id BEFORE the slower full sweep.
+    for (const [rid, rb] of Object.entries(region_bibles)) {
+      if (rid === currentRegionId) continue;
+      if (!enemyId.startsWith(`${rid}_`)) continue;
+      const found = rb.enemies?.find((e) => e.id === enemyId);
       if (found) return found;
     }
     for (const [rid, rb] of Object.entries(region_bibles)) {
@@ -269,9 +350,11 @@ export function rollEncounter({
   }
 
   const enemies: CombatEnemyInstance[] = [];
+  const unresolvedIds: string[] = [];
   spawnIds.forEach((enemyId, idx) => {
     const enemy = resolveEnemyLookup(enemyId, node, world_bible, region_bibles, genre);
     if (!enemy) {
+      unresolvedIds.push(enemyId);
       console.warn(`[combat-engine] Cannot resolve enemy id "${enemyId}" — skipping spawn.`);
       return;
     }
@@ -305,8 +388,59 @@ export function rollEncounter({
   });
 
   if (enemies.length === 0) {
-    console.warn(`[combat-engine] All enemy ids unresolvable at node ${node.id} — encounter cancelled.`);
-    return { combatStarted: false };
+    // HF2 — rich diagnostic so the next time we see this in a save dump,
+    // the exact missing layer is obvious. Surfaces zone_id, the region
+    // bible keys present, and whether the starting-region enemies array
+    // is populated.
+    const bibleKeys     = region_bibles ? Object.keys(region_bibles) : [];
+    const startingCount = world_bible?.starting_region?.enemies?.length ?? 0;
+    console.warn(
+      `[combat-engine] All enemy ids unresolvable at node ${node.id}`,
+      {
+        nodeZoneId:           node.zone_id,
+        nodeType:             node.node_type,
+        unresolvedIds,
+        regionBibleKeys:      bibleKeys,
+        startingRegionId:     world_bible?.starting_region?.id,
+        startingEnemiesCount: startingCount,
+      }
+    );
+
+    // HF2 CHANGE 2 — dungeons must always have a chance to spawn. When a
+    // dungeon node would otherwise silently cancel, mint a generic tier-
+    // appropriate fallback so the player still meets resistance. Non-
+    // dungeon encounters preserve the existing silent-cancel behaviour
+    // (wilderness / landmark / abandoned-settlement nodes have already
+    // passed an encounter_chance roll; cancelling on resolution failure
+    // there is intentional).
+    if (isDungeonNode(node)) {
+      const tier        = dungeonTierForNode(node, world_bible);
+      const fallback    = buildDungeonFallbackEnemy(tier, genre);
+      const fbHp        = rollEnemyHP(fallback, rng);
+      enemies.push({
+        instance_id:     `${fallback.id}_1`,
+        enemy_id:        fallback.id,
+        name:            fallback.name,
+        description:     fallback.description,
+        current_hp:      fbHp,
+        max_hp:          fbHp,
+        agi_mod:         fallback.agi_mod,
+        str_mod:         fallback.str_mod,
+        damage_die:      fallback.damage_die,
+        armor_bonus:     fallback.armor_bonus,
+        xp_value:        fallback.xp_value,
+        loot_table_id:   fallback.loot_table_id,
+        is_boss:         fallback.is_boss,
+        behavior_flavor: fallback.behavior_flavor,
+        alive:           true,
+        status_effects:  [],
+      });
+      console.warn(
+        `[combat-engine] Dungeon fallback spawned at ${node.id}: ${fallback.name} (tier ${tier}).`
+      );
+    } else {
+      return { combatStarted: false };
+    }
   }
 
   // Initiative: player + each enemy instance. Player AGI passed via the

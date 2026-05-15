@@ -1,7 +1,7 @@
 # Endless Worlds RPG — UI Design Reference
 
-**Version:** 3.2  
-**Status:** Design complete — all primary surfaces specced  
+**Version:** 3.3
+**Status:** Design complete — all primary surfaces specced
 **Covers:** All designed UI surfaces as of May 2026
 
 ---
@@ -280,7 +280,7 @@ WorldBible runs in background from genre confirmation through all 6 steps.
 **Class cards:** Stat colour (not genre accent) on icon, role badge, and bottom bar. Stat colours: STR `#c87040` · AGI `#60a850` · INT `#5880d0` · PER `#409888` · CHA `#9060d0`.
 
 **Verified Tabler icons (25 classes):**
-Knight `ti-shield` · Rogue `ti-eye-off` · Mage `ti-wand` · Ranger `ti-crosshair` · Herald `ti-message` · Netrunner `ti-cpu` · Fixer `ti-briefcase` · Street Samurai `ti-sword` · Enforcer `ti-hammer` · Ghost `ti-ghost` · Investigator `ti-search` · Cultist `ti-moon` · Survivor `ti-heart` · Phantom `ti-ghost` · Medium `ti-eye` · Commander `ti-badge` · Pilot `ti-rocket` · Engineer `ti-tool` · Marine `ti-shield` · Recon `ti-radar` · Scavenger `ti-search` · Raider `ti-axe` · Medic `ti-first-aid-kit` · Runner `ti-run` · Demagogue `ti-speakerphone`
+Knight `ti-shield` · Rogue `ti-eye-off` · Mage `ti-wand` · Ranger `ti-crosshair` · Herald `ti-message` · Netrunner `ti-cpu` · Fixer `ti-briefcase` · Street Samurai `ti-sword` · Enforcer `ti-hammer` · Ghost `ti-ghost` · Investigator `ti-search` · Cultist `ti-moon` · Survivor `ti-heart` · Phantom `ti-mask` · Medium `ti-eye` · Commander `ti-badge` · Pilot `ti-rocket` · Engineer `ti-tool` · Marine `ti-ship` · Recon `ti-radar` · Scavenger `ti-search` · Raider `ti-axe` · Medic `ti-first-aid-kit` · Runner `ti-run` · Demagogue `ti-speakerphone`
 
 ---
 
@@ -429,6 +429,7 @@ Desktop: center column fades (200ms ease). Mobile: `translateX(100%→0)`, `300m
 - **Enter World = World Intro Cinematic Modal** (rule 42). No separate transition.
 - **`requestAnimationFrame` double-frame trick** for CSS transitions on dynamically inserted elements.
 - **Toast z-index: 30** — above combat panel (z-index: 10).
+- **jest baseline — see PROMPT-LOG.md (rule 91).** Do not hardcode a number here.
 
 ---
 
@@ -456,11 +457,11 @@ Desktop: center column fades (200ms ease). Mobile: `translateX(100%→0)`, `300m
 
 ### Implementation Approach
 
-Surface-by-surface redesign. V8.83, 626 tests. Not a big-bang overhaul.
+Surface-by-surface redesign. V8.84, 648 tests. Not a big-bang overhaul.
 
 **Authority:** CLAUDE.md → game logic, architecture, data. This doc → visual presentation, interaction. On UI conflicts: this doc wins. On game mechanic conflicts: CLAUDE.md wins.
 
-**Per-prompt invariants:** Origin/main baseline check first (rule 76) · Investigation-before-patching (V8.40) · jest baseline 626 (rule 91) · Do not break Story Feed Colors token system.
+**Per-prompt invariants:** Origin/main baseline check first (rule 76) · Investigation-before-patching (V8.40) · jest baseline — see PROMPT-LOG.md (rule 91) · Do not break Story Feed Colors token system.
 
 ---
 
@@ -661,7 +662,7 @@ If `floor_loot[]` is empty when search is triggered: a single prose line appears
 ### Two Contexts — Same Component
 
 | Context | Header | Trigger | Card type |
-|---------|--------|---------|-----------|
+|---------|--------|---------|-----------| 
 | Enemy remains | "You search the remains" | "Search the remains →" on victory card | Inline feed (first-time), modal (revisit) |
 | World container | "You search the [name]" | "Search" on Context Panel object or story feed object | Inline feed (first-time), modal (revisit) |
 

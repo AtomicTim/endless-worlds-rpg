@@ -52,13 +52,25 @@ function getToneBadge(tone: DialogueOption["tone"], attributes: Attributes): Ton
   }
 }
 
-const DISPOSITION_DOT: Record<string, string> = {
-  hostile:    "#ef4444",
-  suspicious: "#f97316",
-  neutral:    "#facc15",
-  friendly:   "#22c55e",
-  allied:     "#a855f7",
+// UI-6 — disposition palette (design ref §10). Bands map a 0-100
+// trust score to one of five colour bands. Replaces the prior
+// light-tone dots with more saturated / desaturated tones that read
+// against the genre dark surfaces.
+const DISPOSITION_COLOR: Record<string, string> = {
+  hostile:    "#c44040",
+  suspicious: "#b06030",
+  neutral:    "#8a6a3a",
+  friendly:   "#5a9a5a",
+  allied:     "#4a8a4a",
 };
+/** UI-6 — odds label for stat-gated options. Mod uses rule 92's
+ *  floor((score-2)/2). Pure helper, no side effects. */
+function oddsLabel(rawStat: number): "Good odds" | "Risky" | "Long shot" {
+  const mod = Math.floor((rawStat - 2) / 2);
+  if (mod >= 3) return "Good odds";
+  if (mod >= 0) return "Risky";
+  return "Long shot";
+}
 
 function ensureResponsiveSvg(svg: string): string {
   let out = svg;
@@ -215,23 +227,25 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
 
   const effectiveTrust = trustScore ?? 50;
   const disposition    = getNpcDisposition(effectiveTrust);
-  const dispDot        = DISPOSITION_DOT[disposition] ?? DISPOSITION_DOT.neutral;
+  const dispColor      = DISPOSITION_COLOR[disposition] ?? DISPOSITION_COLOR.neutral;
 
-  // ── Header row ─────────────────────────────────────────────────────────────
-  // 48px tall, padding 0 16px. Click anywhere on the header re-expands a
-  // collapsed panel; the right-side ─/× buttons stop event propagation
-  // so they don't also re-expand on click.
+  // ── UI-6 NPC header card (CHANGE 2) ───────────────────────────────────────
+  // Fixed (non-scrolling) header — name (serif italic 15px #e2cda0),
+  // role (Inter Tight 8px uppercase #6a5530), and a 6px disposition
+  // pill whose filled segment width tracks the trust score 0-100.
+  // Click on the header re-expands a collapsed panel; the ─ / ×
+  // buttons stop propagation so they don't toggle expand on click.
   const header = (
     <div
       onClick={collapsed ? () => setCollapsed(false) : undefined}
       style={{
-        height:       48,
-        padding:      "0 16px",
+        padding:      "10px 14px",
         display:      "flex",
         alignItems:   "center",
         gap:          10,
         cursor:       collapsed ? "pointer" : "default",
         flexShrink:   0,
+        borderBottom: "1px solid var(--card-border)",
       }}
       role={collapsed ? "button" : undefined}
       aria-label={collapsed ? "Expand dialogue" : undefined}
@@ -242,13 +256,13 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
           width:          32,
           height:         32,
           background:     "var(--bg-3)",
-          border:         "1px solid var(--accent)",
+          border:         "1px solid var(--genre-accent)",
           display:        "flex",
           alignItems:     "center",
           justifyContent: "center",
           fontFamily:     "var(--mono)",
           fontSize:       11,
-          color:          "var(--accent)",
+          color:          "var(--genre-accent)",
           letterSpacing:  "0.08em",
           flexShrink:     0,
           overflow:       "hidden",
@@ -265,46 +279,77 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
         )}
       </div>
 
-      {/* Name + role + trust */}
+      {/* Name + role + disposition bar */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
-          className="ew-serif"
+          className="ew-serif italic"
           style={{
-            fontSize:    14,
-            color:       "var(--ink-1)",
+            fontSize:    15,
+            color:       "#e2cda0",
             lineHeight:  1.2,
-            display:     "flex",
-            alignItems:  "center",
-            gap:         7,
-            flexWrap:    "wrap",
+            overflow:    "hidden",
+            textOverflow:"ellipsis",
+            whiteSpace:  "nowrap",
           }}
         >
-          <span style={{ fontStyle: "italic" }}>{npcName ?? "Unknown"}</span>
-          <span
-            style={{
-              width:        5,
-              height:       5,
-              background:   dispDot,
-              borderRadius: 3,
-              flexShrink:   0,
-            }}
-          />
+          {npcName ?? "Unknown"}
         </div>
-        {(npcRole || trustScore !== null) && (
+        {npcRole && (
           <div
-            className="ew-mono"
+            className="ew-sans uppercase"
             style={{
               fontSize:      8,
-              letterSpacing: "0.18em",
-              color:         "var(--ink-4)",
+              letterSpacing: "0.16em",
+              color:         "#6a5530",
               marginTop:     2,
-              display:       "flex",
-              alignItems:    "center",
-              gap:           8,
             }}
           >
-            {npcRole && <span>{npcRole.toUpperCase()}</span>}
-            {trustScore !== null && <span>TRUST {effectiveTrust}</span>}
+            {npcRole}
+          </div>
+        )}
+        {trustScore !== null && (
+          <div
+            style={{
+              marginTop:  6,
+              display:    "flex",
+              alignItems: "center",
+              gap:        8,
+            }}
+            aria-label={`Disposition ${disposition}, trust ${effectiveTrust} of 100`}
+          >
+            <div
+              style={{
+                position:     "relative",
+                flex:         1,
+                height:       6,
+                borderRadius: 6,
+                background:   "color-mix(in srgb, #2d2618 70%, transparent)",
+                overflow:     "hidden",
+              }}
+            >
+              <div
+                style={{
+                  position:     "absolute",
+                  top:          0,
+                  left:         0,
+                  height:       "100%",
+                  width:        `${Math.max(0, Math.min(100, effectiveTrust))}%`,
+                  background:   dispColor,
+                  transition:   "width 200ms ease",
+                }}
+              />
+            </div>
+            <span
+              className="ew-sans uppercase"
+              style={{
+                fontSize:      7,
+                letterSpacing: "0.14em",
+                color:         dispColor,
+                flexShrink:    0,
+              }}
+            >
+              {disposition}
+            </span>
           </div>
         )}
       </div>
@@ -317,9 +362,9 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
         style={{
           width:          24,
           height:         24,
-          border:         "1px solid var(--line-2)",
+          border:         "1px solid #2d2618",
           background:     "transparent",
-          color:          "var(--ink-3)",
+          color:          "#6a5530",
           cursor:         "pointer",
           display:        "inline-flex",
           alignItems:     "center",
@@ -327,6 +372,7 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
           fontFamily:     "var(--mono)",
           fontSize:       12,
           lineHeight:     1,
+          alignSelf:      "flex-start",
         }}
       >
         ─
@@ -340,13 +386,14 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
         style={{
           width:          24,
           height:         24,
-          border:         "1px solid var(--line-2)",
+          border:         "1px solid #2d2618",
           background:     "transparent",
-          color:          "var(--ink-3)",
+          color:          "#6a5530",
           cursor:         "pointer",
           display:        "inline-flex",
           alignItems:     "center",
           justifyContent: "center",
+          alignSelf:      "flex-start",
         }}
       >
         <X className="size-3" />
@@ -354,243 +401,376 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
     </div>
   );
 
+  // ── UI-6 — slot population (CHANGE 4) ─────────────────────────────────────
+  // Primary options fill exactly 4 slots: knowledge / AI-emitted tone-only
+  // options. Pad with placeholders below 4; clip to 4 above. Trade / rest /
+  // free / farewell move OUT of the slot grid:
+  //   - free      → free-type input row (existing affordance, restyled).
+  //   - trade     → secondary action row below slots (merchant only).
+  //   - rest      → secondary action row below slots (innkeeper only).
+  //   - farewell  → covered by the End Conversation button, suppressed.
+  const SECONDARY_TYPES = new Set(["trade", "rest", "free", "farewell"]);
+  const primaryOptions = options
+    .filter((o) => !o.type || !SECONDARY_TYPES.has(o.type))
+    .slice(0, 4);
+  const slotCount       = 4;
+  const restOption      = options.find((o) => o.type === "rest");
+  const freeOption      = options.find((o) => o.type === "free");
+
   // ── Inline panel ──────────────────────────────────────────────────────────
   return (
     <div
       role="dialog"
       aria-label="Dialogue options"
       style={{
-        width:        "100%",
-        background:   "var(--bg-1)",
-        borderTop:    "2px solid var(--accent)",
-        borderRadius: "8px 8px 0 0",
-        padding:      "0 0 16px 0",
-        marginTop:    24,
+        // UI-6 (CHANGE 1) — genre card shell: var(--content-bg) +
+        // var(--card-border) + var(--card-radius). Width constrained
+        // to 520px / 94vw so the inline panel doesn't span the full
+        // feed at desktop widths. Position stays inline (bottomSlot
+        // of GameLayout / StoryFeed) so the conversation feed above
+        // and the option panel below read as one continuous scroll.
+        position:     "relative",
+        width:        "min(520px, 94vw)",
+        maxHeight:    "85vh",
+        margin:       "24px auto 0",
+        background:   "var(--content-bg)",
+        border:       "1px solid var(--card-border)",
+        borderRadius: "var(--card-radius)",
+        boxShadow:    "var(--card-shadow)",
+        overflow:     "hidden",
         fontFamily:   "var(--sans)",
         color:        "var(--ink-2)",
       }}
     >
-      {header}
+      {/* UI-1 overlay trio — inert on genres that don't opt in;
+          pointer-events:none so they never block clicks. */}
+      <div
+        className="ol-tex"
+        aria-hidden
+        style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }}
+      />
+      <div
+        className="ol-scan"
+        aria-hidden
+        style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }}
+      />
+      <div
+        className="ol-grid"
+        aria-hidden
+        style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }}
+      />
 
-      {!collapsed && (
-        <>
-          {/* Options list */}
-          <div>
-            {options.map((option) => {
-              const badge   = playerStats ? getToneBadge(option.tone, playerStats) : null;
-              return (
-                <button
-                  key={option.id}
-                  onClick={() => handleOption(option)}
+      {/* Content sits above the overlay layer. */}
+      <div style={{ position: "relative", zIndex: 10 }}>
+        {header}
+
+        {!collapsed && (
+          <>
+            {/* UI-6 (CHANGE 4) — exactly 4 fixed slots. */}
+            <div
+              style={{
+                display:        "flex",
+                flexDirection:  "column",
+                gap:            6,
+                padding:        "10px 14px 6px",
+              }}
+            >
+              {Array.from({ length: slotCount }).map((_, i) => {
+                const option = primaryOptions[i];
+                if (!option) {
+                  // Empty slot — dim dashed placeholder.
+                  return (
+                    <div
+                      key={`slot-${i}-empty`}
+                      aria-hidden
+                      style={{
+                        height:       28,
+                        border:       "1px dashed #2d2618",
+                        borderRadius: 4,
+                        opacity:      0.6,
+                      }}
+                    />
+                  );
+                }
+                const badge = playerStats ? getToneBadge(option.tone, playerStats) : null;
+                // Slot kind: PER badge → OBSERVATION, STR/CHA → STAT_GATED,
+                // null → STANDARD.
+                const kind: "STANDARD" | "STAT_GATED" | "OBSERVATION" =
+                  !badge ? "STANDARD"
+                  : badge.stat === "PER" ? "OBSERVATION"
+                  : "STAT_GATED";
+                return (
+                  <button
+                    key={option.id}
+                    onClick={() => handleOption(option)}
+                    style={{
+                      width:        "100%",
+                      minHeight:    44,
+                      padding:      "8px 12px",
+                      display:      "flex",
+                      alignItems:   "center",
+                      gap:          10,
+                      background:   "transparent",
+                      border:       "1px solid #2d2618",
+                      borderRadius: 4,
+                      color:        "#c4b090",
+                      fontFamily:   "var(--serif)",
+                      fontStyle:    "italic",
+                      fontSize:     13,
+                      textAlign:    "left",
+                      cursor:       "pointer",
+                      transition:   "background 120ms",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background =
+                        "rgba(var(--genre-accent-rgb), .06)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent";
+                    }}
+                  >
+                    <span style={{ flex: 1, minWidth: 0 }}>{option.text}</span>
+                    {kind === "STAT_GATED" && badge && (
+                      <span
+                        className="ew-sans uppercase"
+                        title={`${badge.stat} ${badge.value}${badge.note ? ` (${badge.note})` : ""}`}
+                        style={{
+                          fontSize:      6,
+                          letterSpacing: "0.10em",
+                          color:         "#c4943a",
+                          background:    "rgba(196,148,58,.12)",
+                          borderRadius:  20,
+                          padding:       "1px 6px",
+                          flexShrink:    0,
+                        }}
+                      >
+                        {badge.stat} · {oddsLabel(badge.value)}
+                      </span>
+                    )}
+                    {kind === "OBSERVATION" && (
+                      <span
+                        className="ew-sans uppercase"
+                        title={`Perception probe — your PER: ${badge!.value}`}
+                        style={{
+                          display:       "inline-flex",
+                          alignItems:    "center",
+                          gap:           4,
+                          fontSize:      6,
+                          letterSpacing: "0.10em",
+                          color:         "#4a9888",
+                          background:    "rgba(74,152,136,.12)",
+                          borderRadius:  20,
+                          padding:       "1px 6px",
+                          flexShrink:    0,
+                        }}
+                      >
+                        <span aria-hidden style={{ fontSize: 10, lineHeight: 1 }}>◉</span>
+                        Observe
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Secondary actions row — trade / rest / free-type sit OUTSIDE
+                the 4 primary slots so the slot grid stays a stable shape
+                regardless of NPC role. */}
+            {(isCurrentNpcMerchant || restOption || freeOption) && (
+              <div
+                style={{
+                  display:        "flex",
+                  flexWrap:       "wrap",
+                  gap:            6,
+                  padding:        "0 14px",
+                  marginTop:      4,
+                }}
+              >
+                {isCurrentNpcMerchant && (
+                  <button
+                    onClick={handleOpenTrade}
+                    disabled={tradeOpen && tradeItems.length > 0}
+                    title={
+                      tradeOpen && tradeItems.length > 0
+                        ? "Trade panel is open"
+                        : "Open trade panel"
+                    }
+                    style={{
+                      flex:          "1 1 0",
+                      minWidth:      90,
+                      padding:       "6px 10px",
+                      background:    "rgba(var(--genre-accent-rgb), .10)",
+                      border:        "1px solid color-mix(in srgb, var(--genre-accent) 35%, transparent)",
+                      borderRadius:  4,
+                      color:         "var(--genre-accent)",
+                      fontFamily:    "var(--sans)",
+                      fontSize:      8,
+                      letterSpacing: "0.14em",
+                      textTransform: "uppercase",
+                      fontWeight:    600,
+                      cursor:        (tradeOpen && tradeItems.length > 0) ? "default" : "pointer",
+                      opacity:       (tradeOpen && tradeItems.length > 0) ? 0.4 : 1,
+                    }}
+                  >
+                    ◆ Trade
+                  </button>
+                )}
+                {restOption && (
+                  <button
+                    onClick={() => handleOption(restOption)}
+                    style={{
+                      flex:          "1 1 0",
+                      minWidth:      90,
+                      padding:       "6px 10px",
+                      background:    "rgba(var(--genre-accent-rgb), .10)",
+                      border:        "1px solid color-mix(in srgb, var(--genre-accent) 35%, transparent)",
+                      borderRadius:  4,
+                      color:         "var(--genre-accent)",
+                      fontFamily:    "var(--sans)",
+                      fontSize:      8,
+                      letterSpacing: "0.14em",
+                      textTransform: "uppercase",
+                      fontWeight:    600,
+                      cursor:        "pointer",
+                    }}
+                  >
+                    ☾ Rent room
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Free-type input row — clicking the closed pill opens the
+                inline input, same handler as the option-list "free" type.
+                Restyled to fit the new panel surface. */}
+            <div style={{ padding: "8px 14px 0" }}>
+              {inlineInputOpen ? (
+                <div
                   style={{
-                    width:        "100%",
-                    minHeight:    44,
-                    padding:      "10px 16px",
-                    display:      "flex",
-                    alignItems:   "center",
-                    gap:          12,
-                    background:   "transparent",
-                    border:       "none",
-                    borderBottom: "1px solid var(--line)",
-                    borderLeft:   "3px solid transparent",
-                    color:        "var(--ink-1)",
-                    fontFamily:   "var(--serif)",
-                    fontSize:     14,
-                    textAlign:    "left",
-                    cursor:       "pointer",
-                    transition:   "background 120ms, border-color 120ms",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background  = "var(--bg-2)";
-                    e.currentTarget.style.borderLeft  = "3px solid var(--accent)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background  = "transparent";
-                    e.currentTarget.style.borderLeft  = "3px solid transparent";
+                    display:    "flex",
+                    alignItems: "center",
+                    background: "var(--bg-0)",
+                    border:     "1px solid #2d2618",
+                    borderRadius: 4,
+                    padding:    "2px 4px 2px 10px",
                   }}
                 >
                   <span
                     style={{
-                      color:         "var(--accent)",
-                      fontFamily:    "var(--mono)",
-                      fontSize:      11,
-                      letterSpacing: "0.1em",
+                      color:       "var(--genre-accent)",
+                      fontFamily:  "var(--mono)",
+                      fontSize:    12,
+                      marginRight: 8,
                     }}
                   >
-                    ›
+                    ✎
                   </span>
-                  <span style={{ flex: 1, fontStyle: "italic", minWidth: 0 }}>
-                    {option.text}
-                  </span>
-                  {badge && (
-                    <span
-                      className="ew-mono"
-                      title={`Check fires on use. Your ${badge.stat}: ${badge.value}${badge.note ? ` (${badge.note})` : ""}`}
-                      style={{
-                        fontSize:      8,
-                        letterSpacing: "0.2em",
-                        color:         "var(--ink-3)",
-                        background:    "var(--bg-3)",
-                        padding:       "2px 6px",
-                        borderRadius:  1,
-                        flexShrink:    0,
-                      }}
-                    >
-                      {badge.stat} {badge.value}{badge.note ? ` ${badge.note}` : ""}
-                    </span>
-                  )}
+                  <input
+                    ref={inlineInputRef}
+                    type="text"
+                    value={inlineValue}
+                    onChange={(e) => setInlineValue(e.target.value)}
+                    onKeyDown={handleInlineKeyDown}
+                    onBlur={(e) => {
+                      const next = e.relatedTarget as HTMLElement | null;
+                      if (next?.dataset?.dialogueSend === "true") return;
+                      if (!inlineValue.trim()) setInlineInputOpen(false);
+                    }}
+                    placeholder={
+                      npcName ? `Say something to ${npcName}...` : "Say something..."
+                    }
+                    maxLength={300}
+                    style={{
+                      flex:       1,
+                      background: "transparent",
+                      border:     "none",
+                      outline:    "none",
+                      fontFamily: "var(--serif)",
+                      fontStyle:  "italic",
+                      fontSize:   13,
+                      color:      "#e2cda0",
+                      padding:    "6px 0",
+                    }}
+                  />
+                  <button
+                    onClick={handleInlineSubmit}
+                    data-dialogue-send="true"
+                    disabled={!inlineValue.trim()}
+                    aria-label="Send"
+                    style={{
+                      border:        "none",
+                      background:    "rgba(var(--genre-accent-rgb), .14)",
+                      color:         "var(--genre-accent)",
+                      fontFamily:    "var(--mono)",
+                      fontSize:      10,
+                      letterSpacing: "0.24em",
+                      padding:       "6px 10px",
+                      borderRadius:  3,
+                      cursor:        inlineValue.trim() ? "pointer" : "not-allowed",
+                      opacity:       inlineValue.trim() ? 1 : 0.4,
+                    }}
+                  >
+                    <Send className="size-3" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleTypeOwn}
+                  style={{
+                    width:        "100%",
+                    display:      "flex",
+                    alignItems:   "center",
+                    gap:          8,
+                    padding:      "8px 10px",
+                    background:   "var(--bg-0)",
+                    border:       "1px solid #2d2618",
+                    borderRadius: 4,
+                    fontFamily:   "var(--serif)",
+                    fontStyle:    "italic",
+                    color:        "#6a5530",
+                    fontSize:     13,
+                    cursor:       "pointer",
+                    textAlign:    "left",
+                  }}
+                >
+                  ✎  type your own response…
                 </button>
-              );
-            })}
+              )}
+            </div>
 
-            {/* Trade button (merchant only) — sits in the options list */}
-            {isCurrentNpcMerchant && (
+            {/* UI-6 (CHANGE 5) — End Conversation: persistent full-width
+                button OUTSIDE / BELOW the 4 slots. Inter Tight 8px
+                uppercase 0.10em #6a5530, 1px #2d2618 border. Hover
+                lifts the colour. */}
+            <div style={{ padding: "10px 14px 12px" }}>
               <button
-                onClick={handleOpenTrade}
-                disabled={tradeOpen && tradeItems.length > 0}
+                onClick={() => clear()}
+                className="ew-sans uppercase"
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = "#a08870";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = "#6a5530";
+                }}
                 style={{
                   width:         "100%",
-                  minHeight:     44,
-                  padding:       "10px 16px",
-                  display:       "flex",
-                  alignItems:    "center",
-                  justifyContent:"center",
-                  gap:           8,
+                  fontSize:      8,
+                  letterSpacing: "0.10em",
+                  color:         "#6a5530",
                   background:    "transparent",
-                  border:        "none",
-                  borderBottom:  "1px solid var(--line)",
-                  color:         "#fbbf24",
-                  fontFamily:    "var(--mono)",
-                  fontSize:      10,
-                  letterSpacing: "0.32em",
-                  fontWeight:    600,
-                  cursor:        (tradeOpen && tradeItems.length > 0) ? "default" : "pointer",
-                  opacity:       (tradeOpen && tradeItems.length > 0) ? 0.4 : 1,
+                  border:        "1px solid #2d2618",
+                  borderRadius:  4,
+                  cursor:        "pointer",
+                  padding:       "8px 0",
+                  transition:    "color 120ms",
                 }}
-                title={
-                  tradeOpen && tradeItems.length > 0
-                    ? "Trade panel is open"
-                    : "Open trade panel"
-                }
               >
-                ◆ TRADE
+                End conversation
               </button>
-            )}
-          </div>
-
-          {/* Free-type input row */}
-          <div style={{ padding: "8px 16px" }}>
-            {inlineInputOpen ? (
-              <div
-                style={{
-                  display:    "flex",
-                  alignItems: "center",
-                  background: "var(--bg-0)",
-                  border:     "none",
-                  padding:    "4px 4px 4px 10px",
-                }}
-              >
-                <span
-                  style={{
-                    color:       "var(--accent)",
-                    fontFamily:  "var(--mono)",
-                    fontSize:    12,
-                    marginRight: 8,
-                  }}
-                >
-                  ✎
-                </span>
-                <input
-                  ref={inlineInputRef}
-                  type="text"
-                  value={inlineValue}
-                  onChange={(e) => setInlineValue(e.target.value)}
-                  onKeyDown={handleInlineKeyDown}
-                  onBlur={(e) => {
-                    const next = e.relatedTarget as HTMLElement | null;
-                    if (next?.dataset?.dialogueSend === "true") return;
-                    if (!inlineValue.trim()) setInlineInputOpen(false);
-                  }}
-                  placeholder={
-                    npcName ? `Say something to ${npcName}...` : "Say something..."
-                  }
-                  maxLength={300}
-                  style={{
-                    flex:       1,
-                    background: "transparent",
-                    border:     "none",
-                    outline:    "none",
-                    fontFamily: "var(--serif)",
-                    fontStyle:  "italic",
-                    fontSize:   13,
-                    color:      "var(--ink-1)",
-                    padding:    "6px 0",
-                  }}
-                />
-                <button
-                  onClick={handleInlineSubmit}
-                  data-dialogue-send="true"
-                  disabled={!inlineValue.trim()}
-                  aria-label="Send"
-                  style={{
-                    border:        "none",
-                    background:    "var(--accent-faint)",
-                    color:         "var(--accent)",
-                    fontFamily:    "var(--mono)",
-                    fontSize:      10,
-                    letterSpacing: "0.24em",
-                    padding:       "6px 12px",
-                    cursor:        inlineValue.trim() ? "pointer" : "not-allowed",
-                    opacity:       inlineValue.trim() ? 1 : 0.4,
-                  }}
-                >
-                  <Send className="size-3" />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={handleTypeOwn}
-                style={{
-                  width:      "100%",
-                  display:    "flex",
-                  alignItems: "center",
-                  gap:        8,
-                  padding:    "8px 10px",
-                  background: "var(--bg-0)",
-                  border:     "none",
-                  fontFamily: "var(--serif)",
-                  fontStyle:  "italic",
-                  color:      "var(--ink-5)",
-                  fontSize:   13,
-                  cursor:     "pointer",
-                  textAlign:  "left",
-                }}
-              >
-                ✎  type your own response…
-              </button>
-            )}
-          </div>
-
-          {/* Walk away link — centered mono */}
-          <div style={{ padding: "6px 0 0", textAlign: "center" }}>
-            <button
-              onClick={() => clear()}
-              className="ew-mono"
-              style={{
-                fontSize:       9,
-                letterSpacing:  "0.2em",
-                color:          "var(--ink-4)",
-                background:     "transparent",
-                border:         "none",
-                cursor:         "pointer",
-                padding:        "6px 0",
-              }}
-            >
-              walk away
-            </button>
-          </div>
-        </>
-      )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

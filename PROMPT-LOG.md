@@ -3,7 +3,7 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** a5c0739 (PROMPT-LOG: UI-9 complete)
+**Last code commit:** 51587a8 (UI-9b — nav card layout cleanup)
 **jest baseline:** 734 (authoritative)
 **tsc:** clean
 
@@ -26,7 +26,7 @@
 | UI-7 | Codex + Journal/Quests | — | — | ⏳ (after UI-6) |
 | UI-8 | Loot Flow | — | — | ⏳ |
 | UI-9 | Character Panel | f811645 | 734 | ✅ |
-| UI-9b | Nav Card Layout Cleanup | — | — | ⏳ IN PROGRESS |
+| UI-9b | Nav Card Layout Cleanup | 51587a8 | 734 | ✅ |
 | UI-10 | Combat UI Overhaul | — | — | ⏳ (after HF2 verify) |
 | UI-11 | Transitions + Toast System | — | — | ⏳ |
 | UI-12 | Character Creation Wizard | — | — | ⏳ |
@@ -56,3 +56,5 @@
 **P4:** Quest item gate. **P5:** Status pill + DoT. **P8:** Perk step at L4. (None urgent.)
 **HF2:** Enter a dungeon → confirm enemy spawns. Required before UI-10.
 **UI-9:** Visual — new sidebar layout, HP colour states, pack grid inline expand. Not blocking.
+**UI-9b:** Visual — nav cards stack vertically (one per row), readable name + type badge, no
+  horizontal scroll. Confirm at 1280px the cards span the full nav-bar width with breathing room.

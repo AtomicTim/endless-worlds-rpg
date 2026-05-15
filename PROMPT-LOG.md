@@ -3,8 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** c7d0370 (UI-1 — design token + genre system)
-**jest baseline:** 648 (authoritative)
+**Last code commit:** 87741fb (P6 — ability system foundation)
+**jest baseline:** 678 (authoritative)
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -17,8 +17,8 @@
 | P3 | Merchant Trading + Inn Rest | 0219bec | ✅ 626 tests |
 | P4 | Quest Completion Gate Enforcement | d5ceeb1 | ✅ 648 tests |
 | P5 | Combat UX: Status Effect Display | 7439cb8 | ✅ 605 tests |
-| P6 | Ability System — Foundation | — | ⏳ IN PROGRESS |
-| P7 | Ability System — Combat + Attunement UI | — | ⏳ (after P6) |
+| P6 | Ability System — Foundation | 87741fb | ✅ 678 tests |
+| P7 | Ability System — Combat + Attunement UI | — | ⏳ NEXT |
 | P8 | Perks System | — | ⏳ |
 | P9 | Professions Foundation | — | ⏳ Day 25 |
 | P10 | Professions Crafting + XP + Milestones | — | ⏳ Day 25 |
@@ -66,3 +66,8 @@
 **UI-1 — no blocking tests. Visual only:**
 - Load game in Fantasy genre → accent should be warmer amber (#c4943a not the old yellow #f59e0b).
   Can verify anytime, not blocking.
+
+**P6 — nice to have, not blocking (data layer only, no UI to verify):**
+- Spot-check `lib/game/abilities.ts` ABILITY_LIBRARY entries against `docs/ability-library.md`
+  for any class you want to verify (Knight / Mage / Medic are good representative picks).
+- Tests cover the structural invariants (125 entries, 25 classes × 5, slot unlocks 5/10/15).

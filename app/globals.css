@@ -38,8 +38,10 @@
        Endless Worlds — design tokens (ported from /design/styles.css)
        ────────────────────────────────────────────────────────────────── */
 
-    /* Genre primaries */
-    --g-fantasy: #f59e0b;
+    /* Genre primaries — UI-1: Fantasy accent dropped from #f59e0b to
+       #c4943a (deeper amber-gold per UI design ref §2). Single
+       variable; cascades through --accent → --color-primary etc. */
+    --g-fantasy: #c4943a;
     --g-cyber:   #22d3ee;
     --g-horror:  #84cc16;
     --g-space:   #a855f7;
@@ -137,6 +139,159 @@
   [data-genre="space-opera"]        { --accent: var(--g-space);  }
   [data-genre="post-apocalyptic"]   { --accent: var(--g-apoc);   }
   [data-genre="fantasy"]            { --accent: var(--g-fantasy); }
+
+  /* ──────────────────────────────────────────────────────────────────────
+     UI-1: per-genre CSS variable sets
+     ──────────────────────────────────────────────────────────────────────
+     Applied via the `genre-X` class on the outermost game container
+     (coexists with data-genre — see GameLayout / genreClassName). All
+     downstream surfaces read --card-bg / --card-border / --card-radius /
+     --card-shadow / --content-bg / --genre-accent via var() so a single
+     class swap re-themes the entire UI (design ref §3).
+     ────────────────────────────────────────────────────────────────────── */
+  .genre-fantasy {
+    --card-bg:      linear-gradient(160deg, #2e2010, #281b0e);
+    --card-border:  rgba(196,148,58,.28);
+    --card-radius:  8px;
+    --card-shadow:  inset 0 1px 0 rgba(220,170,70,.14),
+                    0 3px 8px rgba(0,0,0,.55);
+    --content-bg:   linear-gradient(180deg, #241a0a, #1c1308);
+    --genre-accent: #c4943a;
+  }
+  .genre-cyberpunk {
+    --card-bg:      #060e12;
+    --card-border:  rgba(34,211,238,.17);
+    --card-radius:  0px;
+    --card-shadow:  0 0 14px rgba(34,211,238,.06);
+    --content-bg:   #040c0f;
+    --genre-accent: #22d3ee;
+  }
+  .genre-horror {
+    --card-bg:      #0a100a;
+    --card-border:  rgba(45,65,40,.32);
+    --card-radius:  2px;
+    --card-shadow:  inset 0 2px 6px rgba(0,0,0,.6);
+    --content-bg:   #060809;
+    --genre-accent: #84cc16;
+  }
+  .genre-space {
+    --card-bg:      linear-gradient(160deg, #0d0a1a, #080618);
+    --card-border:  rgba(168,85,247,.2);
+    --card-radius:  3px;
+    --card-shadow:  0 0 12px rgba(168,85,247,.08);
+    --content-bg:   linear-gradient(180deg, #070520, #060412);
+    --genre-accent: #a855f7;
+  }
+  .genre-postapoc {
+    --card-bg:      linear-gradient(160deg, #1a0e06, #140b04);
+    --card-border:  rgba(180,80,20,.25);
+    --card-radius:  2px;
+    --card-shadow:  0 2px 8px rgba(0,0,0,.6);
+    --content-bg:   linear-gradient(180deg, #1a0e06, #130b04);
+    --genre-accent: #ea580c;
+  }
+
+  /* ──────────────────────────────────────────────────────────────────────
+     UI-1: overlay classes
+     ──────────────────────────────────────────────────────────────────────
+     Each scrollable surface drops three sibling divs (`.ol-scan`,
+     `.ol-grid`, `.ol-tex`) positioned absolute/inset-0/pointer-events
+     none/z-index 2 — the host element handles positioning, these
+     classes render the genre-specific texture. Defaults render
+     nothing; only the matching genre/overlay combos light up
+     (design ref §3 overlay table).
+     ────────────────────────────────────────────────────────────────────── */
+
+  /* Scan overlay — Cyberpunk: CRT scanlines */
+  .genre-cyberpunk .ol-scan {
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(34,211,238,.025) 2px,
+      rgba(34,211,238,.025) 4px
+    );
+  }
+
+  /* Scan overlay — Horror: dot texture */
+  .genre-horror .ol-scan {
+    background-image: radial-gradient(
+      rgba(84,204,22,.2) 1px, transparent 1px
+    );
+    background-size: 5px 5px;
+  }
+
+  /* Scan overlay — Post-Apoc: diagonal scratches */
+  .genre-postapoc .ol-scan {
+    background: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 8px,
+      rgba(234,92,12,.025) 8px,
+      rgba(234,92,12,.025) 9px
+    );
+  }
+
+  /* Grid overlay — Space Opera: purple grid */
+  .genre-space .ol-grid {
+    background-image:
+      linear-gradient(rgba(168,85,247,.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(168,85,247,.05) 1px, transparent 1px);
+    background-size: 26px 26px;
+  }
+
+  /* Grid overlay — Horror: green fog ellipses */
+  .genre-horror .ol-grid {
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 30%,
+        rgba(84,204,22,.25) 0%, transparent 70%),
+      radial-gradient(ellipse 60% 80% at 80% 70%,
+        rgba(84,204,22,.32) 0%, transparent 70%),
+      radial-gradient(ellipse 70% 50% at 50% 50%,
+        rgba(84,204,22,.28) 0%, transparent 70%),
+      radial-gradient(ellipse 90% 40% at 10% 80%,
+        rgba(84,204,22,.25) 0%, transparent 70%);
+  }
+
+  /* Tex overlay — Fantasy: amber candlelight glow */
+  .genre-fantasy .ol-tex {
+    background:
+      radial-gradient(ellipse 100% 40% at 50% 0%,
+        rgba(196,148,58,.16) 0%, transparent 70%),
+      radial-gradient(ellipse 60% 100% at 0% 50%,
+        rgba(196,148,58,.07) 0%, transparent 70%),
+      radial-gradient(ellipse 60% 100% at 100% 50%,
+        rgba(196,148,58,.07) 0%, transparent 70%);
+  }
+
+  /* No-op defaults — other genre/overlay combos render nothing. */
+  .ol-scan, .ol-grid, .ol-tex { /* base — no background */ }
+
+  /* ──────────────────────────────────────────────────────────────────────
+     UI-1: genre-specific UI label typography
+     ──────────────────────────────────────────────────────────────────────
+     Applies ONLY to UI chrome elements (.ui-label, inter-tight inside
+     cards). NEVER touches prose or NPC speech — Cormorant Garamond
+     italic is always preserved for those (design ref §3 critical rule).
+     ────────────────────────────────────────────────────────────────────── */
+  .genre-cyberpunk .ui-label,
+  .genre-cyberpunk [class*="inter-tight"] {
+    font-family:    'Courier New', monospace;
+    letter-spacing: 0.14em;
+  }
+  .genre-horror   .ui-label { font-size: 6.5px; letter-spacing: 0.04em; }
+  .genre-space    .ui-label { letter-spacing: 0.16em; }
+  .genre-postapoc .ui-label { font-size: 6.5px; letter-spacing: 0.20em; }
+
+  /* ──────────────────────────────────────────────────────────────────────
+     UI-1: genre text glow (accent-coloured text only)
+     ────────────────────────────────────────────────────────────────────── */
+  .genre-cyberpunk .genre-glow {
+    text-shadow: 0 0 8px rgba(34,211,238,.28);
+  }
+  .genre-space .genre-glow {
+    text-shadow: 0 0 6px rgba(168,85,247,.20);
+  }
 }
 
 @layer base {

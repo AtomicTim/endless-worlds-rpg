@@ -24,3 +24,26 @@ export const GENRE_LABEL: Record<string, string> = {
   space:   "SPACE OPERA",
   apoc:    "POST-APOC",
 };
+
+/**
+ * UI-1 — long-form genre class name applied to the outermost game
+ * container. Coexists with `data-genre={slug}` (UI design ref §3 +
+ * CLAUDE.md Story Feed Colors token system): data-genre still drives
+ * --accent overrides via existing selectors, and the class drives the
+ * per-genre CSS variable sets (--card-bg, --content-bg, etc.) and the
+ * overlay / typography / glow rules in app/globals.css.
+ *
+ * Two slug names diverge from the design ref class names (cyber vs
+ * cyberpunk, apoc vs postapoc); this helper bridges that without
+ * mutating the short slugs the existing data-genre selectors depend on.
+ */
+const GENRE_CLASS: Record<string, string> = {
+  fantasy: "genre-fantasy",
+  cyber:   "genre-cyberpunk",
+  horror:  "genre-horror",
+  space:   "genre-space",
+  apoc:    "genre-postapoc",
+};
+export function genreClassName(genre: Genre | string | null | undefined): string {
+  return GENRE_CLASS[genreSlug(genre)] ?? "genre-fantasy";
+}

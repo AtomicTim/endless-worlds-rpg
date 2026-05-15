@@ -8,7 +8,7 @@ import { UserMenu } from "@/components/layout/UserMenu";
 import { VerbosityToggle } from "@/components/game/VerbosityToggle";
 import { Genre } from "@/types/game";
 import { useGameStore } from "@/lib/stores/game-store";
-import { genreSlug, GENRE_LABEL } from "@/lib/game/genre-slug";
+import { genreSlug, genreClassName, GENRE_LABEL } from "@/lib/game/genre-slug";
 
 /**
  * Three-column game layout — redesigned per /design/desktop-ui.jsx and
@@ -97,7 +97,11 @@ export function GameLayout({
 
   return (
     <div
-      className="flex h-screen flex-col overflow-hidden"
+      // UI-1: genre-X class drives the per-genre CSS variable sets
+      // (--card-bg, --content-bg, --genre-accent) + overlay / typography
+      // / glow rules. data-genre is preserved alongside — existing
+      // [data-genre] selectors in globals.css still own --accent.
+      className={`flex h-screen flex-col overflow-hidden ${genreClassName(genre)}`}
       style={{
         backgroundColor: "var(--bg-0)",
         color:           "var(--ink-2)",

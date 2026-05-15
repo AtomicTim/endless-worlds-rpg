@@ -1,6 +1,6 @@
 # Endless Worlds RPG — UI Design Reference
 
-**Version:** 3.1  
+**Version:** 3.2  
 **Status:** Design complete — all primary surfaces specced  
 **Covers:** All designed UI surfaces as of May 2026
 
@@ -64,8 +64,6 @@ Each genre replaces `#c4943a` as the primary accent throughout the entire UI:
 | Space Opera | `#a855f7` | Deep violet |
 | Post-Apocalyptic | `#ea580c` | Rust orange |
 
-Genre accent colour is applied to: logo/title, active tab highlights, primary button borders, NPC speaker labels, HP bars on enemy cards, the genre tag pill, and map accent elements.
-
 ### Typography
 
 All three fonts are already loaded in the existing codebase. Use exact font names as specified.
@@ -87,8 +85,6 @@ Stat numbers / dice: 'JetBrains Mono', monospace
                      tabular-nums, for anything numeric
 ```
 
-Georgia and system-ui are fallbacks only. Cormorant Garamond, Inter Tight, and JetBrains Mono are always available in this codebase.
-
 ### Spacing & Shape (Base — Fantasy)
 
 - Border radius: 7–8px for cards, 20px for pills/badges, 50% for circles
@@ -100,13 +96,7 @@ Georgia and system-ui are fallbacks only. Cormorant Garamond, Inter Tight, and J
 
 ## 3. Genre Visual System
 
-This is the most important implementation section. Every content surface in the game changes visual character per genre — not just the accent colour, but background atmosphere, card shape, texture overlays, and decorative elements.
-
-### Implementation Approach
-
-Apply a single class to the root game container: `genre-fantasy`, `genre-cyberpunk`, `genre-horror`, `genre-space`, `genre-postapoc`. All styling cascades via CSS. Do NOT apply genre styling per-component — one class on the root updates everything.
-
-Recommended CSS custom properties pattern:
+Apply a single class to the root game container: `genre-fantasy`, `genre-cyberpunk`, `genre-horror`, `genre-space`, `genre-postapoc`. All styling cascades via CSS.
 
 ```css
 .genre-fantasy {
@@ -130,88 +120,60 @@ Recommended CSS custom properties pattern:
 
 ### Overlay System
 
-Every scrollable content area contains three overlay divs (`position: absolute`, `inset: 0`, `pointer-events: none`, `z-index: 2`). Exactly one (or two for Horror) are shown per genre via CSS:
+Every scrollable content area contains three overlay divs (`position: absolute`, `inset: 0`, `pointer-events: none`, `z-index: 2`):
 
 | Overlay | Genres | Effect |
 |---------|--------|--------|
-| `.ol-scan` | Cyberpunk | Horizontal CRT scanlines (`repeating-linear-gradient`, 4px repeat, ~2.5% cyan opacity) |
-| `.ol-scan` | Horror | Static dot texture (`radial-gradient` dot pattern, 5px grid, ~20% opacity) |
-| `.ol-scan` | Post-Apoc | Diagonal cross-hatch scratches (two `repeating-linear-gradient` at -55° and 35°, ~2.5% opacity) |
-| `.ol-grid` | Space Opera | Purple holographic grid (`linear-gradient` lines, 26px × 26px, ~5% opacity) |
-| `.ol-grid` | Horror | Green atmospheric fog (four `radial-gradient` ellipses at different positions, ~25–32% opacity) |
-| `.ol-tex` | Fantasy | Warm amber candlelight glow (two `radial-gradient` ellipses, top glow ~16%, edge warmth ~7%) |
+| `.ol-scan` | Cyberpunk | CRT scanlines (4px repeat, ~2.5% cyan) |
+| `.ol-scan` | Horror | Dot texture (5px grid, ~20%) |
+| `.ol-scan` | Post-Apoc | Diagonal scratches (~2.5%) |
+| `.ol-grid` | Space Opera | Purple grid (26×26px, ~5%) |
+| `.ol-grid` | Horror | Green fog (four ellipses, ~25–32%) |
+| `.ol-tex` | Fantasy | Amber candlelight glow (~16% top, ~7% edge) |
 
-Horror uses BOTH `.ol-grid` (fog) AND `.ol-scan` (dots) simultaneously.
+Horror uses BOTH `.ol-grid` AND `.ol-scan` simultaneously.
 
 ### Card Treatment Per Genre
 
-| Genre | Radius | Border | Shadow | Decorative element |
-|-------|--------|--------|--------|---|
-| Fantasy | 7–8px | `rgba(196,148,58,.28)` | Warm inner glow + 0 0 0 .5px outer ring | `✦` Unicode mark, top-right |
-| Cyberpunk | 0px | `rgba(34,211,238,.17)` | Cyan outer glow | Hard corners, no decoration |
-| Horror | 2px | `rgba(45,65,40,.32)` | Crushing inward shadow (inset 0 0 32px) | Near-invisible border |
-| Space Opera | 3px | `rgba(168,85,247,.2)` | Purple outer glow + inner haze | `┌` `┘` corner brackets via `::before` / `::after` |
-| Post-Apoc | 2px | `rgba(180,80,20,.25)` | Double border ring (`box-shadow: 0 0 0 1px`) | Rust-orange streak via `::before` (top edge, left-bleeding gradient) |
+| Genre | Radius | Border | Decorative |
+|-------|--------|--------|------------|
+| Fantasy | 7–8px | `rgba(196,148,58,.28)` | `✦` mark top-right |
+| Cyberpunk | 0px | `rgba(34,211,238,.17)` | Hard corners |
+| Horror | 2px | `rgba(45,65,40,.32)` | Inward shadow |
+| Space Opera | 3px | `rgba(168,85,247,.2)` | `┌` `┘` brackets |
+| Post-Apoc | 2px | `rgba(180,80,20,.25)` | Rust streak top |
 
 ### Content Background Per Genre
 
-| Genre | Background | Notes |
-|-------|------------|-------|
-| Fantasy | `linear-gradient(180deg, #241a0a, #1c1308)` | Noticeably warmer than dark phone chrome — visible parchment contrast |
-| Cyberpunk | Flat `#040c0f` | No gradient — terminal screens are flat |
-| Horror | Near-black `#060809` | Fog overlay provides all depth |
-| Space Opera | `linear-gradient(180deg, #070520, #060412)` | Deep purple-black with grid overlay |
-| Post-Apoc | `linear-gradient(180deg, #1a0e06, #130b04)` | Dark rust-brown, scratch overlay provides texture |
+| Genre | Background |
+|-------|------------|
+| Fantasy | `linear-gradient(180deg, #241a0a, #1c1308)` |
+| Cyberpunk | Flat `#040c0f` |
+| Horror | `#060809` |
+| Space Opera | `linear-gradient(180deg, #070520, #060412)` |
+| Post-Apoc | `linear-gradient(180deg, #1a0e06, #130b04)` |
 
-### Typography Per Genre (Labels and UI only — prose font never changes)
+### Typography Per Genre (UI labels only — prose never changes)
 
-| Genre | UI labels / headers | Prose / narrative |
-|-------|--------------------|--------------------|
-| Fantasy | Inter Tight italic, `letter-spacing: .04em` | Cormorant Garamond italic (unchanged) |
-| Cyberpunk | `"Courier New", monospace`, `font-style: normal`, wider `letter-spacing` | Cormorant Garamond italic (unchanged) |
-| Horror | Inter Tight, `font-size: 6.5px`, minimal `letter-spacing` | Cormorant Garamond italic (unchanged) |
-| Space Opera | Inter Tight, `font-style: normal`, `letter-spacing: .14–.18em` | Cormorant Garamond italic (unchanged) |
-| Post-Apoc | Inter Tight, `letter-spacing: .18–.22em`, `font-size: 6.5px` | Cormorant Garamond italic (unchanged) |
+| Genre | UI labels | Prose |
+|-------|-----------|-------|
+| Fantasy | Inter Tight italic, `letter-spacing: .04em` | Cormorant Garamond italic |
+| Cyberpunk | `"Courier New", monospace`, wider spacing | Cormorant Garamond italic |
+| Horror | Inter Tight, `6.5px`, minimal spacing | Cormorant Garamond italic |
+| Space Opera | Inter Tight, `letter-spacing: .14–.18em` | Cormorant Garamond italic |
+| Post-Apoc | Inter Tight, `letter-spacing: .18–.22em`, `6.5px` | Cormorant Garamond italic |
 
-**Critical rule:** Narrative prose always uses Cormorant Garamond serif italic regardless of genre. Only labels, section headers, and UI chrome change typeface. Changing prose fonts would require retroactive changes across the entire UI.
+**Critical rule:** Narrative prose always uses Cormorant Garamond regardless of genre.
 
 ### Text Glow Per Genre
 
 | Genre | Glow |
 |-------|------|
-| Fantasy | None — warmth comes from colour, not glow |
-| Cyberpunk | `text-shadow: 0 0 8px rgba(34,211,238,.28)` on key text; `0 0 10px` on accent text |
-| Horror | None — oppressive flatness is intentional |
-| Space Opera | `text-shadow: 0 0 6px rgba(168,85,247,.2)` on prose; `0 0 8px` on accent text |
+| Fantasy | None |
+| Cyberpunk | `text-shadow: 0 0 8px rgba(34,211,238,.28)` |
+| Horror | None |
+| Space Opera | `text-shadow: 0 0 6px rgba(168,85,247,.2)` |
 | Post-Apoc | None |
-
-### Surfaces Requiring Genre Treatment
-
-**Surfaces that need overlay textures (three overlay divs required):**
-- Story feed / main game panel
-- Combat content area
-- NPC dialogue conversation feed
-- Codex list and detail views
-- Journal and Quests list
-- Loading state content areas
-- Character sheet panel
-- Context Panel
-
-**Surfaces that need card shape treatment:**
-- Story feed navigation cards
-- Combat combatant cards, action buttons
-- NPC dialogue option cards, NPC header card
-- Codex entry cards
-- Journal entry cards, quest cards
-- Loading state new-area entry card
-- Character sheet stat block, equipment slots, pack items
-- Context Panel NPC and object cards
-
-**Surfaces already genre-specific (no additional work needed):**
-- Maps — handled via Canvas rendering, already fully genre-specific
-- Character creation wizard — genre cards and class cards already themed; inherits genre class naturally
-- Top bar — always dark chrome, genre accent only in logo mark and genre tag pill
-- Main menu — uses neutral amber regardless of genre (no active game loaded)
 
 ---
 
@@ -223,506 +185,192 @@ Horror uses BOTH `.ol-grid` (fog) AND `.ol-scan` (dots) simultaneously.
 [Left: Context Panel] [Center: Story Feed] [Right: Character Panel]
 ```
 
-**Context Panel (left):** Always-visible current location summary. 196px at ≥1280px, 160px at 1024–1279px. See Section 18 for full spec.
-
-**Character Panel (right):** Same widths as Context Panel. Scrollable. See Section 13 for full spec.
-
-**Story Feed (centre):** The primary play surface. Top-down scroll. Story text, navigation cards, NPC dialogue, combat — all live here.
-
-**Top bar:** Runs full-width above all three panels. See Section 17 for full spec.
+Top bar runs full-width above all three panels.
 
 ### Responsive Breakpoints
 
 | Viewport | Layout |
 |----------|--------|
-| ≥ 1280px | Full 3-panel: Context Panel 196px + story feed + Character Panel 196px |
-| 1024px – 1279px | Narrow 3-panel: Context Panel 160px + story feed + Character Panel 160px. Story feed ~680px minimum. |
-| 768px – 1023px | Single column. Both sidebars become drawers. Story feed fills full width. |
-| < 768px | Full mobile — identical behaviour to 768–1023px range. |
+| ≥ 1280px | Context Panel 196px + story feed + Character Panel 196px |
+| 1024px – 1279px | Context Panel 160px + story feed + Character Panel 160px |
+| 768px – 1023px | Single column — both sidebars become drawers |
+| < 768px | Full mobile — identical to 768–1023px |
 
-**Sidebar drawer behaviour at ≤1023px:**
-- Context Panel: hamburger icon (`ti-menu-2`) in top bar, left side. Opens as left drawer: `translateX(-100%) → translateX(0)`, `300ms cubic-bezier(0.22, 1, 0.36, 1)`. Backdrop `rgba(0,0,0,.5)`. Tapping backdrop or swiping left closes (`250ms ease-in`).
-- Character Panel: character pill in top bar. Opens as right drawer (already specced in Section 13).
+Sidebar drawers at ≤1023px: Context Panel slides from left (`translateX(-100%)→0`, `300ms cubic-bezier(0.22,1,0.36,1)`), Character Panel from right (same). Both with `rgba(0,0,0,.5)` backdrop.
 
 ### Mobile Navigation
 
-No bottom tab bar. All navigation lives in the top bar. The story feed fills every available pixel — a bottom nav permanently sacrifices vertical space better used for narrative.
+No bottom tab bar. All navigation in the top bar.
 
-**Mobile top bar element order (left to right):**
-1. Hamburger (`ti-menu-2`) — opens Context Panel left drawer
-2. Logo: "✦ Endless Worlds" — Cormorant Garamond italic, genre accent
-3. [flex spacer]
-4. Codex icon (`ti-book`)
-5. Journal icon (`ti-notebook`)
-6. Map icon (`ti-map`)
-7. Character pill — avatar circle + name, opens Character Panel right drawer
+**Mobile top bar (left to right):** Hamburger (`ti-menu-2`) · Logo · [spacer] · Codex · Journal · Map · Character pill
 
-All icons have 44px minimum tap targets (visual icon can be smaller; hit area pads to 44px).
-
-**Mobile top bar height:** 52px (vs 44px desktop).
+All icons: 44px minimum tap targets. Top bar height: 52px mobile, 44px desktop.
 
 ---
 
 ## 5. Story Panel
 
-### Text Display
+- Font: `'Cormorant Garamond', Georgia, serif`, italic, 14–15px, line-height 1.82, `#c0a878`
+- NPC speech: `#f0c060`, italic, weight 500
+- Scene arrivals: thin rule → `◆ type` glyph → location name → rule → prose
 
-- Font: `'Cormorant Garamond', Georgia, serif`, italic, 14–15px, line-height 1.82, colour `#c0a878`
-- NPC speech: `#f0c060` (brighter), italic, weight 500 — clearly distinct from prose
-- Scene arrivals: thin rule → `◆ type` glyph → italic location name → region sub-label → rule → prose begins
+**The LLM API stream IS the typewriter.** No buffering, no fake animation. Tap to skip to completion.
 
-### Streaming Behaviour
+### Genre cursors
+Fantasy: soft amber blink · Cyberpunk: hard block · Horror: irregular flicker · Space: fade pulse · Post-Apoc: slow heavy blink
 
-**The LLM API stream IS the typewriter.** Display tokens as they arrive. No buffering, no fake animation.
-- Blinking cursor (genre-specific style) while streaming is active
-- Tap the story panel during streaming to skip to instant completion
-- Combat log entries: 80ms fade only — data, not narrative, no typewriter
+### Loading States
 
-**Genre cursor variants:**
-- Fantasy: soft blinking amber underscore
-- Cyberpunk: hard-cut block cursor, on/off with no fade
-- Horror: irregular flicker timing
-- Space Opera: clean fade pulse
-- Post-Apoc: slow, heavy blink
+**Pattern 1 — Wait:** Cursor immediately → after 1.2s: atmospheric fragment streams ("The torchlight wavers.") from local lookup table (~20–30 phrases per genre, no LLM) → real content follows on new paragraph.
 
-### Loading / Waiting States
+**Pattern 2 — New area:** Location name + badge instant → `Revealing…` + progress bar → description streams before bar completes.
 
-**Pattern 1 — Story panel wait (most common):**
-1. Cursor appears immediately on send (world never feels frozen)
-2. After 1.2 seconds of silence: brief atmospheric micro-fragment streams word-by-word ("The torchlight wavers.")
-3. Fragment stays in the feed — it's genuine narrative, not a spinner
-4. Real content continues after it on a new paragraph when LLM starts streaming
-5. Navigation cards dim simultaneously; input bar locks
-
-Atmospheric fragments come from a local lookup table per genre (~20–30 phrases). No LLM call needed. The 1.2s threshold is tunable — if the LLM starts streaming before it, the fragment never shows.
-
-**Pattern 2 — New area loading:**
-1. Location name + type badge appear instantly from game state (no LLM)
-2. `Revealing…` status + thin progress bar
-3. Description streams starting slightly before the bar completes (no dead moment at the end)
-4. Top bar location breadcrumb updates immediately
-
-**Pattern 3 — Background operations:**
-Small 6px pulsing dot in genre accent in the top bar. Appears when regional bible prefetch runs. Disappears quietly on completion. Invisible unless you look for it.
+**Pattern 3 — Background:** 6px pulsing dot in genre accent in top bar during WorldBible/RegionBible prefetch.
 
 ---
 
 ## 6. Navigation Cards
 
-- Each card: icon + italic serif location name + "type · direction" sub-label
-- Left-border colour coding: burnt copper (back), sky blue (settlement/exploration), burnt orange (dungeon/danger)
-- Unknown paths: dashed border, very dim, "unexplored · [direction]" label
-- Section header: "Where to go"
-- Cards dim during any loading/waiting state (pointer-events disabled)
+Left-border colour: burnt copper (back) · sky blue (settlement) · burnt orange (dungeon). Unknown paths: dashed, very dim. Section header: "Where to go." Cards dim during loading.
 
 ---
 
 ## 7. Map System
 
-**All maps use HTML5 Canvas.** SVG was considered and abandoned.
+**All maps use HTML5 Canvas.** Never SVG.
 
-### World Map
-Continent polygon with visible coastline stroke. Territory divisions inside. Interior borders use organic bezier curves seeded with `(px+ppx)*11 + (py+ppy)*7 + 500` for consistent aligned joins. Fog only at canvas edges, not over territory borders.
+**Tiers:** World (bezier territory borders, coastal fog) · Region (node map, 0.58 scale icons) · Settlement (bird's-eye, 5.5px dirt roads) · Dungeon (dark stone, torch glow, no grid)
 
-### Region Map
-Settlement node map. Castle/ruins/shrine icons at 0.58 scale, organic curved paths, fog for unknown edges.
-
-### Settlement Map
-Bird's-eye village view. No enclosing ring. Building footprints (top-down rectangles with door marks), central well, dirt roads (~5.5px warm brown, quadratic bezier curves, lighter centre stripe), trees at periphery.
-
-### Dungeon Map
-- Dark stone background: `#0f0b07`, organic grain texture (scattered dots + crack lines), no grid
-- Explored rooms: warm amber-tinted rectangles
-- Unexplored: near-black with fog
-- Current location: torch glow radial effect
-
-### Genre Map Variants
-
-| Genre | World | Dungeon |
-|-------|-------|---------|
-| Fantasy | Parchment, organic bezier borders | Dark stone floor plan |
-| Cyberpunk | Circuit traces, hex grid | Glowing conduit plan |
-| Horror | Desaturated, fog-heavy | Oppressive, minimal light |
-| Space Opera | Star chart, constellation lines | Facility/deck plan |
-| Post-Apoc | Torn paper texture, rust tones | Collapsed structure |
+**Genre variants:** Fantasy parchment · Cyberpunk circuit/hex · Horror desaturated/fog · Space star chart · Post-Apoc torn paper/rust
 
 ---
 
 ## 8. Combat UI
 
-### Combatant Cards
-Portrait zone at top (fixed dimensions — designed for future art drop-in). Player card: wider (flex 1.4), gold border. Enemy cards: red-tinted. Critical enemies (≤20% HP): brighter border, "Critical" badge, pulsing HP bar.
+**HP colour states:** 75–100% `#4a8a4a` · 50–75% `#5a9450` · 25–50% `#a87830` · 10–25% `#c84830` · ≤10% `#e03030` pulsing
 
-### HP Bar Colour States
+**Action buttons:** Mobile 2×2 + full-width Abilities · Desktop 5 horizontal. Enemy turn: ~30% opacity.
 
-| HP % | Colour |
-|------|--------|
-| 75–100% | `#4a8a4a` green |
-| 50–75% | `#5a9450` transitioning |
-| 25–50% | `#a87830` amber |
-| 10–25% | `#c84830` orange-red |
-| ≤10% | `#e03030` red, pulses |
-
-### Action Buttons
-**Mobile:** 2×2 grid + full-width Abilities button
-**Desktop:** 5 horizontal buttons
-
-During enemy turn: all buttons dimmed to ~30% opacity, pointer-events disabled.
-
-### Abilities Sub-Panel
-Slides up from bottom (mobile). 2×2 grid of ability cards showing: name, type badge, description, cooldown. Disabled abilities at ~50% opacity.
-
-### Combat Timing Orchestration
-
+**Combat timing:**
 ```
-0ms      Button press → buttons lock
-100ms    Story text begins streaming + target card brightens
-300ms    Dice result in combat log (80ms fade)
-400ms    ALL SIMULTANEOUSLY: card shake + HP bar drains (300ms ease) + damage numbers arc
-800ms    Story text completes
-1000ms   Turn badge flips
-1300ms   Enemy resolves (same sequence)
-~3000ms  Round complete → buttons re-enable
+0ms    Lock buttons
+100ms  Story streams + target brightens
+300ms  Dice result (80ms fade)
+400ms  ALL: shake + HP drain (300ms) + damage numbers arc
+800ms  Story completes
+1000ms Turn badge flips
+1300ms Enemy resolves
+~3000ms Re-enable
 ```
-
-Story text and visual effects run **in parallel** — neither waits for the other.
-
-### Damage Number Arcs
-Launch from the HP bar position (not portrait centre). Varied trajectories. Crits: 2–3 particles alongside. Heals float straight upward, `+N` prefix, green `#7abb7a`.
 
 **Damage type colours:** Physical `#e0d8c0` · Fire `#ff7030` · Frost `#60d8ff` · Poison `#80e040` · Lightning `#ffee40` · Shadow `#c060ff` · Holy `#ffdc40` · Bleed `#ff3060` · Heal `#7abb7a`
 
-### Kill Shot Animation
-Card greyscales → compresses vertically → slides out (300ms). Remaining cards close the gap.
+**Kill shot:** Greyscale (400ms) → compress/collapse (300ms) → remaining cards close gap.
 
-### Dice Display Format
-`16 vs 12 · hit` — roll bright, "vs" muted, target muted, outcome colour-coded. Same format used in combat log AND NPC dialogue rolls.
+**Dice format:** `16 vs 12 · hit` — roll bright, "vs" muted, outcome colour-coded.
 
 ---
 
 ## 9. Character Creation Wizard
 
-### Stage Flow
-```
-Genre → [World Forging loading] → Step 1: Species/Mode → Step 2: Class
-→ Step 3: Origin → Step 4: Appearance → Step 5: Name → Step 6: Motivation → Enter World
-```
+**Stage flow:** Genre → [World Forging] → Species → Class → Origin → Appearance → Name → Motivation → Enter World
 
-World creation (WCD + WorldBible) runs in the **background** from genre confirmation through all 6 character steps.
+WorldBible runs in background from genre confirmation through all 6 steps.
 
-### Creation Modes
-1. **Forge a Character** — auto-generate everything, skip to Name. Badge: "Auto-generate"
-2. **Build Step by Step** — walk through all 6 steps. Badge: "6 choices"
-3. **Write Your Own** — free-text fields. Badge: "Creative"
+**Class cards:** Stat colour (not genre accent) on icon, role badge, and bottom bar. Stat colours: STR `#c87040` · AGI `#60a850` · INT `#5880d0` · PER `#409888` · CHA `#9060d0`.
 
-### Class Cards
-Three visual differentiators ALL use the **stat colour** (not genre accent):
-- Icon (left) · Role badge (header right) · Bottom bar (3px strip)
-
-**Stat colour system:** STR `#c87040` · AGI `#60a850` · INT `#5880d0` · PER `#409888` · CHA `#9060d0`
-
-**Selected card state:** 2px border in stat colour, visible background tint, filled checkmark circle top-right.
-
-### Confirmed Working Tabler Icons (25 classes)
-- Knight: `ti-shield` · Rogue: `ti-eye-off` · Mage: `ti-wand` · Ranger: `ti-crosshair` · Herald: `ti-message`
-- Netrunner: `ti-cpu` · Fixer: `ti-briefcase` · Street Samurai: `ti-sword` · Enforcer: `ti-hammer` · Ghost: `ti-ghost`
-- Investigator: `ti-search` · Cultist: `ti-moon` · Survivor: `ti-heart` · Phantom: `ti-ghost` · Medium: `ti-eye`
-- Commander: `ti-badge` · Pilot: `ti-rocket` · Engineer: `ti-tool` · Marine: `ti-shield` · Recon: `ti-radar`
-- Scavenger: `ti-search` · Raider: `ti-axe` · Medic: `ti-first-aid-kit` · Runner: `ti-run` · Demagogue: `ti-speakerphone`
+**Verified Tabler icons (25 classes):**
+Knight `ti-shield` · Rogue `ti-eye-off` · Mage `ti-wand` · Ranger `ti-crosshair` · Herald `ti-message` · Netrunner `ti-cpu` · Fixer `ti-briefcase` · Street Samurai `ti-sword` · Enforcer `ti-hammer` · Ghost `ti-ghost` · Investigator `ti-search` · Cultist `ti-moon` · Survivor `ti-heart` · Phantom `ti-ghost` · Medium `ti-eye` · Commander `ti-badge` · Pilot `ti-rocket` · Engineer `ti-tool` · Marine `ti-shield` · Recon `ti-radar` · Scavenger `ti-search` · Raider `ti-axe` · Medic `ti-first-aid-kit` · Runner `ti-run` · Demagogue `ti-speakerphone`
 
 ---
 
 ## 10. NPC Dialogue System
 
-### Layout
-Fixed NPC header card at top. Scrollable conversation history. **Exactly 4 content option slots.** "End conversation" as a persistent separate button below slots — never occupying a slot.
+**Layout:** Fixed NPC header card · scrollable feed · exactly 4 content slots · persistent "End conversation" button outside the slots.
 
-### NPC Header Card
-Avatar circle (initials) · Name + role · Trait tags (2–3, can gain new ones via perception) · Disposition badge
+**Disposition colours:** Hostile `#c44040` · Suspicious `#b06030` · Wary `#b07030` · Neutral `#8a6a3a` · Warm `#c4943a` · Trusting `#5a9a5a` · Devoted `#4a8a4a`
 
-### Disposition System
+**Three option types:**
+- Standard: no badge, always available
+- Stat-gated: amber badge showing odds (`CHA · Good odds` / `Risky` / `Long shot`). Always tappable — probability-based, never a hard lock.
+- Observation: teal badge + eye icon. Always tappable. Failed = vaguer result.
 
-| Word | Colour |
-|------|--------|
-| Hostile | `#c44040` red |
-| Suspicious | `#b06030` orange-red |
-| Wary | `#b07030` orange |
-| Neutral | `#8a6a3a` amber-muted |
-| Warm | `#c4943a` genre accent |
-| Trusting | `#5a9a5a` green |
-| Devoted | `#4a8a4a` deep green |
-
-### Three Option Types
-
-**Standard dialogue** — what your character says. No badge. Always available.
-
-**Stat-gated dialogue (CHA/STR)** — what your character says, requires stat check. Amber badge showing odds: `CHA · Good odds` / `CHA · Risky` / `CHA · Long shot`. **Always tappable — never hard-locked.** Higher stat = higher d20 modifier = better chance, not guaranteed access.
-
-**Observation (PER/INT)** — what your character *notices*. Teal badge + eye icon. Teal-tinted background. Fires a narrated perception event, not a dialogue exchange. NPC doesn't hear it. **Always tappable.** Failed observation = vaguer, less accurate information. Locked (stat too low): shows vague hint — "Something feels off here you can't quite place. [PER 8]" — not hidden entirely.
-
-### Stat/Roll Mechanics (Critical)
-
-Checks are **never hard gates — always probability-based.**
-- `CHA · Good odds` (stat meets or exceeds requirement) — amber badge
-- `CHA · Risky` (stat close but below) — muted amber
-- `CHA · Long shot` (stat significantly below) — very muted, still tappable
-
-A low-stat player rolling a 20 succeeds. A high-stat player rolling a 1 fails. This is the TTRPG spirit and must be preserved in UI.
-
-### Feed Visual Treatments
-
-- **Narrative:** Cormorant Garamond italic, `#b0956a`, 1.78 line-height
-- **NPC speech:** Speaker label (uppercase Inter Tight, genre accent) + `#f0c060` italic Cormorant Garamond + streaming cursor
-- **Player chosen line:** Left-bordered quote block `#c0a878`
-- **Observation event:** Teal left border `rgba(64,152,136,.28)`, "PERCEPTION" label + eye icon, `#a0c8b8` text
-- **Dice result:** `[dice] 14 vs 11 · hit` inline in feed — JetBrains Mono, same format as combat log
-
-### Observation Reveals Hidden Traits
-Successful PER observations surface hidden NPC trait tags in the header card with teal colour treatment. Rewards building PER — high-PER characters see more.
+**Feed treatments:** Narrative Cormorant Garamond `#b0956a` · NPC speech `#f0c060` italic + speaker label · Player line left-bordered · Observation teal left border · Dice `14 vs 11 · hit` JetBrains Mono
 
 ---
 
 ## 11. Codex
 
-### Entry Types and Colours
+**Entry type colours:** People `#c4943a` · Places `#7a9ab8` · Lore `#a888c8` · Events `#c8885a`
 
-| Type | Colour | Icon |
-|------|--------|------|
-| People | `#c4943a` amber | `ti-user` |
-| Places | `#7a9ab8` slate blue | `ti-map-pin` |
-| Lore | `#a888c8` purple | `ti-book` |
-| Events | `#c8885a` warm orange | `ti-clock` |
+**Tabs:** All (by type) · People (by region) · Places (by region) · Lore (by category) · Events (by day). Section dividers, not accordions.
 
-Left border, icon, and type badge all use the same type colour. Scannable at a glance.
+**Notable mark (◈):** AI-flagged or player-starred only. Never automatic.
 
-### Organisation Within Tabs
-
-- **All tab:** Section headers by entry type (type-coloured headers with icon)
-- **People tab:** Section headers by region/settlement
-- **Places tab:** Section headers by region or parent location
-- **Lore tab:** Section headers by category (Historical, Political, Spiritual, Factional)
-- **Events tab:** Section headers by day (chronological, day markers)
-
-Headers are **section dividers, not accordion groups.** No extra taps required.
-
-### Notable Mark (◈)
-Only appears when AI flags as plot-critical OR player manually stars it. Small `◈` mark in genre accent, top-right. Not a badge.
-
-### NEW Badge
-Appears on unread entries. Clears on open. Codex icon in top bar shows a dot while unread entries exist.
-
-### Related Entries
-Each entry cross-links to related entries. Tapping navigates to that entry. Shown in detail view as a tappable list with type icons.
-
-### Discovery Ceremony — Two-Layer Notification
-
-When a new entry is added to the Codex, two things happen simultaneously:
-
-**1. Story feed inline entry** — a small card appears in the narrative scroll at the exact point of discovery:
-- Type icon + "Added to Codex · [Type]" label in genre accent
-- Entry name (medium weight)
-- Role/location sub-label
-- "View in Codex →" link
-- Fades in: `opacity 0→1, translateY 6px→0, 300ms ease`
-
-**2. Toast at the bottom** — amber toast: "Added to Codex: [Name]" (3.5s). Fires simultaneously with the feed entry.
-
-The feed entry is the canonical discovery moment (it stays in the narrative scroll permanently). The toast is the notification affordance for players not looking at the feed.
+**Discovery:** Two simultaneous notifications — (1) inline feed entry card (permanent, `opacity 0→1, translateY 6px→0, 300ms`) + (2) amber toast.
 
 ---
 
 ## 12. Journal & Quests
 
-### Layout
-Quests and Journal share one nav button, two tabs inside. Screen title: "Chronicle".
+Screen title: "Chronicle". Two tabs: Quests · Journal.
 
-### Quests Tab
+**Quest cards show:** Name · `◈` main quest · source + day · description · current objective
 
-**Section headers:** Active (with count) · Completed · Failed
+**Journal auto-log:** muted amber left border `rgba(196,148,58,.38)`, genre-specific label (Chronicle / SYS_LOG / case notes / SHIP LOG / LOG), `#b0956a` prose.
 
-**Quest card shows:** Quest name · `◈` if main quest · Source + day · 2-line description · **Current objective** (most actionable info, visible without opening detail)
+**Player notes:** brighter amber border `rgba(196,148,58,.72)`, genre label, `#ceaf78` prose.
 
-**Quest detail shows:** Status badge · Full narrative description · Objectives list (narrative-language, NOT checkbox list; completed: dim + strikethrough) · Related Codex entries
-
-### Journal Tab
-
-**Auto-logged (game's voice):**
-- Left border: muted amber `rgba(196,148,58,.38)`
-- Label: "Chronicle" (Fantasy) / "SYS_LOG" (Cyberpunk) / "case notes" (Horror) / "SHIP LOG" (Space) / "LOG" (Post-Apoc)
-- Text: `#b0956a` Cormorant Garamond italic
-
-**Player-written notes (personal):**
-- Left border: brighter amber `rgba(196,148,58,.72)`
-- Label: "Personal entry" (Fantasy) / "PRIV_LOG" (Cyberpunk) / "personal" (Horror) / "PERSONAL" (Space) / "NOTE" (Post-Apoc)
-- Text: `#ceaf78` Cormorant Garamond italic (warmer, slightly brighter)
-- Slightly warmer card background
-
-**Write-a-note flow:** Triggered by button at bottom. Minimal: auto-filled day label, text area, Save + Discard only. No title, no tags, no formatting tools.
-
-**Day section headers:** Genre-specific date language:
-- Fantasy: "— Day the Third —"
-- Cyberpunk: "// DAY_03 ///"
-- Horror: "third night" (lowercase)
-- Space: "◈ CYCLE 3 · HUSHEND SECTOR"
-- Post-Apoc: "DAY 3 //"
+**Day headers (genre):** Fantasy "— Day the Third —" · Cyberpunk "// DAY_03 ///" · Horror "third night" · Space "◈ CYCLE 3" · Post-Apoc "DAY 3 //"
 
 ---
 
 ## 13. Character Sheet Panel
 
-The character sheet is the right panel on desktop (fixed, always visible, scrollable) and a slide-in drawer on mobile. It must be dense but instantly scannable.
+Desktop: always-visible right column (196px / 160px). Mobile: right drawer. Shows mechanical state only — no story content.
 
-**The character sheet does NOT duplicate the Journal.** It shows mechanical state only. Story beats live in the Journal/Chronicle screen exclusively.
+**Sections:** Portrait + identity · HP bar (8px, colour states, JetBrains Mono value) · XP bar (3px, genre accent) · Status effects (hidden when clean, slides open 300ms) · Attribute block (single inline row, 5 cells, `#cbb888` neutral — never colour-coded per stat) · Equipped items + gold (3 slots always shown, "— empty" when empty) · Pack (3-column grid, actual items only, no empty placeholders)
 
-### Content Sections (top to bottom)
+**Pack inventory stat display:** Equipped items show abbreviated stat inline in `#c4943a` (e.g. `d6+1`, `+2 arm`). See Section 20 for full stat colour system.
 
-**1. Portrait + Identity**
-- 48px avatar circle with class icon (Tabler icon, genre accent colour, genre-styled border)
-- Character name: 13px, medium weight, Inter Tight
-- Class + Level: 8.5px Cormorant Garamond italic, muted
-
-**2. HP Bar**
-- 8px tall, fat bar — the most prominent element after the name
-- Same colour-state system as combat HP bars (same thresholds, same colours)
-- `transition: width 300ms ease, background-color 400ms ease`
-- Shows `28 / 42` value right-aligned in JetBrains Mono; flashes red on damage, green on heal
-- At ≤10%: CSS pulse animation
-
-**3. XP Bar**
-- 3px tall, thin — clearly secondary to HP
-- Single colour: genre accent
-- Level-up sequence: bar fills to 100% (400ms ease) → pause → level number flashes (scale 1→1.4→1, 600ms) → bar resets, level increments, max HP increases slightly
-
-**4. Status Effects**
-- Hidden entirely when no effects active (max-height: 0, no dead space)
-- Slides open (max-height: 50px, 300ms ease) when effect applied
-- Each effect: small pill badge using damage-type colour system
-
-**5. Attribute Block — Single Inline Row**
-All five stats in one horizontal row. No grid, no empty cells ever.
-
-```
-[STR 8] [AGI 9] [INT 13] [PER 11] [CHA 10]
-```
-
-Each cell: number (15–18px, JetBrains Mono, neutral warm `#cbb888` — same for all stats, NOT colour-coded per stat), label below (6px Inter Tight, muted, uppercase). Subtle same-tone border.
-
-Genre overrides the neutral number colour (teal for Horror, purple for Space) but stats are NEVER individually colour-coded by type.
-
-**6. Equipped Items + Gold (combined section)**
-Section header: "EQUIPPED" left-aligned, gold/currency amount right-aligned in genre accent.
-
-Three slots, all always shown — never hidden even when empty:
-- Weapon slot · Armour slot · Accessory slot
-
-Empty slot: slot-type icon at ~25% opacity, "— empty" in dim italic Cormorant Garamond, slot label.
-
-**7. Pack Inventory**
-Section header: "Pack · N / 8"
-
-3-column compact grid. Each cell: 13px icon, 6px abbreviated name below, count badge top-right (only if count > 1). No empty placeholder cells.
-
-### Animation Summary
-
-| Event | Animation |
-|-------|-----------|
-| HP damage | Bar shrinks (300ms ease), value flashes red |
-| HP heal | Bar grows (300ms ease), value flashes green |
-| HP critical (≤10%) | Bar pulses continuously |
-| XP gain | Bar fills (400ms ease) |
-| Level up | Bar → 100% → pause → level flash → bar resets |
-| Status effect added | Section slides open (max-height 300ms ease) |
-| Gold change | Value flashes green (gain) or red (spend) |
-| Mobile drawer open | Slides in from right, 300ms ease-out, backdrop fades in |
-| Mobile drawer close | Slides out right, 250ms ease-in |
-
-### Genre-Specific Currency
-
-| Genre | Currency | Icon |
-|-------|----------|------|
-| Fantasy | gold | `ti-coins` |
-| Cyberpunk | cred | `ti-cpu` |
-| Horror | supplies | `ti-backpack` |
-| Space Opera | credits | `ti-coin` |
-| Post-Apoc | scrap | `ti-tool` |
+**Genre-specific currency:** Fantasy gold `ti-coins` · Cyberpunk cred `ti-cpu` · Horror supplies `ti-backpack` · Space credits `ti-coin` · Post-Apoc scrap `ti-tool`
 
 ---
 
 ## 14. Transitions & Micro-Interactions
 
 ### Combat Entry
-
-**Sequence:**
-1. Story feed narrates the encounter (streams in as normal)
-2. Navigation cards fade out — `opacity 0, 180ms ease` — simultaneously with step 3
-3. Combat panel rises — **flex height 0 → 188px**, `380ms cubic-bezier(0.22, 1, 0.36, 1)`. NOT an overlay — flex item that pushes story feed up.
-4. Player card appears — `opacity 0→1, translateY 10px→0, 220ms ease-out`
-5. Enemy card(s) appear — 80ms stagger, same animation
-6. Turn badge fades in — `opacity 0→1, 150ms ease`, 100ms after last card
+Combat panel rises as flex item (height 0→188px, `380ms cubic-bezier(0.22,1,0.36,1)`). Nav cards fade out (180ms). Player card appears (220ms ease-out), enemy cards stagger 80ms after, turn badge fades in 100ms later.
 
 ### Combat Exit — Victory
+Kill shot greyscale (400ms) → compress (300ms) → panel closes (300ms ease-in, 750ms after kill) → nav cards return → victory card in feed (250ms ease-out, 1100ms after kill).
 
-**Sequence:**
-1. Kill shot: enemy card `filter: grayscale(1) brightness(.45)`, `400ms ease`
-2. Compress: `scaleY(0)` + `height→0`, `300ms ease`
-3. Combat panel closes — height → 0, `300ms ease-in`, 750ms after kill shot
-4. Nav cards return — `opacity 0→1, 200ms ease`
-5. Victory card in story feed — `opacity 0→1, 250ms ease-out`, 1100ms after kill shot
-
-**Victory card** — permanent in story feed, not a modal. Contains: XP only (no gold — gold comes from "Search" loot flow), XP progress bar (fills 600ms), post-combat prose, "Search the remains →" prompt.
+**Victory card:** XP only (no gold — gold requires Search, see Section 20), XP bar fills 600ms, post-combat prose, "Search the remains →" prompt.
 
 ### Combat Exit — Defeat
-
-HP hits 0 → screen dims (backdrop `rgba(0,0,0,.6)`, `400ms`) → defeat panel slides up (~120px, same spring) → "You have fallen." · options require confirm before executing.
+HP→0: screen dims → defeat panel slides up → "You have fallen." → options require confirm.
 
 ### Modal Events
+Backdrop `rgba(0,0,0,.82)`, `300ms`. Card `scale(0.88)→scale(1)` + `opacity 0→1`, `420ms cubic-bezier(0.22,1,0.36,1)`. Always requires player action to dismiss.
 
-Backdrop: `rgba(0,0,0,.82)`, `300ms ease`. Modal card: `scale(0.88) → scale(1)` + `opacity 0→1`, `420ms cubic-bezier(0.22, 1, 0.36, 1)`. Always requires player action to dismiss.
+**Quest Complete:** Green language. Check circle · "Quest Complete" · quest name (16px Cormorant Garamond) · narrative summary · XP · "Continue →". Toast fires after dismissal.
 
-#### Quest Complete Modal
+**Level Up:** "✦ Level Up ✦" pulsing glow · `4→5` display (52px Cormorant Garamond) · stat picker (5 inline cards, each with +1 badge, value, stat name, two-word description) · confirm button updates dynamically ("INT: 13→14"). On confirm: stat flares (480ms) → closes → toast.
 
-Green visual language. Structure: check circle icon · "Quest Complete" · quest name (16px Cormorant Garamond italic) · 2–3 sentence narrative summary · divider · XP reward · "Continue →". Toast fires after dismissal.
+Stat descriptions: STR Melee/Carry · AGI Dodge/Flee · INT Magic/Lore · PER Detect/Scout · CHA Speech/Trade
 
-#### Level Up Modal
-
-The most important moment in the game loop.
-
-1. **Header:** "✦ Level Up ✦" with pulsing glow (2s loop) · ambient radial gradient · `4 → 5` level display (52px Cormorant Garamond) · class name
-2. **Divider**
-3. **Stat picker** — single inline row, 5 cards. Each card: `+1` badge (hidden until selected) · value (17px JetBrains Mono) · stat name · two-word description (stacked)
-
-   | Stat | Description |
-   |------|-------------|
-   | STR | Melee · Carry |
-   | AGI | Dodge · Flee |
-   | INT | Magic · Lore |
-   | PER | Detect · Scout |
-   | CHA | Speech · Trade |
-
-4. **Confirm button** — disabled until selection. Button text updates: "INT: 13 → 14". Arrow icon fades in. On confirm: stat flares (480ms) → modal closes → toast fires → character sheet updates.
-
-Backdrop: `rgba(0,0,0,.82)` (darker than quest modal).
-
-### Toast Notification System
-
-`bottom: 50px`, `z-index: 30`. Entry: `translateY(18px→0)` + `opacity 0→1`, `250ms cubic-bezier(0.22, 1, 0.36, 1)`. Persist: 3.5s (4s level-up). Exit: `opacity 0` + `translateY(10px)`, `200ms ease-in`. Stack vertically, max 2 visible.
+### Toast System
+`bottom: 50px`, `z-index: 30`. Enter `translateY(18px→0)` + `opacity 0→1`, `250ms cubic-bezier(0.22,1,0.36,1)`. Persist 3.5s (4s level-up). Exit 200ms ease-in. Max 2 visible, stack vertically.
 
 | Type | Colour | Icon |
 |------|--------|------|
-| Codex discovery | `#c4943a` amber | `ti-book` |
-| Quest complete | `#5a9a5a` green | `ti-circle-check` |
-| Level up | `#e8d070` bright gold | `ti-arrow-up-circle` |
-| Combat result | `#7abb7a` green | `ti-shield-check` |
+| Codex | `#c4943a` | `ti-book` |
+| Quest complete | `#5a9a5a` | `ti-circle-check` |
+| Level up | `#e8d070` | `ti-arrow-up-circle` |
+| Combat result | `#7abb7a` | `ti-shield-check` |
 
 ### Screen Transitions
-
-**Desktop:** Center column content fades `opacity 0→1, 200ms ease`. Left and right panels remain.
-
-**Mobile:** `translateX(100%)→translateX(0)`, `300ms cubic-bezier(0.22, 1, 0.36, 1)`. Backdrop fades. Content-over-content (game doesn't move behind overlay).
-
-**Tab switching within a screen:** `opacity 0→1, 150ms ease` only.
-
-**Context Panel drawer (mobile):** `translateX(-100%)→translateX(0)`, `300ms cubic-bezier(0.22, 1, 0.36, 1)`. Backdrop `rgba(0,0,0,.5)`. Close: `250ms ease-in`.
+Desktop: center column fades (200ms ease). Mobile: `translateX(100%→0)`, `300ms cubic-bezier(0.22,1,0.36,1)`. Tab switch: 150ms fade only. Context Panel drawer: `translateX(-100%→0)`, `300ms cubic-bezier(0.22,1,0.36,1)`.
 
 ### Master Timing Reference
 
@@ -731,29 +379,25 @@ Backdrop: `rgba(0,0,0,.82)` (darker than quest modal).
 | Combat panel open | 380ms | `cubic-bezier(0.22, 1, 0.36, 1)` |
 | Combat panel close | 300ms | `ease-in` |
 | Combatant card appear | 220ms | `ease-out` |
-| Card stagger delay | 80ms | — |
+| Card stagger | 80ms | — |
 | Kill shot greyscale | 400ms | `ease` |
 | Kill shot compress | 300ms | `ease` |
 | Nav cards fade | 180ms | `ease` |
 | Victory card appear | 250ms | `ease-out` |
 | HP bar change | 300ms | `ease` |
-| HP colour change | 400ms | `ease` |
 | XP bar fill | 400ms | `ease` |
 | Level number flash | 600ms | `ease` |
-| Status effect slide | 300ms | `ease` |
-| Modal backdrop in | 300ms | `ease` |
+| Modal backdrop | 300ms | `ease` |
 | Modal card scale-in | 420ms | `cubic-bezier(0.22, 1, 0.36, 1)` |
-| Modal backdrop out | 300ms | `ease` |
 | Level-up glow pulse | 2000ms | `ease-in-out infinite` |
-| Stat card confirm flare | 480ms | `ease` |
+| Stat confirm flare | 480ms | `ease` |
 | Toast enter | 250ms | `cubic-bezier(0.22, 1, 0.36, 1)` |
-| Toast persist (standard) | 3500ms | — |
-| Toast persist (level-up) | 4000ms | — |
+| Toast persist | 3500ms | — |
+| Toast persist level-up | 4000ms | — |
 | Toast exit | 200ms | `ease-in` |
 | Mobile screen open | 300ms | `cubic-bezier(0.22, 1, 0.36, 1)` |
 | Mobile screen close | 250ms | `ease-in` |
 | Tab switch | 150ms | `ease` |
-| Desktop center swap | 200ms | `ease` |
 | Context Panel drawer open | 300ms | `cubic-bezier(0.22, 1, 0.36, 1)` |
 | Context Panel drawer close | 250ms | `ease-in` |
 
@@ -761,197 +405,97 @@ Backdrop: `rgba(0,0,0,.82)` (darker than quest modal).
 
 ## 15. Implementation Notes for Claude Code
 
-- **Font stack is authoritative** — Cormorant Garamond for prose/narrative, Inter Tight for UI chrome, JetBrains Mono for numbers. All three are already loaded. Never substitute system fonts.
-- **Fantasy accent colour is `#c4943a`** — update `--g-fantasy` and CLAUDE.md tech stack table from `#f59e0b`. Single variable change.
-- **Genre class on root container** — apply `genre-X` to the game root; all styling cascades.
-- **Three overlay divs** — every scrollable content area (including Context Panel) needs `.ol-scan`, `.ol-grid`, `.ol-tex` divs (absolute, inset: 0, pointer-events: none, z-index: 2).
-- **All maps use HTML5 Canvas** — never SVG.
-- **LLM stream is the typewriter** — display tokens as they arrive, no buffering.
-- **Combat visual effects fire at fixed times** — 400ms after action, not on LLM completion.
-- **Combat panel is a flex item, not an overlay** — height 0 → 188px. Refactor existing bottom-strip.
-- **Victory card shows XP only** — no gold. "Search the remains →" prompt triggers loot flow.
-- **Codex discovery fires two notifications simultaneously** — inline feed entry card AND toast.
-- **Quest complete uses a modal** — toast fires after dismissal.
-- **Level up modal with stat picker** — confirm button disabled until stat selected, label updates dynamically. Never auto-select.
-- **Stat descriptions in level up picker** — two-word stacked descriptors per stat.
-- **LevelUpModal already exists** (CLAUDE.md rule 90) — redesign it, don't replace it.
-- **Story Feed Colors token system in CLAUDE.md is untouchable** — highlight tokens (`--hl-region`, `--hl-loc`, etc.) coexist with this doc's prose styling. Never overwrite them.
-- **Nav card group names** — BACK/DEEPER/PEER/UNDISCOVERED logic stays; only presentation changes to plain English directional labels.
-- **NPC dialogue: exactly 4 content slots + 1 persistent end button** — end button outside the slots.
-- **Portrait zones on combat cards: fixed pixel dimensions** — art drops in as background image.
-- **Tabler icons in Section 9 are verified** — use exactly those names.
-- **Prose font never changes** — Cormorant Garamond italic regardless of genre.
-- **Observation options always tappable** — failed = vaguer result, never locked.
-- **Notable mark (◈) never automatic** — only AI-flagged or player-starred.
-- **Character sheet stat block: single inline row** — five cells, no grid, never empty.
-- **All three equipment slots always rendered** — empty = dim icon + "— empty".
-- **Pack grid: actual items only** — no empty placeholders.
-- **Character sheet has no story content** — Journal/Chronicle only.
-- **Toast z-index: 30** — above combat panel (z-index: 10).
+- **Font stack:** Cormorant Garamond (prose) · Inter Tight (UI chrome) · JetBrains Mono (numbers). All loaded. Never substitute.
+- **Fantasy accent `#c4943a`** — update `--g-fantasy` from `#f59e0b`. Single variable.
+- **Genre class on root** — `genre-X` cascades everything. Never per-component.
+- **Three overlay divs** — every scrollable area including Context Panel needs `.ol-scan`, `.ol-grid`, `.ol-tex`.
+- **Maps: Canvas only** — never SVG.
+- **LLM stream is the typewriter** — no buffering.
+- **Combat panel is a flex item** — height 0→188px. Refactor existing bottom-strip (CLAUDE.md rule 39).
+- **Victory card XP only** — no gold. Gold requires "Search" (Section 20).
+- **Loot engine already built** — floor_loot[], engine-resolved, zero LLM calls (CLAUDE.md rules 83/84/87). UI only.
+- **Gold is a loot item** — not auto-credited. Requires Take button tap same as any item.
+- **LevelUpModal already exists** (rule 90) — redesign, not replace.
+- **Story Feed Colors token system** — do not overwrite (`--hl-region`, `--hl-loc`, etc.).
+- **Nav card group names** — BACK/DEEPER/PEER/UNDISCOVERED logic stays; presentation changes to plain English.
+- **Loot Take button spec:** `font-size: 9.5px`, `padding: 2px 10px`, `border-radius: 20px`, `color: #c4943a`, `background: rgba(196,148,58,.1)`, `border: 1px solid rgba(196,148,58,.3)`. Identical in inline feed card and modal.
+- **Item stat colour system:** weapon damage → `#c4943a` · heal → `#7abb7a` · accessory stat → `#a888c8`. JetBrains Mono. Consistent across loot card, inventory detail, and equipped items.
+- **Equipped items show abbreviated stat inline** — `d6+1`, `+2 arm` in `#c4943a` in the character sheet sidebar.
+- **Pack item detail: inline expand** — tapping a pack item expands a detail card below the grid in the same viewport. No scrolling required.
+- **Context Panel objects populate progressively** — only after player discovers them. NPCs always show immediately.
+- **Save slot cards:** name + genre badge row 1 · "Level X · Class" row 2. Never wraps.
+- **Save slots: hours played** — not last played. "X.X hours played" with clock icon.
+- **Top bar hidden on main menu and character creation.**
+- **Enter World = World Intro Cinematic Modal** (rule 42). No separate transition.
 - **`requestAnimationFrame` double-frame trick** for CSS transitions on dynamically inserted elements.
-- **Top bar hidden on main menu and character creation** — appears only when game begins.
-- **Context Panel updates from game state** — no LLM call needed on arrival.
-- **Context Panel NPC and object items are individual cards** — not plain rows. See Section 18 card spec.
-- **Context Panel objects populate progressively** — only appear after player discovers them in story feed. NPCs always show immediately. Implementation detail (what triggers "discovered" per object) is an architecture decision for CLAUDE.md.
-- **Save slot cards: name + genre badge on row 1, Level X · Class on row 2** — never wraps. See Section 19 card layout.
-- **Save slots show hours played** — not last played time. Format: "X.X hours played" with clock icon.
-- **Main menu background `#08060a`** — distinct from in-game dark backgrounds.
-- **Enter World transition = World Intro Cinematic Modal** (CLAUDE.md rule 42) — don't design a separate transition.
+- **Toast z-index: 30** — above combat panel (z-index: 10).
 
 ---
 
 ## 16. Notes & Considerations for Implementation Planning
 
-*This section is for Claude.ai review when planning Claude Code prompts.*
-
----
-
 ### Resolved Decisions
 
-- **Fantasy accent:** `#c4943a` (update `#f59e0b` in existing codebase — single variable)
-- **Font stack:** Cormorant Garamond / Inter Tight / JetBrains Mono — all already loaded
-- **Responsive breakpoints:** ≥1280px full 3-panel · 1024–1279px narrow 3-panel · ≤1023px single column with drawers
-- **Mobile navigation:** Top bar only, no bottom tab bar
-- **Context Panel:** ✅ Fully designed — Section 18
-- **Top bar:** ✅ Fully designed — Section 17
-- **Main menu + save slots:** ✅ Fully designed — Section 19
-- **Enter World transition:** ✅ Resolved — connects to existing World Intro Cinematic Modal (CLAUDE.md rule 42)
+- Fantasy accent `#c4943a` · Font stack (all loaded) · Responsive breakpoints · Mobile navigation (top bar only)
+- Context Panel ✅ Section 18 · Top bar ✅ Section 17 · Main menu + save slots ✅ Section 19
+- Enter World transition ✅ World Intro Cinematic Modal (rule 42)
+- Loot flow ✅ Section 20
 
----
+### Active Conflicts with Existing Codebase
 
-### Active Conflicts with the Existing Codebase
-
-**CombatMode architecture** — existing implementation is an absolute-positioned bottom strip (CLAUDE.md rule 39). This doc specifies a flex item. The bottom-strip needs to be refactored when implementing the combat panel redesign.
-
-**LevelUpModal already exists** — CLAUDE.md rule 90. Redesign the existing component; do not delete and recreate.
-
-**Story Feed Colors token system** — CLAUDE.md has its own canonical highlight token table (`--hl-region`, `--hl-loc`, player action teal `#7ab8c8`, item highlight `#e8c547`, etc.). This coexists with this doc's prose styling. Never overwrite it.
-
-**Nav card group names** — CLAUDE.md rule 72 uses BACK/DEEPER/PEER/UNDISCOVERED internally. Grouping logic stays; only presentation label language changes.
-
-**Design token naming** — existing codebase uses `--g-fantasy`, `--accent`, `var(--ink-1)`. Reconcile into a single system; do not create a parallel token set.
-
----
+- **CombatMode bottom-strip** (rule 39) → refactor to flex item per Section 14 spec
+- **LevelUpModal exists** (rule 90) → redesign, not replace
+- **Story Feed Colors token system** — coexists, never overwrite
+- **Nav card group names** — grouping logic unchanged, presentation only
+- **Design token naming** — reconcile `--g-fantasy`/`--accent` into single system
 
 ### Remaining Design Gaps
 
-- **Search / loot flow** — victory card's "Search the remains →" triggers loot UI; floor_loot[] engine exists (CLAUDE.md rules 83/84/87) but the UI is not designed
 - **Error states** — API failures, network errors, mid-stream LLM failures
 - **Settings screen** — not designed
 
----
-
 ### Implementation Approach
 
-Surface-by-surface redesign integrated into the 11-prompt arc. Not a big-bang UI overhaul.
+Surface-by-surface redesign. V8.83, 626 tests. Not a big-bang overhaul.
 
-**Authority:** CLAUDE.md governs game logic, architecture, data. This doc governs visual presentation, interaction, animation. On UI conflicts: this doc wins. On game mechanic conflicts: CLAUDE.md wins.
+**Authority:** CLAUDE.md → game logic, architecture, data. This doc → visual presentation, interaction. On UI conflicts: this doc wins. On game mechanic conflicts: CLAUDE.md wins.
 
-**Per-prompt invariants:**
-- Origin/main baseline check first (CLAUDE.md rule 76)
-- Investigation-before-patching (CLAUDE.md V8.40)
-- jest baseline of 626 must be maintained (CLAUDE.md rule 91)
-- Do not break the Story Feed Colors token system
+**Per-prompt invariants:** Origin/main baseline check first (rule 76) · Investigation-before-patching (V8.40) · jest baseline 626 (rule 91) · Do not break Story Feed Colors token system.
 
 ---
 
 ## 17. Top Bar
 
-The top bar is dark chrome (`#141210`) in all genres and at all screen sizes. It never changes colour with genre.
+Dark chrome `#141210` in all genres. Never changes colour.
 
-### Desktop Elements (left to right)
+**Desktop elements (left → right):** Logo "✦ Endless Worlds" (Cormorant Garamond italic, 13–14px, genre accent) · Genre tag pill · Location breadcrumb (Region › Settlement › Current) · [spacer] · Verbosity toggle (Terse/Standard/Rich) · Background loading dot (6px, genre accent, hidden when idle) · Codex `ti-book` · Journal `ti-notebook` · Map `ti-map` · Character pill (avatar + name, opens Character Panel)
 
-| # | Element | Spec |
-|---|---------|------|
-| 1 | **Logo** | "✦ Endless Worlds" · Cormorant Garamond italic · 13–14px · genre accent colour |
-| 2 | **Genre tag** | Rounded pill · Inter Tight · 11px · uppercase · genre accent text + background + border |
-| 3 | **Location breadcrumb** | Region `›` Settlement `›` Current Location · region/settlement in `#5a4828` · current location in `#a08060` · separator `›` in `#3a2a18` · truncates left on narrow viewports |
-| 4 | [flex spacer] | — |
-| 5 | **Verbosity toggle** | Terse · Standard · Rich · Active: Inter Tight 11px, genre accent, background tint + border · Inactive: `#3e3020`, no border |
-| 6 | **Background loading dot** | 6px pulsing circle, genre accent · visible only during WorldBible/RegionBible prefetch |
-| 7 | **Codex icon** | `ti-book` · 15px · `#4a3828` at rest · 4px dot in genre accent when unread entries exist |
-| 8 | **Journal icon** | `ti-notebook` · 15px · same states |
-| 9 | **Map icon** | `ti-map` · 15px · same states |
-| 10 | **Character pill** | 24px avatar circle (class icon, genre accent, genre-styled border) + name (Inter Tight 11px, `#c0a878`) · tapping opens Character Panel |
-
-### Desktop height: 44px · Mobile height: 52px
-
-**Hidden on main menu and character creation screens** — appears only when game begins.
+Height: 44px desktop, 52px mobile. **Hidden on main menu and character creation.**
 
 ---
 
 ## 18. Context Panel
 
-The Context Panel is the always-visible left column on desktop (196px at ≥1280px, 160px at 1024–1279px). On ≤1023px it becomes a left drawer opened by the hamburger icon in the top bar.
+Always-visible left column (196px ≥1280px, 160px 1024–1279px). Left drawer on ≤1023px.
 
-**The Context Panel is NOT navigational.** Navigation happens via nav cards in the story feed.
+**NOT navigational** — describes the current space only.
 
-### Content Sections (top to bottom)
+### Content
 
-**1. Location header**
-- Name: Cormorant Garamond italic, 12–13px, `#e2cda0`
-- Type badge: Inter Tight 11px, genre accent, pill shape
+**Location header:** Name (Cormorant Garamond italic 12–13px, `#e2cda0`) · Type badge (genre accent pill)
 
-**2. Atmosphere prose**
-- 2–3 sentences. Cormorant Garamond italic, 11px, `#9a7e52` (more muted than story feed — ambient, not narrative)
-- Line-height 1.65
-- Source: current location's `physical_description` / `atmosphere` fields — no LLM call
-- Updates immediately on arrival
+**Atmosphere prose:** 2–3 sentences, 11px `#9a7e52`, Cormorant Garamond italic. From WorldBible/RegionBible data — no LLM call.
 
-**3. Divider** — 0.5px `rgba(accent, .15)`
+**"HERE NOW" — NPCs:** Section header: 2px vertical accent bar + label (genre-specific typography). Hidden if no NPCs. Each NPC in its own card: `rgba(accent,.06)` background · `rgba(accent,.16)` border · 7px radius · 8px 10px padding · disposition dot + name (`#d4bc88`) + role text (`#7a6040`) · hover brightens. Tapping opens dialogue (same code path as story feed).
 
-**4. "HERE NOW" — NPCs present**
+**"IN THIS SPACE" — Objects:** Same section header treatment. **Objects populate progressively** — only appear after the player discovers them in the story feed. NPCs always show immediately. Each object in its own card: `rgba(accent,.04)` background · `rgba(accent,.12)` border · 7px radius · icon + name + action label pill. Action labels match CLAUDE.md rule 87: Search · Read · Examine · Use.
 
-Section header: 2px vertical accent bar (genre accent, opacity .7) + label. Fantasy: Inter Tight italic. Cyberpunk: monospace `// PRESENT` format.
+**Unlooted sources** persist as a single entry ("Sentinel's remains · Search") until all items taken. Tapping opens loot modal (see Section 20).
 
-Hidden entirely if no NPCs present. No empty placeholder.
-
-Each NPC is displayed in its own contained card:
-- Background: `rgba(accent, .06)` · border: `1px solid rgba(accent, .16)` · border-radius: 7px · padding: 8px 10px
-- Left: 6px disposition dot (coloured per Section 10 disposition system)
-- Name: Cormorant Garamond italic, 12px, `#d4bc88`
-- Role + disposition word: Inter Tight 11px, `#7a6040`
-- Hover: background `rgba(accent, .12)`, border `rgba(accent, .30)`
-- Tapping opens dialogue — same code path as story feed
-
-**5. Divider** — hidden if either NPCs or Objects section is absent
-
-**6. "IN THIS SPACE" — interactable objects**
-
-Section header: same left accent bar treatment. Cyberpunk: monospace `// ENVIRONMENT` format.
-
-Hidden entirely if no objects present. No empty placeholder.
-
-**Discovery mechanic — objects populate progressively.** Objects appear in this section only after the player has encountered or discovered them in the story feed. They do not all appear upfront on room entry. NPCs always show immediately. This makes exploration meaningful — the panel becomes a log of what the player has found, not a spoiler sheet. The implementation detail of what triggers the "discovered" flag per object is an architecture decision for CLAUDE.md.
-
-Each object is displayed in its own contained card (slightly more subtle than NPC cards):
-- Background: `rgba(accent, .04)` · border: `1px solid rgba(accent, .12)` · border-radius: 7px · padding: 7px 10px
-- Left: Tabler icon by category (`#7a6040` at rest, brightens on hover): `ti-package` (containers), `ti-news` (notices/boards), `ti-door` (doors), `ti-book` (books/lore), `ti-coins` (valuables), `ti-skull` (enemy remains)
-- Name: Cormorant Garamond italic, 12px, `#d4bc88`
-- Right: action label as a small pill badge (border-radius 20px, genre accent at low opacity)
-- Hover: background `rgba(accent, .09)`, border `rgba(accent, .25)`
-
-**Action label values match CLAUDE.md rule 87 exactly:**
-- "Search" — containers, enemy remains
-- "Read" — books, notices, signs
-- "Examine" — doors, interesting objects
-- "Use" — mechanisms, switches
-
-### Interaction Model
-
-Tapping an NPC or object in the Context Panel is functionally identical to tapping the same entity in the story feed — same underlying interaction, same code path. NPCs grey out (non-tappable) while in dialogue. Objects disappear from the panel when examined/looted.
-
-### Empty States
-
-If no NPCs: entire "Here Now" section doesn't render. If no objects: entire "In This Space" section doesn't render. If both absent: just location name + type + atmosphere prose. Looks intentional — never broken.
+**Empty states:** Sections don't render when empty — never show placeholders.
 
 ### Genre Treatment
-
-Context Panel uses the full genre visual system: `var(--content-bg)` background, genre typography for section headers, three overlay divs (`.ol-scan`, `.ol-grid`, `.ol-tex`).
-
-### Mobile Drawer
-
-`translateX(-100%) → translateX(0)`, `300ms cubic-bezier(0.22, 1, 0.36, 1)`. Backdrop `rgba(0,0,0,.5)`. Close: swipe left, tap backdrop, or tap hamburger. `250ms ease-in`. Same content as desktop.
+Full genre visual system: `var(--content-bg)` background, genre section header typography, three overlay divs.
 
 ---
 
@@ -959,88 +503,181 @@ Context Panel uses the full genre visual system: `var(--content-bg)` background,
 
 ### Two Distinct Screens
 
-The app entry point is two separate screens:
+1. **Main Menu** — splash/landing. Logo + genre pills + two CTAs. Gets out of the way fast.
+2. **Your Worlds** — save slots. Reached from "Continue ›" on Main Menu. Has back button.
 
-1. **Main Menu** — the splash/landing screen. Logo + tagline + two CTAs. Minimal. Gets out of the way fast.
-2. **Your Worlds** — the save slot screen. Reached by tapping "Continue" on the Main Menu. Shows all save slot cards. Has a back button returning to Main Menu.
-
-"Continue" on the Main Menu: if only one save exists, navigates directly into that game. If multiple saves exist, opens the Your Worlds screen. If no saves exist, the "Continue" button is not shown — only "Begin New Adventure."
-
----
+"Continue ›" → directly into game if 1 save, Your Worlds screen if multiple. Hidden if no saves.
 
 ### Main Menu
 
-**Background:** `#08060a` — coolest and darkest background in the entire app.
+Background `#08060a`. Centred layout: Logo ("Endless Worlds", Cormorant Garamond italic, 28px/40px, `#e2cda0`) · tagline ("A new adventure every time", Inter Tight 12px, `#4a3828`) · genre pills (5 pills in respective accent colours) · CTAs · settings gear bottom-right.
 
-**Layout:** Logo + tagline centred (upper area) → genre pills row → CTA buttons → settings gear bottom-right.
+**Ambient genre shift:** Radial glow cycles through 5 genre accents (~8s per genre). Genre label above title fades fully out, holds invisible, then new name fades in clean — no overlap. "Begin New Adventure" button border/tint shifts with glow. Placeholder for future genre artwork.
 
-**Logo:** "Endless Worlds" · Cormorant Garamond italic · 28px mobile / 40px desktop · `#e2cda0`
+**CTAs:** "Begin New Adventure" (primary, Cormorant Garamond italic, genre accent, full-width) · "Continue ›" (secondary, muted).
 
-**Tagline:** "A new adventure every time" · Inter Tight · 12px · `#4a3828` · letter-spacing 0.08em
+### Your Worlds — Save Slot Cards
 
-**Genre pills:** A row of five small pills below the tagline showing all five genre names in their respective accent colours. These tell the player immediately that multiple worlds exist: Fantasy · Cyberpunk · Horror · Space Opera · Post-Apoc.
+**Filled card layout:**
 
-**Ambient genre shift (animation):** The background has a radial glow centred at ~50% × 38% that slowly cycles through all five genre accent colours (~8 seconds per genre). Above the title, a small genre name label (Inter Tight 11px, letter-spacing 0.2em, uppercase) cycles in sync — it fades fully to zero opacity, holds briefly invisible, then the new genre name fades in clean. No overlap between outgoing and incoming text. The "Begin New Adventure" button border and background tint also shift with the glow. This animation is a placeholder for future genre artwork — when real art arrives it replaces the glow while the layout and buttons stay intact.
+Row 1 — flex, no wrap: Avatar circle (class icon, genre accent) · Name (Cormorant Garamond italic 15–16px, flex:1, ellipsis) · Genre badge pill (flex-shrink:0, always in line)
 
-**CTAs:**
-- "Begin New Adventure" — primary button, full-width, Cormorant Garamond italic, genre accent border + background tint (shifts with animation)
-- "Continue ›" — secondary button, full-width, muted border, plain text. Hidden if no saves exist.
+Row 2 — single line, no wrap: "Level X · Class" · Inter Tight 12px · genre-tinted muted colour (Fantasy `#7a6040` · Cyberpunk `#2a7a8a` · Horror `#4a6a30` · Space `#7a5a9a` · Post-Apoc `#8a5030`)
 
-**Settings gear:** `ti-settings` icon, 16px, `#2a2015` at rest, `#4a3828` on hover. Bottom-right corner.
+Divider · World name (Cormorant Garamond italic, muted) · Location breadcrumb · Hours played (`ti-clock` + "X.X hours played") · "Continue →" button (genre accent)
 
----
+**Empty slot:** Dashed amber border · ✦ centred · "Begin a new adventure" italic
 
-### Your Worlds (Save Slot Screen)
-
-**Header:** Dark mini bar · back arrow (`ti-arrow-left`) · "Your Worlds" in Cormorant Garamond italic, muted
-
-**Save slot cards:**
-
-Each card is genre-themed — background, border colour, corner treatment, and text colours all match the genre of that save.
-
-**Filled slot card layout:**
-
-Row 1 — flex row, no wrapping:
-- Left: 34px avatar circle with class icon (genre accent colour and border)
-- Centre (flex 1): Character name · Cormorant Garamond italic · 15–16px · genre-appropriate text colour · `white-space: nowrap; overflow: hidden; text-overflow: ellipsis`
-- Right: Genre badge pill · Inter Tight 11px · genre accent · `flex-shrink: 0` · always in line with name, never pushed to a second line
-
-Row 2 — single line beneath name (indented to align under name, not avatar):
-- "Level X · Class" · Inter Tight 12px · genre-tinted muted colour (Fantasy `#7a6040` · Cyberpunk `#2a7a8a` · Horror `#4a6a30` · Space Opera `#7a5a9a` · Post-Apoc `#8a5030`)
-- Class is plain text — not a badge pill
-- Examples: "Level 4 · Investigator" / "Level 2 · Netrunner"
-- `white-space: nowrap; overflow: hidden; text-overflow: ellipsis` — always one line, never wraps
-
-Divider · 0.5px genre accent at ~15% opacity
-
-World name · Cormorant Garamond italic · 12px · muted
-Location breadcrumb · Inter Tight 11px · very muted · single line with ellipsis
-
-Hours played: `ti-clock` icon + "X.X hours played" · Inter Tight 11px · very muted · 1 decimal place
-
-"Continue →" button — full-width, genre accent border + background tint
-
-**Empty slot card:**
-- Dashed border: `rgba(196,148,58,.22)` — neutral amber regardless of genre
-- ✦ mark centred, `#2e2418`, 17px
-- "Begin a new adventure" · Cormorant Garamond italic · 13px · `#3e3020` · centred
-- Hover: border brightens to `rgba(196,148,58,.45)`, very faint amber background
-
-**Slot counts:** Free = 1 · Adventurer = 3 · Legend = unlimited (scrollable)
-
-**Delete / manage:** Long-press (mobile) or right-click (desktop) reveals "Delete save" option. Requires confirmation modal. Destructive — cannot be undone.
-
----
+**Slot counts:** Free 1 · Adventurer 3 · Legend unlimited. Delete via long-press/right-click with confirmation modal.
 
 ### Enter World Transition
 
-Connects to the existing World Intro Cinematic Modal (CLAUDE.md rule 42). No separate transition animation needed.
+Connects to World Intro Cinematic Modal (CLAUDE.md rule 42). No separate transition.
+
+"Begin Adventure" → loading state → character profile saves → WorldBible check (wait if still generating) → game view mounts → Cinematic Modal fires → "Your adventure begins."
+
+---
+
+## 20. Loot Flow
+
+### Overview
+
+Looting is a two-path design. The **first-time discovery** is a narrative moment in the story feed. **Revisiting** unlooted sources is a modal accessed via the Context Panel. Both paths surface the same data from `floor_loot[]`.
+
+Gold is **not** auto-credited — it is a loot item requiring an explicit Take tap, same as any other item.
+
+---
+
+### Item Card Spec
+
+Used in both the inline feed card and the loot modal. Identical across both contexts.
+
+**Card container:**
+- Background: `rgba(accent, .05)` · Border: `1px solid rgba(accent, .16)` · Border-radius: 7px · Padding: 9px 10px · Margin-bottom: 5px
+- Hover: background `rgba(accent, .10)`, border `rgba(accent, .28)`
+- After taken: `opacity: 0.3`, pointer-events none
+
+**Card layout (flex row):**
+- Left: Tabler icon (14–15px, `#7a6040` at rest) — category by type: `ti-coins` (gold) · `ti-sword` (weapons) · `ti-shield` (armor) · `ti-heart` (heal consumables) · `ti-backpack` (other consumables) · `ti-gem` (valuables/accessories) · `ti-book` (lore items)
+- Centre (flex 1): Item name (Cormorant Garamond italic 12px, `#d4bc88`, single line ellipsis) · Stat line below (see stat system)
+- Right: Take button
+
+**Stat line format:** `[stat in JetBrains Mono] · Type · Rarity`
+
+### Stat Colour System
+
+Consistent across loot cards, inventory item detail, and character sheet sidebar. Always JetBrains Mono.
+
+| Item type | Stat example | Colour |
+|-----------|-------------|--------|
+| Weapon | `d4+1`, `d8+3` | `#c4943a` amber |
+| Armor | `+2 armor` | `#c4943a` amber |
+| Heal consumable | `Heal 2d4+2` | `#7abb7a` green |
+| Accessory | `+1 INT`, `+2 AGI` | `#a888c8` purple |
+| Lore item | `Lore item` | `#c4943a` amber |
+| Gold / currency | `Currency` (no stat value) | — (type text only, `#6a5530`) |
+
+### Take Button Spec
+
+Identical in both inline feed card and loot modal — same component, same styles:
+
+```
+font-size: 9.5px
+padding: 2px 10px
+border-radius: 20px
+color: #c4943a
+background: rgba(196,148,58,.1)
+border: 1px solid rgba(196,148,58,.3)
+margin-top: 1px
+```
+
+Hover: `background rgba(196,148,58,.22)`, `border-color rgba(196,148,58,.55)`
+
+After taken: Take button replaced with `ti-check` icon in `#5a9a5a`.
+
+### Take All Button
+
+Full-width, amber border + tint, Inter Tight uppercase, `padding: 8px`, `border-radius: 7px`.
+
+Updates dynamically as items are taken: "Take all →" → "Take remaining (N) →" → replaced by "All collected ✓" (Cormorant Garamond italic, `#5a9a5a`) when complete.
+
+---
+
+### First-Time Discovery — Inline Feed Card
+
+Triggered by tapping "Search the remains →" on the victory card (or "Search" on a world container in the story feed).
 
 **Sequence:**
-1. Player taps "Begin Adventure" (final character creation step)
-2. Button enters loading state (spinner)
-3. Character profile saves (`/api/game/save-character-profile`)
-4. If WorldBible still generating: full-screen loading state with pulsing ✦ and world name when available
-5. App transitions to game view (story feed, context panel, character panel mount)
-6. World Intro Cinematic Modal fires automatically (rule 42)
-7. First story beat streams: "Your adventure begins."
+1. "Search the remains →" link on victory card changes to "Searched ✓" (green, non-interactive)
+2. Loot card appears in the story feed directly below the victory card
+3. Loot card is permanent in the feed — it scrolls with everything else and is never removed
+
+**Loot card header:** Small caps label with package icon: "You search the remains" / "You search the [object name]"
+
+**Gold row:** Gold is a regular loot item at the top of the list. Icon: `ti-coins`. Type label: "Currency". Take button same as all items. Credits to player gold balance on Take tap.
+
+---
+
+### Revisit — Context Panel Entry + Loot Modal
+
+If the player navigates away without taking all items, the source persists in the Context Panel "In this space" section as a **single compact entry** — not individual items listed.
+
+**Context Panel entry format:**
+- Icon: `ti-skull` (enemy remains) or `ti-package` (containers)
+- Name: "[Enemy name]'s remains" or "[Container name]"
+- Action label pill: "Search"
+- Same card treatment as other "In this space" entries
+
+Tapping the Context Panel entry opens the **loot modal**.
+
+**Loot modal spec:**
+- Backdrop: `rgba(0,0,0,.78)`, `300ms ease`
+- Card: `scale(0.88)→scale(1)` + `opacity 0→1`, `400ms cubic-bezier(0.22,1,0.36,1)`. Width ~280px.
+- Header: source name ("Sentinel's remains") + `ti-x` close button top-right
+- Same item cards as the inline feed card — identical layout, identical Take buttons
+- "Take all →" button at bottom
+- Backdrop tap or ✕ to close
+
+The Context Panel entry disappears once `floor_loot[]` is empty for that source (all items taken via either path).
+
+---
+
+### Inventory Full State
+
+When INVENTORY_CAP (20) is reached:
+
+- Orange warning banner at the top of the item list: "Pack full (20/20)" (bold) + "Drop an item to make room" (secondary line). Background `rgba(180,90,40,.12)`, border `rgba(180,90,40,.28)`.
+- Take buttons replaced with disabled "Inventory full" labels: same pill shape, greyed out, `opacity: 0.5`, not interactive.
+- Items remain in `floor_loot[]` — the loot card/modal stays accessible until items are taken.
+
+---
+
+### Empty Loot Result
+
+If `floor_loot[]` is empty when search is triggered: a single prose line appears in the story feed ("The remains yield nothing of worth.") No card is created. No Context Panel entry is added.
+
+---
+
+### Two Contexts — Same Component
+
+| Context | Header | Trigger | Card type |
+|---------|--------|---------|-----------|
+| Enemy remains | "You search the remains" | "Search the remains →" on victory card | Inline feed (first-time), modal (revisit) |
+| World container | "You search the [name]" | "Search" on Context Panel object or story feed object | Inline feed (first-time), modal (revisit) |
+
+---
+
+### Inventory Item Detail
+
+Tapping any item in the character sheet pack grid expands an inline detail card **directly below the grid** — no scrolling required. The detail appears within the same viewport.
+
+**Detail card:**
+- `border: 1px solid rgba(accent,.3)` · `background: rgba(accent,.07)` · `border-radius: 7px` · `padding: 10px`
+- Item name: Cormorant Garamond italic 12px, `#e2cda0`
+- Stat: JetBrains Mono, same colour system as loot card (weapon `#c4943a`, heal `#7abb7a`, accessory `#a888c8`)
+- Type · Rarity: Inter Tight 9px, `#6a5530`
+- Action buttons: Equip / Use / Read / Drop (context-appropriate, Inter Tight, amber style for primary, red-tinted for Drop)
+
+Tapping same item again collapses the detail. Tapping a different item switches to that item's detail.
+
+**Equipped items in sidebar:** Show abbreviated stat inline in `#c4943a` JetBrains Mono (e.g. `d6+1` for weapons, `+2 arm` for armor) so the most important number is visible without tapping.

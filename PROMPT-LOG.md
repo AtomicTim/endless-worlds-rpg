@@ -2,9 +2,9 @@
 # Updated after every prompt. Claude.ai owns this file.
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
-**CLAUDE.md version:** 8.81
-**Last code commit:** 0219bec (P3 — merchant trading + inn rest)
-**jest baseline:** 626 (authoritative)
+**CLAUDE.md version:** 8.83
+**Last code commit:** d5ceeb1 (P4 — quest completion gate enforcement)
+**jest baseline:** 648 (authoritative)
 **tsc:** clean
 
 ## Implementation Arc
@@ -15,9 +15,9 @@
 | P2 | Generation Prompts (WCD + WorldBible + RegionBible) | 354a013 | ✅ 580 tests |
 | HF1 | Combat UX + Dungeon Nav + Quest Pipeline | 16e990d | ✅ 593 tests |
 | P3 | Merchant Trading + Inn Rest | 0219bec | ✅ 626 tests |
-| P4 | Quest Completion Gate Enforcement | — | ⏳ NEXT |
+| P4 | Quest Completion Gate Enforcement | d5ceeb1 | ✅ 648 tests |
 | P5 | Combat UX: Status Effect Display | 7439cb8 | ✅ 605 tests |
-| P6 | Ability System — Foundation | — | ⏳ |
+| P6 | Ability System — Foundation | — | ⏳ NEXT |
 | P7 | Ability System — Combat + Attunement UI | — | ⏳ |
 | P8 | Perks System | — | ⏳ |
 | P9 | Professions Foundation | — | ⏳ Day 25 |
@@ -42,6 +42,7 @@
 **P5 — required before P6:**
 - Enter combat with a status-capable enemy → confirm status pill appears below HP bar, DoT tick shows in feed with correct template text, DoT floating number appears.
 
-**P3 — required before P4:**
-- Open trade with an NPC → confirm real inventory shown, trust-adjusted prices display, item depletes after purchase.
-- Pay innkeeper 10g → confirm HP fully restored.
+**P4 — required before P6:**
+- Take a quest with an item objective, walk back to the quest-giver WITHOUT the item → confirm NPC deflects naturally (still waiting); inventory unchanged; quest stays active.
+- Pick up the required item, return to the quest-giver → confirm ✦ "Quest complete" banner; the item is consumed from inventory; quest shows under COMPLETED in the journal.
+- Confirm the narrator never proclaims "the quest is complete" — only the code-driven ✦ system message does.

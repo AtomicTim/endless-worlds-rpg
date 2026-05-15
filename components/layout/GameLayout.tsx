@@ -35,6 +35,11 @@ interface GameLayoutProps {
    *  visibility toggled via the store's `mapPanelOpen` flag (mobile
    *  bottom sheet) and the data-genre selector for theming. */
   mapPanel?: React.ReactNode;
+  /** UI-3 — Context Panel. Renders as a fixed left column at lg+
+   *  (160/196px wide) and as a slide-from-left drawer below lg
+   *  (toggled by the TopBar hamburger). Always rendered when
+   *  provided so the desktop column doesn't pop in. */
+  contextPanel?: React.ReactNode;
 }
 
 type SaveState = "idle" | "saving" | "saved";
@@ -44,9 +49,14 @@ export function GameLayout({
   mainPanel,
   sidebar,
   mapPanel,
+  contextPanel,
 }: GameLayoutProps) {
   const router        = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // UI-3 — Context Panel drawer (mirrors sidebarOpen for the right
+  // side; separate state so both drawers can be open / closed
+  // independently on tablet widths).
+  const [contextPanelOpen, setContextPanelOpen] = useState(false);
   const [saveState,   setSaveState]   = useState<SaveState>("idle");
   const mapPanelOpen    = useGameStore((s) => s.mapPanelOpen);
   const setMapPanelOpen = useGameStore((s) => s.setMapPanelOpen);
@@ -106,10 +116,62 @@ export function GameLayout({
         onSaveAndExit={() => { void handleSaveAndExit(); }}
         saveLabel={saveLabel}
         saveDisabled={saveState === "saving" || saveState === "saved"}
+        onOpenContextPanel={
+          contextPanel ? () => setContextPanelOpen(true) : undefined
+        }
       />
 
       {/* ── Content row ─────────────────────────────────────────────────── */}
       <div className="relative flex flex-1 overflow-hidden">
+        {/* ── UI-3: Context Panel — fixed left column (lg+) ────────────── */}
+        {contextPanel && (
+          <aside
+            aria-label="Context Panel"
+            className="hidden lg:flex shrink-0 overflow-hidden lg:w-[160px] lg:min-w-[160px] lg:max-w-[160px] xl:w-[196px] xl:min-w-[196px] xl:max-w-[196px]"
+            style={{ borderRight: "1px solid #2d2618" }}
+          >
+            <div className="h-full w-full overflow-y-auto">
+              {contextPanel}
+            </div>
+          </aside>
+        )}
+
+        {/* ── UI-3: Context Panel — mobile / tablet drawer (<lg) ────────── */}
+        {contextPanel && (
+          <>
+            {/* Backdrop — tap closes the drawer. */}
+            {contextPanelOpen && (
+              <div
+                className="fixed inset-0 lg:hidden"
+                style={{ background: "rgba(0,0,0,0.5)", zIndex: 39 }}
+                onClick={() => setContextPanelOpen(false)}
+                aria-hidden
+              />
+            )}
+            {/* Drawer panel — slide from left. cubic-bezier(0.22,1,0.36,1)
+                per UI design ref §4 (300ms). */}
+            <aside
+              role="dialog"
+              aria-label="Context Panel"
+              aria-hidden={!contextPanelOpen}
+              className="fixed left-0 top-0 lg:hidden overflow-hidden"
+              style={{
+                width:      280,
+                height:     "100vh",
+                zIndex:     40,
+                transform:  contextPanelOpen ? "translateX(0)" : "translateX(-100%)",
+                transition: "transform 300ms cubic-bezier(0.22,1,0.36,1)",
+                background: "var(--content-bg)",
+                borderRight: "1px solid #2d2618",
+              }}
+            >
+              <div className="h-full w-full overflow-y-auto">
+                {contextPanel}
+              </div>
+            </aside>
+          </>
+        )}
+
         {/* Map sidebar — desktop only when mapPanelOpen */}
         {mapPanel && (
           <>

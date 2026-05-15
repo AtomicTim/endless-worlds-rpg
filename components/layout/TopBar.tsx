@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Save } from "lucide-react";
+import { Save, Menu } from "lucide-react";
 import { Genre } from "@/types/game";
 import type { WorldGraph } from "@/types/game";
 import { useGameStore } from "@/lib/stores/game-store";
@@ -45,6 +45,10 @@ export interface TopBarProps {
   /** Disable the save button during the in-flight + post-save window
    *  (matches the existing GameLayout behaviour). */
   saveDisabled: boolean;
+  /** UI-3 — mobile hamburger handler. Opens the Context Panel left
+   *  drawer. Optional so GameLayout can pass nothing if no context
+   *  panel was wired (the hamburger is suppressed in that case). */
+  onOpenContextPanel?: () => void;
 }
 
 const ACCENT       = "var(--genre-accent)";
@@ -94,6 +98,7 @@ export function TopBar({
   onSaveAndExit,
   saveLabel,
   saveDisabled,
+  onOpenContextPanel,
 }: TopBarProps) {
   // ── State reads ──────────────────────────────────────────────────────────
   const masterState        = useGameStore((s) => s.masterState);
@@ -126,6 +131,24 @@ export function TopBar({
       ].join(" ")}
       style={{ background: BAR_BG, borderBottomColor: BAR_BORDER }}
     >
+      {/* UI-3 — Mobile hamburger (Context Panel drawer). Deferred from
+          UI-2; lands here now that ContextPanel exists. Suppressed on
+          desktop (lg+ shows the panel as a fixed column) and when the
+          GameLayout caller didn't wire a context panel. */}
+      {onOpenContextPanel && (
+        <button
+          type="button"
+          aria-label="Open context panel"
+          onClick={onOpenContextPanel}
+          className="lg:hidden shrink-0 inline-flex items-center justify-center min-w-[44px] min-h-[44px] transition-colors"
+          style={{ color: ICON_REST, background: "transparent" }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = ACCENT; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = ICON_REST; }}
+        >
+          <Menu className="size-4" aria-hidden />
+        </button>
+      )}
+
       {/* ── A. Logo ────────────────────────────────────────────────────── */}
       <div
         aria-label="Endless Worlds"

@@ -19,6 +19,7 @@ import { JournalModal } from "@/components/game/JournalModal";
 import { LevelUpModal } from "@/components/game/LevelUpModal";
 import { QuestRevealModal } from "@/components/game/QuestRevealModal";
 import { FloorLootStrip } from "@/components/game/FloorLootStrip";
+import { ContextPanel } from "@/components/game/ContextPanel";
 import WorldIntroModal from "@/components/WorldIntroModal";
 import { AttunementModal } from "@/components/game/AttunementModal";
 import { useFloorLoot } from "@/hooks/useFloorLoot";
@@ -563,6 +564,11 @@ export default function GamePage() {
             }}
           />
         ) : null
+      }
+      contextPanel={
+        <ContextPanel
+          onSubmit={(input, opts) => { void submitAction(input, opts); }}
+        />
       }
     />
   );

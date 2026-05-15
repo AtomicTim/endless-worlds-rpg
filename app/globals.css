@@ -157,6 +157,9 @@
                     0 3px 8px rgba(0,0,0,.55);
     --content-bg:   linear-gradient(180deg, #241a0a, #1c1308);
     --genre-accent: #c4943a;
+    /* UI-3: comma-separated triplet so callers can build
+       rgba(var(--genre-accent-rgb), .06) and friends. */
+    --genre-accent-rgb: 196,148,58;
   }
   .genre-cyberpunk {
     --card-bg:      #060e12;
@@ -165,6 +168,7 @@
     --card-shadow:  0 0 14px rgba(34,211,238,.06);
     --content-bg:   #040c0f;
     --genre-accent: #22d3ee;
+    --genre-accent-rgb: 34,211,238;
   }
   .genre-horror {
     --card-bg:      #0a100a;
@@ -173,6 +177,7 @@
     --card-shadow:  inset 0 2px 6px rgba(0,0,0,.6);
     --content-bg:   #060809;
     --genre-accent: #84cc16;
+    --genre-accent-rgb: 132,204,22;
   }
   .genre-space {
     --card-bg:      linear-gradient(160deg, #0d0a1a, #080618);
@@ -181,6 +186,7 @@
     --card-shadow:  0 0 12px rgba(168,85,247,.08);
     --content-bg:   linear-gradient(180deg, #070520, #060412);
     --genre-accent: #a855f7;
+    --genre-accent-rgb: 168,85,247;
   }
   .genre-postapoc {
     --card-bg:      linear-gradient(160deg, #1a0e06, #140b04);
@@ -189,6 +195,7 @@
     --card-shadow:  0 2px 8px rgba(0,0,0,.6);
     --content-bg:   linear-gradient(180deg, #1a0e06, #130b04);
     --genre-accent: #ea580c;
+    --genre-accent-rgb: 234,92,12;
   }
 
   /* ──────────────────────────────────────────────────────────────────────

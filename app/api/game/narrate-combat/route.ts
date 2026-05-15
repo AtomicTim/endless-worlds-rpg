@@ -145,6 +145,11 @@ const FALLBACK_TEXT_BY_TYPE: Record<CombatEvent["type"], string> = {
   status_tick:       "",
   status_saved:      "",
   status_expired:    "",
+  // P7 — ability dispatch events. Surfaced client-side via templated
+  // story-feed beats; the narrate-combat route doesn't generate prose
+  // for them, but the Record must cover every type.
+  ability_used:      "",
+  ability_no_charges: "",
 };
 
 export async function POST(request: NextRequest) {

@@ -1,6 +1,9 @@
 import { ItemType } from "@/types/game";
 import type {
+  AbilityId,
+  AbilityStatShort,
   ActiveStatusEffect,
+  Attributes,
   CombatEnemyInstance,
   CombatEvent,
   CombatState,
@@ -12,6 +15,7 @@ import type {
   WorldBible,
   WorldNode,
 } from "@/types/game";
+import { ABILITY_LIBRARY, remainingCharges } from "./abilities";
 import { getGenreBestiary } from "./bestiary";
 // Day 21 — rollStubDrops, makeStubItem, and the BASIC_HEALTH_POTION_ID
 // import are all removed: loot is now resolved on demand by the
@@ -25,6 +29,7 @@ import {
   resolveAttack,
   resolveFlee,
   resolveUseItem,
+  rollDamageDie,
   rollEnemyHP,
   rollInitiative,
   rollStatusApplication,
@@ -453,7 +458,42 @@ export type PlayerActionInput =
   | { action: "attack"; target_instance_id: string }
   | { action: "defend" }
   | { action: "use_item"; item_id: string }
-  | { action: "flee" };
+  | { action: "flee" }
+  // P7 — ability dispatch. target_instance_id is required for damage /
+  // debuff abilities; heal / buff / utility abilities omit it.
+  | { action: "ability"; ability_id: AbilityId; target_instance_id?: string };
+
+// ── P7 — ability resolution helpers ────────────────────────────────────────
+
+/** Stat short-form → full Attributes key. Mirrors the map in abilities.ts;
+ *  duplicated here so combat-engine has no cross-import gymnastics. */
+const ABILITY_STAT_KEY: Record<AbilityStatShort, keyof Attributes> = {
+  str: "strength",
+  agi: "agility",
+  int: "intelligence",
+  per: "perception",
+  cha: "charisma",
+};
+
+/** Compact context_note for an "ability_used" event — summarises what
+ *  the ability did so the story-feed templates have a one-liner without
+ *  having to re-derive from the template. */
+function summariseAbilityResolution(args: {
+  abilityName:    string;
+  totalDamage:    number;
+  healedAmount:   number;
+  selfStatuses:   StatusEffectId[];
+  targetStatusId: StatusEffectId | null;
+  clearedSelf:    string[];
+}): string {
+  const parts: string[] = [args.abilityName];
+  if (args.totalDamage > 0)  parts.push(`${args.totalDamage} damage`);
+  if (args.healedAmount > 0) parts.push(`healed ${args.healedAmount} HP`);
+  if (args.selfStatuses.length > 0) parts.push(`self: ${args.selfStatuses.join(", ")}`);
+  if (args.targetStatusId) parts.push(`target: ${args.targetStatusId}`);
+  if (args.clearedSelf.length > 0) parts.push(`cleared ${args.clearedSelf.join(", ")}`);
+  return parts.join(" — ");
+}
 
 export interface PlayerActionResult {
   newState:  CombatState | undefined;   // undefined when combat dismissed
@@ -707,6 +747,195 @@ export function executePlayerAction({
         };
       }
       // Failed flee: turn forfeit, fall through to advance turn into enemy phase.
+      break;
+    }
+    // ── P7 — Ability dispatch ───────────────────────────────────────────────
+    case "ability": {
+      const ability = ABILITY_LIBRARY[action.ability_id];
+      if (!ability) {
+        console.warn(`[combat-engine] ability ${action.ability_id} not in library — turn forfeit.`);
+        break;
+      }
+      // Must be in the player's equipped slot loadout. Passives + pool-
+      // only abilities cannot be dispatched directly.
+      const equipped = (player.equipped_ability_slots ?? []).some(
+        (sid) => sid === action.ability_id
+      );
+      if (!equipped) {
+        console.warn(`[combat-engine] ability ${action.ability_id} not equipped — turn forfeit.`);
+        break;
+      }
+
+      // Charge gate — no charges = no turn advance. Emit the "no_charges"
+      // event and return early so the player can pick a different action.
+      const usedSoFar = s.ability_charges_used?.[action.ability_id] ?? 0;
+      const remaining = remainingCharges(
+        ability, p.level, p.attributes, usedSoFar
+      );
+      if (remaining <= 0) {
+        const noCharges = makeEvent({
+          type:           "ability_no_charges",
+          actor:          PLAYER_ID,
+          target:         action.target_instance_id ?? null,
+          outcome:        null,
+          weapon_or_item: action.ability_id,
+          context_note:   `no charges remaining for ${ability.base_name}`,
+        });
+        events.push(noCharges);
+        s = appendEvents(s, [noCharges]);
+        return { newState: s, newPlayer: p, events };
+      }
+
+      // Deduct one charge for this dispatch.
+      s = {
+        ...s,
+        ability_charges_used: {
+          ...(s.ability_charges_used ?? {}),
+          [action.ability_id]: usedSoFar + 1,
+        },
+      };
+
+      // Resolve the effects payload (P7 — see types/game.ts AbilityEffects).
+      const eff = ability.effects;
+      let totalDamage    = 0;
+      let healedAmount   = 0;
+      const appliedSelf:   StatusEffectId[] = [];
+      let appliedTarget:  StatusEffectId | null = null;
+      const cleared:       string[] = [];
+
+      if (eff) {
+        // ── Self heal (capped at max_health) ──────────────────────────
+        if (typeof eff.heal_amount === "number" && eff.heal_amount > 0) {
+          const newHp = Math.min(p.max_health, p.health + eff.heal_amount);
+          healedAmount = newHp - p.health;
+          p = { ...p, health: newHp };
+        }
+
+        // ── Damage (single or multi-hit) ───────────────────────────────
+        if (eff.damage_die && action.target_instance_id) {
+          const hits     = Math.max(1, eff.hits ?? 1);
+          const statKey  = ABILITY_STAT_KEY[eff.damage_stat ?? "str"];
+          const statMod  = abilityMod(p.attributes[statKey] ?? 2);
+          for (let i = 0; i < hits; i += 1) {
+            const fresh = findEnemyByInstanceId(s, action.target_instance_id);
+            if (!fresh || !fresh.alive) break;
+            const dieRoll = rollDamageDie(eff.damage_die, rng);
+            const dmg     = Math.max(1, dieRoll + statMod);
+            s = applyEnemyDamage(s, action.target_instance_id, dmg);
+            totalDamage += dmg;
+          }
+        }
+
+        // ── Self statuses (FORTIFIED / HASTENED / FOCUSED) ─────────────
+        if (eff.self_statuses && eff.self_statuses.length > 0) {
+          let nextEffects = s.player_status_effects ?? [];
+          for (const sid of eff.self_statuses) {
+            const built = buildStatusEffect(sid, ability.base_name);
+            // Replace any existing instance of the same id (don't stack
+            // duplicates); buffs are not affected by the one-curse rule.
+            nextEffects = [
+              ...nextEffects.filter((x) => x.id !== sid),
+              built,
+            ];
+            appliedSelf.push(sid);
+          }
+          s = { ...s, player_status_effects: nextEffects };
+        }
+
+        // ── Target status (debuff on the enemy instance) ───────────────
+        if (eff.target_status && action.target_instance_id) {
+          const { id: tsId, chance } = eff.target_status;
+          const application = rollStatusApplication(tsId, chance, rng);
+          if (application.applied) {
+            const tgt = findEnemyByInstanceId(s, action.target_instance_id);
+            if (tgt && tgt.alive) {
+              const newEffect = buildStatusEffect(
+                tsId, p.name, application.damage_per_tick
+              );
+              // One-curse limit on enemies too (no enemy-side tick loop
+              // ticks today — data is set for forward compat).
+              const existing = tgt.status_effects ?? [];
+              const isAilment = AILMENT_IDS.includes(tsId);
+              const filtered  = isAilment
+                ? existing.filter((x) => !AILMENT_IDS.includes(x.id))
+                : existing;
+              s = {
+                ...s,
+                enemies: s.enemies.map((e) =>
+                  e.instance_id === tgt.instance_id
+                    ? { ...e, status_effects: [...filtered, newEffect] }
+                    : e
+                ),
+              };
+              appliedTarget = tsId;
+            }
+          }
+        }
+
+        // ── Self status clears (Fade, Antidote Mastery, etc.) ──────────
+        if (eff.clears_self_ids && eff.clears_self_ids.length > 0) {
+          let nextEffects = s.player_status_effects ?? [];
+          for (const cid of eff.clears_self_ids) {
+            if (cid === "any_ailment") {
+              nextEffects = nextEffects.filter(
+                (e) => !AILMENT_IDS.includes(e.id)
+              );
+              cleared.push("any_ailment");
+            } else {
+              nextEffects = nextEffects.filter((e) => e.id !== cid);
+              cleared.push(cid);
+            }
+          }
+          s = { ...s, player_status_effects: nextEffects };
+        }
+      }
+
+      // Did damage kill the target? Emit a kill event so the loot /
+      // victory pipeline picks it up the same way attack kills do.
+      let killed = false;
+      if (totalDamage > 0 && action.target_instance_id) {
+        const t = findEnemyByInstanceId(s, action.target_instance_id);
+        if (t && !t.alive) killed = true;
+      }
+
+      const damageDealtForEvent =
+        totalDamage > 0
+          ? totalDamage
+          : healedAmount > 0
+            ? -healedAmount
+            : null;
+
+      events.push(makeEvent({
+        type:                "ability_used",
+        actor:               PLAYER_ID,
+        target:              action.target_instance_id ?? null,
+        outcome:             killed ? "kill" : null,
+        damage_dealt:        damageDealtForEvent,
+        remaining_target_hp: action.target_instance_id
+          ? (findEnemyByInstanceId(s, action.target_instance_id)?.current_hp ?? null)
+          : null,
+        weapon_or_item:      action.ability_id,
+        context_note:        summariseAbilityResolution({
+          abilityName:    ability.base_name,
+          totalDamage,
+          healedAmount,
+          selfStatuses:   appliedSelf,
+          targetStatusId: appliedTarget,
+          clearedSelf:    cleared,
+        }),
+      }));
+
+      if (killed && action.target_instance_id) {
+        events.push(makeEvent({
+          type:                "kill",
+          actor:               PLAYER_ID,
+          target:              action.target_instance_id,
+          outcome:             "kill",
+          damage_dealt:        totalDamage,
+          remaining_target_hp: 0,
+          weapon_or_item:      action.ability_id,
+        }));
+      }
       break;
     }
   }

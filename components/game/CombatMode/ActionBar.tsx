@@ -5,20 +5,32 @@ import React from "react";
 /**
  * Day 20 Combat — bottom action button strip.
  *
- * Four buttons: Attack / Defend / Use Item / Flee. Plain text
- * labels (no icons per locked design). Disabled when it isn't the
- * player's turn or while the engine is mid-resolution. Use Item
- * also disables when the player has no consumables.
+ * P7 — five buttons: Attack / Defend / Use Item / Abilities / Flee.
+ * Plain text labels (no icons per locked design). Disabled when it
+ * isn't the player's turn or while the engine is mid-resolution. Use
+ * Item also disables when the player has no consumables. Abilities
+ * disables when the player has no equipped slot abilities.
+ *
+ * UI-design-reference §8: "Desktop: 5 buttons horizontal · Mobile: 2×2
+ * grid (existing 4) + one full-width 'Abilities' button below". This
+ * v1 keeps the existing horizontal flex layout; UI-10 (Combat UI
+ * Overhaul) will split desktop / mobile presentation.
  */
 interface Props {
   disabled:           boolean;
   hasConsumables:     boolean;
+  /** P7 — true when the player has at least one equipped ability id. */
+  hasAbilities:       boolean;
   onAttack:           () => void;
   onDefend:           () => void;
   onUseItem:          () => void;
+  onAbilities:        () => void;
   onFlee:             () => void;
   /** Set when target picker is active so Attack stays highlighted. */
   attackTargeting?:   boolean;
+  /** P7 — set when the ability panel is open so the Abilities button
+   *  reads as the active branch. */
+  abilitiesActive?:   boolean;
 }
 
 interface BtnProps {
@@ -55,7 +67,8 @@ function ActionBtn({ label, disabled, active, onClick }: BtnProps) {
 }
 
 export function ActionBar({
-  disabled, hasConsumables, onAttack, onDefend, onUseItem, onFlee, attackTargeting,
+  disabled, hasConsumables, hasAbilities, onAttack, onDefend, onUseItem,
+  onAbilities, onFlee, attackTargeting, abilitiesActive,
 }: Props) {
   return (
     <div
@@ -69,10 +82,11 @@ export function ActionBar({
         background: "var(--bg-1)",
       }}
     >
-      <ActionBtn label="Attack"   disabled={disabled} active={attackTargeting} onClick={onAttack} />
-      <ActionBtn label="Defend"   disabled={disabled}                    onClick={onDefend} />
-      <ActionBtn label="Use Item" disabled={disabled || !hasConsumables} onClick={onUseItem} />
-      <ActionBtn label="Flee"     disabled={disabled}                    onClick={onFlee} />
+      <ActionBtn label="Attack"    disabled={disabled} active={attackTargeting} onClick={onAttack} />
+      <ActionBtn label="Defend"    disabled={disabled}                    onClick={onDefend} />
+      <ActionBtn label="Use Item"  disabled={disabled || !hasConsumables} onClick={onUseItem} />
+      <ActionBtn label="Abilities" disabled={disabled || !hasAbilities} active={abilitiesActive} onClick={onAbilities} />
+      <ActionBtn label="Flee"      disabled={disabled}                    onClick={onFlee} />
     </div>
   );
 }

@@ -134,6 +134,37 @@ export type AbilityCategory =
  *  ability library was authored against. */
 export type AbilityStatShort = "str" | "agi" | "int" | "per" | "cha";
 
+/** P7 — mechanical resolution blueprint for an ability. Every field is
+ *  optional so an entry can carry any combination of damage / heal /
+ *  buff / debuff / status-clear effects. Read by combat-engine's
+ *  resolveAbility branch. Passive abilities omit this entirely (they
+ *  are not dispatchable; the runtime applies their effect implicitly).
+ */
+export interface AbilityEffects {
+  /** Damage die (e.g. "1d6"). When present, the ability deals damage
+   *  to a single target. Auto-hits (no d20 to-hit check). */
+  damage_die?:       string;
+  /** Stat modifier added to each damage roll. Mirrors the AGI/STR/etc.
+   *  bonus on a weapon attack. Defaults to "str". */
+  damage_stat?:      AbilityStatShort;
+  /** Multi-hit count. Defaults to 1. Each hit rolls damage independently
+   *  against the same target (Flurry, Rapid Shot, Breach and Clear). */
+  hits?:             number;
+  /** Flat HP restored to the player on use (Restore N HP). Capped at
+   *  max_health. */
+  heal_amount?:      number;
+  /** Status effects applied to the player on use (FORTIFIED / HASTENED /
+   *  FOCUSED). Applied via buildStatusEffect → player_status_effects. */
+  self_statuses?:    StatusEffectId[];
+  /** Single status effect rolled against the target enemy. `chance` is
+   *  the 0-1 application probability (POISONED 40% etc.). */
+  target_status?:    { id: StatusEffectId; chance: number };
+  /** Status effect ids cleared from the player on use (Fade clears
+   *  CHILLED or WEAKENED; Antidote Mastery clears any ailment). The
+   *  literal "any_ailment" sentinel clears every ailment in one pass. */
+  clears_self_ids?:  Array<StatusEffectId | "any_ailment">;
+}
+
 /** One hardcoded class ability template. Identity for the engine; the
  *  world-flavor `name` is replaced per-world by P7 (the WCD generator
  *  receives the mechanical block and emits a thematic rename). */
@@ -170,6 +201,10 @@ export interface AbilityTemplate {
    *  identity; slot 2 unlocks at level 5; slots 3-4 at level 10/15.
    *  Undefined when `is_passive: true`. */
   slot_position?:    1 | 2 | 3 | 4;
+  /** P7 — mechanical effect blueprint read by combat-engine.
+   *  Undefined on passives + utility abilities whose effect is narrator
+   *  flavour only. */
+  effects?:          AbilityEffects;
 }
 
 export enum LocationStatus {
@@ -1660,7 +1695,9 @@ export interface CombatEvent {
                          | "kill"         | "victory"
                          | "defeat"       | "flee_success"
                          | "status_applied" | "status_tick"
-                         | "status_saved"   | "status_expired";
+                         | "status_saved"   | "status_expired"
+                         // P7 — ability dispatch
+                         | "ability_used" | "ability_no_charges";
   /** Date.now() at event emission. */
   timestamp:             number;
   /** "PLAYER" or an enemy `instance_id`. */
@@ -1762,6 +1799,12 @@ export interface CombatState {
    *  turn; saves rolled at end of player turn. Dismissed with the rest
    *  of CombatState on victory / defeat / flee (rule 29). */
   player_status_effects?: ActiveStatusEffect[];
+  // ── P7 — Ability charges ─────────────────────────────────────────────────
+  /** P7 — uses-per-ability this combat. Charges reset automatically
+   *  when the CombatState slice is dismissed on victory/defeat/flee
+   *  (rule 29) — the next encounter spawns a fresh combat slice with
+   *  an empty map. */
+  ability_charges_used?: Record<AbilityId, number>;
 }
 
 // ---------------------------------------------------------------------------

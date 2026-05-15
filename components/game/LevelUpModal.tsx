@@ -2,8 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useGameStore, makeMessage } from "@/lib/stores/game-store";
-import type { Attributes } from "@/types/game";
+import type { AbilityId, AbilityTemplate, Attributes } from "@/types/game";
 import { resolveLevelUp, applyLevelUp } from "@/lib/game/level-resolver";
+import {
+  ABILITY_LIBRARY,
+  getSlotCandidatesForLevelUp,
+} from "@/lib/game/abilities";
 import { STAT_CAP } from "@/lib/game/constants";
 
 /**
@@ -61,34 +65,54 @@ export function LevelUpModal() {
   // Modal only opens when a level-up is queued AND combat has dismissed.
   // While combat is active, the flag stays set on player state and the
   // victory banner / resolution prose render first — V8.37 pacing.
-  const isOpen = !!player && pending && !combatActive;
+  // P7 — also stays open while the slot-unlock step is in progress
+  // (handleConfirm clears `pending` but transitions to the slot picker).
+  const isStatStepOpen = !!player && pending && !combatActive;
 
   // resolveLevelUp gives us the auto gains based on archetype +
   // pre-levelup level. `player.level` here is still the OLD level
   // because applyLevelUp hasn't fired yet.
   const result = useMemo(() => {
-    if (!isOpen || !player) return null;
+    if (!isStatStepOpen || !player) return null;
     return resolveLevelUp(player.background, player.level);
-  }, [isOpen, player]);
+  }, [isStatStepOpen, player]);
 
   const [freeStat, setFreeStat] = useState<keyof Attributes | null>(null);
+
+  // P7 — slot unlock follow-up step. Set non-null when the level-up
+  // crosses a slot threshold (5 / 10 / 15). Carries the slot number +
+  // the candidate ability ids the player picks from. After the stat
+  // step's Confirm has fired and stats have committed, this state
+  // transitions the modal to the slot picker; closing the picker
+  // commits the chosen slot ability into equipped_ability_slots.
+  const [slotStep, setSlotStep] = useState<{
+    slotNum:        2 | 3 | 4;
+    candidates:     AbilityTemplate[];
+    autoAssigned?:  AbilityId | null;  // slot 2: filled by Continue
+  } | null>(null);
+  const [slotPick, setSlotPick] = useState<AbilityId | null>(null);
 
   // Reset the picker every time a fresh level-up modal opens so chained
   // level-ups (defensive — current pacing never crosses two thresholds
   // at once) get their own confirmation flow.
   useEffect(() => {
-    if (isOpen) setFreeStat(null);
-  }, [isOpen, player?.level]);
+    if (isStatStepOpen) {
+      setFreeStat(null);
+      setSlotStep(null);
+      setSlotPick(null);
+    }
+  }, [isStatStepOpen, player?.level]);
 
-  if (!isOpen || !player || !result) return null;
+  const isOpen = (isStatStepOpen || slotStep !== null) && !combatActive;
+  if (!isOpen || !player) return null;
 
   const stats = player.attributes;
 
   const handleConfirm = () => {
-    if (!freeStat) return;
+    if (!freeStat || !result || !player || !masterState) return;
     const slice = applyLevelUp(player, { ...result, free_stat: freeStat });
     setMasterState({
-      ...masterState!,
+      ...masterState,
       player_state: { ...player, ...slice },
     });
     // Templated story-feed beat. No LLM call — V8.47 rule 84 pattern.
@@ -99,7 +123,223 @@ export function LevelUpModal() {
         { level_up: true, new_level: result.new_level }
       )
     );
+
+    // P7 — slot unlock follow-up step. After stats commit, advance the
+    // modal to the slot-N picker when the new level crosses 5 / 10 / 15.
+    const slotNum: 2 | 3 | 4 | null =
+      result.new_level === 5  ? 2
+      : result.new_level === 10 ? 3
+      : result.new_level === 15 ? 4
+      : null;
+    if (!slotNum) return;
+
+    if (slotNum === 2) {
+      // Slot 2 auto-assigns from the learned pool. v1 = exactly 1 slot-2
+      // ability per class lives in the pool from game start; with v2
+      // variant pools (multiple slot-2 options) this picks one randomly.
+      const slot2InPool = player.learned_abilities
+        .map((id) => ABILITY_LIBRARY[id])
+        .filter((t) => !!t && !t.is_passive && t.slot_position === 2);
+      const chosen = slot2InPool.length === 1
+        ? slot2InPool[0]
+        : slot2InPool.length > 1
+          ? slot2InPool[Math.floor(Math.random() * slot2InPool.length)]
+          : null;
+      setSlotStep({ slotNum: 2, candidates: chosen ? [chosen] : [], autoAssigned: chosen?.id ?? null });
+      setSlotPick(chosen?.id ?? null);
+      return;
+    }
+
+    // Slots 3 and 4 — show the candidates from the library.
+    const candidates = getSlotCandidatesForLevelUp(player.background, slotNum);
+    setSlotStep({ slotNum, candidates });
+    // Pre-select if there is only one — UI degrades to single-card
+    // auto-confirm when v1 ships 1 candidate per slot.
+    if (candidates.length === 1) setSlotPick(candidates[0].id);
   };
+
+  /** Commit the slot picker's chosen ability into equipped_ability_slots
+   *  and add any unchosen candidates to learned_abilities (P7 spec). */
+  const handleSlotConfirm = () => {
+    if (!slotStep || !slotPick || !masterState) return;
+
+    // Re-read player state — handleConfirm already committed level-up
+    // stats, so the working snapshot is in masterState now (not the
+    // stale `player` const captured at modal open).
+    const currentPlayer = masterState.player_state;
+    const idx = (slotStep.slotNum - 1) as 0 | 1 | 2 | 3;
+
+    const nextSlots: [AbilityId | null, AbilityId | null, AbilityId | null, AbilityId | null] = [
+      currentPlayer.equipped_ability_slots[0] ?? null,
+      currentPlayer.equipped_ability_slots[1] ?? null,
+      currentPlayer.equipped_ability_slots[2] ?? null,
+      currentPlayer.equipped_ability_slots[3] ?? null,
+    ];
+    nextSlots[idx] = slotPick;
+
+    // Any unchosen candidate (slot 3/4 only) joins the learned pool if
+    // it isn't already there.
+    const nextLearned = [...currentPlayer.learned_abilities];
+    for (const c of slotStep.candidates) {
+      if (c.id !== slotPick && !nextLearned.includes(c.id)) {
+        nextLearned.push(c.id);
+      }
+    }
+    if (slotPick && !nextLearned.includes(slotPick)) {
+      nextLearned.push(slotPick);
+    }
+
+    setMasterState({
+      ...masterState,
+      player_state: {
+        ...currentPlayer,
+        equipped_ability_slots: nextSlots,
+        learned_abilities:      nextLearned,
+      },
+    });
+
+    const chosen = ABILITY_LIBRARY[slotPick];
+    addMessage(
+      makeMessage(
+        "SYSTEM",
+        `[SLOT ${slotStep.slotNum} UNLOCKED] ${chosen?.base_name ?? slotPick}.`,
+        { level_up: true, slot_unlocked: slotStep.slotNum }
+      )
+    );
+
+    setSlotStep(null);
+    setSlotPick(null);
+  };
+
+  // ── P7 — slot unlock step (renders instead of the stat picker) ────────
+  if (slotStep) {
+    const isAuto = slotStep.slotNum === 2;
+    const chosenTmpl = slotPick ? ABILITY_LIBRARY[slotPick] : null;
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Slot ${slotStep.slotNum} unlocked`}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+      >
+        <div
+          className="w-full max-w-md rounded-sm font-mono shadow-2xl"
+          style={{
+            backgroundColor: "var(--color-bg)",
+            border:          "1px solid var(--accent)",
+            color:           "var(--color-text)",
+          }}
+        >
+          <header
+            className="px-6 pt-5 pb-3 text-center"
+            style={{ borderBottom: "1px solid var(--color-border)" }}
+          >
+            <div
+              className="text-[10px] font-bold tracking-widest uppercase"
+              style={{ color: "var(--accent)" }}
+            >
+              Ability Slot Unlocked
+            </div>
+            <div
+              className="mt-1 text-2xl font-bold ew-serif"
+              style={{ color: "var(--accent)", fontStyle: "italic" }}
+            >
+              Slot {slotStep.slotNum}
+            </div>
+          </header>
+
+          <section className="px-6 pt-4 pb-4">
+            {isAuto ? (
+              chosenTmpl ? (
+                <>
+                  <div className="mb-2 text-[10px] uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
+                    A new ability slot has opened. Slot 2 is filled from the abilities you already know.
+                  </div>
+                  <div
+                    className="mt-3 p-3 rounded-sm"
+                    style={{
+                      background: "color-mix(in srgb, var(--accent) 12%, transparent)",
+                      border:     "1px solid var(--accent)",
+                    }}
+                  >
+                    <div className="ew-serif text-base" style={{ fontStyle: "italic", color: "var(--accent)" }}>
+                      {chosenTmpl.base_name}
+                    </div>
+                    <div className="mt-1 text-xs" style={{ color: "var(--color-text)" }}>
+                      {chosenTmpl.description}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs italic" style={{ color: "var(--color-muted)" }}>
+                  No slot-2 candidate found in your learned pool. Visit Attunement to slot one manually.
+                </div>
+              )
+            ) : (
+              <>
+                <div className="mb-3 text-[10px] uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
+                  A new ability slot has opened. Choose one to equip — the others join your learned pool.
+                </div>
+                <div className="flex flex-col gap-2">
+                  {slotStep.candidates.map((c) => {
+                    const isSelected = slotPick === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setSlotPick(c.id)}
+                        className="text-left p-3 rounded-sm transition-colors"
+                        style={{
+                          background: isSelected
+                            ? "color-mix(in srgb, var(--accent) 18%, transparent)"
+                            : "color-mix(in srgb, var(--color-primary) 8%, transparent)",
+                          border: `1px solid ${isSelected ? "var(--accent)" : "var(--color-border)"}`,
+                          color:  "var(--color-text)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div className="ew-serif text-sm" style={{ fontStyle: "italic", color: isSelected ? "var(--accent)" : "var(--color-text)" }}>
+                          {c.base_name}
+                          <span className="ml-2 text-[10px] uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
+                            {c.category}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-xs" style={{ color: "var(--color-muted)" }}>
+                          {c.description}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </section>
+
+          <footer
+            className="px-6 py-3 text-center"
+            style={{ borderTop: "1px solid var(--color-border)" }}
+          >
+            <button
+              type="button"
+              onClick={handleSlotConfirm}
+              disabled={!slotPick}
+              className="rounded-sm px-6 py-2 text-xs font-bold uppercase tracking-wider transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+              style={{
+                backgroundColor: "var(--accent)",
+                color:           "#0a0a0a",
+              }}
+            >
+              {isAuto ? "Continue" : "Equip"}
+            </button>
+          </footer>
+        </div>
+      </div>
+    );
+  }
+
+  // Stat step — original level-up flow. Bails when result hasn't resolved
+  // (shouldn't normally happen but defensive).
+  if (!result) return null;
 
   return (
     <div

@@ -20,6 +20,7 @@ import { LevelUpModal } from "@/components/game/LevelUpModal";
 import { QuestRevealModal } from "@/components/game/QuestRevealModal";
 import { FloorLootStrip } from "@/components/game/FloorLootStrip";
 import WorldIntroModal from "@/components/WorldIntroModal";
+import { AttunementModal } from "@/components/game/AttunementModal";
 import { useFloorLoot } from "@/hooks/useFloorLoot";
 import { AssetCategory, Genre } from "@/types/game";
 import type { MasterState } from "@/types/game";
@@ -61,6 +62,19 @@ export default function GamePage() {
   const masterState    = useGameStore((s) => s.masterState);
   const messages       = useGameStore((s) => s.messages);
   const locationAssets = useGameStore((s) => s.locationAssets);
+  // P7 — Attunement modal. Opens when rest signal increments (Inn Rest
+  // completes; rule 156) or when the player taps the settlement Attune
+  // button. Guarded against opening during combat by the modal itself
+  // (rule 166).
+  const restCompleteSignal = useGameStore((s) => s.restCompleteSignal);
+  const [attunementOpen, setAttunementOpen] = useState(false);
+  const restSignalSeenRef = useRef(restCompleteSignal);
+  useEffect(() => {
+    if (restCompleteSignal !== restSignalSeenRef.current) {
+      restSignalSeenRef.current = restCompleteSignal;
+      setAttunementOpen(true);
+    }
+  }, [restCompleteSignal]);
 
   const { submitAction, navigateTo, isProcessing, processingStep, buyItem, sellItem, openTrade, restAtInn } = useGameLoop();
   const {
@@ -416,6 +430,13 @@ export default function GamePage() {
           {/* Day 22 — Level-up modal. Opens when player_state
               .pending_level_up=true AND combat is no longer active. */}
           <LevelUpModal />
+          {/* P7 — Attunement modal. Opens on Inn Rest signal or via the
+              settlement Attune button. Locked during combat (rule 166)
+              — the modal itself guards on combat?.active. */}
+          <AttunementModal
+            open={attunementOpen}
+            onClose={() => setAttunementOpen(false)}
+          />
           {/* V8.34 (Prompt 3 Task 3) — when combat is active, swap the
               navigation strip + input bar for the CombatMode panel.
               CombatMode covers more vertical space so the player has
@@ -452,6 +473,45 @@ export default function GamePage() {
                   onTakeAll={floorLootHandlers.onTakeAll}
                 />
               )}
+              {/* P7 — settlement-arrival Attune button. Visible only when
+                  at a settlement_hub node (where Inn Rest / merchants /
+                  attunement live). Hidden during combat (whole subtree
+                  unmounts above). Tap opens the AttunementModal. */}
+              {(() => {
+                if (!masterState) return null;
+                const nodeId = masterState.world_state.current_node_id
+                  ?? masterState.world_state.current_location_id;
+                const node   = masterState.world_graph?.nodes[nodeId];
+                if (node?.node_type !== "settlement_hub") return null;
+                return (
+                  <div
+                    style={{
+                      display:         "flex",
+                      justifyContent:  "flex-end",
+                      padding:         "4px 12px 0",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setAttunementOpen(true)}
+                      className="ew-mono"
+                      style={{
+                        padding:       "4px 12px",
+                        fontSize:      10,
+                        letterSpacing: "0.22em",
+                        textTransform: "uppercase",
+                        background:    "transparent",
+                        border:        "1px solid var(--accent)",
+                        color:         "var(--accent)",
+                        borderRadius:  3,
+                        cursor:        "pointer",
+                      }}
+                    >
+                      Attune
+                    </button>
+                  </div>
+                );
+              })()}
               <NavigationBar
                 masterState={masterState}
                 worldGraph={masterState?.world_graph}

@@ -7,6 +7,11 @@ import type { Attributes } from "@/types/game";
 import { BACKGROUND_CONFIGS, buildItem } from "@/lib/game/starting-equipment";
 import { buildStartingAttributes } from "@/lib/game/archetypes";
 import { STAT_CAP } from "@/lib/game/constants";
+import {
+  drawStartingLearnedPool,
+  getPassiveForClass,
+  getSlotAbilitiesForClass,
+} from "@/lib/game/abilities";
 
 /**
  * Day 20.1 — combat-functional starting equipment now lives in
@@ -79,6 +84,28 @@ export async function POST(request: NextRequest) {
       state.player_state.inventory.push(buildItem(spec));
     }
   }
+
+  // P7 — class ability seeding. Every class ships with:
+  //   • slot 1 (the fixed class identity ability)
+  //   • passive (always active, never slotted)
+  //   • a starting learned pool of 3 abilities drawn from slots 2/3/4
+  //     candidates (v1 = the single ability per slot, so all 3 land).
+  // Slots 2/3/4 stay null until levels 5/10/15 — the LevelUpModal opens
+  // the slot-unlock step and either auto-assigns (slot 2) or offers a
+  // pick (slots 3/4).
+  const passive   = getPassiveForClass(background);
+  const slot1Pool = getSlotAbilitiesForClass(background, 1);
+  const slot1     = slot1Pool[0];
+  const learned   = drawStartingLearnedPool(background);
+
+  if (passive) state.player_state.passive_ability = passive.id;
+  if (slot1) {
+    state.player_state.equipped_ability_slots[0] = slot1.id;
+    // The slot-1 ability also lives in the learned pool (the player
+    // "knows" it; the equipped slot just locks it into the loadout).
+    if (!learned.includes(slot1.id)) learned.push(slot1.id);
+  }
+  state.player_state.learned_abilities = learned;
 
   const sessionId = state.metadata.session_id;
 

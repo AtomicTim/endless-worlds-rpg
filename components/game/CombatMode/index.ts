@@ -4,6 +4,7 @@ export { PortraitSlot } from "./PortraitSlot";
 export { HPBar } from "./HPBar";
 export { StatusEffectPills } from "./StatusEffectPills";
 export { ActionBar } from "./ActionBar";
+export { AbilityPanel, abilityNeedsTarget } from "./AbilityPanel";
 export { TargetPicker } from "./TargetPicker";
 export { UseItemPicker } from "./UseItemPicker";
 export { FloatingDamage } from "./FloatingDamage";

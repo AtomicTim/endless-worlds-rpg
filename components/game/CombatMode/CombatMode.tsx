@@ -39,6 +39,8 @@ import type { WcdStatusAliasSource } from "@/lib/game/combat-narration/status-di
 import type { FloatingDamageEntry } from "./CombatantRow";
 import { CombatantRow } from "./CombatantRow";
 import { ActionBar } from "./ActionBar";
+import { AbilityPanel, abilityNeedsTarget } from "./AbilityPanel";
+import { ABILITY_LIBRARY } from "@/lib/game/abilities";
 import { TargetPicker } from "./TargetPicker";
 import { UseItemPicker } from "./UseItemPicker";
 
@@ -81,6 +83,14 @@ export function CombatMode({
 }: Props) {
   const [attackTargeting, setAttackTargeting] = useState(false);
   const [showItemPicker,  setShowItemPicker]  = useState(false);
+  // P7 — ability panel + ability-target picker. When `abilityPanelOpen`
+  // is true the bottom strip swaps from ActionBar → AbilityPanel. When
+  // the player picks a damage / debuff ability, `pendingAbilityId` is
+  // set + the target picker activates; tapping an enemy submits the
+  // ability action with the resolved target. Self-only abilities skip
+  // the picker entirely and dispatch immediately.
+  const [abilityPanelOpen, setAbilityPanelOpen] = useState(false);
+  const [pendingAbilityId, setPendingAbilityId] = useState<string | null>(null);
 
   // Track in-flight crit-shake animations keyed by target instance_id.
   // When a CombatEvent with outcome === "crit" appears in combat_log,
@@ -127,14 +137,24 @@ export function CombatMode({
   const isPlayerTurn = combat.turn_order[combat.current_turn_index] === PLAYER_ID;
   useEffect(() => {
     if (!isPlayerTurn) {
-      if (attackTargeting) setAttackTargeting(false);
-      if (showItemPicker)  setShowItemPicker(false);
+      if (attackTargeting)   setAttackTargeting(false);
+      if (showItemPicker)    setShowItemPicker(false);
+      if (abilityPanelOpen)  setAbilityPanelOpen(false);
+      if (pendingAbilityId)  setPendingAbilityId(null);
     }
-  }, [isPlayerTurn, attackTargeting, showItemPicker]);
+  }, [isPlayerTurn, attackTargeting, showItemPicker, abilityPanelOpen, pendingAbilityId]);
 
   const hasConsumables = useMemo(
     () => player.inventory.some((i) => i.type === ItemType.CONSUMABLE),
     [player.inventory]
+  );
+
+  // P7 — at least one equipped slot ability for the Abilities button to
+  // be enabled. The Abilities branch is reachable even at level 1 (slot
+  // 1 is seeded on class assignment in /api/game/new).
+  const hasAbilities = useMemo(
+    () => (player.equipped_ability_slots ?? []).some((id) => !!id),
+    [player.equipped_ability_slots]
   );
 
   const actionsDisabled = !isPlayerTurn || isResolving === true;
@@ -144,6 +164,15 @@ export function CombatMode({
     setAttackTargeting(true);
   };
   const handleTargetSelected = (instanceId: string) => {
+    // P7 — a target click resolves either a pending ability or a regular
+    // attack, depending on which branch armed the picker.
+    if (pendingAbilityId) {
+      const ability_id = pendingAbilityId;
+      setPendingAbilityId(null);
+      setAttackTargeting(false);
+      onAction({ action: "ability", ability_id, target_instance_id: instanceId });
+      return;
+    }
     setAttackTargeting(false);
     onAction({ action: "attack", target_instance_id: instanceId });
   };
@@ -162,6 +191,29 @@ export function CombatMode({
   const handleFlee = () => {
     if (actionsDisabled) return;
     onAction({ action: "flee" });
+  };
+
+  // P7 — Abilities branch entry / dispatch / cancel handlers.
+  const handleAbilitiesClick = () => {
+    if (actionsDisabled) return;
+    setAbilityPanelOpen(true);
+  };
+  const handleAbilitySelected = (ability_id: string) => {
+    const tmpl = ABILITY_LIBRARY[ability_id];
+    if (!tmpl) return;
+    if (abilityNeedsTarget(tmpl)) {
+      // Damage / debuff abilities need an enemy. Arm the target picker.
+      setPendingAbilityId(ability_id);
+      setAbilityPanelOpen(false);
+      setAttackTargeting(true);
+      return;
+    }
+    // Self-only ability (heal / buff / status clear) — dispatch directly.
+    setAbilityPanelOpen(false);
+    onAction({ action: "ability", ability_id });
+  };
+  const handleAbilityPanelBack = () => {
+    setAbilityPanelOpen(false);
   };
 
   return (
@@ -314,16 +366,29 @@ export function CombatMode({
         <TargetPicker onCancel={() => setAttackTargeting(false)} />
       )}
 
-      {/* ── Action bar (bottom) ──────────────────────────────────────── */}
-      <ActionBar
-        disabled={actionsDisabled}
-        hasConsumables={hasConsumables}
-        attackTargeting={attackTargeting}
-        onAttack={handleAttackClick}
-        onDefend={handleDefend}
-        onUseItem={handleUseItemClick}
-        onFlee={handleFlee}
-      />
+      {/* ── Bottom strip: AbilityPanel when opened, else ActionBar ── */}
+      {abilityPanelOpen ? (
+        <AbilityPanel
+          player={player}
+          chargesUsed={combat.ability_charges_used}
+          disabled={actionsDisabled}
+          onSelect={handleAbilitySelected}
+          onBack={handleAbilityPanelBack}
+        />
+      ) : (
+        <ActionBar
+          disabled={actionsDisabled}
+          hasConsumables={hasConsumables}
+          hasAbilities={hasAbilities}
+          attackTargeting={attackTargeting}
+          abilitiesActive={abilityPanelOpen}
+          onAttack={handleAttackClick}
+          onDefend={handleDefend}
+          onUseItem={handleUseItemClick}
+          onAbilities={handleAbilitiesClick}
+          onFlee={handleFlee}
+        />
+      )}
 
       {/* ── Use item modal overlay ───────────────────────────────────── */}
       {showItemPicker && (

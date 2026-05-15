@@ -61,6 +61,8 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     learned_abilities:      [],
     equipped_ability_slots: [null, null, null, null],
     passive_ability:        null,
+    // P8 — perks default empty for tests.
+    perks:                  [],
     ...overrides,
   };
 }

@@ -482,15 +482,21 @@ export function isSlotUnlocked(slot: 1 | 2 | 3 | 4, level: number): boolean {
  *   base_charges (2)
  *   + Math.floor(playerAttributes[charge_stat] / 2)   if charge_stat set
  *   + 1   if playerLevel >= 5 AND ability is in slot 1
+ *   + perkChargeBonus   (P8 — total of all charge_bonus perks)
  *
  * Returns base_charges when the template carries no charge_stat
  * (e.g. defensive default for utility abilities that should always
  * be usable a fixed 2 times per combat).
+ *
+ * P8 — `perkChargeBonus` is the player's total `perk_charge_bonus`
+ * (sum of every charge_bonus perk taken). Optional with a 0 default
+ * so legacy callers don't have to pass it.
  */
 export function computeMaxCharges(
-  ability:    AbilityTemplate,
-  playerLevel: number,
-  attributes:  Attributes,
+  ability:         AbilityTemplate,
+  playerLevel:     number,
+  attributes:      Attributes,
+  perkChargeBonus: number = 0,
 ): number {
   let charges = ability.base_charges;
   if (ability.charge_stat) {
@@ -501,20 +507,24 @@ export function computeMaxCharges(
   if (playerLevel >= 5 && ability.slot_position === 1) {
     charges += 1;
   }
+  charges += perkChargeBonus;
   return charges;
 }
 
 /**
  * P7 — current remaining charges given a CombatState's
  * ability_charges_used counter. Pure derivative.
+ *
+ * P8 — `perkChargeBonus` threads through to computeMaxCharges.
  */
 export function remainingCharges(
-  ability:     AbilityTemplate,
-  playerLevel: number,
-  attributes:  Attributes,
-  usedSoFar:   number,
+  ability:         AbilityTemplate,
+  playerLevel:     number,
+  attributes:      Attributes,
+  usedSoFar:       number,
+  perkChargeBonus: number = 0,
 ): number {
-  const max = computeMaxCharges(ability, playerLevel, attributes);
+  const max = computeMaxCharges(ability, playerLevel, attributes, perkChargeBonus);
   return Math.max(0, max - usedSoFar);
 }
 

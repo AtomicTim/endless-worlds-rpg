@@ -2,12 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useGameStore, makeMessage } from "@/lib/stores/game-store";
-import type { AbilityId, AbilityTemplate, Attributes } from "@/types/game";
+import type {
+  AbilityId, AbilityTemplate, Attributes, Perk, PerkId,
+} from "@/types/game";
 import { resolveLevelUp, applyLevelUp } from "@/lib/game/level-resolver";
 import {
   ABILITY_LIBRARY,
   getSlotCandidatesForLevelUp,
 } from "@/lib/game/abilities";
+import {
+  applyPerkEffects,
+  drawPerkOptions,
+  isPerkLevel,
+} from "@/lib/game/perks";
 import { STAT_CAP } from "@/lib/game/constants";
 
 /**
@@ -92,6 +99,14 @@ export function LevelUpModal() {
   } | null>(null);
   const [slotPick, setSlotPick] = useState<AbilityId | null>(null);
 
+  // P8 — perk picker step. Set non-null at levels 4 / 8 / 12 / 16 / 20.
+  // Sequenced AFTER any slot-unlock step so disjoint trigger sets
+  // (perks 4/8/12/16/20 vs slots 5/10/15) don't collide today, and a
+  // future overlap (test #7 hypothetical) cleanly serialises stat →
+  // slot → perk.
+  const [perkStep, setPerkStep] = useState<{ options: Perk[] } | null>(null);
+  const [perkPick, setPerkPick] = useState<PerkId | null>(null);
+
   // Reset the picker every time a fresh level-up modal opens so chained
   // level-ups (defensive — current pacing never crosses two thresholds
   // at once) get their own confirmation flow.
@@ -100,10 +115,13 @@ export function LevelUpModal() {
       setFreeStat(null);
       setSlotStep(null);
       setSlotPick(null);
+      setPerkStep(null);
+      setPerkPick(null);
     }
   }, [isStatStepOpen, player?.level]);
 
-  const isOpen = (isStatStepOpen || slotStep !== null) && !combatActive;
+  const isOpen =
+    (isStatStepOpen || slotStep !== null || perkStep !== null) && !combatActive;
   if (!isOpen || !player) return null;
 
   const stats = player.attributes;
@@ -131,7 +149,14 @@ export function LevelUpModal() {
       : result.new_level === 10 ? 3
       : result.new_level === 15 ? 4
       : null;
-    if (!slotNum) return;
+    // P8 — perk picker fires at 4 / 8 / 12 / 16 / 20. Disjoint from slot
+    // levels (5/10/15) today, so the two never collide, but `openPerkStep`
+    // is invoked AFTER slot resolution to serialise cleanly if the
+    // schedules ever overlap.
+    if (!slotNum) {
+      if (isPerkLevel(result.new_level)) openPerkStep();
+      return;
+    }
 
     if (slotNum === 2) {
       // Slot 2 auto-assigns from the learned pool. v1 = exactly 1 slot-2
@@ -209,7 +234,180 @@ export function LevelUpModal() {
 
     setSlotStep(null);
     setSlotPick(null);
+
+    // P8 — chain into the perk step when this level also unlocked a perk.
+    // Today's schedules don't overlap (perks 4/8/12/16/20, slots 5/10/15)
+    // but the chain is here so a future redesign doesn't lose the perk.
+    if (currentPlayer.level && isPerkLevel(currentPlayer.level)) openPerkStep();
   };
+
+  /** Draw 3 perk options and enter the picker. Pulled from the player's
+   *  CURRENT perks list (read from masterState — not the stale `player`
+   *  capture — so consecutive level-ups in one session don't show
+   *  already-owned perks). */
+  const openPerkStep = () => {
+    const live = useGameStore.getState().masterState?.player_state;
+    const owned = live?.perks ?? [];
+    const options = drawPerkOptions(owned, 3);
+    setPerkStep({ options });
+    setPerkPick(null);
+  };
+
+  /** Commit the chosen perk: apply mechanical effect via applyPerkEffects
+   *  (no-op for passive perks), then append the perk id to player.perks.
+   *  Done as a single setMasterState so React renders consistently. */
+  const handlePerkConfirm = () => {
+    if (!perkPick) return;
+    const live = useGameStore.getState().masterState;
+    if (!live) return;
+    const withEffect = applyPerkEffects(live, perkPick);
+    const nextPerks  = [...withEffect.player_state.perks, perkPick];
+    setMasterState({
+      ...withEffect,
+      player_state: { ...withEffect.player_state, perks: nextPerks },
+    });
+
+    const chosen = perkStep?.options.find((p) => p.id === perkPick);
+    addMessage(
+      makeMessage(
+        "SYSTEM",
+        `[PERK] ${chosen?.name ?? perkPick}.`,
+        { level_up: true, perk_id: perkPick }
+      )
+    );
+
+    setPerkStep(null);
+    setPerkPick(null);
+  };
+
+  // ── P8 — perk step (renders after stat + any slot step) ────────────────
+  if (perkStep) {
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Choose a perk"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+      >
+        <div
+          className="w-full max-w-md rounded-sm font-mono shadow-2xl"
+          style={{
+            backgroundColor: "var(--color-bg)",
+            border:          "1px solid var(--accent)",
+            color:           "var(--color-text)",
+          }}
+        >
+          <header
+            className="px-6 pt-5 pb-3 text-center"
+            style={{ borderBottom: "1px solid var(--color-border)" }}
+          >
+            <div
+              className="text-[10px] font-bold tracking-widest uppercase"
+              style={{ color: "var(--accent)" }}
+            >
+              Perk Unlocked
+            </div>
+            <div
+              className="mt-1 text-2xl font-bold ew-serif"
+              style={{
+                color:     "var(--accent)",
+                fontStyle: "italic",
+              }}
+            >
+              Choose a perk
+            </div>
+          </header>
+
+          <section className="px-6 pt-4 pb-4 flex flex-col gap-2">
+            {perkStep.options.length === 0 ? (
+              <div
+                className="text-xs italic"
+                style={{ color: "var(--color-muted)" }}
+              >
+                No perks available — your pool is exhausted.
+              </div>
+            ) : (
+              perkStep.options.map((p) => {
+                const isSelected = perkPick === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setPerkPick(p.id)}
+                    className="text-left p-3 rounded-sm transition-colors"
+                    style={{
+                      background: isSelected
+                        ? "color-mix(in srgb, var(--accent) 18%, transparent)"
+                        : "color-mix(in srgb, var(--color-primary) 8%, transparent)",
+                      border:     `1px solid ${
+                        isSelected ? "var(--accent)" : "var(--color-border)"
+                      }`,
+                      cursor:     "pointer",
+                    }}
+                  >
+                    <div
+                      className="ew-serif"
+                      style={{
+                        fontSize:  13,
+                        fontStyle: "italic",
+                        color:     isSelected
+                          ? "var(--accent)"
+                          : "#e2cda0",
+                      }}
+                    >
+                      {p.name}
+                      <span
+                        className="ml-2 text-[7px] tracking-widest uppercase"
+                        style={{
+                          background:   "color-mix(in srgb, var(--accent) 18%, transparent)",
+                          color:        "var(--accent)",
+                          padding:      "1px 6px",
+                          borderRadius: 9999,
+                          fontFamily:   "Inter Tight, var(--mono), monospace",
+                          fontStyle:    "normal",
+                        }}
+                      >
+                        {p.category}
+                      </span>
+                    </div>
+                    <div
+                      className="ew-serif mt-1"
+                      style={{
+                        fontSize:  11,
+                        fontStyle: "italic",
+                        color:     "#9a7e52",
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      {p.description}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </section>
+
+          <footer
+            className="px-6 py-3 text-center"
+            style={{ borderTop: "1px solid var(--color-border)" }}
+          >
+            <button
+              type="button"
+              onClick={handlePerkConfirm}
+              disabled={!perkPick}
+              className="rounded-sm px-6 py-2 text-xs font-bold uppercase tracking-wider transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+              style={{
+                backgroundColor: "var(--accent)",
+                color:           "#0a0a0a",
+              }}
+            >
+              Confirm
+            </button>
+          </footer>
+        </div>
+      </div>
+    );
+  }
 
   // ── P7 — slot unlock step (renders instead of the stat picker) ────────
   if (slotStep) {

@@ -207,6 +207,49 @@ export interface AbilityTemplate {
   effects?:          AbilityEffects;
 }
 
+// ---------------------------------------------------------------------------
+// ── PERK SYSTEM (P8) ──
+// Permanent, universal level-up rewards. Unlock every 4 combat levels (4 /
+// 8 / 12 / 16 / 20) — 5 total picks per playthrough. Player chooses 1 of 3
+// candidates drawn from a ~20-entry pool. Perk effects either land
+// immediately on PlayerState (stat / max HP) or get cached on PlayerState
+// for downstream consumers to read (charge bonus / status resist /
+// gold / xp percentages).
+// ---------------------------------------------------------------------------
+
+/** Canonical perk id ("iron_skin"). Plain string alias — matches the
+ *  AbilityId pattern. */
+export type PerkId = string;
+
+/** Coarse perk classification, used for category badges in the picker. */
+export type PerkCategory =
+  | "combat"
+  | "status"
+  | "ability"
+  | "world";
+
+/** Discriminated union of perk mechanical effects. `passive` perks have no
+ *  mechanical effect (narrator flavour only) and are a true no-op for
+ *  applyPerkEffects. */
+export type PerkEffect =
+  | { type: "stat_bonus";      stat: AbilityStatShort; amount: number }
+  | { type: "max_hp_bonus";    amount: number }
+  | { type: "charge_bonus";    amount: number }
+  | { type: "status_resist";   status: StatusEffectId; reduction_pct: number }
+  | { type: "gold_bonus_pct";  amount: number }
+  | { type: "xp_bonus_pct";    amount: number }
+  | { type: "passive" };
+
+/** One hardcoded perk template. Lives in lib/game/perks.ts PERK_LIBRARY. */
+export interface Perk {
+  id:          PerkId;
+  name:        string;
+  category:    PerkCategory;
+  /** One sentence, plain prose. Rendered under the name in the picker. */
+  description: string;
+  effect:      PerkEffect;
+}
+
 export enum LocationStatus {
   PRESENT  = "PRESENT",   // player is here, acting within this location
   ARRIVING = "ARRIVING",  // player just moved here this turn
@@ -509,6 +552,28 @@ export interface PlayerState {
   /** P6 — the class passive ability. Always active, never slotted.
    *  `null` until the class is assigned + the passive seeded (P7). */
   passive_ability:         AbilityId | null;
+  // ── P8 — Perks ───────────────────────────────────────────────────────────
+  /** P8 — chosen perks (one per unlock gate at levels 4/8/12/16/20). Max
+   *  5 entries by end-game. New games start empty; LevelUpModal's perk
+   *  step pushes ids as the player confirms picks. */
+  perks:                   PerkId[];
+  /** P8 — sum of all charge_bonus perks. Read by computeMaxCharges and
+   *  added to every ability's max charge total. Undefined / 0 = no
+   *  bonus. */
+  perk_charge_bonus?:      number;
+  /** P8 — per-status resist chance from perks (0-1). Engine consults
+   *  this in the enemy-on-player status application path: if the perk
+   *  resist rolls true, the status is skipped after the application
+   *  roll passes. Multiple perks on the same status are summed and
+   *  clamped to 1.0 by applyPerkEffects. */
+  perk_status_resist?:     Partial<Record<StatusEffectId, number>>;
+  /** P8 — % bonus added to all gold drops (15 = +15%). Read by the
+   *  loot resolver. Stored as an integer percentage to match the
+   *  spec's authoring convention; consumers convert to decimal. */
+  perk_gold_bonus_pct?:    number;
+  /** P8 — % bonus added to all XP grants. Read by handleVictory at
+   *  combat resolution. Stored as an integer percentage. */
+  perk_xp_bonus_pct?:      number;
 }
 
 // ---------------------------------------------------------------------------

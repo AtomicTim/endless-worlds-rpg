@@ -67,6 +67,9 @@ export function createNewMasterState(
     learned_abilities:      [],
     equipped_ability_slots: [null, null, null, null],
     passive_ability:        null,
+    // P8 — perks. Empty pool at game start; LevelUpModal pushes one
+    // perk id per unlock gate (levels 4 / 8 / 12 / 16 / 20).
+    perks:                  [],
   };
 
   const world_state: WorldState = {

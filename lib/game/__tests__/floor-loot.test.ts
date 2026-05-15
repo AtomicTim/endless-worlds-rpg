@@ -71,6 +71,7 @@ function makeState(overrides: Partial<MasterState> = {}): MasterState {
       learned_abilities:      [],
       equipped_ability_slots: [null, null, null, null],
       passive_ability:        null,
+      perks:                  [],
     },
     world_state: {
       current_location_id: "node_a",

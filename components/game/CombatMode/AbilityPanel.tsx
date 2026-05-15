@@ -66,7 +66,9 @@ export function AbilityPanel({
     if (!isSlotUnlocked((slotIdx + 1) as 1 | 2 | 3 | 4, player.level)) return;
 
     const used = chargesUsed?.[ability_id] ?? 0;
-    const max  = computeMaxCharges(tmpl, player.level, player.attributes);
+    const max  = computeMaxCharges(
+      tmpl, player.level, player.attributes, player.perk_charge_bonus ?? 0,
+    );
     if (used >= max) {
       // No charges — brief flash, no submit.
       setFlashSlot(slotIdx);
@@ -122,7 +124,11 @@ export function AbilityPanel({
           const unlocked  = isSlotUnlocked(slotNum, player.level);
           const tmpl      = ability_id ? ABILITY_LIBRARY[ability_id] : null;
           const used      = ability_id ? (chargesUsed?.[ability_id] ?? 0) : 0;
-          const max       = tmpl ? computeMaxCharges(tmpl, player.level, player.attributes) : 0;
+          const max       = tmpl
+            ? computeMaxCharges(
+                tmpl, player.level, player.attributes, player.perk_charge_bonus ?? 0,
+              )
+            : 0;
           const remaining = Math.max(0, max - used);
           const flashing  = flashSlot === slotIdx;
 

@@ -770,7 +770,9 @@ export function executePlayerAction({
       // event and return early so the player can pick a different action.
       const usedSoFar = s.ability_charges_used?.[action.ability_id] ?? 0;
       const remaining = remainingCharges(
-        ability, p.level, p.attributes, usedSoFar
+        ability, p.level, p.attributes, usedSoFar,
+        // P8 — total charge bonus from perks (Momentum, Arcane Reserve, …).
+        p.perk_charge_bonus ?? 0,
       );
       if (remaining <= 0) {
         const noCharges = makeEvent({
@@ -1136,8 +1138,12 @@ export function advanceEnemyTurn({
   // against rng. One-curse-limit: any existing ailment is replaced
   // when a new one applies. Buffs aren't touched.
   if (result.outcome === "hit" || result.outcome === "crit") {
+    // P8 — perk resist for this status id (0-1), default 0.
+    const perkResist = actor.status_effect
+      ? player.perk_status_resist?.[actor.status_effect.id] ?? 0
+      : 0;
     const { newEffects, applicationEvent } =
-      maybeApplyEnemyStatus(actor, pendingPlayerEffects, rng);
+      maybeApplyEnemyStatus(actor, pendingPlayerEffects, rng, perkResist);
     pendingPlayerEffects = newEffects;
     if (applicationEvent) events.push(applicationEvent);
   }
@@ -1740,17 +1746,27 @@ function rollPlayerStatusSaves(
 
 /** One-curse-limit applicator. Rolls the enemy's on-hit status. If it
  *  applies, removes any existing AILMENT from the player's effect list
- *  before adding the new one. Buffs are preserved. */
+ *  before adding the new one. Buffs are preserved.
+ *
+ *  P8 — `perkResist` is the player's per-status resist chance from perks
+ *  (0-1). After the enemy's application roll passes, a second roll vs
+ *  the perk chance can shrug the status off. Default 0 = no resist. */
 function maybeApplyEnemyStatus(
-  actor:   CombatEnemyInstance,
-  current: ActiveStatusEffect[],
-  rng:     Rng,
+  actor:       CombatEnemyInstance,
+  current:     ActiveStatusEffect[],
+  rng:         Rng,
+  perkResist:  number = 0,
 ): { newEffects: ActiveStatusEffect[]; applicationEvent: CombatEvent | null } {
   const cfg = actor.status_effect;
   if (!cfg) return { newEffects: current, applicationEvent: null };
   const { applied, damage_per_tick } =
     rollStatusApplication(cfg.id, cfg.chance, rng);
   if (!applied) return { newEffects: current, applicationEvent: null };
+  // P8 — perk resist roll. Applied AFTER the enemy's chance passes, so
+  // a 25% resist means a 25% chance to negate the application.
+  if (perkResist > 0 && rng() < perkResist) {
+    return { newEffects: current, applicationEvent: null };
+  }
   const next = [
     ...current.filter((e) => !AILMENT_IDS.includes(e.id)),
     buildStatusEffect(cfg.id, actor.name, damage_per_tick),

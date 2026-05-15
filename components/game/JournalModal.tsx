@@ -2,20 +2,31 @@
 
 import { useEffect, useState } from "react";
 import { useGameStore } from "@/lib/stores/game-store";
+import { Genre } from "@/types/game";
 import type { MainQuest, QuestBreadcrumb, QuestEntry, SideQuest } from "@/types/game";
 
 /**
- * Day 23C — Morrowind-style journal modal.
+ * UI-7 — Journal / Chronicle modal.
  *
- * Three tabs:
- *   • MAIN QUEST   — main_quest header + discovered breadcrumbs +
- *                    LLM-generated diary entries below each.
- *   • SIDE QUESTS  — shell only (23D populates).
- *   • COMPLETED    — completed_quest_ids list (one-line summaries).
- *   • FAILED       — failed_quest_ids list with reason.
+ * Section 12 of /docs/ui-design-reference.md. Visual redesign of the
+ * prior Day-23C modal; all data, tabs, and quest-state logic
+ * preserved. The 4 existing tabs (MAIN QUEST · SIDE QUESTS ·
+ * COMPLETED · FAILED) are kept and restyled (the §12 2-tab spec
+ * "Quests · Journal" would require merging logic, deferred to a
+ * future structural refactor).
  *
- * Opens on top of /game (z-50 backdrop) so combat / dialogue stay
- * mounted underneath. Mirrors the CodexModal pattern.
+ *  • Modal shell follows the UI-1 genre card system + three overlay
+ *    divs (matches CodexModal).
+ *  • Screen title "Chronicle" — Cormorant Garamond italic 18px,
+ *    var(--genre-accent), centered.
+ *  • Quest cards: left border 2px (main quest var(--genre-accent),
+ *    side quest #6a5530 dim), ◈ prefix on main quest, status badges
+ *    with proper tints.
+ *  • Journal entries (BreadcrumbBlock / SideQuestBlock): 2px left
+ *    border rgba(196,148,58,.38), genre-specific label (Chronicle /
+ *    SYS_LOG / case notes / SHIP LOG / LOG), prose 12px #b0956a.
+ *  • Day headers grouped from QuestEntry.timestamp (calendar-day
+ *    ordinal), genre-specific format per spec.
  */
 
 type TabId = "main" | "side" | "completed" | "failed";
@@ -26,16 +37,16 @@ interface TabConfig {
 }
 
 const TABS: TabConfig[] = [
-  { id: "main",      label: "MAIN QUEST" },
-  { id: "side",      label: "SIDE QUESTS" },
-  { id: "completed", label: "COMPLETED" },
-  { id: "failed",    label: "FAILED" },
+  { id: "main",      label: "Main Quest" },
+  { id: "side",      label: "Side Quests" },
+  { id: "completed", label: "Completed" },
+  { id: "failed",    label: "Failed" },
 ];
 
 const ACT_LABEL: Record<QuestBreadcrumb["act"], string> = {
-  1:        "ACT 1",
-  2:        "ACT 2",
-  3:        "ACT 3",
+  1:        "ACT I",
+  2:        "ACT II",
+  3:        "ACT III",
   climax:   "CLIMAX",
 };
 
@@ -44,16 +55,91 @@ const STATUS_LABEL: Record<string, string> = {
   completed: "COMPLETED",
   failed:    "FAILED",
 };
-const STATUS_COLOR: Record<string, string> = {
-  active:    "var(--accent)",
-  completed: "var(--hl-pass)",
-  failed:    "var(--combat-enemy-crit, #c0392b)",
+
+// UI-7 (CHANGE 6) — status badge tints. ACTIVE picks up the genre
+// accent so the tint shifts with theme; COMPLETED + FAILED are
+// semantic (always green / red).
+const STATUS_FG: Record<string, string> = {
+  active:    "var(--genre-accent)",
+  completed: "#5a9a5a",
+  failed:    "#9a4040",
 };
+const STATUS_BG: Record<string, string> = {
+  active:    "rgba(var(--genre-accent-rgb), .12)",
+  completed: "rgba(90, 154, 90, .14)",
+  failed:    "rgba(154, 64, 64, .14)",
+};
+
+// UI-7 (CHANGE 7) — per-genre journal label.
+const GENRE_JOURNAL_LABEL: Record<Genre, string> = {
+  [Genre.FANTASY]:             "Chronicle",
+  [Genre.CYBERPUNK]:           "SYS_LOG",
+  [Genre.HORROR_LOVECRAFTIAN]: "case notes",
+  [Genre.SPACE_OPERA]:         "SHIP LOG",
+  [Genre.POST_APOCALYPTIC]:    "LOG",
+};
+
+// Ordinal word for the Fantasy day header ("Day the Third"). Falls
+// back to a numeric form past 12 to keep the spec language while not
+// overcommitting to a long ordinal table.
+const ORDINAL_WORD: Record<number, string> = {
+  1: "First", 2: "Second", 3: "Third", 4: "Fourth", 5: "Fifth",
+  6: "Sixth", 7: "Seventh", 8: "Eighth", 9: "Ninth", 10: "Tenth",
+  11: "Eleventh", 12: "Twelfth",
+};
+
+function formatDayHeader(genre: Genre, day: number): string {
+  switch (genre) {
+    case Genre.FANTASY:
+      return `— Day the ${ORDINAL_WORD[day] ?? day} —`;
+    case Genre.CYBERPUNK:
+      return `// DAY_${String(day).padStart(2, "0")} ///`;
+    case Genre.HORROR_LOVECRAFTIAN:
+      return `${ORDINAL_WORD[day]?.toLowerCase() ?? day} night`;
+    case Genre.SPACE_OPERA:
+      return `◈ CYCLE ${day}`;
+    case Genre.POST_APOCALYPTIC:
+      return `DAY ${day} //`;
+    default:
+      return `Day ${day}`;
+  }
+}
+
+/** Group QuestEntries by calendar day. Day 1 = the earliest entry's
+ *  date; subsequent calendar days increment the ordinal. Returns an
+ *  ordered array of { day, entries } so callers can render day
+ *  headers between groups. */
+function groupEntriesByDay(entries: QuestEntry[]): Array<{ day: number; entries: QuestEntry[] }> {
+  if (entries.length === 0) return [];
+  const sorted = [...entries].sort((a, b) => a.timestamp - b.timestamp);
+  const baseDate = new Date(sorted[0].timestamp);
+  const baseDayKey = baseDate.toISOString().slice(0, 10);
+  const dayKeyToOrdinal = new Map<string, number>();
+  dayKeyToOrdinal.set(baseDayKey, 1);
+  let nextOrdinal = 2;
+  const buckets = new Map<number, QuestEntry[]>();
+  for (const e of sorted) {
+    const k = new Date(e.timestamp).toISOString().slice(0, 10);
+    let ord = dayKeyToOrdinal.get(k);
+    if (ord === undefined) {
+      ord = nextOrdinal++;
+      dayKeyToOrdinal.set(k, ord);
+    }
+    if (!buckets.has(ord)) buckets.set(ord, []);
+    buckets.get(ord)!.push(e);
+  }
+  // Array.from instead of spread — project tsconfig doesn't enable
+  // downlevelIteration so iterator spread on Map.entries() won't compile.
+  return Array.from(buckets.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([day, list]) => ({ day, entries: list }));
+}
 
 export function JournalModal() {
   const open    = useGameStore((s) => s.journalModalOpen);
   const setOpen = useGameStore((s) => s.setJournalModalOpen);
   const qt      = useGameStore((s) => s.masterState?.quest_threads ?? null);
+  const genre   = useGameStore((s) => s.masterState?.metadata.genre) ?? Genre.FANTASY;
   const [tab, setTab] = useState<TabId>("main");
 
   useEffect(() => {
@@ -71,70 +157,92 @@ export function JournalModal() {
   const sideQuests   = qt?.side_quests ?? [];
   const completedIds = qt?.completed_quest_ids ?? [];
   const failedIds    = qt?.failed_quest_ids ?? [];
+  const journalLabel = GENRE_JOURNAL_LABEL[genre];
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/70"
+      className="fixed inset-0 z-50 flex items-start justify-center"
+      style={{ background: "rgba(0,0,0,0.82)" }}
       onClick={() => setOpen(false)}
       role="dialog"
-      aria-label="Journal"
+      aria-label="Chronicle"
       aria-modal="true"
     >
       <div
-        className="flex w-full max-w-5xl flex-col font-mono shadow-2xl"
+        className="flex flex-col"
         style={{
-          backgroundColor: "var(--color-bg)",
-          color:           "var(--color-text)",
-          border:          "1px solid color-mix(in srgb, var(--color-primary) 35%, transparent)",
-          margin:          "2vh auto",
-          maxHeight:       "96vh",
+          position:     "relative",
+          width:        "min(580px, 96vw)",
+          maxHeight:    "88vh",
+          margin:       "4vh auto",
+          background:   "var(--content-bg)",
+          border:       "1px solid var(--card-border)",
+          borderRadius: "var(--card-radius)",
+          boxShadow:    "var(--card-shadow)",
+          overflow:     "hidden",
+          color:        "var(--ink-2)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <header
-          className="flex items-center justify-between px-6 py-4"
-          style={{ borderBottom: "1px solid var(--color-border)" }}
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-xl">📖</span>
-            <h1
-              className="text-lg font-bold tracking-wide"
-              style={{ color: "var(--color-primary)" }}
-            >
-              Journal
-            </h1>
-          </div>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="text-xl font-mono"
-            style={{ color: "var(--color-muted)" }}
-            aria-label="Close journal"
-          >
-            ✕
-          </button>
-        </header>
+        {/* UI-1 overlay trio. */}
+        <div className="ol-tex"  aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }} />
+        <div className="ol-scan" aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }} />
+        <div className="ol-grid" aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }} />
 
         <div
-          className="flex min-h-0 flex-1 flex-col sm:flex-row"
-          style={{ borderTop: "0" }}
+          className="relative flex min-h-0 flex-1 flex-col"
+          style={{ zIndex: 10 }}
         >
-          {/* Tabs — vertical list on desktop, horizontal scroll on mobile */}
-          <nav
-            className="flex shrink-0 flex-row gap-1 px-2 py-3 sm:flex-col sm:gap-2 sm:px-3 sm:py-4"
+          {/* CHANGE 5 — Screen title "Chronicle", centered serif accent. */}
+          <header
+            className="flex shrink-0 items-center justify-between"
             style={{
-              borderRight: "1px solid var(--color-border)",
-              minWidth:    180,
-              overflowX:   "auto",
+              padding:      "12px 16px 6px",
+              position:     "relative",
             }}
+          >
+            <span style={{ width: 24 }} aria-hidden />
+            <h1
+              className="ew-serif italic"
+              style={{
+                fontSize:   18,
+                color:      "var(--genre-accent)",
+                margin:     0,
+                lineHeight: 1.2,
+                textAlign:  "center",
+                flex:       1,
+              }}
+            >
+              Chronicle
+            </h1>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label="Close chronicle"
+              style={{
+                width:           24,
+                height:          24,
+                border:          "1px solid #2d2618",
+                background:      "transparent",
+                color:           "#6a5530",
+                cursor:          "pointer",
+                display:         "inline-flex",
+                alignItems:      "center",
+                justifyContent:  "center",
+              }}
+            >
+              ✕
+            </button>
+          </header>
+
+          {/* Tabs — Inter Tight 8px uppercase, active accent underline. */}
+          <nav
+            className="flex shrink-0 flex-wrap gap-0 px-4 pb-1"
+            style={{ borderBottom: "1px solid #2d2618" }}
             aria-label="Journal tabs"
           >
             {TABS.map((t) => {
               const isActive = tab === t.id;
-              // V8.66 — SIDE QUESTS badge counts only DISCOVERED quests
-              // (rule 116). Undiscovered quests exist in state from the
-              // moment their region is applied but aren't visible until
-              // the player meets the giver.
               const badge =
                 t.id === "side"      ? sideQuests.filter((q) => q.discovered === true).length :
                 t.id === "completed" ? completedIds.length :
@@ -145,27 +253,28 @@ export function JournalModal() {
                   key={t.id}
                   type="button"
                   onClick={() => setTab(t.id)}
-                  className="flex items-center justify-between gap-2 rounded-sm px-3 py-2 text-left transition-colors"
+                  className="ew-sans uppercase"
                   style={{
-                    background:    isActive ? "color-mix(in srgb, var(--accent) 12%, transparent)" : "transparent",
-                    border:        `1px solid ${isActive ? "var(--accent)" : "var(--line-2)"}`,
-                    color:         isActive ? "var(--accent)" : "var(--ink-2)",
-                    fontFamily:    "var(--mono)",
-                    fontSize:      11,
-                    letterSpacing: "0.16em",
+                    background:    "transparent",
+                    color:         isActive ? "#e2cda0" : "#4a3818",
+                    border:        "none",
+                    borderBottom:  isActive
+                      ? "2px solid var(--genre-accent)"
+                      : "2px solid transparent",
+                    padding:       "6px 10px",
+                    fontSize:      8,
+                    letterSpacing: "0.14em",
+                    cursor:        "pointer",
+                    transition:    "color 120ms",
                   }}
                 >
-                  <span>{t.label}</span>
+                  {t.label}
                   {badge > 0 && (
                     <span
-                      style={{
-                        fontSize:        9,
-                        padding:         "1px 6px",
-                        border:          "1px solid var(--line-2)",
-                        color:           "var(--ink-3)",
-                      }}
+                      className="ml-1"
+                      style={{ color: isActive ? "#a08870" : "#4a3818", fontSize: 7 }}
                     >
-                      {badge}
+                      · {badge}
                     </span>
                   )}
                 </button>
@@ -174,13 +283,13 @@ export function JournalModal() {
           </nav>
 
           <div
-            className="flex-1 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6"
+            className="flex-1 overflow-y-auto px-5 py-5"
             style={{ minHeight: 0 }}
           >
-            {tab === "main"      && <MainQuestTab mainQuest={mainQuest} />}
-            {tab === "side"      && <SideQuestsTab sideQuests={sideQuests} />}
+            {tab === "main"      && <MainQuestTab mainQuest={mainQuest} genre={genre} journalLabel={journalLabel} />}
+            {tab === "side"      && <SideQuestsTab sideQuests={sideQuests} genre={genre} journalLabel={journalLabel} />}
             {tab === "completed" && <CompletedTab ids={completedIds} />}
-            {tab === "failed"    && <FailedTab ids={failedIds} />}
+            {tab === "failed"    && <FailedTab    ids={failedIds} />}
           </div>
         </div>
       </div>
@@ -190,10 +299,16 @@ export function JournalModal() {
 
 // ── Main Quest tab ───────────────────────────────────────────────────────────
 
-function MainQuestTab({ mainQuest }: { mainQuest: MainQuest | null }) {
+function MainQuestTab({
+  mainQuest, genre, journalLabel,
+}: {
+  mainQuest:    MainQuest | null;
+  genre:        Genre;
+  journalLabel: string;
+}) {
   if (!mainQuest) {
     return (
-      <p className="ew-serif italic" style={{ color: "var(--color-muted)", fontSize: 13 }}>
+      <p className="ew-serif italic" style={{ color: "#6a5530", fontSize: 13 }}>
         No quest recorded yet.
       </p>
     );
@@ -202,7 +317,6 @@ function MainQuestTab({ mainQuest }: { mainQuest: MainQuest | null }) {
   const discovered = (mainQuest.breadcrumbs ?? []).filter((b) => b.discovered);
   const journalEntries = mainQuest.journal_entries ?? [];
 
-  // Group breadcrumbs by act for the section headers.
   const orderedActs: Array<QuestBreadcrumb["act"]> = [1, 2, 3, "climax"];
   const grouped: Record<string, QuestBreadcrumb[]> = {};
   for (const b of discovered) {
@@ -212,30 +326,39 @@ function MainQuestTab({ mainQuest }: { mainQuest: MainQuest | null }) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <header className="flex flex-col gap-2">
+    <div className="flex flex-col gap-5">
+      {/* Quest header card — main quest = ◈ prefix + var(--genre-accent)
+          left border per CHANGE 6. */}
+      <header
+        className="flex flex-col"
+        style={{
+          gap:          6,
+          borderLeft:   "2px solid var(--genre-accent)",
+          paddingLeft:  10,
+        }}
+      >
         <h2
-          className="ew-serif"
+          className="ew-serif italic"
           style={{
-            fontSize:   22,
-            color:      "var(--color-primary)",
-            fontWeight: 700,
-            lineHeight: 1.2,
+            fontSize:   13,
+            color:      "#e2cda0",
+            margin:     0,
+            lineHeight: 1.3,
           }}
         >
+          <span aria-hidden style={{ color: "var(--genre-accent)", marginRight: 6 }}>◈</span>
           {mainQuest.title}
         </h2>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <span
-            className="inline-flex items-center"
+            className="ew-sans uppercase"
             style={{
               padding:       "2px 8px",
-              border:        `1px solid ${STATUS_COLOR[mainQuest.status] ?? "var(--ink-3)"}`,
-              color:         STATUS_COLOR[mainQuest.status] ?? "var(--ink-3)",
-              fontFamily:    "var(--mono)",
-              fontSize:      10,
-              letterSpacing: "0.2em",
+              borderRadius:  20,
+              background:    STATUS_BG[mainQuest.status] ?? "transparent",
+              color:         STATUS_FG[mainQuest.status] ?? "#6a5530",
+              fontSize:      7,
+              letterSpacing: "0.14em",
             }}
           >
             {STATUS_LABEL[mainQuest.status] ?? mainQuest.status.toUpperCase()}
@@ -244,44 +367,43 @@ function MainQuestTab({ mainQuest }: { mainQuest: MainQuest | null }) {
         <p
           className="ew-serif italic"
           style={{
-            fontSize:   13,
-            color:      "var(--ink-2)",
+            fontSize:   11,
+            color:      "#9a7e52",
             lineHeight: 1.6,
-            marginTop:  6,
+            margin:     "2px 0 0",
           }}
         >
           {mainQuest.threat_description}
         </p>
       </header>
 
-      {/* Discoveries */}
       {discovered.length === 0 ? (
         <p
           className="ew-serif italic"
           style={{
-            color:      "var(--color-muted)",
-            fontSize:   13,
-            lineHeight: 1.6,
-            borderLeft: "1px solid var(--line-2)",
-            paddingLeft: 12,
+            color:        "#6a5530",
+            fontSize:     12,
+            lineHeight:   1.6,
+            borderLeft:   "1px solid #2d2618",
+            paddingLeft:  10,
           }}
         >
           Your journey has only just begun. There is more to uncover.
         </p>
       ) : (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-5">
           {orderedActs.map((act) => {
             const bcs = grouped[String(act)] ?? [];
             if (bcs.length === 0) return null;
             return (
               <section key={String(act)} className="flex flex-col gap-3">
                 <div
-                  className="ew-mono"
+                  className="ew-sans uppercase"
                   style={{
-                    fontSize:      10,
-                    letterSpacing: "0.32em",
-                    color:         "var(--accent)",
-                    borderBottom:  "1px solid var(--line-2)",
+                    fontSize:      7,
+                    letterSpacing: "0.20em",
+                    color:         "#4a3818",
+                    borderBottom:  "1px solid #2d2618",
                     paddingBottom: 4,
                   }}
                 >
@@ -292,6 +414,8 @@ function MainQuestTab({ mainQuest }: { mainQuest: MainQuest | null }) {
                     key={b.id}
                     breadcrumb={b}
                     entries={journalEntries.filter((e) => e.quest_id === b.id)}
+                    genre={genre}
+                    journalLabel={journalLabel}
                   />
                 ))}
               </section>
@@ -304,40 +428,97 @@ function MainQuestTab({ mainQuest }: { mainQuest: MainQuest | null }) {
 }
 
 function BreadcrumbBlock({
-  breadcrumb,
-  entries,
+  breadcrumb, entries, genre, journalLabel,
 }: {
-  breadcrumb: QuestBreadcrumb;
-  entries:    QuestEntry[];
+  breadcrumb:   QuestBreadcrumb;
+  entries:      QuestEntry[];
+  genre:        Genre;
+  journalLabel: string;
 }) {
+  // UI-7 (CHANGE 6) — current-objective line ("→ {breadcrumb content}")
+  // in genre accent for emphasis. Renders before the journal feed for
+  // this breadcrumb.
   return (
     <div className="flex flex-col gap-2">
       <p
-        className="ew-serif italic"
+        className="ew-sans uppercase"
         style={{
-          fontSize:   14,
-          color:      "var(--ink-1)",
-          lineHeight: 1.6,
+          fontSize:      8,
+          letterSpacing: "0.14em",
+          color:         "var(--genre-accent)",
+          margin:        0,
         }}
       >
-        ✦ {breadcrumb.content}
+        →&nbsp;{breadcrumb.content}
       </p>
-      {entries.map((e) => (
-        <p
-          key={e.id}
-          className="ew-serif"
-          style={{
-            fontSize:   13,
-            color:      "var(--ink-2)",
-            lineHeight: 1.65,
-            marginLeft: 12,
-            paddingLeft: 12,
-            borderLeft: "1px solid var(--line-2)",
-            fontStyle:  "italic",
-          }}
-        >
-          {e.text}
-        </p>
+      {entries.length > 0 && (
+        <JournalFeed entries={entries} genre={genre} journalLabel={journalLabel} />
+      )}
+    </div>
+  );
+}
+
+/** UI-7 (CHANGE 7) — auto-log entries grouped by calendar day with
+ *  genre-specific day headers + label. */
+function JournalFeed({
+  entries, genre, journalLabel,
+}: {
+  entries:      QuestEntry[];
+  genre:        Genre;
+  journalLabel: string;
+}) {
+  const grouped = groupEntriesByDay(entries);
+  return (
+    <div className="flex flex-col gap-3">
+      {grouped.map(({ day, entries: dayEntries }) => (
+        <div key={day} className="flex flex-col gap-2">
+          <div
+            className="ew-sans uppercase"
+            style={{
+              fontSize:      8,
+              letterSpacing: "0.16em",
+              color:         "#4a3818",
+              textAlign:     "center",
+              padding:       "2px 0",
+            }}
+          >
+            {formatDayHeader(genre, day)}
+          </div>
+          {dayEntries.map((e) => (
+            <div
+              key={e.id}
+              style={{
+                borderLeft:  "2px solid rgba(196,148,58,.38)",
+                paddingLeft: 12,
+                paddingTop:  2,
+                paddingBottom: 2,
+              }}
+            >
+              <p
+                className="ew-sans uppercase"
+                style={{
+                  fontSize:      7,
+                  letterSpacing: "0.16em",
+                  color:         "#4a3818",
+                  margin:        "0 0 2px",
+                }}
+              >
+                {journalLabel}
+              </p>
+              <p
+                className="ew-serif italic"
+                style={{
+                  fontSize:   12,
+                  color:      "#b0956a",
+                  lineHeight: 1.7,
+                  margin:     0,
+                }}
+              >
+                {e.text}
+              </p>
+            </div>
+          ))}
+        </div>
       ))}
     </div>
   );
@@ -345,49 +526,50 @@ function BreadcrumbBlock({
 
 // ── Side Quests tab ──────────────────────────────────────────────────────────
 
-/**
- * V8.66 (Day 23D) — Side quests group by status (active → completed →
- * failed) and hide undiscovered quests entirely. A quest exists in
- * quest_threads.side_quests the moment its region is applied, but the
- * player doesn't see it until they speak to the giver — that matches
- * the spec's "discovered organically" principle (rule 116).
- */
 const STATUS_ORDER: Array<{ status: SideQuest["status"]; heading: string }> = [
   { status: "active",    heading: "ACTIVE"    },
   { status: "completed", heading: "COMPLETED" },
   { status: "failed",    heading: "FAILED"    },
 ];
 
-function SideQuestsTab({ sideQuests }: { sideQuests: SideQuest[] }) {
+function SideQuestsTab({
+  sideQuests, genre, journalLabel,
+}: {
+  sideQuests:   SideQuest[];
+  genre:        Genre;
+  journalLabel: string;
+}) {
   const visible = sideQuests.filter((q) => q.discovered === true);
   if (visible.length === 0) {
     return (
-      <p className="ew-serif italic" style={{ color: "var(--color-muted)", fontSize: 13 }}>
+      <p className="ew-serif italic" style={{ color: "#6a5530", fontSize: 13 }}>
         No side quests recorded yet.
       </p>
     );
   }
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       {STATUS_ORDER.map(({ status, heading }) => {
         const group = visible.filter((q) => q.status === status);
         if (group.length === 0) return null;
         return (
           <section key={status} className="flex flex-col gap-3">
             <div
-              className="ew-mono"
+              className="ew-sans uppercase"
               style={{
-                fontSize:      10,
-                letterSpacing: "0.32em",
-                color:         STATUS_COLOR[status] ?? "var(--accent)",
-                borderBottom:  "1px solid var(--line-2)",
+                fontSize:      7,
+                letterSpacing: "0.20em",
+                color:         STATUS_FG[status] ?? "#4a3818",
+                borderBottom:  "1px solid #2d2618",
                 paddingBottom: 4,
               }}
             >
               {heading}
             </div>
             <ul className="flex flex-col gap-3">
-              {group.map((q) => <SideQuestBlock key={q.id} quest={q} />)}
+              {group.map((q) => (
+                <SideQuestBlock key={q.id} quest={q} genre={genre} journalLabel={journalLabel} />
+              ))}
             </ul>
           </section>
         );
@@ -396,76 +578,76 @@ function SideQuestsTab({ sideQuests }: { sideQuests: SideQuest[] }) {
   );
 }
 
-function SideQuestBlock({ quest }: { quest: SideQuest }) {
+function SideQuestBlock({
+  quest, genre, journalLabel,
+}: {
+  quest:        SideQuest;
+  genre:        Genre;
+  journalLabel: string;
+}) {
   const [expanded, setExpanded] = useState(false);
   const hasEntries = quest.entries.length > 0;
   return (
     <li
-      className="flex flex-col gap-2 rounded-sm p-3"
-      style={{ border: "1px solid var(--line-2)" }}
+      className="flex flex-col gap-2"
+      style={{
+        borderLeft:   "2px solid #6a5530",
+        paddingLeft:  10,
+      }}
     >
       <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <span
-          className="ew-serif"
-          style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-1)" }}
+          className="ew-serif italic"
+          style={{ fontSize: 13, color: "#e2cda0", lineHeight: 1.3, flex: 1, minWidth: 0 }}
         >
           {quest.title}
         </span>
-        <div className="flex items-center gap-2">
-          {quest.region_id && (
-            <span
-              style={{
-                fontSize:      9,
-                padding:       "1px 6px",
-                border:        "1px solid var(--line-2)",
-                color:         "var(--ink-3)",
-                fontFamily:    "var(--mono)",
-                letterSpacing: "0.18em",
-              }}
-              title={`Region: ${quest.region_id}`}
-            >
-              {quest.region_id.toUpperCase()}
-            </span>
-          )}
-          <span
-            style={{
-              fontSize:      9,
-              padding:       "1px 6px",
-              border:        `1px solid ${STATUS_COLOR[quest.status] ?? "var(--ink-3)"}`,
-              color:         STATUS_COLOR[quest.status] ?? "var(--ink-3)",
-              fontFamily:    "var(--mono)",
-              letterSpacing: "0.2em",
-            }}
-          >
-            {STATUS_LABEL[quest.status] ?? quest.status.toUpperCase()}
-          </span>
-        </div>
+        <span
+          className="ew-sans uppercase"
+          style={{
+            fontSize:      7,
+            letterSpacing: "0.14em",
+            padding:       "2px 8px",
+            borderRadius:  20,
+            background:    STATUS_BG[quest.status] ?? "transparent",
+            color:         STATUS_FG[quest.status] ?? "#6a5530",
+          }}
+        >
+          {STATUS_LABEL[quest.status] ?? quest.status.toUpperCase()}
+        </span>
       </header>
-      {quest.giver_name && (
+      {(quest.giver_name || quest.region_id) && (
         <p
-          className="ew-serif italic"
-          style={{ fontSize: 11, color: "var(--ink-4)" }}
+          className="ew-sans uppercase"
+          style={{
+            fontSize:      7,
+            letterSpacing: "0.12em",
+            color:         "#4a3818",
+            margin:        0,
+          }}
         >
           {quest.giver_name}
+          {quest.giver_name && quest.region_id && " · "}
+          {quest.region_id?.replace(/_/g, " ")}
         </p>
       )}
       <p
-        className="ew-serif italic"
-        style={{ fontSize: 13, color: "var(--ink-2)", lineHeight: 1.55 }}
+        className="ew-sans uppercase"
+        style={{
+          fontSize:      8,
+          letterSpacing: "0.14em",
+          color:         "var(--genre-accent)",
+          margin:        0,
+        }}
       >
-        {quest.current_objective}
+        →&nbsp;{quest.current_objective}
       </p>
       {quest.reward_hint && (
         <p
-          className="ew-serif"
-          style={{
-            fontSize:   11,
-            color:      "var(--ink-3)",
-            fontStyle:  "italic",
-            opacity:    0.85,
-          }}
+          className="ew-serif italic"
+          style={{ fontSize: 11, color: "#9a7e52", lineHeight: 1.6, margin: 0 }}
         >
-          Reward: {quest.reward_hint}
+          Reward · {quest.reward_hint}
         </p>
       )}
       {hasEntries && (
@@ -473,34 +655,21 @@ function SideQuestBlock({ quest }: { quest: SideQuest }) {
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="self-start"
+            className="ew-sans uppercase self-start"
             style={{
-              fontSize:      10,
-              letterSpacing: "0.18em",
-              color:         "var(--ink-3)",
-              fontFamily:    "var(--mono)",
+              fontSize:      7,
+              letterSpacing: "0.16em",
+              color:         "#6a5530",
+              background:    "transparent",
+              border:        "none",
+              padding:       0,
+              cursor:        "pointer",
             }}
           >
-            {expanded ? "▾ HIDE ENTRIES" : `▸ ${quest.entries.length} ENTR${quest.entries.length === 1 ? "Y" : "IES"}`}
+            {expanded ? "▾ Hide entries" : `▸ ${quest.entries.length} entr${quest.entries.length === 1 ? "y" : "ies"}`}
           </button>
           {expanded && (
-            <div className="flex flex-col gap-1.5">
-              {quest.entries.map((e) => (
-                <p
-                  key={e.id}
-                  className="ew-serif italic"
-                  style={{
-                    fontSize:    12,
-                    color:       "var(--ink-2)",
-                    lineHeight:  1.55,
-                    paddingLeft: 12,
-                    borderLeft:  "1px solid var(--line-2)",
-                  }}
-                >
-                  {e.text}
-                </p>
-              ))}
-            </div>
+            <JournalFeed entries={quest.entries} genre={genre} journalLabel={journalLabel} />
           )}
         </div>
       )}
@@ -513,7 +682,7 @@ function SideQuestBlock({ quest }: { quest: SideQuest }) {
 function CompletedTab({ ids }: { ids: string[] }) {
   if (ids.length === 0) {
     return (
-      <p className="ew-serif italic" style={{ color: "var(--color-muted)", fontSize: 13 }}>
+      <p className="ew-serif italic" style={{ color: "#6a5530", fontSize: 13 }}>
         No quests completed yet.
       </p>
     );
@@ -521,20 +690,30 @@ function CompletedTab({ ids }: { ids: string[] }) {
   return (
     <ul className="flex flex-col gap-2">
       {ids.map((id) => (
-        <li key={id} className="ew-mono" style={{ fontSize: 12, color: "var(--ink-2)" }}>
-          {id}
+        <li
+          key={id}
+          className="ew-sans uppercase"
+          style={{
+            fontSize:      8,
+            letterSpacing: "0.10em",
+            color:         "#9a7e52",
+            borderLeft:    "2px solid #5a9a5a",
+            paddingLeft:   10,
+          }}
+        >
+          {id.replace(/_/g, " ")}
         </li>
       ))}
     </ul>
   );
 }
 
-// ── Failed tab ──────────────────────────────────────────────────────────────
+// ── Failed tab ───────────────────────────────────────────────────────────────
 
 function FailedTab({ ids }: { ids: string[] }) {
   if (ids.length === 0) {
     return (
-      <p className="ew-serif italic" style={{ color: "var(--color-muted)", fontSize: 13 }}>
+      <p className="ew-serif italic" style={{ color: "#6a5530", fontSize: 13 }}>
         No quests failed yet.
       </p>
     );
@@ -542,8 +721,18 @@ function FailedTab({ ids }: { ids: string[] }) {
   return (
     <ul className="flex flex-col gap-2">
       {ids.map((id) => (
-        <li key={id} className="ew-mono" style={{ fontSize: 12, color: "var(--ink-2)" }}>
-          {id}
+        <li
+          key={id}
+          className="ew-sans uppercase"
+          style={{
+            fontSize:      8,
+            letterSpacing: "0.10em",
+            color:         "#9a7e52",
+            borderLeft:    "2px solid #9a4040",
+            paddingLeft:   10,
+          }}
+        >
+          {id.replace(/_/g, " ")}
         </li>
       ))}
     </ul>

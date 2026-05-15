@@ -28,13 +28,26 @@ interface TabConfig {
 }
 
 const TABS: TabConfig[] = [
-  { id: "LOCATION",  label: "Locations",  icon: "🏛" },
-  { id: "CHARACTER", label: "Characters", icon: "👤" },
+  { id: "LOCATION",  label: "Places",     icon: "🏛" },
+  { id: "CHARACTER", label: "People",     icon: "👤" },
   { id: "FACTION",   label: "Factions",   icon: "🏴" },
   { id: "ITEM",      label: "Items",      icon: "💠" },
   { id: "LORE",      label: "Lore",       icon: "📜" },
   { id: "BESTIARY",  label: "Bestiary",   icon: "⚔" },
 ];
+
+// UI-7 — per-category left-border colour (Section 11). The spec's
+// 5-tab vocabulary (All · People · Places · Lore · Events) maps onto
+// the existing 6-category CodexEntry data as follows; FACTION + ITEM
+// fall through to the closest semantic neighbour.
+const ENTRY_TYPE_COLOR: Record<TabId, string> = {
+  LOCATION:  "#7a9ab8", // muted blue — Places
+  CHARACTER: "#c4943a", // amber       — People
+  LORE:      "#a888c8", // purple      — Lore
+  FACTION:   "#a888c8", // purple      — lore-adjacent
+  ITEM:      "#c8885a", // warm orange — Events-adjacent (artifacts)
+  BESTIARY:  "#c8885a", // warm orange — Events-adjacent (encounters)
+};
 
 interface Props {
   /** Called when the user picks a codex entry and clicks the X to close
@@ -135,35 +148,41 @@ export function CodexContent({ onCharacterNameLoaded }: Props) {
 
   return (
     <>
-      {/* Tabs */}
+      {/* UI-7 — Tabs: Inter Tight 8px uppercase. Active = genre accent
+          underline + #e2cda0 text; inactive = #4a3818. */}
       <nav
-        className="flex flex-wrap gap-1 px-6 py-3"
-        style={{ borderBottom: "1px solid var(--color-border)" }}
+        className="flex flex-wrap gap-1 px-4 py-2"
+        style={{ borderBottom: "1px solid #2d2618" }}
       >
         {TABS.map((tab) => {
-          const count = entries.filter((e) => e.category === tab.id).length;
+          const count  = entries.filter((e) => e.category === tab.id).length;
           const active = tab.id === activeTab;
           return (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className="rounded-sm px-3 py-1.5 text-xs tracking-wider uppercase transition-colors"
+              className="ew-sans uppercase"
               style={{
-                backgroundColor: active ? "var(--color-primary)" : "transparent",
-                color:           active ? "#000"                  : "var(--color-text)",
-                border:          active
-                  ? "1px solid var(--color-primary)"
-                  : "1px solid color-mix(in srgb, var(--color-primary) 25%, transparent)",
+                background:    "transparent",
+                color:         active ? "#e2cda0" : "#4a3818",
+                border:        "none",
+                borderBottom:  active
+                  ? "2px solid var(--genre-accent)"
+                  : "2px solid transparent",
+                padding:       "6px 10px",
+                fontSize:      8,
+                letterSpacing: "0.14em",
+                cursor:        "pointer",
+                transition:    "color 120ms",
               }}
             >
-              <span className="mr-1.5">{tab.icon}</span>
               {tab.label}
               {count > 0 && (
                 <span
-                  className="ml-2 text-[10px] opacity-80"
-                  style={{ color: active ? "#000" : "var(--color-muted)" }}
+                  className="ml-1"
+                  style={{ color: active ? "#a08870" : "#4a3818", fontSize: 7 }}
                 >
-                  ({count})
+                  · {count}
                 </span>
               )}
             </button>
@@ -171,87 +190,103 @@ export function CodexContent({ onCharacterNameLoaded }: Props) {
         })}
       </nav>
 
-      {/* Body */}
-      <main className="flex-1 overflow-y-auto px-6 py-6">
+      {/* Body — single-column stack of entry cards. Each card carries
+          a 2px left border in the type colour per Section 11. */}
+      <main className="flex-1 overflow-y-auto px-4 py-4">
         {loading ? (
-          <p className="text-sm" style={{ color: "var(--color-muted)" }}>
+          <p
+            className="ew-serif italic"
+            style={{ color: "#6a5530", fontSize: 13 }}
+          >
             Loading codex…
           </p>
         ) : tabEntries.length === 0 ? (
           <p
-            className="mx-auto max-w-md text-center text-sm italic"
-            style={{ color: "var(--color-muted)" }}
+            className="ew-serif italic mx-auto max-w-md text-center"
+            style={{ color: "#6a5530", fontSize: 13 }}
           >
             Nothing discovered yet in this category.
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="flex flex-col gap-2">
             {tabEntries.map((entry) => {
-              const isMajor = entry.significance === "MAJOR";
-              const tab = TABS.find((t) => t.id === activeTab);
-
-              // Day 19E: NPCs have real names from generation, so the
-              // "Identity Unknown" badge is no longer shown. The lookup
-              // remains for forward-compat hooks but identityUnknown is
-              // pinned to false.
-              const identityUnknown = false;
+              // UI-7 (CHANGE 4) — ◈ Notable mark when significance is
+              // MAJOR (explicitly set by codex write logic; AI-flagged
+              // quest_relevance="key" NPCs etc.). Never automatic.
+              const isMajor   = entry.significance === "MAJOR";
+              const leftColor = ENTRY_TYPE_COLOR[entry.category];
 
               return (
                 <button
                   key={entry.id}
                   onClick={() => setSelected(entry)}
-                  className="group flex flex-col gap-2 rounded-sm p-4 text-left transition-colors"
+                  className="group flex flex-col text-left transition-colors"
                   style={{
-                    backgroundColor: "color-mix(in srgb, var(--color-primary) 6%, transparent)",
-                    border:          "1px solid color-mix(in srgb, var(--color-primary) 25%, transparent)",
+                    background:   "var(--card-bg)",
+                    border:       "1px solid var(--card-border)",
+                    borderLeft:   `2px solid ${leftColor}`,
+                    borderRadius: "var(--card-radius)",
+                    boxShadow:    "var(--card-shadow)",
+                    padding:      "8px 10px",
+                    gap:          4,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background =
+                      "color-mix(in srgb, var(--card-bg) 92%, rgba(var(--genre-accent-rgb), .04))";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "var(--card-bg)";
                   }}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">{tab?.icon}</span>
-                      <span
-                        className="text-sm font-bold"
-                        style={{ color: "var(--color-primary)" }}
-                      >
-                        {entry.name}{identityUnknown ? " ?" : ""}
-                      </span>
-                    </div>
-                    {identityUnknown ? (
-                      <span
-                        className="rounded-sm px-1.5 py-0.5 text-[9px] tracking-wider uppercase"
-                        style={{
-                          backgroundColor: "color-mix(in srgb, var(--color-muted) 15%, transparent)",
-                          color:           "var(--color-muted)",
-                        }}
-                      >
-                        Identity Unknown
-                      </span>
-                    ) : (
-                      <span
-                        className="rounded-sm px-1.5 py-0.5 text-[9px] tracking-wider uppercase"
-                        style={{
-                          backgroundColor: isMajor
-                            ? "color-mix(in srgb, #f59e0b 20%, transparent)"
-                            : "color-mix(in srgb, var(--color-muted) 15%, transparent)",
-                          color: isMajor ? "#fbbf24" : "var(--color-muted)",
-                        }}
-                      >
-                        {entry.significance}
-                      </span>
-                    )}
-                  </div>
-                  <p
-                    className="line-clamp-3 text-xs leading-relaxed"
-                    style={{ color: "var(--color-text)" }}
-                  >
-                    {entry.description}
-                  </p>
-                  {entry.first_seen_location && (
-                    <p
-                      className="text-[10px] italic"
-                      style={{ color: "var(--color-muted)" }}
+                  <div className="flex items-baseline gap-2">
+                    <span
+                      className="ew-serif italic truncate"
+                      style={{
+                        fontSize:   13,
+                        color:      "#d4bc88",
+                        lineHeight: 1.3,
+                        flex:       1,
+                        minWidth:   0,
+                      }}
                     >
-                      First seen: {entry.first_seen_location.replace(/_/g, " ")}
+                      {isMajor && (
+                        <span
+                          aria-hidden
+                          style={{
+                            color:       "var(--genre-accent)",
+                            marginRight: 4,
+                          }}
+                        >
+                          ◈
+                        </span>
+                      )}
+                      {entry.name}
+                    </span>
+                  </div>
+                  <span
+                    className="ew-sans uppercase truncate"
+                    style={{
+                      fontSize:      8,
+                      letterSpacing: "0.10em",
+                      color:         "#6a5530",
+                    }}
+                  >
+                    {entry.category}
+                    {entry.first_seen_location && (
+                      <> · {entry.first_seen_location.replace(/_/g, " ")}</>
+                    )}
+                  </span>
+                  {entry.description && (
+                    <p
+                      className="ew-serif italic line-clamp-2"
+                      style={{
+                        fontSize:   11,
+                        color:      "#9a7e52",
+                        lineHeight: 1.6,
+                        margin:     "2px 0 0",
+                      }}
+                    >
+                      {entry.description}
                     </p>
                   )}
                 </button>
@@ -261,62 +296,81 @@ export function CodexContent({ onCharacterNameLoaded }: Props) {
         )}
       </main>
 
-      {/* Detail modal */}
+      {/* Detail modal — UI-7: same shell tokens as the codex frame
+          itself (var(--content-bg) + var(--card-border) +
+          var(--card-radius)) so it reads as a nested surface, not a
+          foreign panel. */}
       {selected && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.82)" }}
           onClick={() => setSelected(null)}
         >
           <div
-            className="w-full max-w-lg rounded-sm p-6"
+            className="w-full max-w-lg p-6"
             style={{
-              backgroundColor: "var(--color-bg)",
-              border:          "1px solid var(--color-primary)",
+              background:   "var(--content-bg)",
+              border:       "1px solid var(--card-border)",
+              borderLeft:   `2px solid ${ENTRY_TYPE_COLOR[selected.category]}`,
+              borderRadius: "var(--card-radius)",
+              boxShadow:    "var(--card-shadow)",
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal header — Day 19E: identityUnknown is always false now
-                that NPCs have real names from generation. */}
-            {(() => {
-              const modalIdentityUnknown = false;
-              return (
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div>
-                    <p
-                      className="text-[10px] tracking-wider uppercase"
-                      style={{ color: "var(--color-muted)" }}
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p
+                  className="ew-sans uppercase"
+                  style={{
+                    fontSize:      8,
+                    letterSpacing: "0.14em",
+                    color:         "#6a5530",
+                    margin:        0,
+                  }}
+                >
+                  {selected.category}
+                </p>
+                <h2
+                  className="ew-serif italic"
+                  style={{
+                    fontSize:   18,
+                    color:      "#e2cda0",
+                    margin:     "2px 0 0",
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {selected.significance === "MAJOR" && (
+                    <span
+                      aria-hidden
+                      style={{
+                        color:       "var(--genre-accent)",
+                        marginRight: 6,
+                      }}
                     >
-                      {selected.category}
-                    </p>
-                    <h2
-                      className="text-xl font-bold"
-                      style={{ color: "var(--color-primary)" }}
-                    >
-                      {selected.name}{modalIdentityUnknown ? " ?" : ""}
-                    </h2>
-                    {modalIdentityUnknown && (
-                      <span
-                        className="mt-1 inline-block rounded-sm px-2 py-0.5 text-[9px] tracking-wider uppercase"
-                        style={{
-                          backgroundColor: "color-mix(in srgb, var(--color-muted) 15%, transparent)",
-                          color:           "var(--color-muted)",
-                        }}
-                      >
-                        Identity Unknown
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setSelected(null)}
-                    className="text-lg"
-                    style={{ color: "var(--color-muted)" }}
-                    aria-label="Close"
-                  >
-                    ✕
-                  </button>
-                </div>
-              );
-            })()}
+                      ◈
+                    </span>
+                  )}
+                  {selected.name}
+                </h2>
+              </div>
+              <button
+                onClick={() => setSelected(null)}
+                aria-label="Close"
+                style={{
+                  width:           24,
+                  height:          24,
+                  border:          "1px solid #2d2618",
+                  background:      "transparent",
+                  color:           "#6a5530",
+                  cursor:          "pointer",
+                  display:         "inline-flex",
+                  alignItems:      "center",
+                  justifyContent:  "center",
+                }}
+              >
+                ✕
+              </button>
+            </div>
 
             {/* SVG scene art — LOCATION entries only */}
             {selected.category === "LOCATION" && (() => {
@@ -338,15 +392,28 @@ export function CodexContent({ onCharacterNameLoaded }: Props) {
               ) : null;
             })()}
 
-            <p className="text-sm leading-relaxed" style={{ color: "var(--color-text)" }}>
+            <p
+              className="ew-serif italic"
+              style={{
+                fontSize:   12,
+                color:      "#9a7e52",
+                lineHeight: 1.7,
+                margin:     0,
+              }}
+            >
               {selected.description}
             </p>
             {selected.first_seen_location && (
               <p
-                className="mt-4 text-[11px] italic"
-                style={{ color: "var(--color-muted)" }}
+                className="ew-sans uppercase"
+                style={{
+                  marginTop:     12,
+                  fontSize:      8,
+                  letterSpacing: "0.10em",
+                  color:         "#6a5530",
+                }}
               >
-                First seen at {selected.first_seen_location.replace(/_/g, " ")}
+                First seen · {selected.first_seen_location.replace(/_/g, " ")}
               </p>
             )}
           </div>

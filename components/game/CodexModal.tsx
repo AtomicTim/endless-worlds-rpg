@@ -5,32 +5,26 @@ import { useGameStore } from "@/lib/stores/game-store";
 import { CodexContent } from "./CodexContent";
 
 /**
- * Day 20.4.2 TASK 4 — Codex modal overlay.
+ * UI-7 — Codex modal shell.
  *
- * Renders as a full-screen overlay on top of /game without changing
- * the route, so CombatMode stays mounted (and the active encounter
- * stays in store) while the player consults the codex. Before 20.4.2
- * the codex button navigated to /game/codex via Link, which unmounted
- * the game page and dropped any in-flight combat state.
+ * Section 11 of /docs/ui-design-reference.md. Pure visual redesign
+ * over the prior shell (Day 20.4.2 TASK 4) — no data, no logic, no
+ * tab structure change. Genre card system from UI-1 drives the
+ * surface (var(--content-bg) / var(--card-border) /
+ * var(--card-radius)) with the standard three overlay divs.
  *
- * The /game/codex route still exists for direct URL linking — see
- * app/game/codex/page.tsx. Both paths render the same CodexContent
- * body; only the surrounding chrome differs.
- *
- * Closes on: backdrop click, X button click, Escape key. State lives
- * in the game store (codexModalOpen) so any chrome button can toggle
- * it.
+ * Renders on top of /game without changing the route, so CombatMode
+ * stays mounted (and the active encounter stays in store) while the
+ * player consults the codex. Closes on backdrop click, X button, or
+ * Escape. The inner entry-detail overlay (CodexContent) owns its own
+ * ESC handler; opening an entry + pressing ESC closes the entry
+ * first, then the codex shell on the next press.
  */
 export function CodexModal() {
   const open  = useGameStore((s) => s.codexModalOpen);
   const close = useGameStore((s) => s.setCodexModalOpen);
   const [characterName, setCharacterName] = useState<string>("");
 
-  // ESC closes the modal. The inner entry-detail modal owns its own
-  // ESC handler — that fires first because its listener is added
-  // LATER (the entry detail mounts after the codex shell), so opening
-  // an entry and pressing ESC closes the entry first, then the whole
-  // codex on the next press. Good UX.
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
@@ -44,58 +38,84 @@ export function CodexModal() {
 
   return (
     <div
-      // z-50 below the entry-detail modal (z-60 in CodexContent) so the
-      // detail view sits ABOVE this shell when both are open.
-      className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/70"
+      // UI-7 — backdrop rgba(0,0,0,.82). z-50 sits below the inner
+      // entry-detail modal (z-60 in CodexContent).
+      className="fixed inset-0 z-50 flex items-start justify-center"
+      style={{ background: "rgba(0,0,0,0.82)" }}
       onClick={() => close(false)}
       role="dialog"
       aria-label="Codex"
       aria-modal="true"
     >
       <div
-        className="flex w-full max-w-5xl flex-col font-mono shadow-2xl"
+        className="flex flex-col"
         style={{
-          backgroundColor: "var(--color-bg)",
-          color:           "var(--color-text)",
-          border:          "1px solid color-mix(in srgb, var(--color-primary) 35%, transparent)",
-          margin:          "2vh auto",
-          maxHeight:       "96vh",
+          position:     "relative",
+          width:        "min(580px, 96vw)",
+          maxHeight:    "88vh",
+          margin:       "4vh auto",
+          background:   "var(--content-bg)",
+          border:       "1px solid var(--card-border)",
+          borderRadius: "var(--card-radius)",
+          boxShadow:    "var(--card-shadow)",
+          overflow:     "hidden",
+          color:        "var(--ink-2)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Modal header — same layout as the /game/codex route page,
-            but the back link is replaced by a close X. */}
-        <header
-          className="flex items-center justify-between px-6 py-4"
-          style={{ borderBottom: "1px solid var(--color-border)" }}
+        {/* UI-1 overlay trio — inert on genres that don't opt in. */}
+        <div className="ol-tex"  aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }} />
+        <div className="ol-scan" aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }} />
+        <div className="ol-grid" aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }} />
+
+        {/* Content sits above the overlays. Min-height: 0 so the
+            inner scroll body actually scrolls. */}
+        <div
+          className="relative flex min-h-0 flex-1 flex-col"
+          style={{ zIndex: 10 }}
         >
-          <div className="flex items-center gap-3">
-            <span className="text-xl">📖</span>
-            <h1
-              className="text-lg font-bold tracking-wide"
-              style={{ color: "var(--color-primary)" }}
-            >
-              Codex {characterName ? `— ${characterName}'s World` : ""}
-            </h1>
-          </div>
-          <button
-            type="button"
-            onClick={() => close(false)}
-            className="text-xl font-mono"
+          {/* Header — UI-7 typography pass: serif italic title, neutral
+              border, single close ✕. */}
+          <header
+            className="flex shrink-0 items-center justify-between"
             style={{
-              color:           "var(--color-muted)",
-              minHeight:       44,
-              minWidth:        44,
-              display:         "flex",
-              alignItems:      "center",
-              justifyContent:  "center",
+              padding:      "12px 16px",
+              borderBottom: "1px solid #2d2618",
             }}
-            aria-label="Close codex"
           >
-            ✕
-          </button>
-        </header>
-        <CodexContent onCharacterNameLoaded={setCharacterName} />
+            <h1
+              className="ew-serif italic"
+              style={{
+                fontSize:   18,
+                color:      "var(--genre-accent)",
+                margin:     0,
+                lineHeight: 1.2,
+              }}
+            >
+              Codex{characterName ? ` — ${characterName}` : ""}
+            </h1>
+            <button
+              type="button"
+              onClick={() => close(false)}
+              aria-label="Close codex"
+              style={{
+                width:           24,
+                height:          24,
+                border:          "1px solid #2d2618",
+                background:      "transparent",
+                color:           "#6a5530",
+                cursor:          "pointer",
+                display:         "inline-flex",
+                alignItems:      "center",
+                justifyContent:  "center",
+              }}
+            >
+              ✕
+            </button>
+          </header>
+
+          <CodexContent onCharacterNameLoaded={setCharacterName} />
+        </div>
       </div>
     </div>
   );

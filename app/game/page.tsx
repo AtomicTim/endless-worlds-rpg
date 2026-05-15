@@ -518,6 +518,10 @@ export default function GamePage() {
                 worldGraph={masterState?.world_graph}
                 onNavigate={(nodeId) => navigateTo(nodeId)}
                 genre={genre}
+                // UI-5 — action-bar loading dims every card to opacity
+                // 0.4 + pointer-events: none. Mirrors the existing
+                // StoryFeed isLoading wiring above.
+                isLoading={isProcessing && !!processingStep}
                 // Day 23A pt 2 — dungeon callbacks. NavigationBar
                 // branches to room-card mode when masterState
                 // .dungeon_state is set.

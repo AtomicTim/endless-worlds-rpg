@@ -9,7 +9,6 @@ import {
   type Card,
   type CardDirection,
   type CardKind,
-  type CardTier,
 } from "@/lib/game/nav-cards";
 import {
   buildRoomCards,
@@ -76,6 +75,11 @@ interface Props {
   keyItemForRoom?:  (roomId: string) => Item | null;
   /** STR threshold value, surfaced in the popover label. */
   strBypassThreshold?: number;
+  /** UI-5 — action bar is processing. Every card dims to opacity 0.4
+   *  + pointer-events: none + cursor: default while true. Mirrors
+   *  the existing generatingRegionId dim path but covers normal
+   *  action latency (LLM call in flight, etc.) too. */
+  isLoading?:          boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -96,6 +100,7 @@ export function NavigationBar({
   canForceUnlock = false,
   keyItemForRoom,
   strBypassThreshold = 6,
+  isLoading = false,
 }: Props) {
   // Adjacent region travel — outline id currently being expanded into
   // a full RegionBible. Set when the player clicks a ◇ peer-unknown
@@ -167,13 +172,9 @@ export function NavigationBar({
 
   // Column order — back first, then deeper / peer / undiscovered.
   // Empty columns are skipped entirely (no whitespace, no label).
+  // UI-5: per-column labels removed (single "Where to go." header
+  // above replaces them); grouping logic stays.
   const colOrder: CardDirection[] = ["back", "deeper", "peer", "undiscovered"];
-  const colLabels: Record<CardDirection, string> = {
-    back:         "back",
-    deeper:       "deeper",
-    peer:         "peer",
-    undiscovered: "undiscovered",
-  };
 
   return (
     <div
@@ -250,7 +251,26 @@ export function NavigationBar({
       )}
 
       {/* Standard graph-node nav (region / settlement / sub-location).
-          Mutually exclusive with the dungeon branch above. */}
+          Mutually exclusive with the dungeon branch above.
+          UI-5 — Section header "Where to go." rendered once above all
+          columns (replaces per-group italic labels). Internal grouping
+          (BACK / DEEPER / PEER / UNDISCOVERED) is unchanged and no
+          longer surfaced as visible text. */}
+      {!inDungeon && (
+      <div style={{ padding: "8px 16px 0" }}>
+        <div
+          className="ew-sans uppercase"
+          style={{
+            fontSize:      7,
+            letterSpacing: "0.14em",
+            color:         "#4a3818",
+            marginBottom:  6,
+          }}
+        >
+          Where to go.
+        </div>
+      </div>
+      )}
       {!inDungeon && (
       <div
         className="ew-nav-cols"
@@ -258,7 +278,7 @@ export function NavigationBar({
           display:        "flex",
           flexDirection:  "row",
           gap:            8,
-          padding:        "10px 16px 12px",
+          padding:        "0 16px 12px",
           overflowX:      "auto",
           overflowY:      "visible",
         }}
@@ -270,6 +290,9 @@ export function NavigationBar({
           // rightward into new mini-columns. justifyContent: flex-end on
           // each mini-column ensures a lone card in a partial column sits
           // at the bottom (row 2), not the top.
+          // UI-5 — group container is borderless / paddingless now; the
+          // single section header above replaces the per-group label and
+          // visual divider.
           const miniCols = chunkArray(colCards, 2);
           return (
             <div
@@ -279,24 +302,8 @@ export function NavigationBar({
                 display:        "flex",
                 flexDirection:  "column",
                 gap:            4,
-                padding:        "8px",
-                border:         "1px solid var(--line-2)",
-                borderRadius:   4,
               }}
             >
-              <span
-                style={{
-                  fontFamily:    "var(--serif)",
-                  fontStyle:     "italic",
-                  fontSize:      10,
-                  color:         "var(--ink-4)",
-                  opacity:       0.7,
-                  letterSpacing: "0.04em",
-                  marginBottom:  2,
-                }}
-              >
-                {colLabels[dir]}
-              </span>
               {/* Mini-column grid — flex row of fixed-width columns. */}
               <div style={{ display: "flex", flexDirection: "row", gap: 4 }}>
                 {miniCols.map((chunk, colIdx) => (
@@ -316,6 +323,8 @@ export function NavigationBar({
                         card={c}
                         onClick={() => onNavigate(c.targetId)}
                         generatingRegionId={generatingRegionId}
+                        isLoading={isLoading}
+                        isHere={worldGraph?.current_node_id === c.targetId}
                         fullWidth
                       />
                     ))}
@@ -643,20 +652,17 @@ const ARROW: Record<CardKind, string> = {
   "peer-unknown": "◇",
 };
 
-/** Polish 4a TASK 2 — map destination tier to its CSS color token.
- *  Border + leading arrow + title pick up this color so the player
- *  can scan tier at a glance. Background stays neutral. */
-const TIER_COLOR: Record<CardTier, string> = {
-  region:         "var(--hl-region)",
-  settlement:     "var(--hl-loc)",
-  "sub-location": "var(--hl-sublocation)",
-  dungeon:        "var(--hl-dungeon)",
-};
+// Polish 4a TASK 2's per-tier --hl-* border colour map was retired
+// in UI-5. The new left-border palette (burnt copper / sky blue /
+// burnt orange / dashed dim) lives inline in NavCard, keyed by
+// card.kind + card.tier directly.
 
 function NavCard({
   card,
   onClick,
   generatingRegionId,
+  isLoading = false,
+  isHere = false,
   fullWidth = false,
 }: {
   card: Card;
@@ -664,75 +670,68 @@ function NavCard({
   /** When non-null, RegionBible expansion is in flight. Every card
    *  disables; the targeted ◇ swaps its badge to "GENERATING...". */
   generatingRegionId: string | null;
+  /** UI-5 — action bar processing. Cards dim to opacity 0.4 +
+   *  pointer-events: none + cursor: default. */
+  isLoading?: boolean;
+  /** UI-5 — destination IS the player's current location (rare;
+   *  defensive). Shows HERE chip + suppresses VISITED. */
+  isHere?: boolean;
   /** Column layout mode — card fills the column width instead of using
    *  fixed min/maxWidth. Set by the column container. */
   fullWidth?: boolean;
 }) {
   const isBack       = card.kind === "back";
   const isExit       = card.kind === "exit";
-  const isDeeper     = card.kind === "deeper";
-  const isPeerKnown  = card.kind === "peer-known";
   const isUnknown    = card.kind === "peer-unknown";
-  const isNew        = !card.discovered && !isUnknown && !isBack;
+  const isSettlement = card.tier === "settlement";
+  const isDungeon    = card.tier === "dungeon";
   const arrow        = ARROW[card.kind];
 
   const isGenerating       = generatingRegionId !== null;
   const isGeneratingTarget = isUnknown && generatingRegionId === card.targetId;
+  const isDimmed           = isLoading || (isGenerating && !isGeneratingTarget);
 
-  // Polish 4a TASK 2 — tier color drives border, arrow, and title.
-  const tierColor = TIER_COLOR[card.tier];
+  // UI-5 — destination-type-driven LEFT border colour. Order of
+  // precedence: UNDISCOVERED dashed dim → BACK / EXIT burnt copper →
+  // settlement sky blue → dungeon burnt orange → else --card-border.
+  const leftBorderColor =
+    isUnknown    ? "#3a3020"        // very dim, dashed
+    : isBack || isExit ? "#b45309"   // burnt copper
+    : isSettlement ? "#7dd3fc"       // sky blue
+    : isDungeon    ? "#c2410c"       // burnt orange
+    :                "var(--card-border)";
 
-  const arrowColor =
-    isBack ? "var(--ink-3)"
-    : isUnknown ? "var(--ink-4)"
-    : tierColor;
-  const nameColor =
-    isBack    ? "var(--ink-3)"
-    : isUnknown ? "var(--ink-3)"
-    : isNew   ? "var(--ink-3)"
-    : tierColor;
-  const subColor =
-    isPeerKnown ? tierColor
-    : isUnknown  ? tierColor
-    : "var(--ink-4)";
+  // [[hover-state]] CSS-inline pattern — onMouseEnter / Leave swap a
+  // tinted inset boxShadow over the base var(--card-shadow). Subtle
+  // brighten that respects the genre accent.
+  const baseShadow  = "var(--card-shadow)";
+  const hoverShadow = "var(--card-shadow), inset 0 0 0 999px rgba(var(--genre-accent-rgb), .04)";
 
-  // Backgrounds — TYPE B (deeper) is transparent so settlement
-  // sub-loc cards read flatter; TYPE D1 keeps the elevated --bg-2 fill;
-  // TYPE D2 (undiscovered) is transparent.
-  const background =
-    isExit       ? "var(--bg-3)"
-    : isDeeper   ? "transparent"
-    : isUnknown  ? "transparent"
-    : "var(--bg-2)";
+  // Show VISITED when the player has been here (card.discovered true,
+  // skipped on UNDISCOVERED + BACK + the current node). HERE wins.
+  const showVisited = !isUnknown && !isHere && card.discovered === true && !isBack;
 
-  // Border — colored by destination tier. Undiscovered uses a softer
-  // dashed variant. Back uses the neutral --line so it doesn't read
-  // as a destination color cue.
-  const borderColor =
-    isBack       ? "var(--line)"
-    : isUnknown  ? `color-mix(in srgb, ${tierColor} 35%, transparent)`
-    : isNew      ? `color-mix(in srgb, ${tierColor} 50%, transparent)`
-    : tierColor;
-  const borderStyle = isUnknown || isNew ? "dashed" : "solid";
-
-  // Category / undiscovered badge under the primary name — diamond cards
-  // (◆ / ◇) carry an explicit badge so the player can tell a region
-  // dungeon apart from a settlement → DEEPER card at a glance.
-  // While the player's clicked ◇ is being expanded, swap that card's
-  // badge to "GENERATING..." so the wait reads as in-progress work.
-  const showBadge = isPeerKnown || isUnknown;
-  const badgeText = isGeneratingTarget
+  // GENERATING... badge takes precedence over the type sublabel on
+  // the in-flight ◇ card so the player sees the wait state.
+  const typeLabel = isGeneratingTarget
     ? "GENERATING..."
     : isUnknown
       ? "UNDISCOVERED"
-      : card.sublabel;
+      : (card.sublabel ?? "");
 
   return (
     <button
       onClick={onClick}
       title={card.name}
-      disabled={isGenerating}
+      disabled={isGenerating || isLoading}
       aria-busy={isGeneratingTarget}
+      onMouseEnter={(e) => {
+        if (isDimmed) return;
+        (e.currentTarget as HTMLButtonElement).style.boxShadow = hoverShadow;
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.boxShadow = baseShadow;
+      }}
       style={{
         display:        "flex",
         alignItems:     "center",
@@ -742,27 +741,38 @@ function NavCard({
           ? { width: "100%" }
           : { minWidth: 140, maxWidth: 200, flexShrink: 0 }
         ),
-        height:         64,
-        padding:        "0 14px",
-        background,
-        border:         `1px ${borderStyle} ${borderColor}`,
-        borderRadius:   4,
+        minHeight:      64,
+        padding:        "10px 12px",
+        // UI-5 — genre card treatment (CHANGE 3): per-genre tokens from
+        // UI-1 drive background / radius / shadow. Border-left is
+        // overridden by the destination-type colour from CHANGE 2.
+        background:     "var(--card-bg)",
+        border:         `1px ${isUnknown ? "dashed" : "solid"} var(--card-border)`,
+        borderLeft:     `2px ${isUnknown ? "dashed" : "solid"} ${leftBorderColor}`,
+        borderRadius:   "var(--card-radius)",
+        boxShadow:      baseShadow,
         color:          "var(--ink-2)",
-        fontFamily:     "var(--mono)",
-        cursor:         isGenerating ? "wait" : "pointer",
         textAlign:      "left",
         whiteSpace:     "nowrap",
-        transition:     "all 120ms",
-        opacity:        isGenerating && !isGeneratingTarget ? 0.45 : 1,
+        transition:     "box-shadow 140ms, opacity 140ms",
+        // CHANGE 4 — loading dim. UNDISCOVERED also drops to 0.5 per
+        // CHANGE 2 (the dimmed.4 loading state stacks naturally).
+        opacity:        isDimmed ? 0.4 : isUnknown ? 0.5 : 1,
+        pointerEvents:  isDimmed ? "none" : "auto",
+        cursor:         isDimmed ? "default" : isGenerating ? "wait" : "pointer",
       }}
     >
       <span
+        aria-hidden
         style={{
           fontFamily:    "var(--mono)",
-          fontSize:      16,
-          color:         arrowColor,
+          fontSize:      14,
+          // Arrow leans on the destination colour for at-a-glance
+          // scanning; back arrows stay on the burnt-copper border tone.
+          color:         isUnknown ? "#3a3020" : leftBorderColor,
           flexShrink:    0,
           fontWeight:    600,
+          opacity:       isBack || isExit ? 0.9 : 1,
         }}
       >
         {arrow}
@@ -771,7 +781,7 @@ function NavCard({
         style={{
           display:        "flex",
           flexDirection:  "column",
-          gap:            2,
+          gap:            3,
           minWidth:       0,
           flex:           1,
         }}
@@ -780,60 +790,79 @@ function NavCard({
           style={{
             display:       "flex",
             alignItems:    "center",
-            gap:           4,
+            gap:           6,
             overflow:      "hidden",
           }}
         >
           <span
+            // UI-5 — location name: Cormorant Garamond italic, 13px,
+            // #d4bc88.
+            className="ew-serif italic"
             style={{
-              fontFamily:    "var(--mono)",
-              fontSize:      9,
-              letterSpacing: "0.18em",
-              fontWeight:    600,
-              color:         nameColor,
+              fontSize:      13,
+              color:         "#d4bc88",
               overflow:      "hidden",
               textOverflow:  "ellipsis",
               whiteSpace:    "nowrap",
               minWidth:      0,
+              flex:          1,
             }}
           >
             {card.name}
           </span>
-          {isNew && (
-            <span style={{
-              fontSize:      7,
-              fontFamily:    "var(--mono)",
-              letterSpacing: "0.2em",
-              color:         tierColor,
-              border:        `1px solid ${tierColor}`,
-              padding:       "1px 4px",
-              flexShrink:    0,
-            }}>
-              NEW
+          {isHere && (
+            <span
+              className="ew-sans uppercase"
+              style={{
+                fontSize:      6,
+                fontWeight:    600,
+                letterSpacing: "0.12em",
+                color:         "var(--genre-accent)",
+                background:    "rgba(var(--genre-accent-rgb), .14)",
+                border:        "1px solid color-mix(in srgb, var(--genre-accent) 35%, transparent)",
+                borderRadius:  20,
+                padding:       "1px 6px",
+                flexShrink:    0,
+              }}
+            >
+              Here
+            </span>
+          )}
+          {showVisited && (
+            <span
+              className="ew-sans uppercase"
+              style={{
+                fontSize:      6,
+                letterSpacing: "0.12em",
+                color:         "#4a3818",
+                border:        "1px solid #2d2618",
+                borderRadius:  20,
+                padding:       "1px 6px",
+                flexShrink:    0,
+              }}
+            >
+              Visited
             </span>
           )}
         </span>
-        <span
-          style={{
-            fontFamily:    "var(--mono)",
-            fontSize:      showBadge ? 7 : 8,
-            letterSpacing: "0.2em",
-            color:         subColor,
-            overflow:      "hidden",
-            textOverflow:  "ellipsis",
-            whiteSpace:    "nowrap",
-            ...(showBadge ? {
-              alignSelf:    "flex-start",
-              border:       `1px solid ${isUnknown
-                ? `color-mix(in srgb, ${tierColor} 35%, transparent)`
-                : `color-mix(in srgb, ${tierColor} 60%, transparent)`}`,
-              padding:      "1px 5px",
-              marginTop:    2,
-            } : {}),
-          }}
-        >
-          {showBadge ? badgeText : card.sublabel}
-        </span>
+        {typeLabel && (
+          <span
+            // UI-5 — type badge: Inter Tight 7px uppercase 0.12em
+            // #6a5530. GENERATING... and UNDISCOVERED slot in here.
+            className="ew-sans uppercase"
+            style={{
+              fontFamily:    "var(--sans)",
+              fontSize:      7,
+              letterSpacing: "0.12em",
+              color:         "#6a5530",
+              overflow:      "hidden",
+              textOverflow:  "ellipsis",
+              whiteSpace:    "nowrap",
+            }}
+          >
+            {typeLabel}
+          </span>
+        )}
       </span>
     </button>
   );

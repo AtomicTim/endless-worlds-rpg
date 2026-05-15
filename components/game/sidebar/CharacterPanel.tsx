@@ -2,6 +2,14 @@
 
 import React, { useState } from "react";
 import { User } from "lucide-react";
+import type { Icon as TablerIcon } from "@tabler/icons-react";
+import {
+  IconCoins,
+  IconCpu,
+  IconBackpack,
+  IconCoin,
+  IconTool,
+} from "@tabler/icons-react";
 import { Genre, ItemType, ItemRarity } from "@/types/game";
 import type { Attributes, Item } from "@/types/game";
 import { useGameStore, makeMessage } from "@/lib/stores/game-store";
@@ -80,15 +88,16 @@ const STAT_NAMES: Record<keyof Attributes, string> = {
   charisma:     "Charisma",
 };
 
-/** Currency glyph fallback per genre. Design ref §13 calls for Tabler icons
- *  (ti-coins, ti-cpu, ti-backpack, ti-coin, ti-tool); without Tabler we
- *  fall back to unicode equivalents. */
-const CURRENCY_GLYPH: Record<Genre, string> = {
-  [Genre.FANTASY]:             "◈",
-  [Genre.CYBERPUNK]:           "▣",
-  [Genre.HORROR_LOVECRAFTIAN]: "◊",
-  [Genre.SPACE_OPERA]:         "◉",
-  [Genre.POST_APOCALYPTIC]:    "✦",
+/** Currency Tabler icon per genre. Per design ref §13:
+ *  Fantasy ti-coins · Cyberpunk ti-cpu · Horror ti-backpack ·
+ *  Space ti-coin · Post-Apoc ti-tool. UI-12 installed @tabler/icons-react
+ *  and resolved the UI-9 fallback gap. */
+const CURRENCY_ICON: Record<Genre, TablerIcon> = {
+  [Genre.FANTASY]:             IconCoins,
+  [Genre.CYBERPUNK]:           IconCpu,
+  [Genre.HORROR_LOVECRAFTIAN]: IconBackpack,
+  [Genre.SPACE_OPERA]:         IconCoin,
+  [Genre.POST_APOCALYPTIC]:    IconTool,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -525,11 +534,15 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
             <span
               aria-hidden
               style={{
-                color:    "var(--genre-accent)",
-                fontSize: 14,
+                color:           "var(--genre-accent)",
+                display:         "inline-flex",
+                alignItems:      "center",
               }}
             >
-              {CURRENCY_GLYPH[genre] ?? "◈"}
+              {(() => {
+                const Icon = CURRENCY_ICON[genre] ?? IconCoins;
+                return <Icon size={14} stroke={1.75} />;
+              })()}
             </span>
             <span
               style={{

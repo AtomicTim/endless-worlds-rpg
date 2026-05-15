@@ -2,6 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { Icon as TablerIcon } from "@tabler/icons-react";
+import {
+  IconShield, IconEyeOff, IconWand, IconCrosshair, IconMessage,
+  IconCpu, IconBriefcase, IconSword, IconHammer, IconGhost,
+  IconSearch, IconMoon, IconHeart, IconMask, IconEye,
+  IconBadge, IconRocket, IconTool, IconAnchor, IconRadar,
+  IconAxe, IconFirstAidKit, IconRun, IconSpeakerphone,
+} from "@tabler/icons-react";
 import { Genre } from "@/types/game";
 import type {
   AppearanceProfile,
@@ -15,6 +23,63 @@ import { BACKGROUND_CONFIGS } from "@/lib/game/starting-equipment";
 import { ARCHETYPE_MAP } from "@/lib/game/archetypes";
 import { pregenerateRegionalBible } from "@/lib/game/regional-bible-cache";
 import WorldForgingScreen from "@/components/WorldForgingScreen";
+
+// ─── UI-12 — Class icons + stat colour system ────────────────────────────────
+//
+// Tabler icon per class (design ref §9). The spec calls for ti-ship on
+// Marine; @tabler/icons-react v3 doesn't export IconShip, so Marine uses
+// IconAnchor as the nearest naval analogue. Scavenger shares IconSearch
+// with Investigator per the spec.
+const CLASS_ICON: Record<string, TablerIcon> = {
+  // Fantasy
+  knight:         IconShield,
+  rogue:          IconEyeOff,
+  mage:           IconWand,
+  ranger:         IconCrosshair,
+  herald:         IconMessage,
+  // Cyberpunk
+  netrunner:      IconCpu,
+  fixer:          IconBriefcase,
+  street_samurai: IconSword,
+  enforcer:       IconHammer,
+  ghost:          IconGhost,
+  // Horror
+  investigator:   IconSearch,
+  cultist:        IconMoon,
+  survivor:       IconHeart,
+  phantom:        IconMask,
+  medium:         IconEye,
+  // Space Opera
+  commander:      IconBadge,
+  pilot:          IconRocket,
+  engineer:       IconTool,
+  marine:         IconAnchor,
+  recon:          IconRadar,
+  // Post-Apoc
+  scavenger:      IconSearch,
+  raider:         IconAxe,
+  medic:          IconFirstAidKit,
+  runner:         IconRun,
+  demagogue:      IconSpeakerphone,
+};
+
+/** Semantic stat colour (NOT genre-specific — hardcoded per spec). */
+const STAT_COLOR: Record<string, string> = {
+  strength:     "#c87040",  // STR
+  agility:      "#60a850",  // AGI
+  intelligence: "#5880d0",  // INT
+  perception:   "#409888",  // PER
+  charisma:     "#9060d0",  // CHA
+};
+
+/** Short stat abbrev for the role-badge pill. */
+const STAT_SHORT: Record<string, string> = {
+  strength:     "STR",
+  agility:      "AGI",
+  intelligence: "INT",
+  perception:   "PER",
+  charisma:     "CHA",
+};
 
 // ─── Genre data ──────────────────────────────────────────────────────────────
 
@@ -139,39 +204,37 @@ function validateName(name: string): string {
   return "";
 }
 
-// ─── Step indicator ───────────────────────────────────────────────────────────
-
+// ─── Step indicator (UI-12 CHANGE 8 — dot-style only) ───────────────────────
+//
+// Filled = genre accent for completed steps. Active = larger accent dot.
+// Remaining = #2d2618 dim. No labels. World Forging is NOT a user step
+// (the dot total stays at 6 across species/class/origin/appearance/name/
+// motivation).
 function StepIndicator({ current, total }: { current: number; total: number }) {
   return (
-    <div className="flex items-center justify-center gap-3 mb-8">
+    <div className="flex items-center justify-center gap-2 mb-8" aria-label={`Step ${current} of ${total}`}>
       {Array.from({ length: total }, (_, i) => {
         const n = i + 1;
-        const done = n < current;
+        const done   = n < current;
         const active = n === current;
+        const filled = done || active;
+        const size   = active ? 9 : 6;
         return (
-          <div key={n} className="flex items-center gap-3">
-            <div
-              className="flex items-center justify-center w-8 h-8 rounded-full border text-xs font-bold font-mono transition-colors"
-              style={{
-                borderColor: active || done ? "var(--color-primary)" : "var(--color-muted)",
-                backgroundColor: done ? "var(--color-primary)" : "transparent",
-                color: done ? "var(--color-bg)" : active ? "var(--color-primary)" : "var(--color-muted)",
-              }}
-            >
-              {done ? "✓" : n}
-            </div>
-            {i < total - 1 && (
-              <div
-                className="w-8 h-px"
-                style={{ backgroundColor: done ? "var(--color-primary)" : "var(--color-muted)" }}
-              />
-            )}
-          </div>
+          <span
+            key={n}
+            aria-hidden
+            style={{
+              display:      "inline-block",
+              width:        size,
+              height:       size,
+              borderRadius: "50%",
+              background:   filled ? "var(--genre-accent)" : "#2d2618",
+              opacity:      done && !active ? 0.7 : 1,
+              transition:   "background 200ms ease, width 200ms ease, height 200ms ease",
+            }}
+          />
         );
       })}
-      <span className="ml-2 text-xs font-mono" style={{ color: "var(--color-muted)" }}>
-        Step {current} of {total}
-      </span>
     </div>
   );
 }
@@ -895,15 +958,19 @@ export default function NewGamePage() {
   const stepNum = STAGE_TO_STEP[stage];
   const showStepIndicator = typeof stepNum === "number";
 
-  // ── Card styling helper ────────────────────────────────────────────────────
+  // ── Card styling helper (UI-12 — genre token system) ──────────────────────
+  // Selected cards override border with var(--genre-accent) per spec.
+  // Hover brighten is handled inline by callers (transform scale already
+  // in place via Tailwind hover:scale on the buttons).
   function cardStyle(isSelected: boolean): React.CSSProperties {
     return {
-      borderColor: isSelected ? "var(--color-primary)" : "var(--color-border)",
-      backgroundColor: isSelected
-        ? "color-mix(in srgb, var(--color-primary) 8%, transparent)"
-        : "color-mix(in srgb, var(--color-border) 40%, transparent)",
-      boxShadow: isSelected
-        ? "0 0 12px color-mix(in srgb, var(--color-primary) 30%, transparent)"
+      background:   "var(--card-bg)",
+      border:       isSelected
+        ? "2px solid var(--genre-accent)"
+        : "1px solid var(--card-border)",
+      borderRadius: "var(--card-radius, 7px)",
+      boxShadow:    isSelected
+        ? "0 0 12px rgba(var(--genre-accent-rgb), 0.30)"
         : "none",
     };
   }
@@ -912,7 +979,11 @@ export default function NewGamePage() {
     <div
       className="min-h-screen font-mono"
       data-genre={dataAttr || undefined}
-      style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
+      style={{
+        // UI-12 CHANGE 2 — wizard shell uses #08060a (matches main menu).
+        backgroundColor: "#08060a",
+        color:           "var(--color-text)",
+      }}
     >
       {/* Header */}
       <header className="border-b px-6 py-4" style={{ borderColor: "var(--color-border)" }}>
@@ -945,29 +1016,67 @@ export default function NewGamePage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {GENRES.map((g) => {
                 const isSelected = selectedGenre === g.id;
+                // UI-12 CHANGE 3 — genre cards use the per-genre CSS
+                // variable sets (UI-1). data-genre on the card scopes the
+                // accent so each card paints its own colour pill +
+                // selected border, independent of the page-level genre.
                 return (
                   <button
                     key={g.id}
                     onClick={() => handleGenreSelect(g.id)}
-                    className="text-left p-4 rounded border transition-all duration-150 hover:scale-[1.02] active:scale-[0.99]"
+                    data-genre={g.dataAttr || "fantasy"}
+                    className="text-left p-4 transition-all duration-150 hover:scale-[1.02] active:scale-[0.99]"
                     style={cardStyle(isSelected)}
                   >
-                    <pre
-                      className="ascii-art mb-3 leading-tight"
+                    {/* Artwork placeholder — Section 9 calls for genre
+                        art here. ASCII placeholder retained as a low-
+                        intensity tracer until art lands. */}
+                    <div
                       style={{
-                        color: isSelected ? "var(--color-primary)" : "var(--color-muted)",
-                        fontSize: "0.6rem",
+                        height:     54,
+                        marginBottom: 10,
+                        display:    "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
                       }}
                     >
-                      {g.asciiArt}
-                    </pre>
-                    <div
-                      className="text-sm font-bold mb-1 tracking-wide"
-                      style={{ color: isSelected ? "var(--color-primary)" : "var(--color-text)" }}
+                      <pre
+                        className="ascii-art leading-tight"
+                        style={{
+                          color:    "rgba(var(--genre-accent-rgb), 0.35)",
+                          fontSize: "0.55rem",
+                          margin:   0,
+                        }}
+                      >
+                        {g.asciiArt}
+                      </pre>
+                    </div>
+                    {/* Genre accent pill */}
+                    <span
+                      className="ew-sans uppercase"
+                      style={{
+                        display:       "inline-block",
+                        fontSize:      8,
+                        letterSpacing: "0.20em",
+                        color:         "var(--genre-accent)",
+                        background:    "rgba(var(--genre-accent-rgb), 0.10)",
+                        border:        "1px solid rgba(var(--genre-accent-rgb), 0.32)",
+                        borderRadius:  20,
+                        padding:       "1px 8px",
+                        marginBottom:  8,
+                      }}
                     >
                       {g.name}
-                    </div>
-                    <div className="text-xs leading-relaxed" style={{ color: "var(--color-muted)" }}>
+                    </span>
+                    <div
+                      className="ew-serif"
+                      style={{
+                        fontStyle: "italic",
+                        fontSize:  11,
+                        lineHeight: 1.45,
+                        color:     "#9a7e52",
+                      }}
+                    >
                       {g.description}
                     </div>
                   </button>
@@ -1119,22 +1228,33 @@ export default function NewGamePage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
               {backgroundIds.map((bgId) => {
-                const isSelected = selectedBackground === bgId;
-                const arch       = ARCHETYPE_MAP[bgId];
-                const flavor     = CLASS_FLAVOR[bgId];
-                const primaryStat = arch ? STAT_LABEL[arch.primary] ?? arch.primary : "—";
-                const bonusLine  = arch ? `+2 ${primaryStat}` : "";
-                const description = flavor?.description
-                  ?? "A path with its own quiet weight.";
-                const itemHint    = flavor?.startingItem ?? "Class kit";
+                const isSelected   = selectedBackground === bgId;
+                const arch         = ARCHETYPE_MAP[bgId];
+                const flavor       = CLASS_FLAVOR[bgId];
+                const primaryKey   = arch?.primary as string | undefined;
+                const primaryShort = primaryKey ? STAT_SHORT[primaryKey] ?? primaryKey : "—";
+                const primaryLong  = primaryKey ? STAT_LABEL[primaryKey] ?? primaryKey : "—";
+                const statColor    = primaryKey ? STAT_COLOR[primaryKey] ?? "var(--genre-accent)" : "var(--genre-accent)";
+                const description  = flavor?.description ?? "A path with its own quiet weight.";
+                const itemHint     = flavor?.startingItem ?? "Class kit";
+                const Icon         = CLASS_ICON[bgId];
+                // UI-12 CHANGE 5 — selected cards use the STAT colour
+                // (not the genre accent) as the 2px border so the
+                // class identity reads at a glance.
+                const cardSx: React.CSSProperties = {
+                  background:   "var(--card-bg)",
+                  border:       isSelected
+                    ? `2px solid ${statColor}`
+                    : "1px solid var(--card-border)",
+                  borderRadius: "var(--card-radius, 7px)",
+                  boxShadow:    isSelected
+                    ? `0 0 12px color-mix(in srgb, ${statColor} 30%, transparent)`
+                    : "none",
+                };
                 return (
                   <button
                     key={bgId}
                     onClick={() => {
-                      // Reset origin + appearance selections on class change.
-                      // Day 23.5B hotfix (FIX 3B) — class also invalidates
-                      // the per-gender appearance cache (descriptors are
-                      // class-specific).
                       if (selectedBackground !== bgId) {
                         setOriginOptions([]);
                         setSelectedOrigin(null);
@@ -1144,26 +1264,97 @@ export default function NewGamePage() {
                       }
                       setSelectedBackground(bgId);
                     }}
-                    className="text-left p-5 rounded border transition-all duration-150 hover:scale-[1.02] active:scale-[0.99] flex flex-col"
-                    style={cardStyle(isSelected)}
+                    className="text-left p-5 transition-all duration-150 hover:scale-[1.02] active:scale-[0.99] flex flex-col"
+                    style={cardSx}
                   >
-                    <div
-                      className="text-base font-bold mb-2 tracking-wide"
-                      style={{ color: isSelected ? "var(--color-primary)" : "var(--color-text)" }}
-                    >
-                      {formatClassName(bgId)}
+                    {/* Icon + class name + role badge row */}
+                    <div className="flex items-start gap-3 mb-2">
+                      <span
+                        aria-hidden
+                        style={{
+                          color:       statColor,
+                          display:     "inline-flex",
+                          flexShrink:  0,
+                          marginTop:   2,
+                        }}
+                      >
+                        {Icon ? <Icon size={24} stroke={1.75} /> : null}
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          className="ew-serif"
+                          style={{
+                            fontStyle: "italic",
+                            fontSize:  14,
+                            color:     "#e2cda0",
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          {formatClassName(bgId)}
+                        </div>
+                        <span
+                          className="ew-sans uppercase"
+                          style={{
+                            display:       "inline-block",
+                            fontSize:      7,
+                            letterSpacing: "0.18em",
+                            color:         statColor,
+                            background:    `color-mix(in srgb, ${statColor} 14%, transparent)`,
+                            border:        `1px solid color-mix(in srgb, ${statColor} 36%, transparent)`,
+                            borderRadius:  20,
+                            padding:       "1px 6px",
+                            marginTop:     4,
+                            fontWeight:    600,
+                          }}
+                        >
+                          {primaryShort}
+                        </span>
+                      </div>
                     </div>
-                    <p className="text-xs leading-relaxed mb-4 flex-1" style={{ color: "var(--color-muted)" }}>
+
+                    <p
+                      className="ew-serif"
+                      style={{
+                        fontStyle: "italic",
+                        fontSize:  11,
+                        lineHeight: 1.4,
+                        color:     "#9a7e52",
+                        flex:      1,
+                        marginBottom: 12,
+                      }}
+                    >
                       {description}
                     </p>
-                    <div className="space-y-1 border-t pt-3 mt-auto"
-                      style={{ borderColor: "var(--color-border)" }}>
-                      <div className="text-xs font-bold" style={{ color: "var(--color-accent)" }}>
-                        {bonusLine}
-                      </div>
-                      <div className="text-xs" style={{ color: "var(--color-muted)" }}>
+
+                    {/* Bottom bar: primary stat label + starting item hint */}
+                    <div
+                      style={{
+                        borderTop:  `1px solid color-mix(in srgb, ${statColor} 20%, transparent)`,
+                        paddingTop: 8,
+                        display:    "flex",
+                        flexDirection: "column",
+                        gap:        2,
+                      }}
+                    >
+                      <span
+                        className="ew-sans uppercase"
+                        style={{
+                          fontSize:      7,
+                          letterSpacing: "0.20em",
+                          color:         "#6a5530",
+                        }}
+                      >
+                        Primary: {primaryLong}
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: "var(--mono)",
+                          fontSize:   10,
+                          color:      "#a08870",
+                        }}
+                      >
                         Starts with: {itemHint}
-                      </div>
+                      </span>
                     </div>
                   </button>
                 );
@@ -1397,17 +1588,25 @@ export default function NewGamePage() {
                   maxLength={24}
                   placeholder="Enter your name..."
                   autoFocus
-                  className="flex-1 px-4 py-3 rounded border bg-transparent text-base outline-none transition-colors"
+                  className="flex-1 px-4 py-3 outline-none transition-colors ew-serif"
                   style={{
-                    borderColor: nameError ? "#ef4444" : "var(--color-border)",
-                    color: "var(--color-text)",
-                    caretColor: "var(--color-primary)",
+                    // UI-12 CHANGE 7 — dark input bg, Cormorant Garamond
+                    // italic 15px, caret in the genre accent colour.
+                    background:   "#141210",
+                    border:       nameError
+                      ? "1px solid #c44040"
+                      : "1px solid var(--card-border)",
+                    borderRadius: 6,
+                    color:        "#e2cda0",
+                    caretColor:   "var(--genre-accent)",
+                    fontStyle:    "italic",
+                    fontSize:     15,
                   }}
                   onFocus={(e) => {
-                    e.currentTarget.style.borderColor = nameError ? "#ef4444" : "var(--color-primary)";
+                    e.currentTarget.style.borderColor = nameError ? "#c44040" : "var(--genre-accent)";
                   }}
                   onBlur={(e) => {
-                    e.currentTarget.style.borderColor = nameError ? "#ef4444" : "var(--color-border)";
+                    e.currentTarget.style.borderColor = nameError ? "#c44040" : "var(--card-border)";
                   }}
                 />
                 <button
@@ -1509,11 +1708,19 @@ export default function NewGamePage() {
                 rows={3}
                 maxLength={120}
                 placeholder="I came to this world to..."
-                className="w-full px-4 py-3 rounded border bg-transparent text-sm outline-none"
+                className="w-full px-4 py-3 outline-none ew-serif"
                 style={{
-                  borderColor: "var(--color-border)",
-                  color:       "var(--color-text)",
+                  // UI-12 CHANGE 7 — match the name input treatment.
+                  background:   "#141210",
+                  border:       "1px solid var(--card-border)",
+                  borderRadius: 6,
+                  color:        "#e2cda0",
+                  caretColor:   "var(--genre-accent)",
+                  fontStyle:    "italic",
+                  fontSize:     14,
                 }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "var(--genre-accent)"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "var(--card-border)"; }}
               />
               <div className="flex items-center justify-between mt-1 gap-3">
                 <button

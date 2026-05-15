@@ -178,17 +178,52 @@ export default function WorldForgingScreen({
   return (
     <div
       className="fixed inset-0 flex items-center justify-center px-6"
-      style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
+      style={{
+        // UI-12 CHANGE 4 — wizard shell uses #08060a (matches main menu
+        // + the wizard root). Genre accent drives everything else.
+        backgroundColor: "#08060a",
+        color:           "var(--color-text)",
+      }}
     >
-      <div className="w-full max-w-2xl text-center flex flex-col items-center gap-12">
-        {/* Stage message — crossfades via key change. */}
+      <div className="w-full max-w-2xl text-center flex flex-col items-center gap-10">
+        {/* "Forging your world…" headline (only before the world-name
+            typewriter takes over) */}
+        {stage <= 2 && (
+          <div
+            className="ew-serif"
+            style={{
+              fontStyle:  "italic",
+              fontSize:   22,
+              color:      "var(--genre-accent)",
+              lineHeight: 1.3,
+            }}
+          >
+            Forging your world…
+            <span
+              className="ew-forging-blink"
+              aria-hidden="true"
+              style={{
+                display:    "inline-block",
+                marginLeft: 6,
+                color:      "var(--genre-accent)",
+              }}
+            >
+              ▋
+            </span>
+          </div>
+        )}
+
+        {/* Stage description — small Inter Tight tracer that crossfades. */}
         <div
           key={`msg-${stage}`}
-          className="font-mono text-sm tracking-widest uppercase"
+          className="ew-sans uppercase"
           style={{
-            color:      "var(--color-primary)",
-            opacity:    1,
-            animation:  "ew-forging-fade-in 800ms ease-out forwards",
+            fontFamily:    "var(--sans, var(--mono))",
+            fontSize:      9,
+            letterSpacing: "0.22em",
+            color:         "#6a5530",
+            opacity:       1,
+            animation:     "ew-forging-fade-in 800ms ease-out forwards",
           }}
         >
           <span>{stageMessage}</span>
@@ -196,27 +231,57 @@ export default function WorldForgingScreen({
             <span
               className="ew-forging-blink ml-2 inline-block"
               aria-hidden="true"
-              style={{ color: "var(--color-primary)" }}
+              style={{ color: "var(--genre-accent)" }}
             >
               ▋
             </span>
           )}
         </div>
 
+        {/* Thin progress sweep — purely decorative, genre accent. */}
+        <div
+          aria-hidden
+          style={{
+            width:        220,
+            height:       2,
+            borderRadius: 2,
+            background:   "rgba(var(--genre-accent-rgb), 0.10)",
+            overflow:     "hidden",
+            position:     "relative",
+          }}
+        >
+          <div
+            className="ew-forging-sweep"
+            style={{
+              position:     "absolute",
+              top:          0,
+              left:         0,
+              height:       2,
+              width:        60,
+              background:   "var(--genre-accent)",
+              borderRadius: 2,
+            }}
+          />
+        </div>
+
         {/* World name reveal — types in letter by letter. */}
         {showWorldName && (
           <div
-            className="text-4xl sm:text-5xl font-bold text-glow tracking-wide flex items-end justify-center"
+            className="ew-serif flex items-end justify-center"
             style={{
-              color:     "var(--color-primary)",
-              minHeight: "3.5rem",
+              fontStyle:  "italic",
+              fontSize:   46,
+              color:      "var(--genre-accent)",
+              minHeight:  "3.5rem",
+              lineHeight: 1.1,
+              textShadow: "0 0 18px rgba(var(--genre-accent-rgb), 0.35)",
             }}
           >
             <span>{typed}</span>
             {showCursor && (
               <span
                 className="inline-block w-0.5 h-10 ml-1 animate-pulse"
-                style={{ backgroundColor: "var(--color-primary)" }}
+                style={{ backgroundColor: "var(--genre-accent)" }}
               />
             )}
           </div>
@@ -234,7 +299,14 @@ export default function WorldForgingScreen({
           50%      { opacity: 0; }
         }
         .ew-forging-blink {
-          animation: ew-forging-blink-kf 1s ease-in-out infinite;
+          animation: ew-forging-blink-kf 900ms ease-in-out infinite;
+        }
+        @keyframes ew-forging-sweep-kf {
+          0%   { transform: translateX(-60px); }
+          100% { transform: translateX(220px); }
+        }
+        .ew-forging-sweep {
+          animation: ew-forging-sweep-kf 1800ms ease-in-out infinite;
         }
       `}</style>
     </div>

@@ -216,47 +216,84 @@ export function CombatMode({
     setAbilityPanelOpen(false);
   };
 
+  // UI-10 CHANGE 4 — surface the most-recent dice roll for the current
+  // turn. Reads the last combat_log event that carries a populated
+  // `rolls.d20`. Resets at each phase boundary inside computeDiceDisplay.
+  const diceDisplay = useMemo<DiceDisplay | null>(() => {
+    return computeDiceDisplay(combat.combat_log);
+  }, [combat.combat_log]);
+
   return (
     <div
       role="region"
       aria-label="Combat panel"
+      className="ew-combat-panel-enter"
       style={{
         position:       "relative",
         display:        "flex",
         flexDirection:  "column",
-        minHeight:      "min(33vh, 360px)",
+        // UI-10 CHANGE 1 — 188px floor as the panel rises into the flex
+        // column. Keep the prior min(33vh, 360px) cap as a comfortable
+        // ceiling on taller viewports.
+        minHeight:      "max(188px, min(33vh, 360px))",
         background:     "var(--bg-1)",
-        borderTop:      "2px solid var(--combat-enemy)",
+        borderTop:      "1px solid var(--card-border)",
       }}
     >
+      {/* UI-10 — entry animation + HP pulse + dice fade-in. Scoped. */}
+      <style>{`
+        @keyframes ew-combat-panel-rise {
+          0%   { max-height: 0;     opacity: 0; }
+          100% { max-height: 600px; opacity: 1; }
+        }
+        .ew-combat-panel-enter {
+          animation: ew-combat-panel-rise 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+          overflow: hidden;
+        }
+        @keyframes ew-hp-pulse {
+          0%, 100% { opacity: 1; }
+          50%      { opacity: 0.55; }
+        }
+        @keyframes ew-combat-dice-in {
+          0%   { opacity: 0; transform: translateY(2px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        .ew-combat-dice {
+          animation: ew-combat-dice-in 80ms ease-out 220ms both;
+        }
+      `}</style>
       {/* ── Header ───────────────────────────────────────────────────── */}
       {/* Day 20.1 TASK 5 — turn pill is the canonical phase indicator.
           Reads displayPhase (lagged by useCombat across the drain
           delays) so it stays in sync with the feed pacing instead
           of jumping ahead to the engine's auto-resolved index. */}
       {(() => {
+        // UI-10 CHANGE 5 — turn badge per §8.
+        //   Player: genre accent tint + accent text, Inter Tight 7px
+        //   Enemy : #9a4040 tint + #c84830 text
+        // 100ms fade on background/border/color.
         const effectivePhase: "player" | "enemy" =
           displayPhase ?? (isPlayerTurn ? "player" : "enemy");
         const isPillPlayer = effectivePhase === "player";
         const pillBg = isPillPlayer
-          ? "color-mix(in srgb, var(--combat-player) 28%, var(--bg-2))"
-          : "color-mix(in srgb, var(--combat-enemy) 28%, var(--bg-2))";
+          ? "rgba(var(--genre-accent-rgb), 0.14)"
+          : "rgba(154, 64, 64, 0.18)";
         const pillBorder = isPillPlayer
-          ? "var(--combat-player)"
-          : "var(--combat-enemy)";
+          ? "rgba(var(--genre-accent-rgb), 0.45)"
+          : "rgba(200, 72, 48, 0.55)";
         const pillColor = isPillPlayer
-          ? "var(--combat-player)"
-          : "var(--combat-enemy)";
-        const pillLabel = isPillPlayer ? "Your turn" : "Enemy turn";
+          ? "var(--genre-accent)"
+          : "#c84830";
+        const pillLabel = isPillPlayer ? "Your Turn" : "Enemy Turn";
         return (
           <div
             className="ew-mono"
             style={{
               padding:        "8px 14px",
-              borderBottom:   "1px solid var(--line)",
-              fontSize:       10,
-              letterSpacing:  "0.32em",
-              color:          "var(--combat-enemy-crit)",
+              borderBottom:   "1px solid var(--card-border)",
+              fontSize:       9,
+              letterSpacing:  "0.30em",
+              color:          "#6a5530",
               fontWeight:     700,
               textTransform:  "uppercase",
               display:        "flex",
@@ -265,22 +302,22 @@ export function CombatMode({
               gap:            10,
             }}
           >
-            <span>⚔ Combat — Round {combat.round_number}</span>
+            <span>⚔ Round {combat.round_number}</span>
             <span
               role="status"
               aria-live="polite"
+              className="ew-sans uppercase"
               style={{
-                fontFamily:     "var(--mono)",
-                fontSize:       11,
-                letterSpacing:  "0.24em",
-                fontWeight:     700,
-                textTransform:  "uppercase",
-                padding:        "4px 10px",
-                borderRadius:   3,
-                background:     pillBg,
-                border:         `1px solid ${pillBorder}`,
-                color:          pillColor,
-                transition:     "background 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out",
+                fontFamily:    "var(--ui-sans, var(--mono))",
+                fontSize:      7,
+                letterSpacing: "0.26em",
+                fontWeight:    700,
+                padding:       "3px 10px",
+                borderRadius:  20,
+                background:    pillBg,
+                border:        `1px solid ${pillBorder}`,
+                color:         pillColor,
+                transition:    "background 100ms ease, border-color 100ms ease, color 100ms ease",
               }}
             >
               {pillLabel}
@@ -361,6 +398,39 @@ export function CombatMode({
         </div>
       </div>
 
+      {/* UI-10 CHANGE 4 — Dice display. "16 vs 12 · hit" colour-coded.
+          Re-mounts via key on every event change so the 80ms fade-in
+          fires for each new roll. Hidden when there's no roll yet. */}
+      {diceDisplay && (
+        <div
+          key={diceDisplay.key}
+          className="ew-combat-dice"
+          aria-live="polite"
+          style={{
+            display:        "flex",
+            justifyContent: "center",
+            alignItems:     "center",
+            gap:            8,
+            padding:        "4px 12px 8px",
+            fontFamily:     "var(--mono)",
+            fontSize:       14,
+            lineHeight:     1,
+          }}
+        >
+          <span style={{ color: "#e2cda0", fontWeight: 600 }}>
+            {diceDisplay.total}
+          </span>
+          <span style={{ color: "#4a3818" }}>vs</span>
+          <span style={{ color: "#6a5530" }}>
+            {diceDisplay.dc ?? "—"}
+          </span>
+          <span style={{ color: "#3a3020" }}>·</span>
+          <span style={{ color: diceDisplay.color, fontWeight: 600 }}>
+            {diceDisplay.label}
+          </span>
+        </div>
+      )}
+
       {/* ── Targeting hint banner ────────────────────────────────────── */}
       {attackTargeting && (
         <TargetPicker onCancel={() => setAttackTargeting(false)} />
@@ -400,6 +470,76 @@ export function CombatMode({
       )}
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI-10 CHANGE 4 — Dice display helper. Surfaces the most-recent roll
+// for the current turn in "16 vs 12 · hit" format. Walks combat_log
+// backwards, stops at the earliest of:
+//   • a phase boundary (no roll yet this turn)
+//   • a roll-bearing event (rolls.d20 populated)
+// Colour-coded per outcome (design ref §8):
+//   hit #7abb7a · miss #9a7060 · crit #e8d070 · fumble #c84830.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface DiceDisplay {
+  key:   string;
+  total: number;
+  dc:    number | null;
+  label: string;
+  color: string;
+}
+
+const OUTCOME_LABEL: Record<string, string> = {
+  hit:         "hit",
+  miss:        "miss",
+  crit:        "crit",
+  fumble:      "fumble",
+  fled:        "fled",
+  fled_failed: "missed",
+  kill:        "kill",
+  defended:    "defend",
+  item_used:   "used",
+};
+
+const OUTCOME_COLOR: Record<string, string> = {
+  hit:         "#7abb7a",
+  miss:        "#9a7060",
+  crit:        "#e8d070",
+  fumble:      "#c84830",
+  fled:        "#7abb7a",
+  fled_failed: "#9a7060",
+  kill:        "#e8d070",
+  defended:    "#a08870",
+  item_used:   "#7abb7a",
+};
+
+function computeDiceDisplay(log: CombatEvent[]): DiceDisplay | null {
+  for (let i = log.length - 1; i >= 0; i -= 1) {
+    const ev = log[i];
+    if (
+      ev.type === "player_turn_start" ||
+      ev.type === "enemy_phase_start" ||
+      ev.type === "round_start" ||
+      ev.type === "combat_start"
+    ) {
+      return null;
+    }
+    const r = ev.rolls;
+    if (!r || typeof r.d20 !== "number") continue;
+    const mod   = typeof r.d20_modifier === "number" ? r.d20_modifier : 0;
+    const total = r.d20 + mod;
+    const dc    = typeof r.target_dc === "number" ? Math.round(r.target_dc) : null;
+    const oc    = typeof ev.outcome === "string" ? ev.outcome : "";
+    return {
+      key:   `${ev.timestamp}_${i}`,
+      total,
+      dc,
+      label: OUTCOME_LABEL[oc] ?? oc ?? "—",
+      color: OUTCOME_COLOR[oc] ?? "#a08870",
+    };
+  }
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

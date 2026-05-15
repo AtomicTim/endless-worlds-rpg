@@ -110,11 +110,16 @@ export function CombatantRow(props: Props) {
         gap:            6,
         padding:        "8px 6px",
         cursor:         isTargetable ? "pointer" : "default",
-        opacity:        isAlive ? 1 : 0.4,
+        // UI-10 CHANGE 2 — kill-shot animation. On death, greyscale
+        // (400ms) then compress (300ms via transition-delay). CSS-only;
+        // no engine state changes.
+        opacity:        isAlive ? 1 : 0.45,
+        filter:         isAlive ? "none" : "grayscale(1)",
+        transform:      isAlive ? "scale(1)" : "scale(0.85)",
         flex:           1,
         minWidth:       0,
         maxWidth:       180,
-        transition:     "opacity 200ms",
+        transition:     "opacity 400ms ease, filter 400ms ease, transform 300ms ease 400ms",
       }}
     >
       {/* Day 20.4 TASK 3 — portrait wrapper with position:relative (no

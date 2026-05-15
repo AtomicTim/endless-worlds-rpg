@@ -40,25 +40,46 @@ interface BtnProps {
   onClick:  () => void;
 }
 function ActionBtn({ label, disabled, active, onClick }: BtnProps) {
+  // UI-10 CHANGE 3 — genre token shell, Inter Tight 8px uppercase #a08870.
+  // Hover border brightens to var(--genre-accent). Enemy-turn (the
+  // `disabled` prop) drops opacity to 0.3 per spec.
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      onMouseEnter={(e) => {
+        if (disabled) return;
+        (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--genre-accent)";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.borderColor = active
+          ? "var(--genre-accent)"
+          : "var(--card-border)";
+      }}
       style={{
         flex:           1,
-        padding:        "14px 12px",
-        background:     active ? "var(--accent-faint)" : "var(--bg-2)",
-        border:         active ? "1px solid var(--accent)" : "1px solid var(--line-2)",
-        borderRadius:   3,
-        fontFamily:     "var(--mono)",
-        fontSize:       11,
-        letterSpacing:  "0.18em",
+        padding:        "12px 10px",
+        background:     active
+          ? "rgba(var(--genre-accent-rgb), 0.10)"
+          : "var(--card-bg)",
+        border:         active
+          ? "1px solid var(--genre-accent)"
+          : "1px solid var(--card-border)",
+        borderRadius:   "var(--card-radius, 4px)",
+        fontFamily:     "var(--ui-sans, var(--mono))",
+        fontSize:       8,
+        letterSpacing:  "0.22em",
         textTransform:  "uppercase",
-        color:          disabled ? "var(--ink-4)" : (active ? "var(--accent)" : "var(--ink-1)"),
+        fontWeight:     600,
+        color:          disabled
+          ? "#4a3818"
+          : active
+            ? "var(--genre-accent)"
+            : "#a08870",
         cursor:         disabled ? "not-allowed" : "pointer",
-        opacity:        disabled ? 0.4 : 1,
-        transition:     "background 120ms, border-color 120ms",
+        opacity:        disabled ? 0.3 : 1,
+        transition:     "background 120ms, border-color 120ms, color 120ms, opacity 120ms",
       }}
     >
       {label}

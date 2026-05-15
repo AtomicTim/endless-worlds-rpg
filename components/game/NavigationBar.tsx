@@ -84,16 +84,6 @@ interface Props {
 
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Split an array into sub-arrays of at most `size` elements.
- *  Used to build the 2-row-max mini-column grid inside each group block. */
-function chunkArray<T>(arr: T[], size: number): T[][] {
-  const result: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) {
-    result.push(arr.slice(i, i + size));
-  }
-  return result;
-}
-
 export function NavigationBar({
   worldGraph, masterState, onNavigate,
   onNavigateRoom, onUseKeyOnRoom, onForceRoom,
@@ -275,65 +265,31 @@ export function NavigationBar({
       <div
         className="ew-nav-cols"
         style={{
+          // UI-9b — single-column list. Cards fill the nav-bar container
+          // width; one card per row. Replaces the 4-group × per-mini-
+          // column 140px-wide grid that left cards unreadable at 1280px.
+          // Grouping logic (BACK / DEEPER / PEER / UNDISCOVERED) is
+          // preserved via the colOrder flat-map below; the visual
+          // dividers that used to live between groups are gone — the
+          // single "Where to go." header above replaces them.
           display:        "flex",
-          flexDirection:  "row",
-          gap:            8,
+          flexDirection:  "column",
+          gap:            6,
           padding:        "0 16px 12px",
-          overflowX:      "auto",
-          overflowY:      "visible",
+          width:          "100%",
         }}
       >
-        {colOrder.map((dir) => {
-          const colCards = grouped[dir];
-          if (colCards.length === 0) return null;
-          // Chunk into mini-columns of max 2 cards. Extra cards overflow
-          // rightward into new mini-columns. justifyContent: flex-end on
-          // each mini-column ensures a lone card in a partial column sits
-          // at the bottom (row 2), not the top.
-          // UI-5 — group container is borderless / paddingless now; the
-          // single section header above replaces the per-group label and
-          // visual divider.
-          const miniCols = chunkArray(colCards, 2);
-          return (
-            <div
-              key={dir}
-              style={{
-                flexShrink:     0,
-                display:        "flex",
-                flexDirection:  "column",
-                gap:            4,
-              }}
-            >
-              {/* Mini-column grid — flex row of fixed-width columns. */}
-              <div style={{ display: "flex", flexDirection: "row", gap: 4 }}>
-                {miniCols.map((chunk, colIdx) => (
-                  <div
-                    key={colIdx}
-                    style={{
-                      display:        "flex",
-                      flexDirection:  "column",
-                      justifyContent: "flex-end",
-                      gap:            4,
-                      width:          140,
-                    }}
-                  >
-                    {chunk.map((c) => (
-                      <NavCard
-                        key={c.key}
-                        card={c}
-                        onClick={() => onNavigate(c.targetId)}
-                        generatingRegionId={generatingRegionId}
-                        isLoading={isLoading}
-                        isHere={worldGraph?.current_node_id === c.targetId}
-                        fullWidth
-                      />
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
+        {colOrder.flatMap((dir) => grouped[dir] ?? []).map((c) => (
+          <NavCard
+            key={c.key}
+            card={c}
+            onClick={() => onNavigate(c.targetId)}
+            generatingRegionId={generatingRegionId}
+            isLoading={isLoading}
+            isHere={worldGraph?.current_node_id === c.targetId}
+            fullWidth
+          />
+        ))}
       </div>
       )}
     </div>
@@ -735,14 +691,17 @@ function NavCard({
       style={{
         display:        "flex",
         alignItems:     "center",
-        gap:            10,
+        // UI-9b — gap floor 6px (was 10), padding 10/14 (was 10/12),
+        // min-height floor 56px. Cards still grow when content needs
+        // it; these are floors, not caps.
+        gap:            6,
         // fullWidth (column mode): fill the column; row mode: fixed range.
         ...(fullWidth
           ? { width: "100%" }
           : { minWidth: 140, maxWidth: 200, flexShrink: 0 }
         ),
-        minHeight:      64,
-        padding:        "10px 12px",
+        minHeight:      56,
+        padding:        "10px 14px",
         // UI-5 — genre card treatment (CHANGE 3): per-genre tokens from
         // UI-1 drive background / radius / shadow. Border-left is
         // overridden by the destination-type colour from CHANGE 2.
@@ -814,7 +773,7 @@ function NavCard({
             <span
               className="ew-sans uppercase"
               style={{
-                fontSize:      6,
+                fontSize:      8,                       // UI-9b — chip floor 8px (was 6)
                 fontWeight:    600,
                 letterSpacing: "0.12em",
                 color:         "var(--genre-accent)",
@@ -832,7 +791,7 @@ function NavCard({
             <span
               className="ew-sans uppercase"
               style={{
-                fontSize:      6,
+                fontSize:      8,                       // UI-9b — chip floor 8px (was 6)
                 letterSpacing: "0.12em",
                 color:         "#4a3818",
                 border:        "1px solid #2d2618",
@@ -847,12 +806,13 @@ function NavCard({
         </span>
         {typeLabel && (
           <span
-            // UI-5 — type badge: Inter Tight 7px uppercase 0.12em
-            // #6a5530. GENERATING... and UNDISCOVERED slot in here.
+            // UI-5 — type badge: Inter Tight uppercase 0.12em #6a5530.
+            // GENERATING... and UNDISCOVERED slot in here.
+            // UI-9b — floor 8px (was 7) for legibility at 1280px.
             className="ew-sans uppercase"
             style={{
               fontFamily:    "var(--sans)",
-              fontSize:      7,
+              fontSize:      8,
               letterSpacing: "0.12em",
               color:         "#6a5530",
               overflow:      "hidden",

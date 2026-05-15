@@ -2,12 +2,12 @@
 # Updated after every prompt. Claude.ai owns this file.
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
-**CLAUDE.md version:** 8.83
-**Last code commit:** d5ceeb1 (P4 — quest completion gate enforcement)
+**CLAUDE.md version:** 8.84
+**Last code commit:** c7d0370 (UI-1 — design token + genre system)
 **jest baseline:** 648 (authoritative)
 **tsc:** clean
 
-## Implementation Arc
+## Gameplay Implementation Arc
 
 | # | Prompt | Commit | Status |
 |---|--------|--------|--------|
@@ -17,32 +17,52 @@
 | P3 | Merchant Trading + Inn Rest | 0219bec | ✅ 626 tests |
 | P4 | Quest Completion Gate Enforcement | d5ceeb1 | ✅ 648 tests |
 | P5 | Combat UX: Status Effect Display | 7439cb8 | ✅ 605 tests |
-| P6 | Ability System — Foundation | — | ⏳ NEXT |
-| P7 | Ability System — Combat + Attunement UI | — | ⏳ |
+| P6 | Ability System — Foundation | — | ⏳ IN PROGRESS |
+| P7 | Ability System — Combat + Attunement UI | — | ⏳ (after P6) |
 | P8 | Perks System | — | ⏳ |
 | P9 | Professions Foundation | — | ⏳ Day 25 |
 | P10 | Professions Crafting + XP + Milestones | — | ⏳ Day 25 |
 | P11 | Professions Character Sheet UI | — | ⏳ Day 25 |
 
+## UI Implementation Arc
+
+| # | Prompt | Commit | Status |
+|---|--------|--------|--------|
+| UI-1 | Design Token + Genre System | c7d0370 | ✅ 648 tests (CSS only) |
+| UI-2 | Top Bar | — | ⏳ NEXT (safe to run now — no P6 overlap) |
+| UI-3 | Context Panel | — | ⏳ (after UI-2) |
+| UI-4 | Story Panel Typography + Streaming | — | ⏳ |
+| UI-5 | Navigation Cards | — | ⏳ |
+| UI-6 | NPC Dialogue | — | ⏳ |
+| UI-7 | Codex + Journal/Quests | — | ⏳ |
+| UI-8 | Loot Flow | — | ⏳ (after UI-3) |
+| UI-9 | Character Panel | — | ⏳ (coordinate with P8) |
+| UI-10 | Combat UI Overhaul | — | ⏳ (after P7) |
+| UI-11 | Transitions + Toast System | — | ⏳ |
+| UI-12 | Character Creation Wizard | — | ⏳ |
+| UI-13 | Main Menu + Save Slots | — | ⏳ |
+
+## Key Implementation Notes
+
+**UI-1 findings (inform all future UI prompts):**
+- genreClassName() helper added to lib/game/genre-slug.ts — returns long-form class (genre-fantasy,
+  genre-cyberpunk etc.) from Genre enum. Use this in all future components.
+- GameLayout.tsx applies both data-genre (existing, owns --accent) AND genre-X class (new, owns
+  --card-bg/--content-bg/overlay/typography vars). Both must coexist going forward.
+- .ol-scan/.ol-grid/.ol-tex are inert until a surface opts in — add the divs in each surface prompt.
+- No .ui-label selectors exist yet — CHANGE 5 typography rules are forward-looking.
+
 ## Manual Verification Pending
 
-**HF1 + P1 — required before P3:**
-- Die in combat → confirm 75% HP respawn (NOT 50%).
-- Die holding 200g → confirm lose 20g (10%, under 50g cap).
-- Die holding 1000g → confirm lose 50g (capped).
-- Enter combat → confirm encounter banner appears in feed.
-- Get a crit landed on you → confirm NO LLM paragraph, just the templated line.
-- Exit any dungeon → confirm landing in region zone, not settlement.
-- Talk to a quest NPC twice → confirm main quest banner appears only once.
-
-**P2 — nice to have, not blocking:**
-- Generate a new world → inspect WorldBible output for typed enemies with status_effect field
-- Confirm starting settlement shop/library has 3 lore objects (profession manuals)
+**P4 — required before P6:**
+- Take a quest with an item objective → walk to quest-giver WITHOUT item → confirm NPC deflects.
+- Pick up the item → return → confirm ✦ Quest complete banner + item consumed + quest in COMPLETED.
+- Confirm narrator never proclaims completion (only the ✦ system message does).
 
 **P5 — required before P6:**
-- Enter combat with a status-capable enemy → confirm status pill appears below HP bar, DoT tick shows in feed with correct template text, DoT floating number appears.
+- Enter combat with a status-capable enemy → confirm status pill below HP bar, DoT tick in feed,
+  floating DoT number appears.
 
-**P4 — required before P6:**
-- Take a quest with an item objective, walk back to the quest-giver WITHOUT the item → confirm NPC deflects naturally (still waiting); inventory unchanged; quest stays active.
-- Pick up the required item, return to the quest-giver → confirm ✦ "Quest complete" banner; the item is consumed from inventory; quest shows under COMPLETED in the journal.
-- Confirm the narrator never proclaims "the quest is complete" — only the code-driven ✦ system message does.
+**UI-1 — no blocking tests. Visual only:**
+- Load game in Fantasy genre → accent should be warmer amber (#c4943a not the old yellow #f59e0b).
+  Can verify anytime, not blocking.

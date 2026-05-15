@@ -1,6 +1,6 @@
 # Endless Worlds RPG — UI Design Reference
 
-**Version:** 3.0  
+**Version:** 3.1  
 **Status:** Design complete — all primary surfaces specced  
 **Covers:** All designed UI surfaces as of May 2026
 
@@ -205,7 +205,7 @@ Horror uses BOTH `.ol-grid` (fog) AND `.ol-scan` (dots) simultaneously.
 - Journal entry cards, quest cards
 - Loading state new-area entry card
 - Character sheet stat block, equipment slots, pack items
-- Context Panel NPC and object rows
+- Context Panel NPC and object cards
 
 **Surfaces already genre-specific (no additional work needed):**
 - Maps — handled via Canvas rendering, already fully genre-specific
@@ -791,6 +791,10 @@ Backdrop: `rgba(0,0,0,.82)` (darker than quest modal).
 - **`requestAnimationFrame` double-frame trick** for CSS transitions on dynamically inserted elements.
 - **Top bar hidden on main menu and character creation** — appears only when game begins.
 - **Context Panel updates from game state** — no LLM call needed on arrival.
+- **Context Panel NPC and object items are individual cards** — not plain rows. See Section 18 card spec.
+- **Context Panel objects populate progressively** — only appear after player discovers them in story feed. NPCs always show immediately. Implementation detail (what triggers "discovered" per object) is an architecture decision for CLAUDE.md.
+- **Save slot cards: name + genre badge on row 1, Level X · Class on row 2** — never wraps. See Section 19 card layout.
+- **Save slots show hours played** — not last played time. Format: "X.X hours played" with clock icon.
 - **Main menu background `#08060a`** — distinct from in-game dark backgrounds.
 - **Enter World transition = World Intro Cinematic Modal** (CLAUDE.md rule 42) — don't design a separate transition.
 
@@ -831,19 +835,15 @@ Backdrop: `rgba(0,0,0,.82)` (darker than quest modal).
 
 ### Remaining Design Gaps
 
-The following surfaces still need design before Claude Code can be prompted for them:
-
 - **Search / loot flow** — victory card's "Search the remains →" triggers loot UI; floor_loot[] engine exists (CLAUDE.md rules 83/84/87) but the UI is not designed
 - **Error states** — API failures, network errors, mid-stream LLM failures
 - **Settings screen** — not designed
-
-Everything else in Section 16's original gap list has been resolved or is deferred by explicit decision.
 
 ---
 
 ### Implementation Approach
 
-This doc describes the **target visual state** for a live codebase at V8.83 with 626 passing tests. Surface-by-surface redesign integrated into the 11-prompt implementation arc — not a big-bang UI overhaul.
+Surface-by-surface redesign integrated into the 11-prompt arc. Not a big-bang UI overhaul.
 
 **Authority:** CLAUDE.md governs game logic, architecture, data. This doc governs visual presentation, interaction, animation. On UI conflicts: this doc wins. On game mechanic conflicts: CLAUDE.md wins.
 
@@ -857,7 +857,7 @@ This doc describes the **target visual state** for a live codebase at V8.83 with
 
 ## 17. Top Bar
 
-The top bar is dark chrome (`#141210`) in all genres and at all screen sizes. It never changes colour with genre. It's the persistent UI frame the game lives inside.
+The top bar is dark chrome (`#141210`) in all genres and at all screen sizes. It never changes colour with genre.
 
 ### Desktop Elements (left to right)
 
@@ -865,24 +865,18 @@ The top bar is dark chrome (`#141210`) in all genres and at all screen sizes. It
 |---|---------|------|
 | 1 | **Logo** | "✦ Endless Worlds" · Cormorant Garamond italic · 13–14px · genre accent colour |
 | 2 | **Genre tag** | Rounded pill · Inter Tight · 11px · uppercase · genre accent text + background + border |
-| 3 | **Location breadcrumb** | Region `›` Settlement `›` Current Location · region/settlement in `#5a4828` · current location in `#a08060` · separator `›` in `#3a2a18` · truncates left on narrow viewports (current location always visible) |
+| 3 | **Location breadcrumb** | Region `›` Settlement `›` Current Location · region/settlement in `#5a4828` · current location in `#a08060` · separator `›` in `#3a2a18` · truncates left on narrow viewports |
 | 4 | [flex spacer] | — |
-| 5 | **Verbosity toggle** | Three states: Terse · Standard · Rich · Active: Inter Tight 11px, genre accent, background tint + border · Inactive: `#3e3020`, no border |
-| 6 | **Background loading dot** | 6px pulsing circle, genre accent · visible only during WorldBible/RegionBible prefetch · hidden when idle |
-| 7 | **Codex icon** | `ti-book` · 15px · `#4a3828` at rest · brightens on hover · 4px dot in genre accent when unread entries exist |
-| 8 | **Journal icon** | `ti-notebook` · 15px · same states as Codex |
+| 5 | **Verbosity toggle** | Terse · Standard · Rich · Active: Inter Tight 11px, genre accent, background tint + border · Inactive: `#3e3020`, no border |
+| 6 | **Background loading dot** | 6px pulsing circle, genre accent · visible only during WorldBible/RegionBible prefetch |
+| 7 | **Codex icon** | `ti-book` · 15px · `#4a3828` at rest · 4px dot in genre accent when unread entries exist |
+| 8 | **Journal icon** | `ti-notebook` · 15px · same states |
 | 9 | **Map icon** | `ti-map` · 15px · same states |
-| 10 | **Character pill** | 24px avatar circle (class icon, genre accent, genre-styled border) + character name (Inter Tight 11px, `#c0a878`) · `border-radius: 20px` pill shape · tapping opens Character Panel |
+| 10 | **Character pill** | 24px avatar circle (class icon, genre accent, genre-styled border) + name (Inter Tight 11px, `#c0a878`) · tapping opens Character Panel |
 
 ### Desktop height: 44px · Mobile height: 52px
 
-### Behaviour Rules
-
-- Top bar never scrolls — `position: sticky` or fixed at top.
-- Breadcrumb updates immediately on navigation (from game state, no LLM call).
-- Verbosity toggle takes effect on next AI action — not retroactively.
-- Background dot is the only dynamically appearing/disappearing element.
-- **Hidden on main menu and character creation screens** — top bar appears only when game begins.
+**Hidden on main menu and character creation screens** — appears only when game begins.
 
 ---
 
@@ -890,7 +884,7 @@ The top bar is dark chrome (`#141210`) in all genres and at all screen sizes. It
 
 The Context Panel is the always-visible left column on desktop (196px at ≥1280px, 160px at 1024–1279px). On ≤1023px it becomes a left drawer opened by the hamburger icon in the top bar.
 
-**The Context Panel is NOT navigational.** Navigation happens via nav cards in the story feed. The Context Panel describes the current space.
+**The Context Panel is NOT navigational.** Navigation happens via nav cards in the story feed.
 
 ### Content Sections (top to bottom)
 
@@ -899,31 +893,43 @@ The Context Panel is the always-visible left column on desktop (196px at ≥1280
 - Type badge: Inter Tight 11px, genre accent, pill shape
 
 **2. Atmosphere prose**
-- 2–3 sentences. Cormorant Garamond italic, 11px, `#5a4020` (more muted than story feed — ambient, not narrative)
+- 2–3 sentences. Cormorant Garamond italic, 11px, `#9a7e52` (more muted than story feed — ambient, not narrative)
 - Line-height 1.65
-- Source: current location's `physical_description` / `atmosphere` fields from WorldBible/RegionBible — **no LLM call**
+- Source: current location's `physical_description` / `atmosphere` fields — no LLM call
 - Updates immediately on arrival
 
-**3. Divider** — 0.5px `#252018`
+**3. Divider** — 0.5px `rgba(accent, .15)`
 
 **4. "HERE NOW" — NPCs present**
+
+Section header: 2px vertical accent bar (genre accent, opacity .7) + label. Fantasy: Inter Tight italic. Cyberpunk: monospace `// PRESENT` format.
+
 Hidden entirely if no NPCs present. No empty placeholder.
 
-Each NPC row (tappable — opens same dialogue flow as story feed):
-- 6px disposition dot (coloured per Section 10 disposition system)
-- Name: Cormorant Garamond italic, 11px, `#c0a878`
-- Role + disposition word: Inter Tight 11px, `#4a3828`
-- Hover: `rgba(196,148,58,.09)` background, `border-radius: 5px`
+Each NPC is displayed in its own contained card:
+- Background: `rgba(accent, .06)` · border: `1px solid rgba(accent, .16)` · border-radius: 7px · padding: 8px 10px
+- Left: 6px disposition dot (coloured per Section 10 disposition system)
+- Name: Cormorant Garamond italic, 12px, `#d4bc88`
+- Role + disposition word: Inter Tight 11px, `#7a6040`
+- Hover: background `rgba(accent, .12)`, border `rgba(accent, .30)`
+- Tapping opens dialogue — same code path as story feed
 
 **5. Divider** — hidden if either NPCs or Objects section is absent
 
 **6. "IN THIS SPACE" — interactable objects**
+
+Section header: same left accent bar treatment. Cyberpunk: monospace `// ENVIRONMENT` format.
+
 Hidden entirely if no objects present. No empty placeholder.
 
-Each object row (tappable — triggers object interaction):
-- Tabler icon by category: `ti-package` (containers), `ti-news` (notices/boards), `ti-door` (doors), `ti-book` (books/lore), `ti-coins` (valuables), `ti-skull` (enemy remains) · `#4a3828` at rest
-- Name: Cormorant Garamond italic, 11px, `#c0a878`
-- Action label right-aligned: Inter Tight 11px, `#3e3020`
+**Discovery mechanic — objects populate progressively.** Objects appear in this section only after the player has encountered or discovered them in the story feed. They do not all appear upfront on room entry. NPCs always show immediately. This makes exploration meaningful — the panel becomes a log of what the player has found, not a spoiler sheet. The implementation detail of what triggers the "discovered" flag per object is an architecture decision for CLAUDE.md.
+
+Each object is displayed in its own contained card (slightly more subtle than NPC cards):
+- Background: `rgba(accent, .04)` · border: `1px solid rgba(accent, .12)` · border-radius: 7px · padding: 7px 10px
+- Left: Tabler icon by category (`#7a6040` at rest, brightens on hover): `ti-package` (containers), `ti-news` (notices/boards), `ti-door` (doors), `ti-book` (books/lore), `ti-coins` (valuables), `ti-skull` (enemy remains)
+- Name: Cormorant Garamond italic, 12px, `#d4bc88`
+- Right: action label as a small pill badge (border-radius 20px, genre accent at low opacity)
+- Hover: background `rgba(accent, .09)`, border `rgba(accent, .25)`
 
 **Action label values match CLAUDE.md rule 87 exactly:**
 - "Search" — containers, enemy remains
@@ -933,77 +939,108 @@ Each object row (tappable — triggers object interaction):
 
 ### Interaction Model
 
-Tapping an NPC or object in the Context Panel is functionally identical to tapping the same entity in the story feed — same underlying interaction, same code path. NPCs grey out (non-tappable) while in dialogue. Objects disappear from the panel when examined/looted (game state update).
+Tapping an NPC or object in the Context Panel is functionally identical to tapping the same entity in the story feed — same underlying interaction, same code path. NPCs grey out (non-tappable) while in dialogue. Objects disappear from the panel when examined/looted.
 
 ### Empty States
 
-If no NPCs: entire "Here Now" section doesn't render. If no objects: entire "In This Space" section doesn't render. If both absent: just location name + type + atmosphere prose. This looks clean and intentional — never broken.
-
-### Update Behaviour
-
-Context Panel updates instantly on arrival. Data from game state only — never an LLM call. Never in a "loading" state.
+If no NPCs: entire "Here Now" section doesn't render. If no objects: entire "In This Space" section doesn't render. If both absent: just location name + type + atmosphere prose. Looks intentional — never broken.
 
 ### Genre Treatment
 
-Context Panel uses the full genre visual system: `var(--content-bg)` background, genre typography rules for section headers, and three overlay divs (`.ol-scan`, `.ol-grid`, `.ol-tex`) — same requirement as story feed.
+Context Panel uses the full genre visual system: `var(--content-bg)` background, genre typography for section headers, three overlay divs (`.ol-scan`, `.ol-grid`, `.ol-tex`).
 
 ### Mobile Drawer
 
-`translateX(-100%) → translateX(0)`, `300ms cubic-bezier(0.22, 1, 0.36, 1)`. Backdrop `rgba(0,0,0,.5)`. Close: swipe left, tap backdrop, or tap hamburger again. `250ms ease-in`. Same content as desktop.
+`translateX(-100%) → translateX(0)`, `300ms cubic-bezier(0.22, 1, 0.36, 1)`. Backdrop `rgba(0,0,0,.5)`. Close: swipe left, tap backdrop, or tap hamburger. `250ms ease-in`. Same content as desktop.
 
 ---
 
-## 19. Main Menu, Save Slots & Enter World
+## 19. Main Menu, Your Worlds & Enter World
+
+### Two Distinct Screens
+
+The app entry point is two separate screens:
+
+1. **Main Menu** — the splash/landing screen. Logo + tagline + two CTAs. Minimal. Gets out of the way fast.
+2. **Your Worlds** — the save slot screen. Reached by tapping "Continue" on the Main Menu. Shows all save slot cards. Has a back button returning to Main Menu.
+
+"Continue" on the Main Menu: if only one save exists, navigates directly into that game. If multiple saves exist, opens the Your Worlds screen. If no saves exist, the "Continue" button is not shown — only "Begin New Adventure."
+
+---
 
 ### Main Menu
 
-**Background:** `#08060a` — coolest and darkest background in the entire app. Creates a clear mode boundary: not the game yet.
+**Background:** `#08060a` — coolest and darkest background in the entire app.
 
-**Layout (mobile):** Logo + tagline centred (upper ~30% of screen) → save slot cards stacked vertically, full-width → settings gear bottom-right.
+**Layout:** Logo + tagline centred (upper area) → genre pills row → CTA buttons → settings gear bottom-right.
 
-**Layout (desktop):** Logo + tagline centred → save slot cards in a horizontal row (up to 3 per row, max ~280px each, scrollable if more) → settings gear bottom-right.
+**Logo:** "Endless Worlds" · Cormorant Garamond italic · 28px mobile / 40px desktop · `#e2cda0`
 
-**Logo:** "Endless Worlds" · Cormorant Garamond italic · 28px mobile / 40px desktop · `#e2cda0` · no icon mark on main menu (just the text)
+**Tagline:** "A new adventure every time" · Inter Tight · 12px · `#4a3828` · letter-spacing 0.08em
 
-**Tagline:** "An adventure generated for you" · Inter Tight · 12px · `#4a3828` · letter-spacing 0.08em
+**Genre pills:** A row of five small pills below the tagline showing all five genre names in their respective accent colours. These tell the player immediately that multiple worlds exist: Fantasy · Cyberpunk · Horror · Space Opera · Post-Apoc.
 
-**Settings gear:** `ti-settings` icon, 16px, `#2a2015` at rest, `#4a3828` on hover. Opens settings modal (not yet designed — deferred).
+**Ambient genre shift (animation):** The background has a radial glow centred at ~50% × 38% that slowly cycles through all five genre accent colours (~8 seconds per genre). Above the title, a small genre name label (Inter Tight 11px, letter-spacing 0.2em, uppercase) cycles in sync — it fades fully to zero opacity, holds briefly invisible, then the new genre name fades in clean. No overlap between outgoing and incoming text. The "Begin New Adventure" button border and background tint also shift with the glow. This animation is a placeholder for future genre artwork — when real art arrives it replaces the glow while the layout and buttons stay intact.
 
-### Save Slot Cards
+**CTAs:**
+- "Begin New Adventure" — primary button, full-width, Cormorant Garamond italic, genre accent border + background tint (shifts with animation)
+- "Continue ›" — secondary button, full-width, muted border, plain text. Hidden if no saves exist.
 
-**Filled slot card:**
-- Genre badge pill: Inter Tight 11px, genre accent colour + border
-- Character name: Cormorant Garamond italic, 15–16px, genre-appropriate text colour
-- Class · Level: Inter Tight 12px, very muted
-- Thin divider `0.5px`
-- World name: Cormorant Garamond italic, 12px, muted
-- Current location breadcrumb: Inter Tight 11px, very muted
-- Last played: Inter Tight 11px, very muted
-- "Continue →" button: full-width, genre accent border + background tint, Inter Tight uppercase
+**Settings gear:** `ti-settings` icon, 16px, `#2a2015` at rest, `#4a3828` on hover. Bottom-right corner.
 
-**Card background and border match the genre of that save.** A Fantasy save has a warm amber parchment card. A Cyberpunk save has a flat cyan-bordered card. The full genre card treatment from Section 3 applies.
+---
+
+### Your Worlds (Save Slot Screen)
+
+**Header:** Dark mini bar · back arrow (`ti-arrow-left`) · "Your Worlds" in Cormorant Garamond italic, muted
+
+**Save slot cards:**
+
+Each card is genre-themed — background, border colour, corner treatment, and text colours all match the genre of that save.
+
+**Filled slot card layout:**
+
+Row 1 — flex row, no wrapping:
+- Left: 34px avatar circle with class icon (genre accent colour and border)
+- Centre (flex 1): Character name · Cormorant Garamond italic · 15–16px · genre-appropriate text colour · `white-space: nowrap; overflow: hidden; text-overflow: ellipsis`
+- Right: Genre badge pill · Inter Tight 11px · genre accent · `flex-shrink: 0` · always in line with name, never pushed to a second line
+
+Row 2 — single line beneath name (indented to align under name, not avatar):
+- "Level X · Class" · Inter Tight 12px · genre-tinted muted colour (Fantasy `#7a6040` · Cyberpunk `#2a7a8a` · Horror `#4a6a30` · Space Opera `#7a5a9a` · Post-Apoc `#8a5030`)
+- Class is plain text — not a badge pill
+- Examples: "Level 4 · Investigator" / "Level 2 · Netrunner"
+- `white-space: nowrap; overflow: hidden; text-overflow: ellipsis` — always one line, never wraps
+
+Divider · 0.5px genre accent at ~15% opacity
+
+World name · Cormorant Garamond italic · 12px · muted
+Location breadcrumb · Inter Tight 11px · very muted · single line with ellipsis
+
+Hours played: `ti-clock` icon + "X.X hours played" · Inter Tight 11px · very muted · 1 decimal place
+
+"Continue →" button — full-width, genre accent border + background tint
 
 **Empty slot card:**
-- Dashed border: `rgba(196,148,58,.3)` — neutral amber regardless of genre
-- ✦ mark centred, `#3e3020`, 18px
-- "Begin a new adventure" · Cormorant Garamond italic · 13px · `#4a3828` · centred
-- Hover: border brightens to `rgba(196,148,58,.55)`, very faint amber background
+- Dashed border: `rgba(196,148,58,.22)` — neutral amber regardless of genre
+- ✦ mark centred, `#2e2418`, 17px
+- "Begin a new adventure" · Cormorant Garamond italic · 13px · `#3e3020` · centred
+- Hover: border brightens to `rgba(196,148,58,.45)`, very faint amber background
 
-**Slot counts:** Free = 1 · Adventurer = 3 · Legend = unlimited (row scrolls)
+**Slot counts:** Free = 1 · Adventurer = 3 · Legend = unlimited (scrollable)
 
-**Delete / manage:** Long-press (mobile) or right-click (desktop) reveals "Delete save" option. Requires confirmation modal — "Are you sure? This world is gone forever." Destructive — cannot be undone.
+**Delete / manage:** Long-press (mobile) or right-click (desktop) reveals "Delete save" option. Requires confirmation modal. Destructive — cannot be undone.
+
+---
 
 ### Enter World Transition
 
-The transition from character creation to the game connects to the existing World Intro Cinematic Modal (CLAUDE.md rule 42). No separate transition animation is designed.
+Connects to the existing World Intro Cinematic Modal (CLAUDE.md rule 42). No separate transition animation needed.
 
 **Sequence:**
 1. Player taps "Begin Adventure" (final character creation step)
-2. Button enters loading state (spinner replaces arrow icon)
+2. Button enters loading state (spinner)
 3. Character profile saves (`/api/game/save-character-profile`)
-4. If WorldBible is still generating: full-screen loading state with pulsing ✦ and world name when available. Never navigate to the game with incomplete WorldBible.
+4. If WorldBible still generating: full-screen loading state with pulsing ✦ and world name when available
 5. App transitions to game view (story feed, context panel, character panel mount)
-6. World Intro Cinematic Modal fires automatically (CLAUDE.md rule 42): full-screen overlay, world name, opening narration from `metadata.world_intro` template. Dismissed by tap or keypress.
-7. First story beat streams below the modal dismissal: "Your adventure begins."
-
-**WorldBible timing:** Generation starts at genre confirmation (character creation step 1) and runs in background through all 6 steps. In practice it completes well before the player reaches the Motivation step. The loading state in step 4 is the rare edge case, not the normal path.
+6. World Intro Cinematic Modal fires automatically (rule 42)
+7. First story beat streams: "Your adventure begins."

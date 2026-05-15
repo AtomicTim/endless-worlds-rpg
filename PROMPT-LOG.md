@@ -3,7 +3,7 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 8749056 (UI-8 — loot flow)
+**Last code commit:** beeb2ef (UI-12 — character creation wizard)
 **jest baseline:** 734 (authoritative)
 **tsc:** clean
 
@@ -27,7 +27,7 @@
 | UI-9b | Nav Card Layout Cleanup | 51587a8 | 734 | ✅ |
 | UI-10 | Combat UI Overhaul | — | — | ⏳ (after HF2 manual verify) |
 | UI-11 | Transitions + Toast System | — | — | ⏳ IN PROGRESS |
-| UI-12 | Character Creation Wizard | — | — | ⏳ IN PROGRESS |
+| UI-12 | Character Creation Wizard | beeb2ef | 734 | ✅ |
 | UI-13 | Main Menu + Save Slots | — | — | ⏳ |
 
 ## Known Gaps / Bugs
@@ -36,7 +36,8 @@
 - **Perk gold/xp consumers not wired (P8).** Small follow-up.
 - **Enemy-side status ticks not running (P7).** Follow-up after UI-10.
 - **Bug 2 — zone_id cache leak.** HF2 defensive fix shipped. Root cause refactor pending.
-- **Tabler icons not installed (UI-9).** Unicode fallbacks. Fixed in UI-12.
+- **Tabler icons installed (UI-12).** @tabler/icons-react 3.44. CharacterPanel currency row + all
+  25 class cards now use real icons. Marine uses IconAnchor (ti-ship absent in v3).
 - **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass.
 - **Sidebar width 280px (UI-9).** Spec 196/160px. LogBook co-tenant blocks narrowing.
 - **FloorLootStrip still rendered (UI-8).** Visual overlap with new feed-embedded loot UI. Retire later.
@@ -65,3 +66,9 @@
 - Leave without searching → Context Panel shows "Remains · Search" → tap → loot modal
 - All taken → Context Panel entry disappears
 **P4/P5/P8/UI-6/7/9:** Visual or non-urgent. Not blocking.
+**UI-12:** Visual — start a new game, walk through every wizard step: genre cards (accent pill +
+  --card-bg), Forging screen (#08060a + genre-accent headline + sweep bar), class cards (Tabler
+  icon in stat colour + role pill in stat colour, selected border is stat colour), species/
+  origin/appearance cards (genre-accent border on select), name input (#141210 bg + Cormorant
+  italic 15px + caret in genre accent), motivation textarea (same shell), step dots at top
+  (no labels). Not blocking.

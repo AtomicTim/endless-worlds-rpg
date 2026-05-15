@@ -67,6 +67,10 @@ function makeState(overrides: Partial<MasterState> = {}): MasterState {
       inventory: [],
       level:     1,
       xp:        0,
+      // P6 — ability fields are required on PlayerState; populated by P7.
+      learned_abilities:      [],
+      equipped_ability_slots: [null, null, null, null],
+      passive_ability:        null,
     },
     world_state: {
       current_location_id: "node_a",

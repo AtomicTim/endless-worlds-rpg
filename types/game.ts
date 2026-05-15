@@ -96,6 +96,82 @@ export interface ActiveStatusEffect {
   source:    string;
 }
 
+// ---------------------------------------------------------------------------
+// ── ABILITY SYSTEM (P6 foundation) ──
+// Hardcoded class abilities — 25 classes × 5 (4 active slots + 1 passive)
+// = 125 templates total. Live in lib/game/abilities.ts (ABILITY_LIBRARY).
+// World-native flavor names are layered on top in P7.
+//
+// PlayerState carries:
+//   • learned_abilities       — pool of abilities the player knows (5-7/run)
+//   • equipped_ability_slots  — fixed-length 4 tuple, one ability per slot
+//   • passive_ability         — class passive, always active, never slotted
+//
+// Slot unlock schedule (rules 97 / 164):
+//   slot 1 — start (level 1+)
+//   slot 2 — level 5
+//   slot 3 — level 10
+//   slot 4 — level 15
+// ---------------------------------------------------------------------------
+
+/** Canonical ability id ("knight_shield_bash"). Plain string alias —
+ *  branded types would force casts at every literal site, which buys
+ *  nothing for a closed library keyed by snake_case slugs. */
+export type AbilityId = string;
+
+/** Coarse ability classification for sorting / filtering / UI badges.
+ *  Categorized by primary effect — a damage ability that also inflicts
+ *  WEAKENED is still `"damage"`; a heal+buff combo is `"heal"`. */
+export type AbilityCategory =
+  | "damage"
+  | "heal"
+  | "buff"
+  | "debuff"
+  | "utility";
+
+/** Stat short-form used by ability gates + charge_stat scaling. Mirrors
+ *  the Attributes keys but in the engine-friendly 3-letter form the
+ *  ability library was authored against. */
+export type AbilityStatShort = "str" | "agi" | "int" | "per" | "cha";
+
+/** One hardcoded class ability template. Identity for the engine; the
+ *  world-flavor `name` is replaced per-world by P7 (the WCD generator
+ *  receives the mechanical block and emits a thematic rename). */
+export interface AbilityTemplate {
+  /** Canonical id ("knight_shield_bash"). Stable across worlds. */
+  id:                AbilityId;
+  /** Display name. Equals `base_name` until P7 overlays a world flavor
+   *  name (e.g. "Frost Bolt" → "Abyssal Chill"). */
+  name:              string;
+  /** Canonical class-doc name ("Shield Bash"). Never re-skinned. */
+  base_name:         string;
+  /** Snake-case class id ("knight", "street_samurai"). */
+  class_id:          string;
+  category:          AbilityCategory;
+  /** Terse mechanical line — derived from docs/ability-library.md. */
+  description:       string;
+  /** Cross-class gate — present only on abilities the player learned
+   *  outside their class. CLAUDE.md rule 165: own-class abilities have
+   *  NO stat gate; cross-class abilities require ≥ 6 in `stat`. Always
+   *  `min: 6` for cross-class today; the field carries the value
+   *  explicitly so future variants can raise the bar. */
+  stat_requirement?: { stat: AbilityStatShort; min: number };
+  /** Base charges per combat (always 2 per CLAUDE.md). The runtime adds
+   *  +1 per 2 levels in `charge_stat`, and +1 to Slot 1 at level 5. */
+  base_charges:      number;
+  /** Stat that drives the per-2-levels-in-this-stat charge bonus.
+   *  Passives don't have a meaningful charge scaling, so the field is
+   *  optional. */
+  charge_stat?:      AbilityStatShort;
+  /** True for the class passive — always active, never slotted, no
+   *  charge accounting. Exactly one passive per class. */
+  is_passive:        boolean;
+  /** Slot the ability fills when equipped. Slot 1 is the fixed class
+   *  identity; slot 2 unlocks at level 5; slots 3-4 at level 10/15.
+   *  Undefined when `is_passive: true`. */
+  slot_position?:    1 | 2 | 3 | 4;
+}
+
 export enum LocationStatus {
   PRESENT  = "PRESENT",   // player is here, acting within this location
   ARRIVING = "ARRIVING",  // player just moved here this turn
@@ -171,6 +247,13 @@ export interface Item {
   damage_resistances?: Partial<Record<DamageType, number>>;
   /** Armor / accessory: status effects this item prevents outright. */
   status_immunities?:  StatusEffectId[];
+  // ── P6 — Lore item ability teaching ──────────────────────────────────────
+  /** P6 — lore item: on first READ, adds the named ability to the
+   *  player's learned_abilities pool (subject to the cross-class stat
+   *  gate). Path 2 of the ability acquisition spec (rule 168). The
+   *  rarity-vs-functions rule (rule 169) limits how many of these +
+   *  other special fields a single item may carry. */
+  teaches_ability?:    AbilityId;
 }
 
 export interface EquippedLoadout {
@@ -371,6 +454,26 @@ export interface PlayerState {
    *  the character creation rework in 23.5B will populate this for
    *  every new game. Read by the narrator for biographical references. */
   character_profile?: PlayerCharacterProfile;
+  // ── P6 — Ability system ──────────────────────────────────────────────────
+  /** P6 — every ability the player has acquired this run (class +
+   *  lore-item READs + NPC-taught). 5-7 entries by end-game per the
+   *  pool/slot model (rule 166). New games start empty; P7 seeds slot
+   *  1 + passive on class assignment. */
+  learned_abilities:       AbilityId[];
+  /** P6 — fixed-length 4-slot loadout. Slot 1 (index 0) is the class
+   *  identity; slots 2-4 unlock at levels 5/10/15 (see
+   *  getUnlockedSlotCount). A `null` entry = slot empty / not yet
+   *  unlocked. Attunement (re-slotting) happens at settlements + Inn
+   *  Rest in P7. */
+  equipped_ability_slots:  [
+    AbilityId | null,
+    AbilityId | null,
+    AbilityId | null,
+    AbilityId | null,
+  ];
+  /** P6 — the class passive ability. Always active, never slotted.
+   *  `null` until the class is assigned + the passive seeded (P7). */
+  passive_ability:         AbilityId | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -861,6 +964,12 @@ export interface NPCDefinition {
    *  prompt. Reserved for future systems; populated by the generator
    *  on NPCs the WorldBible flags as recruitable. */
   min_trust_to_recruit?: number;
+  /** P6 — NPC-taught ability (rule 168 Path 3). When set, an NPC at
+   *  trust ≥ 70-80 can teach this ability via a "learn_ability" dialogue
+   *  option, adding it to the player's learned_abilities pool. The
+   *  exact trust threshold is enforced by the runtime in P7; the type
+   *  layer just carries the id. */
+  teaches_ability?:      AbilityId;
 }
 
 // ---------------------------------------------------------------------------

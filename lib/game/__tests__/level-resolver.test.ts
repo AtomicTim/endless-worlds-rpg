@@ -54,6 +54,10 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     xp:        0,
     pending_level_up: false,
     stat_cap:  STAT_CAP,
+    // P6 — ability fields are required on PlayerState; populated by P7.
+    learned_abilities:      [],
+    equipped_ability_slots: [null, null, null, null],
+    passive_ability:        null,
     ...overrides,
   };
 }

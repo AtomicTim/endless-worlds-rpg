@@ -61,6 +61,12 @@ export function createNewMasterState(
     // stay at these defaults.
     pending_level_up: false,
     stat_cap:  STAT_CAP,
+    // P6 — ability system foundation. All three fields ship empty; P7
+    // populates slot 1 + the passive at class-assignment time and the
+    // attunement UI fills slots 2-4 as the player levels.
+    learned_abilities:      [],
+    equipped_ability_slots: [null, null, null, null],
+    passive_ability:        null,
   };
 
   const world_state: WorldState = {

@@ -299,6 +299,49 @@
   .genre-space .genre-glow {
     text-shadow: 0 0 6px rgba(168,85,247,.20);
   }
+
+  /* ──────────────────────────────────────────────────────────────────────
+     UI-13: Main menu ambient genre glow
+     ──────────────────────────────────────────────────────────────────────
+     A large, soft radial gradient that sits behind the logo and slowly
+     cycles through the 5 genre accent colours (8s per genre = 40s total).
+     `.menu-ambient-glow` paints the radial; `.menu-cta-accent` cycles
+     the same 5 colours on the primary CTA's border + tint so the button
+     stays in sync with the glow.
+     Both animations run linear / infinite. The glow opacity is low
+     (~18%) so the glow reads as ambience, not a spotlight.
+     ────────────────────────────────────────────────────────────────────── */
+  @keyframes menu-ambient-cycle {
+    0%   { background: radial-gradient(circle at 50% 50%, rgba(196,148,58,.18), transparent 65%); }
+    18%  { background: radial-gradient(circle at 50% 50%, rgba(196,148,58,.18), transparent 65%); }
+    20%  { background: radial-gradient(circle at 50% 50%, rgba(34,211,238,.18),  transparent 65%); }
+    38%  { background: radial-gradient(circle at 50% 50%, rgba(34,211,238,.18),  transparent 65%); }
+    40%  { background: radial-gradient(circle at 50% 50%, rgba(132,204,22,.18),  transparent 65%); }
+    58%  { background: radial-gradient(circle at 50% 50%, rgba(132,204,22,.18),  transparent 65%); }
+    60%  { background: radial-gradient(circle at 50% 50%, rgba(168,85,247,.18),  transparent 65%); }
+    78%  { background: radial-gradient(circle at 50% 50%, rgba(168,85,247,.18),  transparent 65%); }
+    80%  { background: radial-gradient(circle at 50% 50%, rgba(234,92,12,.18),   transparent 65%); }
+    98%  { background: radial-gradient(circle at 50% 50%, rgba(234,92,12,.18),   transparent 65%); }
+    100% { background: radial-gradient(circle at 50% 50%, rgba(196,148,58,.18),  transparent 65%); }
+  }
+  .menu-ambient-glow {
+    /* The radial paints onto background; the keyframes also assign
+       background, so the static declaration here is just a fallback for
+       browsers / states that pause the animation. */
+    background: radial-gradient(circle at 50% 50%, rgba(196,148,58,.18), transparent 65%);
+    animation: menu-ambient-cycle 40s linear infinite;
+  }
+  @keyframes menu-cta-cycle {
+    0%, 18%  { border-color: rgba(196,148,58,.65); background-color: rgba(196,148,58,.10); color: #c4943a; }
+    20%, 38% { border-color: rgba(34,211,238,.65); background-color: rgba(34,211,238,.10); color: #22d3ee; }
+    40%, 58% { border-color: rgba(132,204,22,.65); background-color: rgba(132,204,22,.10); color: #84cc16; }
+    60%, 78% { border-color: rgba(168,85,247,.65); background-color: rgba(168,85,247,.10); color: #a855f7; }
+    80%, 98% { border-color: rgba(234,92,12,.65);  background-color: rgba(234,92,12,.10);  color: #ea580c; }
+    100%     { border-color: rgba(196,148,58,.65); background-color: rgba(196,148,58,.10); color: #c4943a; }
+  }
+  .menu-cta-accent {
+    animation: menu-cta-cycle 40s linear infinite;
+  }
 }
 
 @layer base {

@@ -3,8 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 0db542e (PROMPT-LOG: P6 complete)
-**jest baseline:** 678 (authoritative)
+**Last code commit:** 334c6b5 (P7 — ability system: combat + attunement UI)
+**jest baseline:** 699 (authoritative)
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -18,8 +18,8 @@
 | P4 | Quest Completion Gate Enforcement | d5ceeb1 | 648 | ✅ |
 | P5 | Combat UX: Status Effect Display | 7439cb8 | 605 | ✅ |
 | P6 | Ability System — Foundation | 87741fb | 678 | ✅ |
-| P7 | Ability System — Combat + Attunement UI | — | — | ⏳ NEXT |
-| P8 | Perks System | — | — | ⏳ |
+| P7 | Ability System — Combat + Attunement UI | 334c6b5 | 699 | ✅ |
+| P8 | Perks System | — | — | ⏳ NEXT |
 | P9 | Professions Foundation | — | — | ⏳ Day 25 |
 | P10 | Professions Crafting + XP + Milestones | — | — | ⏳ Day 25 |
 | P11 | Professions Character Sheet UI | — | — | ⏳ Day 25 |
@@ -66,3 +66,14 @@
 **P5:** Status pill below HP bar, DoT in feed, floating DoT number.
 **P6:** Data layer only — jest covers it. Spot-check ability library entries if desired, not blocking.
 **UI-1:** Visual — Fantasy accent warmer amber (#c4943a). Not blocking.
+**P7:**
+- Start a new game → confirm slot 1 + passive are seeded (Character sheet / log inspection).
+- Enter combat → tap Abilities → confirm 4-slot panel renders, slot 1 has a name + N/M charges,
+  slots 2/3/4 read "— locked" at level 1, Back returns to action bar.
+- Use a damage ability with a target enemy → confirm target HP drops, charge counter decrements.
+- Use a self heal/buff ability → confirm HP / status pill update, charge counter decrements.
+- Exhaust an ability → confirm "No charges" flash + the turn is NOT consumed.
+- Inn Rest → confirm AttunementModal opens automatically after the rest beat.
+- At a settlement_hub (not in combat) → confirm an "Attune" button is visible; tap → modal opens.
+- Reach level 5 → confirm Level Up modal advances to a slot-2 "Continue" page with War Cry (Knight).
+- Reach level 10/15 → confirm slot-3/4 candidate picker (v1: single auto-confirmable card).

@@ -32,6 +32,12 @@ import {
   shouldTriggerDialogueDiscovery,
 } from "@/lib/game/quest-discovery";
 import {
+  buildQuestGateNarrativeContext,
+  peekQuestGatesForNpc,
+  tryCompleteSideQuest,
+  type QuestGatePeek,
+} from "@/lib/game/quest-completion";
+import {
   openTrade as resolveOpenTrade,
   buyItem as resolveBuyItem,
   sellItem as resolveSellItem,
@@ -915,6 +921,39 @@ export function useGameLoop() {
 
       // ── 4. Apply state_delta ───────────────────────────────────────────────
       let updatedState = applyStateDelta(state, resolution.state_delta);
+
+      // ── 4-P4. Quest gate peek (DIALOGUE only) ──────────────────────────────
+      // For DIALOGUE actions targeting a quest-giver NPC, peek-evaluate any
+      // active item-condition side quest BEFORE narration so the narrator can
+      // deflect on missing_item ("the NPC is still waiting…"). The actual
+      // quest mutation happens AFTER narration at step 9-P4 below; the
+      // narrative_context flags ride the same resolution object straight to
+      // narrateAction. Pure — no state changes here.
+      let questGatePeek: QuestGatePeek = { ready: [], blocked: [] };
+      if (
+        parsedAction.action_type === ActionType.DIALOGUE &&
+        parsedAction.primary_target
+      ) {
+        const npcName = parsedAction.primary_target.toLowerCase();
+        const npcAsset = useGameStore.getState().locationAssets.find(
+          (a) =>
+            a.category === AssetCategory.CHARACTER &&
+            a.name.toLowerCase() === npcName,
+        );
+        const npcAssetId = npcAsset?.id ?? null;
+        questGatePeek = peekQuestGatesForNpc(updatedState, npcAssetId);
+        const gateContext = buildQuestGateNarrativeContext(questGatePeek);
+        if (Object.keys(gateContext).length > 0) {
+          // Mutating in place is safe — narrative_context is the same object
+          // ref narrateAction receives, and the StateDelta has already been
+          // applied so there's no later step that overwrites it.
+          Object.assign(resolution.narrative_context, gateContext);
+          console.log(
+            `[GameLoop/4-P4] Quest gate flags injected for ${parsedAction.primary_target}:`,
+            { ready: questGatePeek.ready.length, blocked: questGatePeek.blocked.length },
+          );
+        }
+      }
 
       // ── 4b. Roll feedback (feed + log book) ────────────────────────────────
       // The roll line goes into both the live story feed AND the persistent
@@ -3301,6 +3340,58 @@ export function useGameLoop() {
                   `[GameLoop/9-quest] Side quest discovered: ${undiscovered.title} (npc: ${parsedAction.primary_target}).`
                 );
               }
+            }
+          }
+        }
+
+        // ── 9-P4. Quest gate enforcement — apply completions ──────────────────
+        // Step 4-P4 peeked the gate and enriched narrative_context for the
+        // narrator. Now that the narrator has spoken (using flags it already
+        // received), apply the actual mutation: consume the conditioned item
+        // and mark the side quest completed. The narrator is informed by code;
+        // it does not decide completion.
+        if (resolution.success && questGatePeek.ready.length > 0) {
+          for (const quest of questGatePeek.ready) {
+            // Re-look up the live SideQuest from the (possibly mutated)
+            // updatedState — discovery in the block above may have just
+            // flipped `discovered` for this same quest. Use that as the
+            // authoritative source rather than the snapshot peek captured
+            // pre-narration.
+            const live =
+              (updatedState.quest_threads?.side_quests ?? []).find((q) => q.id === quest.id) ??
+              quest;
+            const result = tryCompleteSideQuest(updatedState, live);
+            if (result.success) {
+              updatedState = result.state;
+              updatedState = persistLogEntry(
+                updatedState,
+                LogEntryType.QUEST,
+                `QUEST COMPLETE — ${live.title}`,
+              );
+              store.addMessage(
+                makeMessage(
+                  "SYSTEM",
+                  `✦ Quest complete: ${live.title}`,
+                  {
+                    quest_completion: true,
+                    quest_id:         live.id,
+                    item_consumed:    true,
+                  },
+                ),
+              );
+              const qt = updatedState.quest_threads;
+              if (qt) {
+                saveQuestThreadsAsync(updatedState.metadata.session_id, qt);
+              }
+              console.log(
+                `[GameLoop/9-P4] Side quest completed: ${live.title} ` +
+                `(item ${live.completion_condition?.target_id} consumed).`
+              );
+            } else {
+              console.warn(
+                `[GameLoop/9-P4] tryCompleteSideQuest returned ${result.reason} ` +
+                `for ${live.title} despite peek=ready — state drifted between phases.`
+              );
             }
           }
         }

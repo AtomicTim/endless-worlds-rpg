@@ -1,7 +1,7 @@
 # Endless Worlds RPG — UI Design Reference
 
-**Version:** 2.4  
-**Status:** Design complete, ready for implementation  
+**Version:** 2.5  
+**Status:** Design complete, ready for implementation planning  
 **Covers:** All designed UI surfaces as of May 2026
 
 ---
@@ -12,8 +12,8 @@
 
 - Dark and warm, never cold or sterile
 - Amber gold is the only saturated accent colour in the Fantasy genre — all other colours are muted, warm darks. This makes the accent feel precious and meaningful
-- Georgia serif for all narrative text (prose, NPC speech, item descriptions)
-- Clean system sans-serif for all UI chrome (labels, badges, buttons, stats)
+- Cormorant Garamond serif for all narrative text (prose, NPC speech, item descriptions)
+- Inter Tight for all UI chrome (labels, badges, buttons, stats)
 - Every design decision should serve the "Saturday night on the couch" goal: a couple picks up their phones and is in a new world within 2 minutes
 
 **The Hybrid Authority Model:** Code is the source of truth for all numbers (stats, HP, gold, inventory). The AI is the Narrator and Visualiser. The UI must never make the player feel like they're interacting with a spreadsheet.
@@ -34,7 +34,7 @@ Border default:        #2d2618
 Border subtle:         #252018
 Border strong:         #3a3020
 
-Story prose:           #c0a878  (Georgia serif, warm amber)
+Story prose:           #c0a878  (Cormorant Garamond, warm amber)
 NPC speech:            #f0c060  (brighter gold, italic)
 UI text primary:       #e2cda0
 UI text secondary:     #a08870
@@ -67,14 +67,26 @@ Genre accent colour is applied to: logo/title, active tab highlights, primary bu
 
 ### Typography
 
+All three fonts are already loaded in the existing codebase. Use exact font names as specified.
+
 ```
-Narrative prose:     Georgia, serif, italic, 13–15px, line-height 1.78–1.82
-NPC speech:          Georgia, serif, italic, 13px, genre accent colour, weight 500
-UI labels:           System sans-serif, 7–9px, letter-spacing 0.1–0.18em, uppercase
-Button labels:       System sans-serif, 8–9px, uppercase, letter-spacing 0.12em
-Character names:     Georgia, serif, italic, varies by context
-Stat numbers:        Monospace/tabular-nums, for anything numeric
+Narrative prose:     'Cormorant Garamond', Georgia, serif
+                     italic, 13–15px, line-height 1.78–1.82, colour #c0a878
+
+NPC speech:          'Cormorant Garamond', Georgia, serif
+                     italic, 13px, genre accent colour, weight 500
+
+UI labels / chrome:  'Inter Tight', system-ui, sans-serif
+                     7–9px, letter-spacing 0.1–0.18em, uppercase
+
+Button labels:       'Inter Tight', system-ui, sans-serif
+                     8–9px, uppercase, letter-spacing 0.12em
+
+Stat numbers / dice: 'JetBrains Mono', monospace
+                     tabular-nums, for anything numeric
 ```
+
+Georgia and system-ui are fallbacks only. Cormorant Garamond, Inter Tight, and JetBrains Mono are always available in this codebase.
 
 ### Spacing & Shape (Base — Fantasy)
 
@@ -154,13 +166,13 @@ Horror uses BOTH `.ol-grid` (fog) AND `.ol-scan` (dots) simultaneously.
 
 | Genre | UI labels / headers | Prose / narrative |
 |-------|--------------------|--------------------|
-| Fantasy | Georgia italic, `font-style: italic`, `text-transform: none`, `letter-spacing: .04em` | Georgia italic (unchanged) |
-| Cyberpunk | `"Courier New", monospace`, `font-style: normal`, wider `letter-spacing` | Georgia italic (unchanged) |
-| Horror | System sans-serif, `font-size: 6.5px`, minimal `letter-spacing` | Georgia italic (unchanged) |
-| Space Opera | `system-ui, sans-serif`, `font-style: normal`, `letter-spacing: .14–.18em` | Georgia italic (unchanged) |
-| Post-Apoc | System sans-serif, `letter-spacing: .18–.22em`, `font-size: 6.5px` | Georgia italic (unchanged) |
+| Fantasy | Inter Tight italic, `letter-spacing: .04em` | Cormorant Garamond italic (unchanged) |
+| Cyberpunk | `"Courier New", monospace`, `font-style: normal`, wider `letter-spacing` | Cormorant Garamond italic (unchanged) |
+| Horror | Inter Tight, `font-size: 6.5px`, minimal `letter-spacing` | Cormorant Garamond italic (unchanged) |
+| Space Opera | Inter Tight, `font-style: normal`, `letter-spacing: .14–.18em` | Cormorant Garamond italic (unchanged) |
+| Post-Apoc | Inter Tight, `letter-spacing: .18–.22em`, `font-size: 6.5px` | Cormorant Garamond italic (unchanged) |
 
-**Critical rule:** Narrative prose always uses Georgia serif italic regardless of genre. Only labels, section headers, and UI chrome change typeface. Changing prose fonts would require retroactive changes across the entire UI.
+**Critical rule:** Narrative prose always uses Cormorant Garamond serif italic regardless of genre. Only labels, section headers, and UI chrome change typeface. Changing prose fonts would require retroactive changes across the entire UI.
 
 ### Text Glow Per Genre
 
@@ -225,7 +237,7 @@ Story feed fills the screen. Navigation cards appear below story text. Combat pa
 
 ### Text Display
 
-- Font: Georgia serif, 14–15px, line-height 1.82, colour `#c0a878`
+- Font: `'Cormorant Garamond', Georgia, serif`, italic, 14–15px, line-height 1.82, colour `#c0a878`
 - NPC speech: `#f0c060` (brighter), italic, weight 500 — clearly distinct from prose
 - Scene arrivals: thin rule → `◆ type` glyph → italic location name → region sub-label → rule → prose begins
 
@@ -429,11 +441,11 @@ A low-stat player rolling a 20 succeeds. A high-stat player rolling a 1 fails. T
 
 ### Feed Visual Treatments
 
-- **Narrative:** Georgia italic `#b0956a`, 1.78 line-height
-- **NPC speech:** Speaker label (uppercase genre accent) + `#f0c060` italic Georgia + streaming cursor
+- **Narrative:** Cormorant Garamond italic, `#b0956a`, 1.78 line-height
+- **NPC speech:** Speaker label (uppercase Inter Tight, genre accent) + `#f0c060` italic Cormorant Garamond + streaming cursor
 - **Player chosen line:** Left-bordered quote block `#c0a878`
 - **Observation event:** Teal left border `rgba(64,152,136,.28)`, "PERCEPTION" label + eye icon, `#a0c8b8` text
-- **Dice result:** `[dice] 14 vs 11 · hit` inline in feed — same format as combat log
+- **Dice result:** `[dice] 14 vs 11 · hit` inline in feed — JetBrains Mono, same format as combat log
 
 ### Observation Reveals Hidden Traits
 Successful PER observations surface hidden NPC trait tags in the header card with teal colour treatment. Rewards building PER — high-PER characters see more.
@@ -483,7 +495,7 @@ When a new entry is added to the Codex, two things happen simultaneously:
 - "View in Codex →" link
 - Fades in: `opacity 0→1, translateY 6px→0, 300ms ease`
 
-**2. Toast at the bottom** — same amber toast as before: "Added to Codex: [Name]" (3.5s). Fires simultaneously with the feed entry.
+**2. Toast at the bottom** — amber toast: "Added to Codex: [Name]" (3.5s). Fires simultaneously with the feed entry.
 
 The feed entry is the canonical discovery moment (it stays in the narrative scroll permanently). The toast is the notification affordance for players not looking at the feed.
 
@@ -507,12 +519,12 @@ Quests and Journal share one nav button, two tabs inside. Screen title: "Chronic
 **Auto-logged (game's voice):**
 - Left border: muted amber `rgba(196,148,58,.38)`
 - Label: "Chronicle" (Fantasy) / "SYS_LOG" (Cyberpunk) / "case notes" (Horror) / "SHIP LOG" (Space) / "LOG" (Post-Apoc)
-- Text: `#b0956a` Georgia italic
+- Text: `#b0956a` Cormorant Garamond italic
 
 **Player-written notes (personal):**
 - Left border: brighter amber `rgba(196,148,58,.72)`
 - Label: "Personal entry" (Fantasy) / "PRIV_LOG" (Cyberpunk) / "personal" (Horror) / "PERSONAL" (Space) / "NOTE" (Post-Apoc)
-- Text: `#ceaf78` Georgia italic (warmer, slightly brighter)
+- Text: `#ceaf78` Cormorant Garamond italic (warmer, slightly brighter)
 - Slightly warmer card background
 
 **Write-a-note flow:** Triggered by button at bottom. Minimal: auto-filled day label, text area, Save + Discard only. No title, no tags, no formatting tools.
@@ -536,14 +548,14 @@ The character sheet is the right panel on desktop (fixed, always visible, 196px 
 
 **1. Portrait + Identity**
 - 48px avatar circle with class icon (Tabler icon, genre accent colour, genre-styled border)
-- Character name: 13px, medium weight
-- Class + Level: 8.5px Georgia italic, muted
+- Character name: 13px, medium weight, Inter Tight
+- Class + Level: 8.5px Cormorant Garamond italic, muted
 
 **2. HP Bar**
 - 8px tall, fat bar — the most prominent element after the name
 - Same colour-state system as combat HP bars (same thresholds, same colours)
 - `transition: width 300ms ease, background-color 400ms ease`
-- Shows `28 / 42` value right-aligned; flashes red on damage, green on heal
+- Shows `28 / 42` value right-aligned in JetBrains Mono; flashes red on damage, green on heal
 - At ≤10%: CSS pulse animation
 
 **3. XP Bar**
@@ -563,7 +575,7 @@ All five stats in one horizontal row. No grid, no empty cells ever.
 [STR 8] [AGI 9] [INT 13] [PER 11] [CHA 10]
 ```
 
-Each cell: number (15–18px, neutral warm `#cbb888` — same for all stats, NOT colour-coded per stat), label below (6px, muted, uppercase). Subtle same-tone border. Classic D&D feel.
+Each cell: number (15–18px, JetBrains Mono, neutral warm `#cbb888` — same for all stats, NOT colour-coded per stat), label below (6px Inter Tight, muted, uppercase). Subtle same-tone border. Classic D&D feel.
 
 Genre overrides the neutral number colour (teal for Horror, purple for Space) but stats are NEVER individually colour-coded by type.
 
@@ -575,7 +587,7 @@ Three slots, all always shown — never hidden even when empty:
 - Armour slot
 - Accessory slot (ring, necklace, trinket)
 
-Empty slot: slot-type icon at ~25% opacity, "— empty" in dim italic, slot label.
+Empty slot: slot-type icon at ~25% opacity, "— empty" in dim italic Cormorant Garamond, slot label.
 
 **7. Pack Inventory**
 Section header: "Pack · N / 8"
@@ -670,7 +682,7 @@ Appears when a quest moves to the Completed state. Uses green visual language to
 **Structure:**
 - 44px green circle with check icon, centred at top
 - "Quest Complete" label in small caps, green `#5a9a5a`
-- Quest name: 16px Georgia italic, prominent
+- Quest name: 16px Cormorant Garamond italic, prominent
 - 2–3 sentence narrative summary of what was accomplished
 - Thin divider
 - XP reward: large number + "XP" label
@@ -689,8 +701,8 @@ The most important moment in the game loop. Must feel genuinely rewarding — th
 1. **Header (ambient glow)**
    - "✦ Level Up ✦" text in genre accent with pulsing `text-shadow` glow animation (2s loop)
    - A radial gradient behind the level number (`rgba(accent, .22)`, 130px × 90px ellipse)
-   - Previous level → new level: `"4 → 5"` displayed as small grey `4 →` followed by large prominent `5` (52px, Georgia, `#e8d5b0`)
-   - Class name in muted small caps below
+   - Previous level → new level: `"4 → 5"` displayed as small grey `4 →` followed by large prominent `5` (52px, Cormorant Garamond, `#e8d5b0`)
+   - Class name in muted Inter Tight small caps below
 
 2. **Divider**
 
@@ -698,9 +710,9 @@ The most important moment in the game loop. Must feel genuinely rewarding — th
 
    Each card shows (top to bottom):
    - `+1` badge: top-right corner, genre accent, hidden until card is selected
-   - Current value: 17px, neutral warm, transitions to accent on selection
-   - Stat name: 6px uppercase label
-   - Two-word description: 5.5px, very muted, two lines stacked
+   - Current value: 17px JetBrains Mono, neutral warm, transitions to accent on selection
+   - Stat name: 6px Inter Tight uppercase label
+   - Two-word description: 5.5px Inter Tight, very muted, two lines stacked
 
    **Stat descriptions:**
    | Stat | Description |
@@ -805,6 +817,8 @@ Codex, Map, Journal, Chronicle all replace the center panel content. Left and ri
 
 ## 15. Implementation Notes for Claude Code
 
+- **Font stack is authoritative** — Cormorant Garamond for prose/narrative, Inter Tight for UI chrome, JetBrains Mono for numbers. All three are already loaded. Never substitute system fonts for these.
+- **Fantasy accent colour is `#c4943a`** — the existing codebase uses `#f59e0b` in the CLAUDE.md tech stack table and likely in `--g-fantasy`. Update to `#c4943a`. Single CSS variable change.
 - **Genre class on root container** — apply `genre-X` to the game root; all styling cascades. Never apply genre overrides per-component.
 - **CSS custom properties** — define all card/content variables at the genre class level; components consume `var()` references.
 - **Three overlay divs** — every scrollable content area needs `.ol-scan`, `.ol-grid`, `.ol-tex` divs (absolute, inset: 0, pointer-events: none, z-index: 2). Genre CSS shows exactly one or two per genre.
@@ -823,7 +837,7 @@ Codex, Map, Journal, Chronicle all replace the center panel content. Left and ri
 - **NPC dialogue: exactly 4 content slots + 1 persistent end button** — end button is structurally outside the slots.
 - **Portrait zones on combat cards have fixed pixel dimensions** — art drops in as background image, layout does not reflow.
 - **Tabler icon names in Section 9 are verified** — use exactly those names.
-- **Never change narrative prose font** — Georgia italic throughout, all genres. Only labels and UI chrome change typeface per genre.
+- **Never change narrative prose font** — Cormorant Garamond italic throughout, all genres. Only labels and UI chrome change typeface per genre.
 - **Observation options always tappable** — failed observation gives vaguer result, never hard-locked.
 - **Notable mark (◈) is never automatic** — only AI-flagged or player-starred entries get it.
 - **Character sheet stat block is a single inline row** — five cells in one horizontal row, no grid, no empty slots ever possible.
@@ -832,3 +846,84 @@ Codex, Map, Journal, Chronicle all replace the center panel content. Left and ri
 - **Character sheet has no story content** — Journal/Chronicle is the canonical record of narrative events.
 - **Toast z-index: 30** — always on top of combat panel (z-index: 10) and overlays.
 - **Use `requestAnimationFrame` double-frame trick for CSS transitions on dynamically inserted elements** — set element, then two rAF calls, then add the transition class. Direct class add after insertion won't animate.
+
+---
+
+## 16. Notes & Considerations for Implementation Planning
+
+*This section is written for Claude.ai review when planning Claude Code prompts. It documents resolved decisions, active conflicts with the existing codebase, design gaps that need work before prompting, and the recommended implementation approach.*
+
+---
+
+### Resolved Decisions
+
+**Fantasy accent colour:** `#c4943a` is authoritative. The existing codebase has `#f59e0b` in the CLAUDE.md tech stack table. This must be updated when implementing the genre visual system. It is a single CSS variable replacement — no structural work required.
+
+**Narrative prose font:** `'Cormorant Garamond', Georgia, serif` — Cormorant Garamond is already loaded in the codebase. Inter Tight (already loaded) for UI chrome. JetBrains Mono (already loaded) for stat numbers, dice results, and tabular values. No new fonts need to be sourced or installed.
+
+---
+
+### Active Conflicts with the Existing Codebase
+
+These are cases where this doc's target state differs from what currently exists. Each needs to be factored into the relevant Claude Code prompt.
+
+**CombatMode is a bottom-strip, not a flex item.**
+CLAUDE.md rule 39: "CombatMode bottom-strip swap when `combat?.active === true`." The current implementation is absolute-positioned at the screen bottom. This doc specifies a flex-item that pushes the story feed up (height 0 → 188px). These are architecturally different — the bottom-strip approach needs to be refactored, not just reskinned, when the combat panel redesign prompt is written.
+
+**LevelUpModal already exists — redesign, not replace.**
+CLAUDE.md rule 90: "Level-up post-combat, player-driven. LevelUpModal + 5-button picker." The component exists. Section 14's level up spec is a redesign of that existing modal (pulsing glow, 4→5 display, stat descriptions, spring animation, dynamic confirm button label). Claude Code should be told explicitly to redesign the existing component.
+
+**Story Feed Colors token system in CLAUDE.md is a separate layer.**
+CLAUDE.md has its own canonical story feed colour table covering gameplay highlight tokens: player action teal `#7ab8c8`, item highlight `#e8c547`, region highlight lavender `--hl-region`, location sky-blue `--hl-loc`, etc. This system coexists with the narrative prose styling in this doc — it is not being redesigned. Prompts implementing story panel changes must leave the highlight token system untouched.
+
+**Nav card presentation vs. existing group logic.**
+CLAUDE.md rule 72 uses "BACK/DEEPER/PEER/UNDISCOVERED" as internal group names in code logic. This doc replaces the visible *label presentation* with plain English directional language ("The Quarry Mouth · north"). The underlying grouping logic stays unchanged. Only the UI presentation changes — make this explicit in the nav card prompt.
+
+**Design token naming conflict.**
+The existing codebase uses tokens like `--g-fantasy`, `--accent`, `var(--ink-1)`. This doc introduces tokens like `--genre-accent`, `--card-bg`, `--card-radius`. When implementing the genre visual system, Claude Code should reconcile these into a single coherent system — mapping new tokens onto or replacing existing ones — rather than introducing a parallel set.
+
+---
+
+### Design Gaps
+
+The following surfaces are referenced in this doc or the codebase but have not been visually designed. Prompts for these surfaces will require design decisions to be made upstream before Claude Code can be given clear instructions.
+
+**Context Panel (left panel on desktop)**
+Described in Section 4 as showing current location name, type, description, NPCs present, and interactable objects. No visual spec, layout, or interaction model exists. Needs design before a Claude Code prompt can be written.
+
+**Top bar visual layout**
+Section 4 lists the elements but provides no visual arrangement, sizing, or spacing. Needs design.
+
+**Mobile navigation pattern**
+Individual screens are specced (Codex, Journal, Map, Character Sheet as overlays). The navigation *system* on mobile — what lives at the bottom of the screen, how the player moves between primary surfaces — is not specified. Worth resolving before implementing any mobile navigation work.
+
+**Enter World transition**
+Character creation ends with "Begin Adventure." The transition to the game itself is not specced. Note: CLAUDE.md rule 42 specifies a World Intro Cinematic Modal fires on first load when `metadata.world_intro` is set. The transition design should connect to this existing mechanism rather than replace it.
+
+**Search / loot flow**
+The victory card's "Search the remains →" prompt triggers a loot interaction. CLAUDE.md rules 83/84/87 confirm the loot engine is built (floor_loot[], engine-resolved, "Search" label on container objects). The UI for what happens when the player taps "Search" — how loot is presented and confirmed — is not designed.
+
+**Error states**
+API failures, network errors, mid-stream LLM failures. Not addressed anywhere.
+
+**Main menu and save slots**
+The app entry point. Not designed.
+
+**Settings screen**
+Not designed.
+
+---
+
+### Implementation Approach
+
+This doc describes the **target visual state** for a live codebase at V8.83 with 626 passing tests. It is not a spec for a greenfield build.
+
+The intended approach is **surface-by-surface redesign** integrated into the existing 11-prompt implementation arc. UI work should be scoped to the surface being addressed in each prompt — not batched into a separate "UI overhaul" prompt.
+
+**Authority division:** This doc and CLAUDE.md are both authoritative in their respective domains. CLAUDE.md governs game logic, architecture, data rules, and engine behaviour. This doc governs visual presentation, interaction design, and animation. In cases of conflict on UI matters, this doc takes precedence. In cases of conflict on game mechanics or data behaviour, CLAUDE.md takes precedence.
+
+**Per-prompt invariants that apply to all UI work:**
+- Origin/main baseline check first (CLAUDE.md rule 76)
+- Investigation-before-patching (CLAUDE.md V8.40)
+- jest baseline of 626 must be maintained (CLAUDE.md rule 91)
+- Do not break the Story Feed Colors token system

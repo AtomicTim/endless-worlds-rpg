@@ -1,19 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
-// UI-fix-E 4b — swapped from Lucide to Tabler per design-reference §18.
-// Tabler is the icon library called out in the spec and is already a
-// project dependency (@tabler/icons-react ^3.44.0, used by the wizard,
-// dashboard, and TopBar). Mapping:
-//   container → IconPackage   (was lucide Package)
-//   lore      → IconBook      (was lucide BookOpen)
-//   remains   → IconSkull     (was lucide Skull)
-//   box/other → IconBox       (was lucide Box)
-// UI-fix-D 4b — add IconRefresh for the settlement-hub Attune entry
-// (Tabler "ti-refresh", per design-reference §18 action verbs). The
-// Attune entry takes over the "no designed surface" floating button
-// the page used to render between FloorLootStrip and NavigationBar.
-import { IconPackage, IconBox, IconBook, IconSkull, IconRefresh } from "@tabler/icons-react";
+// Change 5 — the ObjectCard refactor moved to a verb-label + name
+// layout with no icon column, so the Tabler icon imports (added by
+// UI-fix-E 4b and UI-fix-D 4b) are no longer referenced. Removing
+// them satisfies @typescript-eslint/no-unused-vars at build time;
+// reintroduce as needed when an icon-style affordance returns.
 import { LootModal } from "@/components/game/loot/LootModal";
 import { AssetCategory } from "@/types/game";
 import type {
@@ -82,7 +74,8 @@ const NPC_ROLE_INK  = "#7a6040";
 // label inside their respective cards and share visual weight; the
 // previous #c4b090 made object names read as secondary.
 const OBJ_NAME_INK  = "#d4bc88";
-const ICON_INK      = "#7a6040";
+// Change 5 — ICON_INK dropped alongside the icon column. Reinstate
+// if a glyph-style affordance returns to ObjectCard.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pure helpers
@@ -211,8 +204,12 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
 
   // ── Renderers ────────────────────────────────────────────────────────────
 
+  // Change 3 — section labels rephrased from environmental copy ("Here
+  // Now" / "In This Space") to action-first ("Present" / "Interact").
+  // The new wording reads as a UI affordance rather than a narrator
+  // aside, matching the row-level Talk → / Search verbs below it.
   const npcSection = npcAssets.length === 0 ? null : (
-    <Section label="Here Now">
+    <Section label="Present">
       {npcAssets.map((npc) => {
         const role  = String(npc.constitution?.role ?? "").trim();
         const trust = masterState ? trustFor(masterState, npc) : 50;
@@ -242,7 +239,7 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
 
   const showObjects = showAttune || objects.length > 0 || floorLoot.length > 0;
   const objectsSection = !showObjects ? null : (
-    <Section label="In This Space">
+    <Section label="Interact">
       {showAttune && (
         <ObjectCard
           key="attune"
@@ -323,13 +320,21 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
       {/* Content stack — sits above the overlay z-index 2 layer. */}
       <div className="relative z-10 flex flex-col gap-3 p-3">
         {/* ── Section A: Location header ────────────────────────────────── */}
+        {/* Change 1 — name promoted to 20px / weight 500 / line-height 1.2;
+            still serif italic, still truncated, still NAME_INK so it
+            reads as a proper page header rather than a body line.
+            Change 2 — type badge demoted from pill to plain muted
+            uppercase label: no background, no border, no pill padding;
+            just Inter Tight 8px / 0.14em ls / #6a5530. */}
         {node && (
           <div className="flex items-center gap-2">
             <div
               className="min-w-0 flex-1 italic truncate"
               style={{
                 fontFamily: "var(--serif)",
-                fontSize:   13,
+                fontSize:   20,
+                fontWeight: 500,
+                lineHeight: 1.2,
                 color:      NAME_INK,
               }}
             >
@@ -341,13 +346,9 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
                 className="shrink-0 uppercase"
                 style={{
                   fontFamily:    "var(--sans)",
-                  fontSize:      7,
-                  letterSpacing: "0.12em",
-                  padding:       "2px 8px",
-                  borderRadius:  20,
-                  color:         "var(--genre-accent)",
-                  background:    "rgba(var(--genre-accent-rgb), .12)",
-                  border:        "1px solid rgba(var(--genre-accent-rgb), .28)",
+                  fontSize:      8,
+                  letterSpacing: "0.14em",
+                  color:         "#6a5530",
                 }}
               >
                 {typeBadge}
@@ -377,6 +378,44 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
 
         {/* ── Section D: IN THIS SPACE (Objects) ────────────────────────── */}
         {objectsSection}
+
+        {/* ── Section E: Region breadcrumb ──────────────────────────────── */}
+        {/* Change 6 — quiet "parent zone › current node" trail anchored
+            at the bottom of the panel so the player always has the
+            location hierarchy at a glance without scrolling back to
+            the top bar's breadcrumb. Three-tone palette descends
+            #3a2a18 (parent) → #2a1e10 (›) → #6a4a28 (current),
+            keeping the visual weight on the current location.
+            Renders null when world_graph isn't loaded yet, when the
+            node has no zone_id, when zone_id points at the node
+            itself (the node IS the zone), or when zone_id misses
+            the nodes registry — never throws, never empty <div>. */}
+        {(() => {
+          const wg = masterState?.world_graph;
+          if (!wg || !node) return null;
+          const parentId = node.zone_id;
+          if (!parentId || parentId === node.id) return null;
+          const parent = wg.nodes[parentId];
+          if (!parent) return null;
+          return (
+            <div
+              style={{
+                borderTop:     "1px solid #1e1912",
+                marginTop:     8,
+                paddingTop:    8,
+                fontFamily:    "var(--sans)",
+                fontSize:      8,
+                letterSpacing: "0.08em",
+                color:         "#4a3818",
+                lineHeight:    1.5,
+              }}
+            >
+              <span style={{ color: "#3a2a18" }}>{parent.name}</span>
+              <span style={{ color: "#2a1e10", margin: "0 4px" }}>›</span>
+              <span style={{ color: "#6a4a28" }}>{node.name}</span>
+            </div>
+          );
+        })()}
       </div>
 
       {/* UI-8 — Loot modal overlay. Mounts adjacent to the panel so it
@@ -426,7 +465,13 @@ function Section({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-/** NPC card. */
+/** NPC card.
+ *  Change 4 — name switches from serif italic to Inter Tight 600 so it
+ *  reads as a UI label, not a narrator beat. Role gets explicit 0.10em
+ *  tracking to space it out at 8px. A new "Talk →" affordance lands
+ *  rightmost in the genre accent, pinned via marginLeft:auto so it
+ *  hugs the right edge regardless of name length. The whole row stays
+ *  tappable — Talk → is signal, not a target. */
 function NpcCard({
   name, role, dot, onClick,
 }: {
@@ -467,9 +512,10 @@ function NpcCard({
       />
       <div className="min-w-0 flex-1">
         <div
-          className="italic truncate"
+          className="truncate"
           style={{
-            fontFamily: "var(--serif)",
+            fontFamily: "var(--sans)",
+            fontWeight: 600,
             fontSize:   12,
             color:      NPC_NAME_INK,
           }}
@@ -478,45 +524,66 @@ function NpcCard({
         </div>
         {role && (
           <div
-            className="truncate"
+            className="truncate uppercase"
             style={{
-              fontFamily: "var(--sans)",
-              fontSize:   8,
-              color:      NPC_ROLE_INK,
+              fontFamily:    "var(--sans)",
+              fontSize:      8,
+              letterSpacing: "0.10em",
+              color:         NPC_ROLE_INK,
             }}
           >
             {role}
           </div>
         )}
       </div>
+      <span
+        aria-hidden
+        style={{
+          fontFamily:  "var(--sans)",
+          fontSize:    10,
+          color:       "var(--genre-accent)",
+          flexShrink:  0,
+          marginLeft:  "auto",
+          paddingLeft: 8,
+        }}
+      >
+        Talk →
+      </span>
     </button>
   );
 }
 
-/** Object card — icon + name + accent action pill. */
+/** Object card — verb label + name.
+ *  Change 5 — collapsed from "icon + name + pill" to a two-element
+ *  horizontal row: the verb leads (Inter Tight 7px uppercase ls
+ *  0.14em in the genre accent), the object name follows in Cormorant
+ *  Garamond italic 12px (OBJ_NAME_INK = #d4bc88, shared with NPC
+ *  names per UI-fix-E). The icon column and the right-side accent
+ *  pill are both gone — the verb label and italic name carry the
+ *  action read on their own without the visual noise.
+ *
+ *  The `icon` prop is retained on the signature so call sites in
+ *  this file don't need a coordinated edit and the type stays
+ *  documented; it's marked unused via `void`. The Tabler icon
+ *  imports stay in place per spec (may be reintroduced later).
+ *
+ *  The Attune entry uses the same shell — its caller passes
+ *  actionLabel="Attune" + name="Attune abilities", which slots
+ *  cleanly into the verb-then-name layout without a special case. */
 function ObjectCard({
   name, icon, actionLabel, onClick,
 }: {
   name:        string;
-  // UI-fix-D 4b — added "attune" so the settlement-hub Attune entry
-  // can reuse the standard ObjectCard shell. IconRefresh is the
-  // ti-refresh glyph called out in the design ref §18 action verbs.
   icon:        "container" | "lore" | "box" | "remains" | "attune";
   actionLabel: string;
   onClick:     () => void;
 }) {
-  const IconCmp =
-    icon === "container" ? IconPackage
-    : icon === "lore"    ? IconBook
-    : icon === "remains" ? IconSkull
-    : icon === "attune"  ? IconRefresh
-    :                      IconBox;
-
+  void icon;
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-full items-center gap-2 transition-colors text-left"
+      className="group flex w-full items-center transition-colors text-left"
       style={{
         background:   "rgba(var(--genre-accent-rgb), .04)",
         border:       "1px solid rgba(var(--genre-accent-rgb), .12)",
@@ -532,35 +599,34 @@ function ObjectCard({
           "rgba(var(--genre-accent-rgb), .04)";
       }}
     >
-      <IconCmp
-        aria-hidden
-        size={13}
-        style={{ color: ICON_INK, flexShrink: 0 }}
-      />
-      <div
-        className="min-w-0 flex-1 italic truncate"
-        style={{
-          fontFamily: "var(--serif)",
-          fontSize:   12,
-          color:      OBJ_NAME_INK,
-        }}
-      >
-        {name}
-      </div>
       <span
-        className="shrink-0 uppercase"
+        className="uppercase"
         style={{
           fontFamily:    "var(--sans)",
           fontSize:      7,
-          letterSpacing: "0.12em",
-          padding:       "2px 8px",
-          borderRadius:  20,
+          letterSpacing: "0.14em",
           color:         "var(--genre-accent)",
-          background:    "rgba(var(--genre-accent-rgb), .12)",
-          border:        "1px solid rgba(var(--genre-accent-rgb), .28)",
+          flexShrink:    0,
+          marginRight:   8,
         }}
       >
         {actionLabel}
+      </span>
+      <span
+        className="italic"
+        style={{
+          fontFamily:   "var(--serif)",
+          fontStyle:    "italic",
+          fontSize:     12,
+          color:        OBJ_NAME_INK,
+          flex:         1,
+          minWidth:     0,
+          overflow:     "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace:   "nowrap",
+        }}
+      >
+        {name}
       </span>
     </button>
   );

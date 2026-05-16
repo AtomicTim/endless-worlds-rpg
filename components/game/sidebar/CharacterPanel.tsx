@@ -628,11 +628,17 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                       {ITEM_ICONS[item.type]}
                     </span>
                     <span
-                      className="ew-serif"
+                      // UI-fix-F 4a — pack cells are small UI chrome, not
+                      // narrative text. Per design ref §13: "6px
+                      // abbreviated name below in Inter Tight #7a6040".
+                      // Was ew-serif italic 9px #9a7e52 — too prose-like
+                      // for a 3-col compact grid; the Cormorant glyphs
+                      // also don't legibly survive 9px ellipsis.
                       style={{
-                        fontStyle:    "italic",
-                        fontSize:     9,
-                        color:        "#9a7e52",
+                        fontFamily:   "var(--sans)",
+                        fontStyle:    "normal",
+                        fontSize:     6,
+                        color:        "#7a6040",
                         width:        "100%",
                         whiteSpace:   "nowrap",
                         overflow:     "hidden",
@@ -806,12 +812,16 @@ function EquipSlotRow({ kind, item, onTap }: EquipSlotRowProps) {
       }}
     >
       <span
+        // UI-fix-F 4b — equipped item name per design ref §13:
+        // Cormorant Garamond italic 10px #9a8060. Was 11px / #c4b090.
+        // Empty placeholder (#3a3020 at 10px) keeps its dim treatment
+        // — the dimness signals "no item" without re-styling.
         className="ew-serif"
         style={{
           flex:         1,
           fontStyle:    "italic",
-          fontSize:     item ? 11 : 10,
-          color:        item ? "#c4b090" : "#3a3020",
+          fontSize:     10,
+          color:        item ? "#9a8060" : "#3a3020",
           whiteSpace:   "nowrap",
           overflow:     "hidden",
           textOverflow: "ellipsis",

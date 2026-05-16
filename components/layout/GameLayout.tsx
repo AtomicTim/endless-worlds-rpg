@@ -251,31 +251,45 @@ export function GameLayout({
           {mainPanel}
         </main>
 
-        {/* Mobile right-sidebar backdrop */}
+        {/* Mobile right-sidebar backdrop. UI-fix-F 4c — was md:hidden;
+            now lg:hidden so tablet (768–1023px) shares the mobile
+            drawer treatment with the Context Panel (which already
+            docks at lg, GameLayout line 130). */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 z-10 md:hidden"
+            className="fixed inset-0 z-10 lg:hidden"
             style={{ background: "rgba(0,0,0,0.6)" }}
             onClick={() => setSidebarOpen(false)}
           />
         )}
 
-        {/* Right sidebar — character panel */}
+        {/* Right sidebar — character panel.
+            UI-fix-F 4c — sidebar widths per design ref §13:
+              ≥ 1280 (xl) → 196px docked
+              1024–1279 (lg) → 160px docked
+              < 1024     → fixed drawer w-72 with translate-x slide
+            Was md:w-[280px] uniformly across tablet+desktop, which
+            forced LogBook + Context Panel to fight for centre-column
+            real estate. Mirroring the Context Panel's lg/xl pattern
+            (line 130) keeps the layout symmetric. */}
         <aside
           className={[
             "fixed right-0 top-14 z-20 h-[calc(100vh-3.5rem)] w-72 overflow-y-auto",
-            "md:relative md:top-auto md:z-auto md:h-auto md:w-[280px] md:max-w-[280px] md:min-w-[280px]",
+            "lg:relative lg:top-auto lg:z-auto lg:h-auto",
+            "lg:w-[160px] lg:min-w-[160px] lg:max-w-[160px]",
+            "xl:w-[196px] xl:min-w-[196px] xl:max-w-[196px]",
             "transition-transform duration-300 ease-in-out",
-            sidebarOpen ? "translate-x-0 sidebar-slide-in" : "translate-x-full md:translate-x-0",
+            sidebarOpen ? "translate-x-0 sidebar-slide-in" : "translate-x-full lg:translate-x-0",
           ].join(" ")}
           style={{
             borderLeft:      "1px solid var(--line)",
             backgroundColor: "var(--bg-1)",
           }}
         >
-          {/* Mobile close row */}
+          {/* Mobile close row — UI-fix-F 4c md:hidden → lg:hidden so it
+              still appears on tablet drawer mode. */}
           <div
-            className="flex items-center justify-between px-3 py-2 md:hidden"
+            className="flex items-center justify-between px-3 py-2 lg:hidden"
             style={{ borderBottom: "1px solid var(--line)" }}
           >
             <span

@@ -3,9 +3,9 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 8f88f56 (context-panel: larger name, plain badge, Present/Interact labels, NPC Talk→, object verb-label, breadcrumb)
-**jest baseline:** 734 (authoritative — context-panel rework is presentation-only, no test deltas)
-**tsc:** clean (on ContextPanel-isolated state; CharacterPanel has unrelated in-flight edits)
+**Last code commit:** bc986d7 (char-panel: equipped tile grid, pack 4-col icon-only)
+**jest baseline:** 734 (authoritative — char-panel rework is presentation-only, no test deltas)
+**tsc:** clean
 
 ## Gameplay Implementation Arc
 
@@ -56,6 +56,12 @@
 | # | Change | Commit | Tests | Status |
 |---|--------|--------|-------|--------|
 | 1–6 | Larger name, plain badge, Present/Interact labels, NPC Talk→, object verb-label, region breadcrumb | 8f88f56 | 734 | ✅ |
+
+## Character Panel polish pass (post-brief)
+
+| # | Change | Commit | Tests | Status |
+|---|--------|--------|-------|--------|
+| 1 | Equipped → 3-tile flex grid (80×80, icon+name+stat); Pack → 4-col INVENTORY_CAP icon-only grid with dashed empty cells; Tabler icons replace unicode glyphs; RARITY_COLORS dropped | bc986d7 | 734 | ✅ |
 
 ## Known Gaps (post-arc)
 

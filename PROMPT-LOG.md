@@ -3,8 +3,12 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** bc986d7 (char-panel: equipped tile grid, pack 4-col icon-only)
-**jest baseline:** 734 (authoritative — char-panel rework is presentation-only, no test deltas)
+**Last code commit:** 0be34aa (UI-foundation PR-1: canonical tokens + #f59e0b purge)
+**jest baseline:** 734 non-ui-foundation tests passing (authoritative for gameplay/business
+  suites). Full repo: 854 / 837 passed / 17 failed — all 17 failures are in the new
+  `lib/__tests__/ui-foundation.test.ts` harness (committed at a7e1c44, moved to canonical
+  `__tests__` in 0be34aa) and all 17 are explicit PR-2 / PR-3 scope. The harness IS the
+  new gate; its failures are tracked separately from the gameplay baseline.
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -62,6 +66,15 @@
 | # | Change | Commit | Tests | Status |
 |---|--------|--------|-------|--------|
 | 1 | Equipped → 3-tile flex grid (80×80, icon+name+stat); Pack → 4-col INVENTORY_CAP icon-only grid with dashed empty cells; Tabler icons replace unicode glyphs; RARITY_COLORS dropped | bc986d7 | 734 | ✅ |
+
+## UI Foundation verification harness
+
+| PR | Scope | Commit | ui-fdn fails | Status |
+|----|-------|--------|--------------|--------|
+| Harness | `lib/__tests__/ui-foundation.test.ts` introduced (file moved to canonical jest path in PR-1) | a7e1c44 / a1f8962 | 31 | landed |
+| PR-1 | Canonical §2 tokens added to globals.css (--ui-text-*, --ui-border-*, --ui-bg-*, --npc-*, --atmosphere, --breadcrumb-*, --chronicle-prose, --player-notes, --stat-heal, --stat-accessory, --combat-dot-tick); FORBIDDEN_HEX_CODES + "no forbidden legacy hex" describe added; #f59e0b purged from 4 map renderers (DebugMap / FantasyMap / primitives / WorldMapTier3) | 0be34aa | 31 → 17 | ✅ |
+| PR-2 | Tokenize semantic systems — POI colours, status effect colours, NPC tone bars (poi-colors.ts, StatusEffectPills.tsx, genre-ui.ts) | _pending_ | est. 17 → ~10 | ⏳ |
+| PR-3 | Tokenize Tailwind defaults (#22c55e, #3b82f6, #ef4444, #fbbf24, #e2e8f0 etc) across the remaining ~10 component files | _pending_ | est. ~10 → 0 | ⏳ |
 
 ## Known Gaps (post-arc)
 

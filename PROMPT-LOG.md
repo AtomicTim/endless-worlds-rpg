@@ -3,7 +3,7 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 43ca65e (UI-PR5: CharacterPanel token pass + genre accent fix)
+**Last code commit:** 10a772f (UI-PR5: CharacterPanel token pass + genre accent fix)
 **jest baseline:** 854 (authoritative — zero delta PR-5, ui-foundation 120/120)
 **tsc:** clean
 
@@ -69,7 +69,7 @@ Pattern established across PR-3 and PR-4: proposed new tokens frequently turn ou
 | PR-2 | 42 semantic tokens (POI, status effects, dialogue tones, codex, loot rarity, nav, surfaces) | 6101441 | 854 | 42 | ✅ |
 | PR-3 | NavigationBar.tsx — zero hex strings remain | f31dec3 | 854 | 4 (--nav-border-unknown/name/sublabel/breadcrumb) | ✅ |
 | PR-4 | StoryFeed.tsx + StoryComponents.tsx — zero hex strings remain | dbfd1af | 854 | 1 (--status-resolved: #5a9a5a) | ✅ |
-| PR-5 | CharacterPanel.tsx — zero hex strings remain; genre-accent bug fix (rgba 196,148,58 → genre-accent-rgb); hpThresholdColor() returns var() strings | 43ca65e | 854 | 5 (--hp-healthy / good / hurt / danger / critical) | ✅ |
+| PR-5 | CharacterPanel.tsx — zero hex strings remain; genre-accent bug fix (rgba 196,148,58 → genre-accent-rgb); hpThresholdColor() returns var() strings | 10a772f | 854 | 5 (--hp-healthy / good / hurt / danger / critical) | ✅ |
 
 ## Workflow note (post PR-4 merge conflict)
 

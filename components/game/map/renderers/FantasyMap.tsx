@@ -43,7 +43,8 @@ function CommonNodes({
   return (
     <>
       {nodes.map((n) => {
-        const labelColor = n.isCurrent ? "#f59e0b"
+        /* canonical --g-fantasy resolved literal — SVG fill attribute */
+        const labelColor = n.isCurrent ? "#c4943a"
                          : n.isDiscovered ? "#e8d8b0" : "#7a6850";
         return (
           <g key={n.id}>
@@ -87,8 +88,9 @@ function CommonNodes({
             </text>
             {npcMode && n.npcCount > 0 && (
               <g transform={`translate(${n.x + 6} ${n.y - 5})`}>
-                <circle r="1.4" fill="#f59e0b" />
-                <circle r="2.8" fill="#f59e0b" opacity="0.3" />
+                {/* canonical --g-fantasy resolved literal — SVG fill attribute */}
+                <circle r="1.4" fill="#c4943a" />
+                <circle r="2.8" fill="#c4943a" opacity="0.3" />
               </g>
             )}
           </g>
@@ -128,7 +130,8 @@ function CommonExits({
             fontFamily="var(--serif)"
             fontStyle="italic"
             fontSize="14"
-            fill="#f59e0b"
+            /* canonical --g-fantasy resolved literal — SVG fill attribute */
+            fill="#c4943a"
           >
             → {e.targetName}
           </text>

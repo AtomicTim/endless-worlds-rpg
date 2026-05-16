@@ -95,6 +95,57 @@
     --combat-flee:             #a8a29c;  /* dusty grey-tan — flee line */
     --combat-encounter-banner: #f4a07a;  /* light coral — combat_start banner (Day 20.1) */
 
+    /* ──────────────────────────────────────────────────────────────────
+       Endless Worlds — UI palette tokens (design ref §2 canonical)
+       ──────────────────────────────────────────────────────────────────
+       These match the design ref's "UI text / border / surface" section
+       verbatim. Components must consume these via var(--ui-text-1) etc
+       instead of inlining the hex literals; the ui-foundation jest test
+       enforces this.
+       ────────────────────────────────────────────────────────────────── */
+
+    /* UI text (design ref §2) */
+    --ui-text-1:      #e2cda0;  /* primary — labels, names, attribute values */
+    --ui-text-2:      #a08870;  /* secondary — role tags, breadcrumb mid */
+    --ui-text-muted:  #6a5530;  /* muted   — section headings, type pills */
+    --ui-text-hint:   #5a4828;  /* hint    — disabled / dimmest meta */
+    --ui-text-prose:  #c0a878;  /* prose   — narrator body text */
+
+    /* UI borders (design ref §2) */
+    --ui-border-default: #2d2618;
+    --ui-border-subtle:  #252018;
+    --ui-border-strong:  #3a3020;
+
+    /* UI surfaces (design ref §2) */
+    --ui-bg-primary:   #1c1a17;  /* main game background */
+    --ui-bg-secondary: #1e1b16;
+    --ui-bg-tertiary:  #141210;  /* top + bottom bars */
+    --ui-bg-card:      #221e19;  /* combat cards, option cards */
+
+    /* Context Panel + NPC card inks (design ref §18) */
+    --npc-name:   #d4bc88;  /* NPC name inside cards */
+    --npc-role:   #7a6040;  /* NPC role / disposition label */
+    --atmosphere: #9a7e52;  /* atmosphere prose under location header */
+
+    /* Breadcrumb tone descent (Context Panel footer) */
+    --breadcrumb-parent:  #3a2a18;
+    --breadcrumb-sep:     #2a1e10;
+    --breadcrumb-current: #6a4a28;
+    --breadcrumb-rule:    #1e1912;
+
+    /* Chronicle / Journal (design ref §12) */
+    --chronicle-prose: #b0956a;  /* auto-log prose */
+    --player-notes:    #ceaf78;  /* player-written notes */
+
+    /* Item stat colours (design ref §20) — heal green and accessory purple
+       apply to inventory + loot card stat strings, NOT to class-card icons.
+       Class-card stat colours were removed in the V3.3 spec update. */
+    --stat-heal:      #7abb7a;
+    --stat-accessory: #a888c8;
+
+    /* Floating combat numbers — DoT tick orange (design ref §14) */
+    --combat-dot-tick: #fb923c;
+
     /* Type stack */
     --serif: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;
     --sans:  'Inter Tight', 'Inter', system-ui, sans-serif;

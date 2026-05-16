@@ -208,7 +208,8 @@ export function WorldMapTier3({
             box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.45);
           }
           50% {
-            border-color: #f59e0b;
+            /* canonical --g-fantasy var() resolves in styled-jsx CSS context */
+            border-color: var(--g-fantasy);
             box-shadow: 0 0 0 4px rgba(251, 191, 36, 0);
           }
         }

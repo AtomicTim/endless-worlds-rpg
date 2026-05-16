@@ -362,12 +362,14 @@ export function TownGlyph({ x, y, current = false }: XYProps & { current?: boole
       {current && (
         <>
           <circle r="14" fill="rgba(245,158,11,0.10)" />
-          <circle r="9" fill="none" stroke="#f59e0b" strokeWidth="0.5"
+          {/* canonical --g-fantasy resolved literal — SVG stroke attribute */}
+          <circle r="9" fill="none" stroke="#c4943a" strokeWidth="0.5"
             strokeDasharray="2 2" className="ew-pulse"
             style={{ transformOrigin: "center", transformBox: "fill-box" }} />
         </>
       )}
-      <g stroke={current ? "#f59e0b" : "#e8d8b0"} strokeWidth="0.9"
+      {/* canonical --g-fantasy resolved literal — SVG stroke attribute */}
+      <g stroke={current ? "#c4943a" : "#e8d8b0"} strokeWidth="0.9"
         fill="#14110c" strokeLinejoin="round">
         <path d="M -4 1 L -4 -2 L -2 -4 L 0 -2 L 0 1 Z" />
         <path d="M 0 1 L 0 -1 L 2 -3 L 4 -1 L 4 1 Z" />

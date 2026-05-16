@@ -22,14 +22,16 @@ import { VIEW } from "./types";
 // for longer node labels and the four-edge exit-label distribution.
 const PAD = 76;
 
-const COLOR_CURRENT      = "#f59e0b";
+/* canonical --g-fantasy resolved literal */
+const COLOR_CURRENT      = "#c4943a";
 const COLOR_DISCOVERED   = "#e8dfd1";
 const COLOR_UNDISCOVERED = "#4a4339";
 const COLOR_GRID         = "rgba(255,255,255,0.06)";
 const COLOR_GRID_BOLD    = "rgba(255,255,255,0.12)";
 const COLOR_BG           = "#0a0907";
 const COLOR_INK          = "#a89e8c";
-const COLOR_ACCENT       = "#f59e0b";
+/* canonical --g-fantasy resolved literal */
+const COLOR_ACCENT       = "#c4943a";
 
 interface ExitWithEdge {
   targetId:   string;

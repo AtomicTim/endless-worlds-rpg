@@ -49,45 +49,90 @@ const APP_DIR = path.join(REPO_ROOT, "app");
 //   (c) A debug or temporary stub explicitly tagged with a // ALLOW
 //       comment on the same line (the parser respects that).
 //
+// ────────────────────────────────────────────────────────────────────────────
+// ALLOWED HEX CODES — every value here is in the design-ref or has a clear
+// single-source justification (HP bands, NPC dispositions, combat events).
 // New entries require a PR-level justification comment.
+// ────────────────────────────────────────────────────────────────────────────
 const ALLOWED_HEX_CODES = new Set<string>([
   // ── Genre primaries (globals.css --g-*) ─────────────────────────
-  "#c4943a", // --g-fantasy
-  "#22d3ee", // --g-cyber
-  "#84cc16", // --g-horror
-  "#a855f7", // --g-space
-  "#ea580c", // --g-apoc
+  "#c4943a", "#22d3ee", "#84cc16", "#a855f7", "#ea580c",
 
-  // ── Surfaces (globals.css --bg-*, --line-*) ─────────────────────
+  // ── Surfaces (globals.css --bg-* / --ui-bg-*) ───────────────────
   "#0a0907", "#110f0c", "#181410", "#211c16",
+  "#1c1a17", "#1e1b16", "#141210", "#221e19",
+
+  // ── Borders / lines (--line / --ui-border-*) ───────────────────
   "#2a2520", "#3a342c",
+  "#2d2618", "#252018", "#3a3020",
 
-  // ── Text inks (globals.css --ink-*) ─────────────────────────────
+  // ── Text inks (globals.css --ink-* / --ui-text-*) ───────────────
   "#e8dfd1", "#c8bfae", "#a89e8c", "#6e6557", "#4a4339",
+  "#e2cda0", "#a08870", "#6a5530", "#5a4828", "#c0a878",
 
-  // ── Highlight roles (globals.css --hl-*) ────────────────────────
-  "#7dd3fc", // --hl-loc
-  "#c4b5fd", // --hl-region
-  "#94d8b8", // --hl-sublocation / --hl-landmark
-  "#b45309", // --hl-dungeon
-  "#e8c547", // --hl-item
-  "#f0c060", // --hl-said
-  "#a3e635", // --hl-pass
-  "#f87171", // --hl-fail
+  // ── Context Panel inks (--npc-name, --npc-role, --atmosphere) ───
+  "#d4bc88", "#7a6040", "#9a7e52",
 
-  // ── Combat event colours (globals.css --combat-*) ───────────────
+  // ── Breadcrumb tone descent (Context Panel footer) ──────────────
+  "#3a2a18", "#2a1e10", "#6a4a28", "#1e1912", "#4a3818",
+
+  // ── Object name (matches NPC name per design-ref §18) ───────────
+  "#c4b090",
+
+  // ── Chronicle / Journal (design ref §12) ────────────────────────
+  "#b0956a", "#ceaf78",
+
+  // ── Highlight roles (--hl-*) ────────────────────────────────────
+  "#7dd3fc", "#c4b5fd", "#94d8b8", "#b45309",
+  "#e8c547", "#f0c060", "#a3e635", "#f87171",
+
+  // ── Combat event colours (--combat-*) ───────────────────────────
   "#7ab8c8", "#e87c6d", "#3b82a8", "#c0392b",
   "#7dbb8e", "#a93226", "#a8a29c", "#f4a07a",
+  "#fb923c",  // DoT tick orange (design ref §14)
 
-  // ── HP state bands (design ref §8, screenshot "HP BAR STATES") ──
+  // ── Item stat colours (design ref §20) ──────────────────────────
+  "#7abb7a", "#a888c8",
+
+  // ── HP state bands (design ref §8, "HP BAR STATES" screenshot) ──
   "#4a8a4a", "#5a9a5a", "#5a9450", "#a87830",
   "#c84830", "#e03030",
 
   // ── NPC disposition dots (design ref §10) ───────────────────────
   "#c44040", "#b06030", "#b07030", "#8a6a3a",
 
+  // ── Toast colours (design ref §14) ──────────────────────────────
+  "#e8d070",
+
+  // ── Combat panel auxiliary (CombatMode internal) ────────────────
+  "#9a7060",
+
+  // ── Map renderer art palette (file-local; lives only inside
+  //    components/game/map/renderers/* — hand-drawn parchment art is
+  //    not a global token system, it's illustration colour data).
+  //    Audited 2026-05; reduce/promote to tokens only if the
+  //    illustration style changes.
+  "#1a1611", "#0e0c09", "#1a1108", "#0d0805", "#0a0f08",
+  "#040603", "#070a0c", "#04030c", "#0d0a1f", "#cfd8ff",
+  "#8a6f4a", "#6b5638", "#3a2f20", "#1f1813", "#a08868",
+  "#d8c8a8", "#7a5e38", "#c9a872", "#7a92a8", "#e8d8b0",
+  "#14110c", "#c4302b", "#2d3a1a", "#3d3220", "#4a3c28",
+  "#c8b890", "#7a6850", "#5a4a38", "#0f0d0a", "#1a1410",
+
+  // ── Modal backdrops / generic dark fills ────────────────────────
+  "#0a0a0a", "#1a1a1a",
+
   // ── Pure black / transparent stubs ──────────────────────────────
   "#000000", "#ffffff",
+]);
+
+// ────────────────────────────────────────────────────────────────────────────
+// FORBIDDEN_HEX_CODES — explicit deny list for legacy or accidentally
+// duplicated values. A separate test catches these so the failure
+// message is louder than "unauthorized hex."
+// ────────────────────────────────────────────────────────────────────────────
+const FORBIDDEN_HEX_CODES = new Map<string, string>([
+  ["#f59e0b", "Legacy Fantasy accent. Replaced by --g-fantasy = #c4943a in V3.3 of the design ref. Use var(--g-fantasy) instead."],
 ]);
 
 // Components that legitimately render hex codes as DATA, not styling
@@ -181,6 +226,23 @@ describe("UI Foundation — design token consumption", () => {
             `If this is a new semantic colour (HP state, damage type, mood\n` +
             `band, etc.), it belongs as a CSS variable in app/globals.css.`,
           );
+        }
+      });
+    }
+  });
+
+  describe("no forbidden legacy hex codes", () => {
+    for (const filePath of allFiles) {
+      const rel = relativeFromRepo(filePath);
+      it(`${rel} contains no forbidden legacy values`, () => {
+        const src = readWithoutComments(filePath).toLowerCase();
+        // Array.from() avoids the ES2015-target Map<>-iteration error
+        // the project's tsconfig (no downlevelIteration) would otherwise
+        // throw on `for (const [k, v] of map)`.
+        for (const [hex, reason] of Array.from(FORBIDDEN_HEX_CODES)) {
+          if (src.includes(hex)) {
+            throw new Error(`${rel} contains forbidden legacy hex ${hex}\n  ${reason}`);
+          }
         }
       });
     }

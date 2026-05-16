@@ -3,9 +3,9 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 16b5298 (UI-fix-K: fantasy settlement map — Canvas bird's-eye renderer, building footprints, curved roads)
-**jest baseline:** 734 (authoritative — UI-fix-K is presentation-only, no test deltas)
-**tsc:** clean
+**Last code commit:** 8f88f56 (context-panel: larger name, plain badge, Present/Interact labels, NPC Talk→, object verb-label, breadcrumb)
+**jest baseline:** 734 (authoritative — context-panel rework is presentation-only, no test deltas)
+**tsc:** clean (on ContextPanel-isolated state; CharacterPanel has unrelated in-flight edits)
 
 ## Gameplay Implementation Arc
 
@@ -50,6 +50,12 @@
 | J | World Intro Cinematic — prose 15px, warm colour, hint contrast | f3de117 | 734 | ✅ |
 | K | Fantasy settlement map — Canvas bird's-eye, building footprints, curved roads (Local tier only; World/Region/Dungeon + non-Fantasy stay SVG) | 16b5298 | 734 | ✅ |
 | L | Misc bugs verification — L1 closed by B, L2 closed by B, L3 closed by D | (no new commit) | 734 | ✅ |
+
+## Context Panel polish pass (post-brief)
+
+| # | Change | Commit | Tests | Status |
+|---|--------|--------|-------|--------|
+| 1–6 | Larger name, plain badge, Present/Interact labels, NPC Talk→, object verb-label, region breadcrumb | 8f88f56 | 734 | ✅ |
 
 ## Known Gaps (post-arc)
 

@@ -480,45 +480,13 @@ export default function GamePage() {
                   onTakeAll={floorLootHandlers.onTakeAll}
                 />
               )}
-              {/* P7 — settlement-arrival Attune button. Visible only when
-                  at a settlement_hub node (where Inn Rest / merchants /
-                  attunement live). Hidden during combat (whole subtree
-                  unmounts above). Tap opens the AttunementModal. */}
-              {(() => {
-                if (!masterState) return null;
-                const nodeId = masterState.world_state.current_node_id
-                  ?? masterState.world_state.current_location_id;
-                const node   = masterState.world_graph?.nodes[nodeId];
-                if (node?.node_type !== "settlement_hub") return null;
-                return (
-                  <div
-                    style={{
-                      display:         "flex",
-                      justifyContent:  "flex-end",
-                      padding:         "4px 12px 0",
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setAttunementOpen(true)}
-                      className="ew-mono"
-                      style={{
-                        padding:       "4px 12px",
-                        fontSize:      10,
-                        letterSpacing: "0.22em",
-                        textTransform: "uppercase",
-                        background:    "transparent",
-                        border:        "1px solid var(--accent)",
-                        color:         "var(--accent)",
-                        borderRadius:  3,
-                        cursor:        "pointer",
-                      }}
-                    >
-                      Attune
-                    </button>
-                  </div>
-                );
-              })()}
+              {/* UI-fix-D 4b — the P7 floating Attune button used to
+                  live here (between FloorLootStrip and NavigationBar)
+                  with no designed surface. It is now an Attune card
+                  inside the Context Panel "In This Space" section,
+                  rendered only at settlement_hub nodes and only out
+                  of combat. setAttunementOpen is wired through
+                  ContextPanel's new onAttune prop below. */}
               <NavigationBar
                 masterState={masterState}
                 worldGraph={masterState?.world_graph}
@@ -577,6 +545,12 @@ export default function GamePage() {
       contextPanel={
         <ContextPanel
           onSubmit={(input, opts) => { void submitAction(input, opts); }}
+          // UI-fix-D 4b — relocated Attune entry. Only the open
+          // signal crosses the boundary; the modal itself + its
+          // close handler stay in this page (above) so the
+          // restCompleteSignal Inn-Rest auto-open path still
+          // works without ContextPanel knowing about it.
+          onAttune={() => setAttunementOpen(true)}
         />
       }
     />

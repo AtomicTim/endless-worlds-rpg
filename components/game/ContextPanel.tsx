@@ -9,7 +9,11 @@ import React, { useState } from "react";
 //   lore      → IconBook      (was lucide BookOpen)
 //   remains   → IconSkull     (was lucide Skull)
 //   box/other → IconBox       (was lucide Box)
-import { IconPackage, IconBox, IconBook, IconSkull } from "@tabler/icons-react";
+// UI-fix-D 4b — add IconRefresh for the settlement-hub Attune entry
+// (Tabler "ti-refresh", per design-reference §18 action verbs). The
+// Attune entry takes over the "no designed surface" floating button
+// the page used to render between FloorLootStrip and NavigationBar.
+import { IconPackage, IconBox, IconBook, IconSkull, IconRefresh } from "@tabler/icons-react";
 import { LootModal } from "@/components/game/loot/LootModal";
 import { AssetCategory } from "@/types/game";
 import type {
@@ -54,6 +58,13 @@ export interface ContextPanelProps {
   /** Reuses the existing useGameLoop submitAction — same path the
    *  story feed and InventoryPanel use. */
   onSubmit: (input: string, opts?: { npcName?: string }) => void;
+  /** UI-fix-D 4b — opens the AttunementModal. Surfaced inside the
+   *  "In This Space" section as an Attune card when the player is
+   *  at a settlement_hub and not in combat. State (open/close) is
+   *  owned by app/game/page.tsx — this prop is the bridge.
+   *  Optional so callers that don't wire attunement (tests,
+   *  storybook) keep working unchanged. */
+  onAttune?: () => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -147,7 +158,7 @@ function actionFor(obj: LocationObject): { label: string; verb: string; icon: "c
 // Component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function ContextPanel({ onSubmit }: ContextPanelProps) {
+export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
   const masterState    = useGameStore((s) => s.masterState);
   const locationAssets = useGameStore((s) => s.locationAssets);
   // UI-8 — open loot modal state. ID === null when modal is closed.
@@ -218,9 +229,29 @@ export function ContextPanel({ onSubmit }: ContextPanelProps) {
     </Section>
   );
 
-  const showObjects = objects.length > 0 || floorLoot.length > 0;
+  // UI-fix-D 4b — Attune entry is settlement-hub-only and locked
+  // during combat (rule 166 — attunement is locked in combat; the
+  // AttunementModal also self-guards, but suppressing the entry here
+  // keeps the panel from advertising a no-op tap). The entry sits at
+  // the TOP of the "In This Space" section so the player sees it
+  // before any environmental objects on a settlement arrival.
+  const showAttune =
+    !!onAttune &&
+    node?.node_type === "settlement_hub" &&
+    masterState?.combat?.active !== true;
+
+  const showObjects = showAttune || objects.length > 0 || floorLoot.length > 0;
   const objectsSection = !showObjects ? null : (
     <Section label="In This Space">
+      {showAttune && (
+        <ObjectCard
+          key="attune"
+          name="Attune abilities"
+          icon="attune"
+          actionLabel="Attune"
+          onClick={() => onAttune?.()}
+        />
+      )}
       {objects.map((obj) => {
         const a = actionFor(obj);
         return (
@@ -467,7 +498,10 @@ function ObjectCard({
   name, icon, actionLabel, onClick,
 }: {
   name:        string;
-  icon:        "container" | "lore" | "box" | "remains";
+  // UI-fix-D 4b — added "attune" so the settlement-hub Attune entry
+  // can reuse the standard ObjectCard shell. IconRefresh is the
+  // ti-refresh glyph called out in the design ref §18 action verbs.
+  icon:        "container" | "lore" | "box" | "remains" | "attune";
   actionLabel: string;
   onClick:     () => void;
 }) {
@@ -475,6 +509,7 @@ function ObjectCard({
     icon === "container" ? IconPackage
     : icon === "lore"    ? IconBook
     : icon === "remains" ? IconSkull
+    : icon === "attune"  ? IconRefresh
     :                      IconBox;
 
   return (

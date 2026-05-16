@@ -3,8 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 8cc5d9f (UI-PR4: StoryFeed + StoryComponents story feed token system — PROMPT-LOG update)
-**jest baseline:** 854 (authoritative — zero delta PR-4)
+**Last code commit:** ab79b29 (merge resolution: PROMPT-LOG conflict — accepted parallel session framing)
+**jest baseline:** 854 (authoritative — zero delta PR-4, ui-foundation 120/120 post-merge)
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -38,7 +38,7 @@
 
 | Group | Prompt | Commit | Tests | Status |
 |-------|--------|--------|-------|--------|
-| A | Foundation — fonts, genre vars, bg colours, overlay divs | 3993bc9 | 734 | ✅ |
+| A | Foundation — fonts, genre vars, bg colours, overlay divgs | 3993bc9 | 734 | ✅ |
 | B | Character wizard — cards, stat colours, fonts, name bug, motivation | e33e5e8 | 734 | ✅ |
 | C | Nav cards — compact chip style, typography, no-mono arrows | 8bbab32 | 734 | ✅ |
 | D | Arrival format confirmed, Attune button → Context Panel (also Group L item 3) | 2dbc973 | 734 | ✅ |
@@ -70,6 +70,10 @@ Pattern established across PR-3 and PR-4: proposed new tokens frequently turn ou
 | PR-3 | NavigationBar.tsx — zero hex strings remain | f31dec3 | 854 | 4 (--nav-border-unknown/name/sublabel/breadcrumb) | ✅ |
 | PR-4 | StoryFeed.tsx + StoryComponents.tsx — zero hex strings remain | dbfd1af | 854 | 1 (--status-resolved: #5a9a5a) | ✅ |
 | PR-5 | CharacterPanel.tsx | — | — | — | ⏳ |
+
+## Workflow note (post PR-4 merge conflict)
+
+Claude Code updates PROMPT-LOG.md in its own commit; Claude.ai updates it separately after receiving the result. These two writes race. Resolution going forward: Claude.ai waits for Tim to report the full final commit hash before writing to PROMPT-LOG.md, so Claude.ai's write always lands on top of Claude Code's. Tim resolves any conflict by taking origin (Claude.ai's version).
 
 ## Known Gaps (post-arc)
 

@@ -3,8 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** f3de117 (UI-fix-J: world intro cinematic — prose size 15px, warm prose color, hint contrast)
-**jest baseline:** 734 (authoritative — UI-fix-J is presentation-only, no test deltas)
+**Last code commit:** 3c598c0 (UI-fix-I: chronicle — quest objectives sentence case, inactive tab contrast)
+**jest baseline:** 734 (authoritative — UI-fix-I is presentation-only, no test deltas)
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -46,6 +46,7 @@
 | F | Character Panel — pack grid font, equipped name colour, sidebar 196/160px | 16b5c78 | 734 | ✅ |
 | G | Dialogue Modal — avatar circle, initials sans, badge size | 901eccd | 734 | ✅ |
 | H | Top Bar — Section 17 conformance | 986f874 | 734 | ✅ |
+| I | Chronicle — quest objectives sentence case, inactive tab contrast | 3c598c0 | 734 | ✅ |
 | J | World Intro Cinematic — prose 15px, warm colour, hint contrast | f3de117 | 734 | ✅ |
 
 ## Known Gaps (post-arc)

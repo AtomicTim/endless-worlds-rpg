@@ -3,10 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** f31dec3 (UI-PR3: NavigationBar nav card token system)
-**jest baseline:** 854 / 854 passed across 41 suites. ui-foundation still 120/120
-  green. Gameplay/business test count unchanged at 734; the remaining 120 are the
-  ui-foundation harness itself.
+**Last code commit:** 8e0b2f0 (UI-PR3: NavigationBar nav card token system — PROMPT-LOG update)
+**jest baseline:** 854 (authoritative — post-foundation PR-1/PR-2 added ui-foundation suite; PR-3 zero delta)
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -59,21 +57,16 @@
 |---|--------|--------|-------|--------|
 | 1–6 | Larger name, plain badge, Present/Interact labels, NPC Talk→, object verb-label, region breadcrumb | 8f88f56 | 734 | ✅ |
 
-## Character Panel polish pass (post-brief)
+## Post-Foundation Visual Refactor — Token Discipline Pass
 
-| # | Change | Commit | Tests | Status |
-|---|--------|--------|-------|--------|
-| 1 | Equipped → 3-tile flex grid (80×80, icon+name+stat); Pack → 4-col INVENTORY_CAP icon-only grid with dashed empty cells; Tabler icons replace unicode glyphs; RARITY_COLORS dropped | bc986d7 | 734 | ✅ |
+Separate from the UI arc above. Goal: enforce the §5 workflow across all game surfaces — zero hardcoded hex strings in components/game/, all values via var(--token). ui-foundation suite enforces this in CI.
 
-## UI Foundation verification harness
-
-| PR | Scope | Commit | ui-fdn fails | Status |
-|----|-------|--------|--------------|--------|
-| Harness | `lib/__tests__/ui-foundation.test.ts` introduced (file moved to canonical jest path in PR-1) | a7e1c44 / a1f8962 | 31 | landed |
-| PR-1 | Canonical §2 tokens added to globals.css (--ui-text-*, --ui-border-*, --ui-bg-*, --npc-*, --atmosphere, --breadcrumb-*, --chronicle-prose, --player-notes, --stat-heal, --stat-accessory, --combat-dot-tick); FORBIDDEN_HEX_CODES + "no forbidden legacy hex" describe added; #f59e0b purged from 4 map renderers (DebugMap / FantasyMap / primitives / WorldMapTier3) | 0be34aa | 31 → 17 | ✅ |
-| PR-2 | All remaining semantic systems tokenised — POI (9), status effects (7), dialogue tones (6), codex entry types (2), observation badge (1), character sheet (2), loot rarity/quality (3), surfaces (3), cross-region nav (1), action colours (7), destructive (1) added to globals.css; 16 component files refactored to var() consumption + harness allow-list expanded | 6101441 | 17 → 0 | ✅ |
-| PR-3 (Nav) | NavigationBar nav card token system — 4 new tokens (--nav-border-unknown, --nav-name, --nav-sublabel, --nav-breadcrumb) + reused PR-2 nav tokens + var(--hl-dungeon) / var(--hl-loc) for BACK/EXIT + settlement borders; all 10 NavigationBar hex strings replaced with var(); zero visual change to rendered output | f31dec3 | 0 (already green) | ✅ |
-| PR-3 (next) | Continued surface-by-surface VISUAL refactors per design ref §13 / §5 (CharacterPanel sidebar, StoryFeed prose treatment). Same token-system pattern. | _pending_ | n/a (ui-fdn already 0) | ⏳ |
+| PR | Surface | Commit | Tests | Status |
+|----|---------|--------|-------|--------|
+| PR-1 | globals.css canonical tokens + legacy #f59e0b purge | 0be34aa | 854 | ✅ |
+| PR-2 | 42 semantic tokens (POI, status effects, dialogue tones, codex, loot rarity, nav, surfaces) | 6101441 | 854 | ✅ |
+| PR-3 | NavigationBar.tsx — 4 new nav tokens + 5 existing token aliases; zero hex strings remain | f31dec3 | 854 | ✅ |
+| PR-4 | StoryFeed.tsx + StoryComponents.tsx | — | — | ⏳ |
 
 ## Known Gaps (post-arc)
 
@@ -87,6 +80,7 @@
 - ~~**Sidebar width 280px (UI-9).** LogBook co-tenant blocks narrowing.~~ → resolved in UI-fix-F (16b5c78); LogBook fit cleanly at 196px / 160px without restructure.
 - **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass.
 - **OneDrive sync race (recurring).** Staged-as-you-go pattern for CombatMode files.
+- **PR-3b — Nav card layout.** Cards currently render as an unbounded single column. Design intent (CLAUDE.md rule 72): max 2 cards tall, overflow into additional columns horizontally. No token changes needed — layout only. Schedule after PR-5.
 
 ## Next Steps
 

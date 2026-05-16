@@ -9,14 +9,27 @@ import {
   IconBackpack,
   IconCoin,
   IconTool,
+  // char-panel: equipped tile grid + 4-col pack — Tabler glyphs
+  // replace the unicode/emoji set so the tiles match the rest of
+  // the Tabler-icon design language and stay crisp at 18-22px.
+  IconSword,
+  IconShield,
+  IconDiamond,
+  IconFlask,
+  IconKey,
+  IconBook,
+  IconPackage,
+  IconStar,
+  IconSparkles,
+  IconQuestionMark,
 } from "@tabler/icons-react";
-import { Genre, ItemType, ItemRarity } from "@/types/game";
+import { Genre, ItemType } from "@/types/game";
 import type { Attributes, Item } from "@/types/game";
 import { useGameStore, makeMessage } from "@/lib/stores/game-store";
 import { useCombat } from "@/hooks/useCombat";
 import { getGenreColors } from "@/components/game/genre-ui";
 import { applyStatBoost } from "@/lib/game/level-resolver";
-import { STAT_CAP } from "@/lib/game/constants";
+import { STAT_CAP, INVENTORY_CAP } from "@/lib/game/constants";
 import { xpForNextLevel } from "@/lib/game/level-resolver";
 import { PERK_LIBRARY } from "@/lib/game/perks";
 import { StatusEffectPills } from "@/components/game/CombatMode/StatusEffectPills";
@@ -49,25 +62,31 @@ import { StatusEffectPills } from "@/components/game/CombatMode/StatusEffectPill
 
 const BASIC_HEALTH_POTION_ID = "consumable_basic_health_potion";
 
-/** Unicode glyph by ItemType — Tabler font isn't installed, so we keep the
- *  existing unicode set (matches InventoryPanel's icon table). */
-const ITEM_ICONS: Record<ItemType, string> = {
-  [ItemType.WEAPON]:     "⚔",
-  [ItemType.ARMOR]:      "🛡",
-  [ItemType.CONSUMABLE]: "⚗",
-  [ItemType.KEY]:        "🗝",
-  [ItemType.LORE]:       "📜",
-  [ItemType.CONTAINER]:  "📦",
-  [ItemType.VALUABLE]:   "💎",
-  [ItemType.QUEST_ITEM]: "✦",
-  [ItemType.STAT_XP]:    "✨",
+/** char-panel — ItemType → Tabler icon. Replaces the prior unicode/
+ *  emoji set; @tabler/icons-react is already a dependency (UI-12) so
+ *  the tile grid renders crisp at any DPR. RARITY_COLORS dropped
+ *  with the icon-only pack redesign — rarity hue no longer tints the
+ *  pack icon, so the legacy map had no remaining caller. */
+const ITEM_TABLER_ICONS: Record<ItemType, TablerIcon> = {
+  [ItemType.WEAPON]:     IconSword,
+  [ItemType.ARMOR]:      IconShield,
+  [ItemType.CONSUMABLE]: IconFlask,
+  [ItemType.KEY]:        IconKey,
+  [ItemType.LORE]:       IconBook,
+  [ItemType.CONTAINER]:  IconPackage,
+  [ItemType.VALUABLE]:   IconDiamond,
+  [ItemType.QUEST_ITEM]: IconStar,
+  [ItemType.STAT_XP]:    IconSparkles,
 };
 
-const RARITY_COLORS: Record<ItemRarity, string> = {
-  [ItemRarity.COMMON]:    "#7a6040",
-  [ItemRarity.UNCOMMON]:  "#5a9450",
-  [ItemRarity.RARE]:      "#5880d0",
-  [ItemRarity.LEGENDARY]: "#c4943a",
+/** char-panel — equipped slot kind → Tabler icon for the empty-slot
+ *  affordance. When something IS equipped the tile uses the item's
+ *  own icon from ITEM_TABLER_ICONS above; this map covers the empty
+ *  tile so the slot still reads as "weapon" / "armor" / "accessory". */
+const SLOT_TABLER_ICONS: Record<"weapon" | "armor" | "accessory", TablerIcon> = {
+  weapon:    IconSword,
+  armor:     IconShield,
+  accessory: IconDiamond,
 };
 
 const STAT_KEYS: Array<keyof Attributes> = [
@@ -495,24 +514,34 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
           >
             Equipped
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <EquipSlotRow
+          {/* char-panel — 3-tile flex row replaces the column-list of
+              EquipSlotRow. Each tile is the standard 80×80 chip with
+              icon / name / stat stacked centre-aligned. isSelected
+              wires the active-tile border to the same selectedId
+              state the pack grid uses, so tapping an equipped tile
+              opens the inline detail card below the pack just like
+              tapping a pack tile does. */}
+          <div style={{ display: "flex", flexDirection: "row", gap: 8 }}>
+            <EquipSlotTile
               kind="weapon"
               item={equippedWeapon}
+              isSelected={!!equippedWeapon && selectedId === equippedWeapon.id}
               onTap={() => equippedWeapon && setSelectedId(
                 selectedId === equippedWeapon.id ? null : equippedWeapon.id
               )}
             />
-            <EquipSlotRow
+            <EquipSlotTile
               kind="armor"
               item={equippedArmor}
+              isSelected={!!equippedArmor && selectedId === equippedArmor.id}
               onTap={() => equippedArmor && setSelectedId(
                 selectedId === equippedArmor.id ? null : equippedArmor.id
               )}
             />
-            <EquipSlotRow
+            <EquipSlotTile
               kind="accessory"
               item={equippedAccessory}
+              isSelected={!!equippedAccessory && selectedId === equippedAccessory.id}
               onTap={() => equippedAccessory && setSelectedId(
                 selectedId === equippedAccessory.id ? null : equippedAccessory.id
               )}
@@ -570,89 +599,76 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
           >
             Pack
           </div>
-          {packItems.length === 0 ? (
-            <div
-              className="ew-serif"
-              style={{
-                fontSize:  10,
-                fontStyle: "italic",
-                color:     "#6a5530",
-                padding:   "4px 0",
-              }}
-            >
-              — empty —
-            </div>
-          ) : (
-            <div
-              style={{
-                display:        "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap:            4,
-              }}
-            >
-              {packItems.map((item) => {
-                const isSelected = selectedId === item.id;
+          {/* char-panel — 4-col icon-only grid. Always renders
+              INVENTORY_CAP (20) cells so the pack reads as a fixed
+              capacity strip (no more "— empty —" placeholder line);
+              empty cells use a quieter dashed border so a partially
+              filled pack still scans at a glance. Names + rarity
+              tinting were removed per the new spec — the icon alone
+              carries the slot, and the full item name + details
+              expand inline via ItemDetailCard below the grid when
+              a cell is tapped. */}
+          <div
+            style={{
+              display:             "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
+              gap:                 6,
+            }}
+          >
+            {Array.from({ length: INVENTORY_CAP }).map((_, i) => {
+              const item       = packItems[i];
+              if (!item) {
                 return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() =>
-                      setSelectedId(isSelected ? null : item.id)
-                    }
-                    title={item.name}
+                  <div
+                    key={`empty-${i}`}
+                    aria-hidden
                     style={{
-                      display:        "flex",
-                      flexDirection:  "column",
-                      alignItems:     "center",
-                      gap:            2,
-                      padding:        "6px 4px",
-                      background:     isSelected
-                        ? "rgba(var(--genre-accent-rgb), 0.12)"
-                        : "transparent",
-                      border:         isSelected
-                        ? "1px solid var(--genre-accent)"
-                        : "1px solid transparent",
-                      borderRadius:   3,
-                      cursor:         "pointer",
-                      minWidth:       0,
+                      aspectRatio:  "1",
+                      background:   "#181410",
+                      border:       "1px dashed #1e1912",
+                      borderRadius: 6,
+                      opacity:      0.4,
                     }}
-                  >
-                    <span
-                      aria-hidden
-                      style={{
-                        color:    RARITY_COLORS[item.rarity] ?? "#7a6040",
-                        fontSize: 14,
-                        lineHeight: 1,
-                      }}
-                    >
-                      {ITEM_ICONS[item.type]}
-                    </span>
-                    <span
-                      // UI-fix-F 4a — pack cells are small UI chrome, not
-                      // narrative text. Per design ref §13: "6px
-                      // abbreviated name below in Inter Tight #7a6040".
-                      // Was ew-serif italic 9px #9a7e52 — too prose-like
-                      // for a 3-col compact grid; the Cormorant glyphs
-                      // also don't legibly survive 9px ellipsis.
-                      style={{
-                        fontFamily:   "var(--sans)",
-                        fontStyle:    "normal",
-                        fontSize:     6,
-                        color:        "#7a6040",
-                        width:        "100%",
-                        whiteSpace:   "nowrap",
-                        overflow:     "hidden",
-                        textOverflow: "ellipsis",
-                        textAlign:    "center",
-                      }}
-                    >
-                      {item.name}
-                    </span>
-                  </button>
+                  />
                 );
-              })}
-            </div>
-          )}
+              }
+              const isSelected = selectedId === item.id;
+              const Icon       = ITEM_TABLER_ICONS[item.type] ?? IconQuestionMark;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setSelectedId(isSelected ? null : item.id)}
+                  title={item.name}
+                  style={{
+                    aspectRatio:  "1",
+                    background:   "#181410",
+                    border:       isSelected
+                      ? "1.5px solid rgba(196,148,58,.45)"
+                      : "1px solid #2d2618",
+                    borderRadius: 6,
+                    display:      "flex",
+                    alignItems:   "center",
+                    justifyContent: "center",
+                    cursor:       "pointer",
+                    padding:      0,
+                    transition:   "border-color 120ms",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (isSelected) return;
+                    (e.currentTarget as HTMLButtonElement).style.borderColor =
+                      "rgba(196,148,58,0.30)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (isSelected) return;
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = "#2d2618";
+                  }}
+                >
+                  <Icon size={18} stroke={1.75} color="#7a6040" aria-hidden />
+                </button>
+              );
+            })}
+          </div>
 
           {/* Inline detail expand — renders directly below the grid */}
           {selectedItem && (
@@ -748,31 +764,40 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Equipped row — CHANGE 7
+// Equipped tile — char-panel rebuild
+//
+// 80×80 chip per slot (weapon / armor / accessory) with the icon,
+// item name, and short stat stacked centre-aligned. Replaces the
+// prior EquipSlotRow (full-width row, name left + stat right). The
+// row layout sat oddly between the inline attribute strip above and
+// the pack grid below; uniform tiles let the three slots share the
+// same visual language as the pack cells while still showing the
+// "what's equipped" info at a glance.
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface EquipSlotRowProps {
-  kind:  "weapon" | "armor" | "accessory";
-  item:  Item | null;
-  onTap: () => void;
+interface EquipSlotTileProps {
+  kind:        "weapon" | "armor" | "accessory";
+  item:        Item | null;
+  isSelected:  boolean;
+  onTap:       () => void;
 }
 
-function EquipSlotRow({ kind, item, onTap }: EquipSlotRowProps) {
+function EquipSlotTile({ kind, item, isSelected, onTap }: EquipSlotTileProps) {
   const slotLabel =
     kind === "weapon"    ? "Weapon"
     : kind === "armor"   ? "Armor"
     : "Accessory";
 
-  // Abbreviated stat inline per spec.
+  // Stat abbreviation reuses the prior EquipSlotRow logic verbatim:
+  // weapons collapse "1d6" → "d6", armor renders "+N arm", accessories
+  // surface the first stat_bonus entry. Returns null when the item has
+  // no stat-worthy field so the third line collapses cleanly.
   let statLine: string | null = null;
   if (item) {
     if (kind === "weapon") {
       const die = item.effect?.damage_die;
       if (typeof die === "string" && die.length > 0) {
-        // "1d6" → "d6"; strip the leading numeric die-count for the
-        // short form (matches the design ref's "d6+1" example).
-        const shortDie = die.replace(/^1d/, "d");
-        statLine = shortDie;
+        statLine = die.replace(/^1d/, "d");
       }
     } else if (kind === "armor") {
       const ab = item.effect?.armor_bonus;
@@ -780,7 +805,6 @@ function EquipSlotRow({ kind, item, onTap }: EquipSlotRowProps) {
         statLine = `${ab >= 0 ? "+" : ""}${ab} arm`;
       }
     } else if (kind === "accessory") {
-      // Primary stat bonus — show the first/highest entry.
       if (item.stat_bonus) {
         const entries = Object.entries(item.stat_bonus)
           .filter(([, v]) => typeof v === "number");
@@ -792,6 +816,13 @@ function EquipSlotRow({ kind, item, onTap }: EquipSlotRowProps) {
     }
   }
 
+  // Icon source: equipped item uses ITEM_TABLER_ICONS; empty slot
+  // falls back to SLOT_TABLER_ICONS so the tile still reads as
+  // "this is the weapon slot" even when nothing is equipped.
+  const Icon = item
+    ? (ITEM_TABLER_ICONS[item.type] ?? IconQuestionMark)
+    : SLOT_TABLER_ICONS[kind];
+
   return (
     <button
       type="button"
@@ -799,44 +830,52 @@ function EquipSlotRow({ kind, item, onTap }: EquipSlotRowProps) {
       disabled={!item}
       title={item ? item.name : `${slotLabel} (empty)`}
       style={{
+        width:          80,
+        height:         80,
+        background:     "#181410",
+        border:         isSelected
+          ? "1.5px solid rgba(196,148,58,0.45)"
+          : item
+            ? "1px solid #2d2618"
+            : "1px dashed #2d2618",
+        borderRadius:   8,
         display:        "flex",
-        alignItems:     "baseline",
-        gap:            8,
-        padding:        "3px 0",
-        background:     "transparent",
-        border:         "none",
+        flexDirection:  "column",
+        alignItems:     "center",
+        justifyContent: "center",
+        gap:            6,
         cursor:         item ? "pointer" : "default",
-        textAlign:      "left",
-        width:          "100%",
-        minWidth:       0,
+        opacity:        item ? 1 : 0.5,
+        padding:        0,
+        flexShrink:     0,
+        transition:     "border-color 120ms",
       }}
     >
-      <span
-        // UI-fix-F 4b — equipped item name per design ref §13:
-        // Cormorant Garamond italic 10px #9a8060. Was 11px / #c4b090.
-        // Empty placeholder (#3a3020 at 10px) keeps its dim treatment
-        // — the dimness signals "no item" without re-styling.
-        className="ew-serif"
-        style={{
-          flex:         1,
-          fontStyle:    "italic",
-          fontSize:     10,
-          color:        item ? "#9a8060" : "#3a3020",
-          whiteSpace:   "nowrap",
-          overflow:     "hidden",
-          textOverflow: "ellipsis",
-          minWidth:     0,
-        }}
-      >
-        {item ? item.name : "— empty"}
-      </span>
+      <Icon size={22} stroke={1.75} color="#7a6040" aria-hidden />
+      {item && (
+        <span
+          style={{
+            fontFamily:   "var(--sans)",
+            fontSize:     8,
+            color:        "#9a8060",
+            textAlign:    "center",
+            maxWidth:     70,
+            whiteSpace:   "nowrap",
+            overflow:     "hidden",
+            textOverflow: "ellipsis",
+            lineHeight:   1,
+          }}
+        >
+          {item.name}
+        </span>
+      )}
       {statLine && (
         <span
           style={{
             fontFamily: "var(--mono)",
-            fontSize:   10,
+            fontSize:   7,
             color:      "#c4943a",
-            flexShrink: 0,
+            lineHeight: 1,
           }}
         >
           {statLine}

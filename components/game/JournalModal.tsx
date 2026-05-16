@@ -62,7 +62,7 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_FG: Record<string, string> = {
   active:    "var(--genre-accent)",
   completed: "#5a9a5a",
-  failed:    "#9a4040",
+  failed:    "var(--action-destructive)",
 };
 const STATUS_BG: Record<string, string> = {
   active:    "rgba(var(--genre-accent-rgb), .12)",
@@ -750,7 +750,7 @@ function FailedTab({ ids }: { ids: string[] }) {
             fontSize:      8,
             letterSpacing: "0.10em",
             color:         "#9a7e52",
-            borderLeft:    "2px solid #9a4040",
+            borderLeft:    "2px solid var(--action-destructive)",
             paddingLeft:   10,
           }}
         >

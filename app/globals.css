@@ -146,6 +146,80 @@
     /* Floating combat numbers — DoT tick orange (design ref §14) */
     --combat-dot-tick: #fb923c;
 
+    /* ──────────────────────────────────────────────────────────────────
+       Endless Worlds — semantic token systems (PR-2)
+       ──────────────────────────────────────────────────────────────────
+       Each token below names a colour by its semantic role. Components
+       must consume these via var() — the ui-foundation jest test
+       blocks raw hex consumption.
+       ────────────────────────────────────────────────────────────────── */
+
+    /* POI map markers (point-of-interest categories) */
+    --poi-settlement:       #60a5fa;
+    --poi-settlement-light: #93c5fd;
+    --poi-landmark:         #fbbf24;
+    --poi-landmark-light:   #fde68a;
+    --poi-dungeon:          #f97316;
+    --poi-dungeon-light:    #fdba74;
+    --poi-hostile:          #ef4444;
+    --poi-hostile-light:    #fca5a5;
+    --poi-lore:             #a78bfa;
+
+    /* Status effect badge colours (combat status pills) */
+    --status-burning:    #f97316;  /* fire orange */
+    --status-chilled:    #67e8f9;  /* frost cyan */
+    --status-poisoned:   #86efac;  /* poison green */
+    --status-weakened:   #d1d5db;  /* dust grey */
+    --status-frightened: #c084fc;  /* shadow purple */
+    --status-fortified:  #fde68a;  /* armour yellow */
+    --status-hastened:   #93c5fd;  /* haste blue */
+
+    /* Dialogue option tone bars (design ref §10) */
+    --tone-friendly:     #22aa44;
+    --tone-neutral:      #334455;
+    --tone-curious:      #4488cc;
+    --tone-persuasive:   #8844cc;
+    --tone-deceptive:    #aaaa22;
+    --tone-aggressive:   #cc4422;
+
+    /* Codex entry type colours (design ref §11) — People = --g-fantasy,
+       Lore = --stat-accessory; only Places + Events need their own tokens. */
+    --codex-places: #7a9ab8;
+    --codex-events: #c8885a;
+
+    /* Dialogue observation badge (design ref §10) */
+    --observation-teal: #4a9888;
+
+    /* Character sheet inks (design ref §13) */
+    --attribute-value: #cbb888;  /* attribute number — never colour-coded per stat */
+    --equipped-name:   #9a8060;  /* equipped item name in sidebar */
+
+    /* Loot rarity / quality tints */
+    --loot-quality-uncommon: #d8884c;  /* warm rust — UNCOMMON tier */
+    --rarity-rare:           #fbbf24;  /* gold — RARE tier */
+    --rarity-epic:           #c084fc;  /* purple — EPIC / LEGENDARY tier */
+
+    /* Surface backgrounds (design ref §5 + §6) */
+    --bg-story-feed:   #191308;  /* StoryFeed scroll surface */
+    --bg-nav-card:     #111009;  /* NavigationBar card background */
+    --border-nav-card: #222015;  /* NavigationBar card subtle border */
+
+    /* Cross-region nav arrow */
+    --nav-cross-region: #c2410c;  /* burnt orange */
+
+    /* Semantic action colours (replaces Tailwind defaults across
+       CharacterSheet, InventoryPanel, TradeModal, InputBar, etc.) */
+    --action-success: #22c55e;  /* equip / buy / accept */
+    --action-danger:  #ef4444;  /* drop / sell / delete / error */
+    --action-warning: #eab308;  /* caution / partial XP */
+    --action-info:    #3b82f6;  /* sell / merchant / inform */
+    --action-special: #7c3aed;  /* ability / special action */
+    --action-buff:    #86efac;  /* active buff effect glow */
+    --action-fade:    #e2e8f0;  /* verbosity toggle inactive */
+
+    /* Journal destructive confirmation */
+    --action-destructive: #9a4040;
+
     /* Type stack */
     --serif: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;
     --sans:  'Inter Tight', 'Inter', system-ui, sans-serif;

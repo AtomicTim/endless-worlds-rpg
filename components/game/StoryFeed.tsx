@@ -181,7 +181,7 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
         // #191308 (very dark warm brown) — pulls the prose out of
         // the cooler --bg-0 main shell so the feed reads as the
         // game's central warm vellum surface.
-        background:      "#191308",
+        background:      "var(--bg-story-feed)",
         fontFamily:      "var(--sans)",
       }}
       // UI-4: tap-to-skip hook. Today (no per-token feed stream yet)

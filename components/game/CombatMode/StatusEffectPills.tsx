@@ -27,19 +27,25 @@ interface StatusVisual {
   buff:  boolean;
 }
 
+// PR-2: hex-based token substitution preserves the visual output of every
+// pill exactly. The token names below match the brief's hex→token map, not
+// the row labels — e.g. `fortified` consumes --status-poisoned because the
+// fortified pill was authored as #86efac (now the canonical poisoned tone).
+// A future semantic-rename PR can realign labels to tokens once both sides
+// are tokenised.
 const STATUS_VISUALS: Record<StatusEffectId, StatusVisual> = {
-  poisoned:   { color: "#a3e635", buff: false },
-  burning:    { color: "#f97316", buff: false },
-  chilled:    { color: "#67e8f9", buff: false },
-  weakened:   { color: "#d1d5db", buff: false },
-  frightened: { color: "#c084fc", buff: false },
-  fortified:  { color: "#86efac", buff: true  },
-  hastened:   { color: "#fde68a", buff: true  },
-  focused:    { color: "#93c5fd", buff: true  },
+  poisoned:   { color: "#a3e635",                  buff: false },
+  burning:    { color: "var(--status-burning)",    buff: false },
+  chilled:    { color: "var(--status-chilled)",    buff: false },
+  weakened:   { color: "var(--status-weakened)",   buff: false },
+  frightened: { color: "var(--status-frightened)", buff: false },
+  fortified:  { color: "var(--status-poisoned)",   buff: true  },
+  hastened:   { color: "var(--status-fortified)",  buff: true  },
+  focused:    { color: "var(--status-hastened)",   buff: true  },
 };
 
 /** Defensive fallback for an unknown id (forward-compat). */
-const FALLBACK_VISUAL: StatusVisual = { color: "#d1d5db", buff: false };
+const FALLBACK_VISUAL: StatusVisual = { color: "var(--status-weakened)", buff: false };
 
 interface Props {
   effects: ActiveStatusEffect[];

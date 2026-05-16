@@ -41,12 +41,12 @@ const TABS: TabConfig[] = [
 // the existing 6-category CodexEntry data as follows; FACTION + ITEM
 // fall through to the closest semantic neighbour.
 const ENTRY_TYPE_COLOR: Record<TabId, string> = {
-  LOCATION:  "#7a9ab8", // muted blue — Places
+  LOCATION:  "var(--codex-places)", // muted blue — Places
   CHARACTER: "#c4943a", // amber       — People
   LORE:      "#a888c8", // purple      — Lore
   FACTION:   "#a888c8", // purple      — lore-adjacent
-  ITEM:      "#c8885a", // warm orange — Events-adjacent (artifacts)
-  BESTIARY:  "#c8885a", // warm orange — Events-adjacent (encounters)
+  ITEM:      "var(--codex-events)", // warm orange — Events-adjacent (artifacts)
+  BESTIARY:  "var(--codex-events)", // warm orange — Events-adjacent (encounters)
 };
 
 interface Props {

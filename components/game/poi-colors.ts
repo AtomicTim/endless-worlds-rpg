@@ -16,22 +16,22 @@ import type { PointOfInterest } from "@/types/game";
  * highlight span itself) — this module is pure colour tokens.
  */
 export const POI_COLORS: Record<PointOfInterest["type"], string> = {
-  LOCATION:  "#60a5fa",
+  LOCATION:  "var(--poi-settlement)",
   NPC:       "var(--color-primary)",
-  ITEM:      "#fbbf24",
-  CONTAINER: "#f97316",
-  HAZARD:    "#ef4444",
-  LANDMARK:  "#a78bfa",
+  ITEM:      "var(--poi-landmark)",
+  CONTAINER: "var(--poi-dungeon)",
+  HAZARD:    "var(--poi-hostile)",
+  LANDMARK:  "var(--poi-lore)",
 };
 
 /** Slightly brighter colour applied on hover so the player gets an
  *  affordance cue without changing the background. LANDMARK shares the
  *  base since it's info-only — no click feedback needed. */
 export const POI_HOVER_COLORS: Record<PointOfInterest["type"], string> = {
-  LOCATION:  "#93c5fd",
+  LOCATION:  "var(--poi-settlement-light)",
   NPC:       "var(--color-primary)",
-  ITEM:      "#fde68a",
-  CONTAINER: "#fdba74",
-  HAZARD:    "#fca5a5",
-  LANDMARK:  "#c4b5fd",
+  ITEM:      "var(--poi-landmark-light)",
+  CONTAINER: "var(--poi-dungeon-light)",
+  HAZARD:    "var(--poi-hostile-light)",
+  LANDMARK:  "var(--hl-region)",
 };

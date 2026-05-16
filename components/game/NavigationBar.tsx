@@ -674,7 +674,7 @@ function NavCard({
     isUnknown    ? "#3a3020"        // very dim, dashed
     : isBack || isExit ? "#b45309"   // burnt copper
     : isSettlement ? "#7dd3fc"       // sky blue
-    : isDungeon    ? "#c2410c"       // burnt orange
+    : isDungeon    ? "var(--nav-cross-region)" // burnt orange
     :                "var(--card-border)";
 
   // [[hover-state]] CSS-inline pattern — onMouseEnter / Leave swap a
@@ -730,8 +730,8 @@ function NavCard({
         // simpler nav-specific palette so the row of chips reads as a
         // navigation strip rather than a stack of large cards. The
         // borderLeft override (destination-tier colour) stays.
-        background:     "#111009",
-        border:         `1px ${isUnknown ? "dashed" : "solid"} #222015`,
+        background:     "var(--bg-nav-card)",
+        border:         `1px ${isUnknown ? "dashed" : "solid"} var(--border-nav-card)`,
         borderLeft:     `2px ${isUnknown ? "dashed" : "solid"} ${leftBorderColor}`,
         borderRadius:   6,
         boxShadow:      baseShadow,

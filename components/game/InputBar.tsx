@@ -210,7 +210,7 @@ export const InputBar = forwardRef<InputBarHandle, InputBarProps>(function Input
           // tabular figures stays consistent at every digit width.
           className="ew-mono text-[10px]"
           style={{
-            color:                remaining <= 50 ? "#ef4444" : "var(--color-muted)",
+            color:                remaining <= 50 ? "var(--action-danger)" : "var(--color-muted)",
             fontVariantNumeric:   "tabular-nums",
           }}
         >

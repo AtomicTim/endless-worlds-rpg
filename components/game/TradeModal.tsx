@@ -19,10 +19,14 @@ interface TradeModalProps {
   onSell: (item: Item) => void;
 }
 
+// PR-2: hex-based token substitution preserves the existing rarity
+// tints. The action-* tokens happen to carry the same Tailwind
+// green / blue values; a future PR can introduce dedicated
+// --rarity-uncommon / --rarity-common tokens.
 const RARITY_COLORS: Record<string, string> = {
   COMMON:    "var(--color-muted)",
-  UNCOMMON:  "#22c55e",
-  RARE:      "#3b82f6",
+  UNCOMMON:  "var(--action-success)",
+  RARE:      "var(--action-info)",
   // UI-fix-A — was #f59e0b. Aligned with the locked Fantasy accent
   // #c4943a (design ref §2). LEGENDARY pills now match the rest of
   // the warm-amber palette instead of the brighter web-amber.

@@ -89,7 +89,7 @@ export function LootList({
             style={{
               fontWeight:    700,
               fontSize:      11,
-              color:         "#d8884c",
+              color:         "var(--loot-quality-uncommon)",
             }}
           >
             Pack full ({playerInventorySize}/{INVENTORY_CAP})

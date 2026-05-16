@@ -40,9 +40,9 @@ interface Props {
 // Rarity → text/border color for the item pill badge.
 const RARITY_COLOR: Record<ItemRarity, string> = {
   [ItemRarity.COMMON]:    "var(--ink-2)",
-  [ItemRarity.UNCOMMON]:  "#7dd3fc",   // sky-blue
-  [ItemRarity.RARE]:      "#fbbf24",   // amber
-  [ItemRarity.LEGENDARY]: "#c084fc",   // purple
+  [ItemRarity.UNCOMMON]:  "#7dd3fc",                // sky-blue
+  [ItemRarity.RARE]:      "var(--rarity-rare)",     // amber
+  [ItemRarity.LEGENDARY]: "var(--rarity-epic)",     // purple
 };
 
 export function FloorLootStrip({
@@ -91,7 +91,7 @@ export function FloorLootStrip({
                 padding:        "10px 14px",
                 background:     "color-mix(in srgb, #c4943a 18%, var(--bg-1))",
                 border:         "1px solid #c4943a",
-                color:          "#fbbf24",
+                color:          "var(--rarity-rare)",
                 fontWeight:     700,
                 fontSize:       11,
                 letterSpacing:  "0.28em",
@@ -194,9 +194,9 @@ function GoldPill({
         alignItems:     "center",
         minHeight:      32,
         padding:        "4px 10px",
-        background:     "color-mix(in srgb, #fbbf24 14%, var(--bg-1))",
-        border:         "1px solid color-mix(in srgb, #fbbf24 55%, transparent)",
-        color:          "#fbbf24",
+        background:     "color-mix(in srgb, var(--rarity-rare) 14%, var(--bg-1))",
+        border:         "1px solid color-mix(in srgb, var(--rarity-rare) 55%, transparent)",
+        color:          "var(--rarity-rare)",
         fontWeight:     700,
         fontSize:       11,
         letterSpacing:  "0.16em",

@@ -490,7 +490,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                 style={{
                   fontFamily: "var(--mono)",
                   fontSize:   12,
-                  color:      "#cbb888",   // CHANGE 6 — neutral, never colour-coded
+                  color:      "var(--attribute-value)", // CHANGE 6 — neutral, never colour-coded
                   fontWeight: 500,
                 }}
               >
@@ -857,7 +857,7 @@ function EquipSlotTile({ kind, item, isSelected, onTap }: EquipSlotTileProps) {
           style={{
             fontFamily:   "var(--sans)",
             fontSize:     8,
-            color:        "#9a8060",
+            color:        "var(--equipped-name)",
             textAlign:    "center",
             maxWidth:     70,
             whiteSpace:   "nowrap",
@@ -1121,7 +1121,7 @@ function ItemDetailCard(props: ItemDetailCardProps) {
                     padding:        "3px 0",
                     background:     "rgba(74, 138, 74, 0.10)",
                     border:         "1px solid rgba(74, 138, 74, 0.40)",
-                    color:          "#86efac",
+                    color:          "var(--action-buff)",
                     borderRadius:   3,
                     cursor:         capped ? "not-allowed" : "pointer",
                     opacity:        capped ? 0.4 : 1,

@@ -45,7 +45,7 @@ export function VerbosityToggle() {
             }}
             className="px-2 py-1 text-[11px] uppercase tracking-wider transition-colors"
             style={{
-              color:           active ? "#e2e8f0" : "var(--color-muted)",
+              color:           active ? "var(--action-fade)" : "var(--color-muted)",
               borderBottom:    active ? `2px solid ${primary}` : "2px solid transparent",
               backgroundColor: "transparent",
               fontFamily:      "var(--sans)",

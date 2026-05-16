@@ -204,11 +204,15 @@ export function WorldMapTier3({
       <style jsx global>{`
         @keyframes tier3-pulse-border {
           0%, 100% {
-            border-color: #fbbf24;
+            /* current-location pulse — brief Path: pulse → var(--g-fantasy);
+               styled-jsx CSS is a real var()-resolving context. The
+               two-tone amber pulse collapses to a single-tone glow
+               pulse (shadow still fades at 50%) — acceptable per
+               PR-2 scope. */
+            border-color: var(--g-fantasy);
             box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.45);
           }
           50% {
-            /* canonical --g-fantasy var() resolves in styled-jsx CSS context */
             border-color: var(--g-fantasy);
             box-shadow: 0 0 0 4px rgba(251, 191, 36, 0);
           }

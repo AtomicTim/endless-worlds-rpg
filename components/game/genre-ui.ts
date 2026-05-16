@@ -32,11 +32,11 @@ export function getGenreColors(genre: Genre) {
  * all five genres.
  */
 export const TONE_BAR_COLORS: Record<string, string> = {
-  friendly:     "#22aa44",
-  neutral:      "#334455",
-  curious:      "#4488cc",
-  persuasive:   "#8844cc",
-  deceptive:    "#aaaa22",
-  aggressive:   "#cc4422",
-  intimidating: "#cc4422",
+  friendly:     "var(--tone-friendly)",
+  neutral:      "var(--tone-neutral)",
+  curious:      "var(--tone-curious)",
+  persuasive:   "var(--tone-persuasive)",
+  deceptive:    "var(--tone-deceptive)",
+  aggressive:   "var(--tone-aggressive)",
+  intimidating: "var(--tone-aggressive)",
 };

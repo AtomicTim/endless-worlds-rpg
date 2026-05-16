@@ -572,7 +572,7 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                           gap:           4,
                           fontSize:      7,
                           letterSpacing: "0.10em",
-                          color:         "#4a9888",
+                          color:         "var(--observation-teal)",
                           background:    "rgba(74,152,136,.12)",
                           borderRadius:  20,
                           padding:       "1px 6px",

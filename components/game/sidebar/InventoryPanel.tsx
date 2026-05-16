@@ -51,10 +51,16 @@ const ITEM_ICONS: Record<ItemType, string> = {
   [ItemType.STAT_XP]:    "✨",
 };
 
+// PR-2: hex-based token substitution. UNCOMMON / RARE consume the
+// action-success / action-info tokens because the file's rarity tints
+// happen to share Tailwind green / blue with those action roles —
+// visual output preserved, but a future PR should add proper
+// --rarity-uncommon / --rarity-common tokens once InventoryPanel
+// (currently orphaned per PROMPT-LOG) is either revived or removed.
 const RARITY_COLORS: Record<ItemRarity, string> = {
   [ItemRarity.COMMON]:    "var(--color-muted)",
-  [ItemRarity.UNCOMMON]:  "#22c55e",
-  [ItemRarity.RARE]:      "#3b82f6",
+  [ItemRarity.UNCOMMON]:  "var(--action-success)",
+  [ItemRarity.RARE]:      "var(--action-info)",
   // UI-fix-A — aligned with locked Fantasy accent #c4943a.
   [ItemRarity.LEGENDARY]: "#c4943a",
 };
@@ -346,12 +352,12 @@ export function InventoryPanel({ onSubmit }: InventoryPanelProps) {
                 className="flex aspect-square flex-col items-center justify-center gap-0.5 rounded-sm text-xs transition-all"
                 style={{
                   border: isRejected
-                    ? "1px solid #ef4444"
+                    ? "1px solid var(--action-danger)"
                     : item
                       ? `1px solid ${isOver ? "var(--color-primary)" : "var(--color-accent)"}`
                       : `1px dashed ${isOver ? "var(--color-primary)" : "var(--color-border)"}`,
                   backgroundColor: isRejected
-                    ? "color-mix(in srgb, #ef4444 15%, transparent)"
+                    ? "color-mix(in srgb, var(--action-danger) 15%, transparent)"
                     : item
                       ? isSelected
                         ? "color-mix(in srgb, var(--color-accent) 18%, transparent)"

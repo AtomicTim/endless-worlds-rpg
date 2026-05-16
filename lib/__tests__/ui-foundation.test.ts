@@ -119,6 +119,32 @@ const ALLOWED_HEX_CODES = new Set<string>([
   "#14110c", "#c4302b", "#2d3a1a", "#3d3220", "#4a3c28",
   "#c8b890", "#7a6850", "#5a4a38", "#0f0d0a", "#1a1410",
 
+  // ── PR-2 semantic tokens (POI / status / tone / codex /
+  //    observation / character / loot / surface / action) ──────
+  // POI markers
+  "#60a5fa", "#93c5fd", "#fbbf24", "#fde68a", "#f97316",
+  "#fdba74", "#ef4444", "#fca5a5", "#a78bfa",
+  // Status effects
+  "#67e8f9", "#86efac", "#d1d5db", "#c084fc",
+  // Dialogue tones
+  "#22aa44", "#334455", "#4488cc", "#8844cc", "#aaaa22", "#cc4422",
+  // Codex entry types
+  "#7a9ab8", "#c8885a",
+  // Observation badge
+  "#4a9888",
+  // Character sheet
+  "#cbb888", "#9a8060",
+  // Loot quality
+  "#d8884c",
+  // Surfaces
+  "#191308", "#111009", "#222015",
+  // Cross-region nav
+  "#c2410c",
+  // Semantic action colours
+  "#22c55e", "#eab308", "#3b82f6", "#7c3aed", "#e2e8f0",
+  // Journal destructive
+  "#9a4040",
+
   // ── Modal backdrops / generic dark fills ────────────────────────
   "#0a0a0a", "#1a1a1a",
 

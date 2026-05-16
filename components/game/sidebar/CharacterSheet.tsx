@@ -51,9 +51,15 @@ function StatBar({
 }
 
 function hpColor(pct: number): string {
-  if (pct > 60) return "#22c55e";
-  if (pct > 30) return "#eab308";
-  return "#ef4444";
+  // PR-2: this 3-stop ladder uses the Tailwind success/warning/danger
+  // palette, NOT the design-ref §8 5-band HP gradient (#4a8a4a /
+  // #5a9a5a / #a87830 / #c84830 / #e03030). CharacterSheet.tsx is
+  // an orphan file (see PROMPT-LOG known gaps) — when it's revived
+  // or replaced, swap to the canonical HP bands. For now the
+  // action-* tokens carry the success/warning/danger semantics.
+  if (pct > 60) return "var(--action-success)";
+  if (pct > 30) return "var(--action-warning)";
+  return "var(--action-danger)";
 }
 
 function HPBar({ hp, maxHp, label }: { hp: number; maxHp: number; label: string }) {
@@ -98,7 +104,7 @@ function SanityBar({ sanity, maxSanity }: { sanity: number; maxSanity: number })
   }, [sanity]);
 
   const pct    = sanity / maxSanity;
-  const color  = pct > 0.5 ? "#a855f7" : "#7c3aed";
+  const color  = pct > 0.5 ? "#a855f7" : "var(--action-special)";
   return (
     <div className="mb-2 space-y-1">
       <div className="flex justify-between text-[10px]">

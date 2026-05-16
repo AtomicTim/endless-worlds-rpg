@@ -250,17 +250,26 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
       role={collapsed ? "button" : undefined}
       aria-label={collapsed ? "Expand dialogue" : undefined}
     >
-      {/* 32px initials / portrait chip */}
+      {/* 32px initials / portrait chip.
+          UI-fix-G 4a — borderRadius: 50% gives the "avatar circle"
+          called for in design-reference §10. overflow:hidden already
+          clips the portrait SVG (h-full w-full) to whatever shape the
+          parent enforces, so the same clip handles both portrait and
+          initials fallback paths.
+          UI-fix-G 4b — initials are a 2-char label, not numerics, so
+          fontFamily moves from var(--mono) to var(--sans). Size,
+          colour, and letter-spacing stay per spec. */}
       <div
         style={{
           width:          32,
           height:         32,
           background:     "var(--bg-3)",
           border:         "1px solid var(--genre-accent)",
+          borderRadius:   "50%",
           display:        "flex",
           alignItems:     "center",
           justifyContent: "center",
-          fontFamily:     "var(--mono)",
+          fontFamily:     "var(--sans)",
           fontSize:       11,
           color:          "var(--genre-accent)",
           letterSpacing:  "0.08em",
@@ -530,12 +539,18 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                     }}
                   >
                     <span style={{ flex: 1, minWidth: 0 }}>{option.text}</span>
+                    {/* UI-fix-G 4c — badges bumped from fontSize 6 to 7.
+                        At 6px the "CHA · Good odds" / "Observe" labels
+                        crowded into illegibility on most monitors; 7
+                        keeps the chip dense without sacrificing the
+                        odds read. Letter-spacing, radius, padding,
+                        and colours unchanged. */}
                     {kind === "STAT_GATED" && badge && (
                       <span
                         className="ew-sans uppercase"
                         title={`${badge.stat} ${badge.value}${badge.note ? ` (${badge.note})` : ""}`}
                         style={{
-                          fontSize:      6,
+                          fontSize:      7,
                           letterSpacing: "0.10em",
                           color:         "#c4943a",
                           background:    "rgba(196,148,58,.12)",
@@ -555,7 +570,7 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                           display:       "inline-flex",
                           alignItems:    "center",
                           gap:           4,
-                          fontSize:      6,
+                          fontSize:      7,
                           letterSpacing: "0.10em",
                           color:         "#4a9888",
                           background:    "rgba(74,152,136,.12)",

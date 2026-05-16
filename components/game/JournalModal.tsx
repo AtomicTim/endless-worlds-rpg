@@ -257,7 +257,12 @@ export function JournalModal() {
                   className="ew-sans uppercase"
                   style={{
                     background:    "transparent",
-                    color:         isActive ? "#e2cda0" : "#4a3818",
+                    // UI-fix-I 4b — inactive label was #4a3818
+                    // (near-black on the dark modal surface — illegible).
+                    // Bumped to #6a5530, the standard UI muted text the
+                    // design system uses elsewhere; reads cleanly without
+                    // competing with the active #e2cda0 + accent underline.
+                    color:         isActive ? "#e2cda0" : "#6a5530",
                     border:        "none",
                     borderBottom:  isActive
                       ? "2px solid var(--genre-accent)"
@@ -273,7 +278,10 @@ export function JournalModal() {
                   {badge > 0 && (
                     <span
                       className="ml-1"
-                      style={{ color: isActive ? "#a08870" : "#4a3818", fontSize: 7 }}
+                      // UI-fix-I 4b — badge count tracked the same #4a3818
+                      // tone; bumped in lockstep so the count stays legible
+                      // beside its (now-readable) label.
+                      style={{ color: isActive ? "#a08870" : "#6a5530", fontSize: 7 }}
                     >
                       · {badge}
                     </span>
@@ -436,17 +444,24 @@ function BreadcrumbBlock({
   genre:        Genre;
   journalLabel: string;
 }) {
-  // UI-7 (CHANGE 6) — current-objective line ("→ {breadcrumb content}")
-  // in genre accent for emphasis. Renders before the journal feed for
-  // this breadcrumb.
+  // UI-fix-I 4a — current-objective line. Was uppercase tracked
+  // chrome ("ew-sans uppercase 8px tracked, var(--genre-accent)")
+  // which read like a database row. Per design ref §12 quest
+  // objectives are narrative sentence-case ("Find the clerk who
+  // sent the message."), not field labels. The serif italic +
+  // warm neutral #c4b090 sits between the title (#e2cda0) and
+  // the journal prose (#b0956a) without burning the genre accent
+  // on every objective line. The → prefix stays as a visual
+  // bullet; sentence case comes for free from dropping the CSS
+  // textTransform: uppercase (no content change).
   return (
     <div className="flex flex-col gap-2">
       <p
-        className="ew-sans uppercase"
+        className="ew-serif italic"
         style={{
-          fontSize:      8,
-          letterSpacing: "0.14em",
-          color:         "var(--genre-accent)",
+          fontSize:      12,
+          letterSpacing: "0.01em",
+          color:         "#c4b090",
           margin:        0,
         }}
       >
@@ -632,12 +647,18 @@ function SideQuestBlock({
           {quest.region_id?.replace(/_/g, " ")}
         </p>
       )}
+      {/* UI-fix-I 4a — side-quest current objective. Same change as
+          BreadcrumbBlock above: serif italic narrative register
+          replaces the uppercase-tracked chrome treatment. Sentence
+          case is what the source content already reads as; the
+          uppercase CSS transform was the one forcing it into
+          field-label form. */}
       <p
-        className="ew-sans uppercase"
+        className="ew-serif italic"
         style={{
-          fontSize:      8,
-          letterSpacing: "0.14em",
-          color:         "var(--genre-accent)",
+          fontSize:      12,
+          letterSpacing: "0.01em",
+          color:         "#c4b090",
           margin:        0,
         }}
       >

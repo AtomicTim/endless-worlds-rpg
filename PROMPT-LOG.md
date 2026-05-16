@@ -48,6 +48,7 @@
 | H | Top Bar — Section 17 conformance | 986f874 | 734 | ✅ |
 | I | Chronicle — quest objectives sentence case, inactive tab contrast | 3c598c0 | 734 | ✅ |
 | J | World Intro Cinematic — prose 15px, warm colour, hint contrast | f3de117 | 734 | ✅ |
+| L | Misc bugs verification — L1 closed by B, L2 closed by B, L3 closed by D | (no new commit) | 734 | ✅ |
 
 ## Known Gaps (post-arc)
 

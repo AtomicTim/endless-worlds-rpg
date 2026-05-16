@@ -3,11 +3,10 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 6101441 (UI-foundation PR-2: tokenize semantic systems (17 → 0))
-**jest baseline:** 854 / 854 passed across 41 suites. Tokenization phase complete —
-  the ui-foundation verification harness is now fully green and joins the gameplay
-  baseline as a single number. Gameplay/business test count unchanged at 734; the
-  remaining 120 are the ui-foundation harness itself.
+**Last code commit:** f31dec3 (UI-PR3: NavigationBar nav card token system)
+**jest baseline:** 854 / 854 passed across 41 suites. ui-foundation still 120/120
+  green. Gameplay/business test count unchanged at 734; the remaining 120 are the
+  ui-foundation harness itself.
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -73,7 +72,8 @@
 | Harness | `lib/__tests__/ui-foundation.test.ts` introduced (file moved to canonical jest path in PR-1) | a7e1c44 / a1f8962 | 31 | landed |
 | PR-1 | Canonical §2 tokens added to globals.css (--ui-text-*, --ui-border-*, --ui-bg-*, --npc-*, --atmosphere, --breadcrumb-*, --chronicle-prose, --player-notes, --stat-heal, --stat-accessory, --combat-dot-tick); FORBIDDEN_HEX_CODES + "no forbidden legacy hex" describe added; #f59e0b purged from 4 map renderers (DebugMap / FantasyMap / primitives / WorldMapTier3) | 0be34aa | 31 → 17 | ✅ |
 | PR-2 | All remaining semantic systems tokenised — POI (9), status effects (7), dialogue tones (6), codex entry types (2), observation badge (1), character sheet (2), loot rarity/quality (3), surfaces (3), cross-region nav (1), action colours (7), destructive (1) added to globals.css; 16 component files refactored to var() consumption + harness allow-list expanded | 6101441 | 17 → 0 | ✅ |
-| PR-3 | Surface-by-surface VISUAL refactors per design ref §13 / §5 / §6 (CharacterPanel sidebar, StoryFeed prose treatment, NavigationBar card layout). PR-2 proved consumption; PR-3 fixes visual fidelity. | _pending_ | n/a (ui-fdn already 0) | ⏳ |
+| PR-3 (Nav) | NavigationBar nav card token system — 4 new tokens (--nav-border-unknown, --nav-name, --nav-sublabel, --nav-breadcrumb) + reused PR-2 nav tokens + var(--hl-dungeon) / var(--hl-loc) for BACK/EXIT + settlement borders; all 10 NavigationBar hex strings replaced with var(); zero visual change to rendered output | f31dec3 | 0 (already green) | ✅ |
+| PR-3 (next) | Continued surface-by-surface VISUAL refactors per design ref §13 / §5 (CharacterPanel sidebar, StoryFeed prose treatment). Same token-system pattern. | _pending_ | n/a (ui-fdn already 0) | ⏳ |
 
 ## Known Gaps (post-arc)
 

@@ -3,8 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 8bbab32 (UI-fix-C: nav cards — compact chip style, correct typography, no mono on arrows)
-**jest baseline:** 734 (authoritative — UI-fix-C is presentation-only, no test deltas)
+**Last code commit:** e33e5e8 (UI-fix-B: character wizard — card containers, stat colors, font system, name bug, motivation step)
+**jest baseline:** 734 (authoritative — UI-fix-B is presentation-only, no test deltas)
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -39,6 +39,7 @@
 | Group | Prompt | Commit | Tests | Status |
 |-------|--------|--------|-------|--------|
 | A | Foundation — fonts, genre vars, bg colours, overlay divs | 3993bc9 | 734 | ✅ |
+| B | Character wizard — cards, stat colours, fonts, name bug, motivation | e33e5e8 | 734 | ✅ |
 | C | Nav cards — compact chip style, typography, no-mono arrows | 8bbab32 | 734 | ✅ |
 | H | Top Bar — Section 17 conformance | 986f874 | 734 | ✅ |
 

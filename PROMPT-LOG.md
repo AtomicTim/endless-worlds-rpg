@@ -3,8 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 3c598c0 (UI-fix-I: chronicle — quest objectives sentence case, inactive tab contrast)
-**jest baseline:** 734 (authoritative — UI-fix-I is presentation-only, no test deltas)
+**Last code commit:** 16b5298 (UI-fix-K: fantasy settlement map — Canvas bird's-eye renderer, building footprints, curved roads)
+**jest baseline:** 734 (authoritative — UI-fix-K is presentation-only, no test deltas)
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -48,6 +48,7 @@
 | H | Top Bar — Section 17 conformance | 986f874 | 734 | ✅ |
 | I | Chronicle — quest objectives sentence case, inactive tab contrast | 3c598c0 | 734 | ✅ |
 | J | World Intro Cinematic — prose 15px, warm colour, hint contrast | f3de117 | 734 | ✅ |
+| K | Fantasy settlement map — Canvas bird's-eye, building footprints, curved roads (Local tier only; World/Region/Dungeon + non-Fantasy stay SVG) | 16b5298 | 734 | ✅ |
 | L | Misc bugs verification — L1 closed by B, L2 closed by B, L3 closed by D | (no new commit) | 734 | ✅ |
 
 ## Known Gaps (post-arc)

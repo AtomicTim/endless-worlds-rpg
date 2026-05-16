@@ -3,12 +3,11 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 0be34aa (UI-foundation PR-1: canonical tokens + #f59e0b purge)
-**jest baseline:** 734 non-ui-foundation tests passing (authoritative for gameplay/business
-  suites). Full repo: 854 / 837 passed / 17 failed — all 17 failures are in the new
-  `lib/__tests__/ui-foundation.test.ts` harness (committed at a7e1c44, moved to canonical
-  `__tests__` in 0be34aa) and all 17 are explicit PR-2 / PR-3 scope. The harness IS the
-  new gate; its failures are tracked separately from the gameplay baseline.
+**Last code commit:** 6101441 (UI-foundation PR-2: tokenize semantic systems (17 → 0))
+**jest baseline:** 854 / 854 passed across 41 suites. Tokenization phase complete —
+  the ui-foundation verification harness is now fully green and joins the gameplay
+  baseline as a single number. Gameplay/business test count unchanged at 734; the
+  remaining 120 are the ui-foundation harness itself.
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -73,8 +72,8 @@
 |----|-------|--------|--------------|--------|
 | Harness | `lib/__tests__/ui-foundation.test.ts` introduced (file moved to canonical jest path in PR-1) | a7e1c44 / a1f8962 | 31 | landed |
 | PR-1 | Canonical §2 tokens added to globals.css (--ui-text-*, --ui-border-*, --ui-bg-*, --npc-*, --atmosphere, --breadcrumb-*, --chronicle-prose, --player-notes, --stat-heal, --stat-accessory, --combat-dot-tick); FORBIDDEN_HEX_CODES + "no forbidden legacy hex" describe added; #f59e0b purged from 4 map renderers (DebugMap / FantasyMap / primitives / WorldMapTier3) | 0be34aa | 31 → 17 | ✅ |
-| PR-2 | Tokenize semantic systems — POI colours, status effect colours, NPC tone bars (poi-colors.ts, StatusEffectPills.tsx, genre-ui.ts) | _pending_ | est. 17 → ~10 | ⏳ |
-| PR-3 | Tokenize Tailwind defaults (#22c55e, #3b82f6, #ef4444, #fbbf24, #e2e8f0 etc) across the remaining ~10 component files | _pending_ | est. ~10 → 0 | ⏳ |
+| PR-2 | All remaining semantic systems tokenised — POI (9), status effects (7), dialogue tones (6), codex entry types (2), observation badge (1), character sheet (2), loot rarity/quality (3), surfaces (3), cross-region nav (1), action colours (7), destructive (1) added to globals.css; 16 component files refactored to var() consumption + harness allow-list expanded | 6101441 | 17 → 0 | ✅ |
+| PR-3 | Surface-by-surface VISUAL refactors per design ref §13 / §5 / §6 (CharacterPanel sidebar, StoryFeed prose treatment, NavigationBar card layout). PR-2 proved consumption; PR-3 fixes visual fidelity. | _pending_ | n/a (ui-fdn already 0) | ⏳ |
 
 ## Known Gaps (post-arc)
 

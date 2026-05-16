@@ -109,16 +109,30 @@ export default function WorldIntroModal({
           {worldName}
         </div>
 
-        {/* World intro prose — italic-serif via ew-serif + ew-world-intro
-            so it visually echoes the in-feed style this modal replaces. */}
+        {/* World intro prose — italic-serif via ew-serif, mirroring the
+            in-feed style this modal replaces.
+            UI-fix-J 4a — fontSize "0.9rem" (≈14.4px) → 15px. Brief
+              calls for 15-16px minimum on the cinematic; the prior
+              value sat below the readability floor on the dark
+              backdrop.
+            UI-fix-J 4b — color var(--color-text) (≈#e8dfd1, the
+              near-white prose ink) → #c0a878, the warm amber NarrativeBlock
+              uses for story prose (design-reference §2/§5). The white
+              read sterile; the amber gives the cinematic the warmth
+              its source material has.
+            UI-fix-J 4b — opacity dimmed from .85 → 1. The explicit
+              warm colour now carries the tone; no opacity tax needed.
+            UI-fix-J 4d — dropped the ew-world-intro className. The
+              class was never defined in globals.css (was a stale
+              hook from an earlier draft). */}
         <div
-          className="ew-serif ew-world-intro text-center"
+          className="ew-serif text-center"
           style={{
             fontStyle:    "italic",
-            fontSize:     "0.9rem",
+            fontSize:     15,
             lineHeight:   1.8,
-            color:        "var(--color-text)",
-            opacity:      proseVisible ? 0.85 : 0,
+            color:        "#c0a878",
+            opacity:      proseVisible ? 1 : 0,
             transition:   "opacity 400ms ease-out",
             maxWidth:     "540px",
             whiteSpace:   "pre-wrap",
@@ -130,7 +144,13 @@ export default function WorldIntroModal({
 
       {/* Hint — anchored to the bottom of the viewport. UI-fix-A:
           UI chrome label uses Inter Tight (var(--sans)), uppercase
-          + tracking. Was font-mono (Courier). */}
+          + tracking. Was font-mono (Courier).
+          UI-fix-J 4c — colour var(--color-muted) (= --ink-4 #6e6557)
+          → #6a5530, the standard UI muted tone used across the
+          design system. The prior value sat too close to the
+          backdrop to read against the radial-gradient fade at the
+          edges; #6a5530 is consistent with the muted UI-chrome
+          ink used by step labels in the wizard. */}
       <div
         className="ew-sans animate-pulse text-center"
         style={{
@@ -141,7 +161,7 @@ export default function WorldIntroModal({
           fontSize:      "0.7rem",
           letterSpacing: "0.18em",
           textTransform: "uppercase",
-          color:         "var(--color-muted)",
+          color:         "#6a5530",
           opacity:       proseVisible ? 1 : 0,
           transition:    "opacity 400ms ease-out",
           pointerEvents: "none",

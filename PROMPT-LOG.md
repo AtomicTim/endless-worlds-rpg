@@ -3,8 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 986f874 (UI-fix-H: top bar — height, logo font, icon tap targets, char pill, verbosity toggle)
-**jest baseline:** 734 (authoritative)
+**Last code commit:** 3993bc9 (UI-fix-A: font system, genre CSS variable consumption, bg colours, overlay divs)
+**jest baseline:** 734 (authoritative — UI-fix-A is presentation-only, no test deltas)
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -38,7 +38,7 @@
 
 | Group | Prompt | Commit | Tests | Status |
 |-------|--------|--------|-------|--------|
-| A | Foundation — fonts, genre vars, bg colours, overlay divs | _pending_ | 734 | ✅ |
+| A | Foundation — fonts, genre vars, bg colours, overlay divs | 3993bc9 | 734 | ✅ |
 | H | Top Bar — Section 17 conformance | 986f874 | 734 | ✅ |
 
 ## Known Gaps (post-arc)

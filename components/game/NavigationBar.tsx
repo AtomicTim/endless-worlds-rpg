@@ -180,11 +180,16 @@ export function NavigationBar({
         <div
           style={{
             padding:       "6px 16px 0",
-            // UI-fix-A — breadcrumb is UI chrome → Inter Tight.
+            // UI-fix-C — breadcrumb is UI chrome (Inter Tight) at 9px
+            // with light tracking (.10em) and the dim warm-brown
+            // #4a3818 per design ref §6 / Group C step 4c. Casing is
+            // upstream (buildBreadcrumb .toUpperCase) — those pure
+            // functions are out of scope for this prompt; no CSS
+            // textTransform here.
             fontFamily:    "var(--sans)",
-            fontSize:      8,
-            letterSpacing: "0.2em",
-            color:         "var(--ink-4)",
+            fontSize:      9,
+            letterSpacing: "0.10em",
+            color:         "#4a3818",
             whiteSpace:    "nowrap",
             overflow:      "hidden",
             textOverflow:  "ellipsis",
@@ -250,12 +255,18 @@ export function NavigationBar({
       {!inDungeon && (
       <div style={{ padding: "8px 16px 0" }}>
         <div
+          // UI-fix-C — section header per design ref §6 step 4h:
+          // ew-sans uppercase, 7px, 0.14em, #4a3818, marginBottom 5.
+          // ew-sans (utility class) overrides the parent's font-mono
+          // -- which is now JetBrains Mono after UI-fix-A, but the
+          // explicit ew-sans here keeps the header firmly in Inter
+          // Tight regardless of any parent inheritance.
           className="ew-sans uppercase"
           style={{
             fontSize:      7,
             letterSpacing: "0.14em",
             color:         "#4a3818",
-            marginBottom:  6,
+            marginBottom:  5,
           }}
         >
           Where to go.
@@ -517,14 +528,15 @@ function DungeonNavCardButton({
           alignItems: "center",
           gap:        6,
           color,
-          // UI-fix-A — nav card name is location prose per design ref
-          // §6 ("Cormorant Garamond italic, ~11px"). Was var(--mono).
-          // Group C will refine the rest of the nav card visuals.
+          // UI-fix-C — dungeon room name (Group C step 4g): Cormorant
+          // Garamond italic, 500-weight, 11px. letterSpacing dropped
+          // — serifs need no tracking at this size and the previous
+          // 0.04em pushed the cap-height too wide. Color inherits
+          // from the button's `color` prop above.
           fontFamily: "var(--serif)",
           fontSize:   11,
           fontWeight: 500,
           fontStyle:  "italic",
-          letterSpacing: "0.04em",
         }}
       >
         <span style={{ fontSize: 13 }}>{arrow}</span>
@@ -533,10 +545,12 @@ function DungeonNavCardButton({
       <div
         style={{
           marginTop:    2,
-          // UI-fix-A — sublabel "type · direction" → Inter Tight.
+          // UI-fix-C — dungeon sublabel (Group C step 4g): Inter Tight
+          // 8px / 0.10em / var(--ink-4). Was 9px / 0.20em — the
+          // tighter spacing matches the new compact chip rhythm.
           fontFamily:   "var(--sans)",
-          fontSize:     9,
-          letterSpacing: "0.2em",
+          fontSize:     8,
+          letterSpacing: "0.10em",
           color:        "var(--ink-4)",
         }}
       >
@@ -664,10 +678,12 @@ function NavCard({
     :                "var(--card-border)";
 
   // [[hover-state]] CSS-inline pattern — onMouseEnter / Leave swap a
-  // tinted inset boxShadow over the base var(--card-shadow). Subtle
-  // brighten that respects the genre accent.
-  const baseShadow  = "var(--card-shadow)";
-  const hoverShadow = "var(--card-shadow), inset 0 0 0 999px rgba(var(--genre-accent-rgb), .04)";
+  // tinted inset highlight on the chip. UI-fix-C dropped the genre
+  // var(--card-shadow) base entirely (nav chips are flat, not full
+  // genre cards per design ref §6 / Group C step 4a); the hover
+  // affordance is the inset accent tint alone.
+  const baseShadow  = "none";
+  const hoverShadow = "inset 0 0 0 999px rgba(var(--genre-accent-rgb), .04)";
 
   // Show VISITED when the player has been here (card.discovered true,
   // skipped on UNDISCOVERED + BACK + the current node). HERE wins.
@@ -697,24 +713,27 @@ function NavCard({
       style={{
         display:        "flex",
         alignItems:     "center",
-        // UI-9b — gap floor 6px (was 10), padding 10/14 (was 10/12),
-        // min-height floor 56px. Cards still grow when content needs
-        // it; these are floors, not caps.
         gap:            6,
         // fullWidth (column mode): fill the column; row mode: fixed range.
         ...(fullWidth
           ? { width: "100%" }
           : { minWidth: 140, maxWidth: 200, flexShrink: 0 }
         ),
-        minHeight:      56,
-        padding:        "10px 14px",
-        // UI-5 — genre card treatment (CHANGE 3): per-genre tokens from
-        // UI-1 drive background / radius / shadow. Border-left is
-        // overridden by the destination-type colour from CHANGE 2.
-        background:     "var(--card-bg)",
-        border:         `1px ${isUnknown ? "dashed" : "solid"} var(--card-border)`,
+        // UI-fix-C — touch-target floor 44px, compact padding 7×10.
+        // Was 56 / 10×14. Nav cards are now lighter chips, not full
+        // genre cards (design ref §6 / Group C step 4f).
+        minHeight:      44,
+        padding:        "7px 10px",
+        // UI-fix-C — chip surface (Group C step 4a): nav cards drop the
+        // per-genre --card-bg / --card-border / --card-radius / shadow
+        // tokens because they are not full genre cards. They use the
+        // simpler nav-specific palette so the row of chips reads as a
+        // navigation strip rather than a stack of large cards. The
+        // borderLeft override (destination-tier colour) stays.
+        background:     "#111009",
+        border:         `1px ${isUnknown ? "dashed" : "solid"} #222015`,
         borderLeft:     `2px ${isUnknown ? "dashed" : "solid"} ${leftBorderColor}`,
-        borderRadius:   "var(--card-radius)",
+        borderRadius:   6,
         boxShadow:      baseShadow,
         color:          "var(--ink-2)",
         textAlign:      "left",
@@ -730,7 +749,10 @@ function NavCard({
       <span
         aria-hidden
         style={{
-          fontFamily:    "var(--mono)",
+          // UI-fix-C — arrow glyph (← → ↑ ◆ ◇) is a directional
+          // symbol, not a numeric value. Drop var(--mono) per Group
+          // C step 4b so it inherits the chip's typeface and stays
+          // visually balanced with the serif name beside it.
           fontSize:      14,
           // Arrow leans on the destination colour for at-a-glance
           // scanning; back arrows stay on the burnt-copper border tone.
@@ -760,12 +782,15 @@ function NavCard({
           }}
         >
           <span
-            // UI-5 — location name: Cormorant Garamond italic, 13px,
-            // #d4bc88.
+            // UI-fix-C — location name (Group C step 4d): Cormorant
+            // Garamond italic, 11px, #c8b890. Was 13px / #d4bc88 from
+            // UI-5; the new sizing fits the compact chip and the
+            // muted #c8b890 sits one step quieter so the chip reads
+            // as nav-list, not headline.
             className="ew-serif italic"
             style={{
-              fontSize:      13,
-              color:         "#d4bc88",
+              fontSize:      11,
+              color:         "#c8b890",
               overflow:      "hidden",
               textOverflow:  "ellipsis",
               whiteSpace:    "nowrap",
@@ -812,15 +837,17 @@ function NavCard({
         </span>
         {typeLabel && (
           <span
-            // UI-5 — type badge: Inter Tight uppercase 0.12em #6a5530.
-            // GENERATING... and UNDISCOVERED slot in here.
-            // UI-9b — floor 8px (was 7) for legibility at 1280px.
+            // UI-fix-C — sub-label "type · direction" (Group C step 4e):
+            // Inter Tight uppercase, 7.5px, #5a4828. Smaller and dimmer
+            // than the prior 8px / #6a5530 so the chip's centre of
+            // gravity sits firmly on the serif name above. GENERATING…
+            // and UNDISCOVERED labels render in this slot.
             className="ew-sans uppercase"
             style={{
               fontFamily:    "var(--sans)",
-              fontSize:      8,
+              fontSize:      7.5,
               letterSpacing: "0.12em",
-              color:         "#6a5530",
+              color:         "#5a4828",
               overflow:      "hidden",
               textOverflow:  "ellipsis",
               whiteSpace:    "nowrap",

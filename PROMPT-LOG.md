@@ -3,8 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 2dbc973 (UI-fix-D: arrival format confirmed, attune button → context panel)
-**jest baseline:** 734 (authoritative — UI-fix-D is presentation-only, no test deltas)
+**Last code commit:** 901eccd (UI-fix-G: dialogue modal — avatar circular, initials sans font, badge size bump)
+**jest baseline:** 734 (authoritative — UI-fix-G is presentation-only, no test deltas)
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -43,6 +43,7 @@
 | C | Nav cards — compact chip style, typography, no-mono arrows | 8bbab32 | 734 | ✅ |
 | D | Arrival format confirmed, Attune button → Context Panel (also Group L item 3) | 2dbc973 | 734 | ✅ |
 | E | Context Panel — object name colour, Tabler icons | f496807 | 734 | ✅ |
+| G | Dialogue Modal — avatar circle, initials sans, badge size | 901eccd | 734 | ✅ |
 | H | Top Bar — Section 17 conformance | 986f874 | 734 | ✅ |
 
 ## Known Gaps (post-arc)

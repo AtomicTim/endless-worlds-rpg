@@ -3,8 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 901eccd (UI-fix-G: dialogue modal — avatar circular, initials sans font, badge size bump)
-**jest baseline:** 734 (authoritative — UI-fix-G is presentation-only, no test deltas)
+**Last code commit:** 16b5c78 (UI-fix-F: character panel — pack grid font, equipped name color, sidebar width 196/160px)
+**jest baseline:** 734 (authoritative — UI-fix-F is presentation-only, no test deltas)
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -43,6 +43,7 @@
 | C | Nav cards — compact chip style, typography, no-mono arrows | 8bbab32 | 734 | ✅ |
 | D | Arrival format confirmed, Attune button → Context Panel (also Group L item 3) | 2dbc973 | 734 | ✅ |
 | E | Context Panel — object name colour, Tabler icons | f496807 | 734 | ✅ |
+| F | Character Panel — pack grid font, equipped name colour, sidebar 196/160px | 16b5c78 | 734 | ✅ |
 | G | Dialogue Modal — avatar circle, initials sans, badge size | 901eccd | 734 | ✅ |
 | H | Top Bar — Section 17 conformance | 986f874 | 734 | ✅ |
 
@@ -55,7 +56,7 @@
 - **Combat panel exit animation deferred (UI-10).** Polish patch.
 - **FloorLootStrip still rendered (UI-8).** Retire in cleanup pass.
 - **Codex/Journal tab restructure deferred (UI-7).** Data shape change required.
-- **Sidebar width 280px (UI-9).** LogBook co-tenant blocks narrowing.
+- ~~**Sidebar width 280px (UI-9).** LogBook co-tenant blocks narrowing.~~ → resolved in UI-fix-F (16b5c78); LogBook fit cleanly at 196px / 160px without restructure.
 - **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass.
 - **OneDrive sync race (recurring).** Staged-as-you-go pattern for CombatMode files.
 

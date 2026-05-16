@@ -3,9 +3,9 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 8f88f56 (context-panel: larger name, plain badge, Present/Interact labels, NPC Talk→, object verb-label, breadcrumb)
-**jest baseline:** 734 (authoritative — context-panel rework is presentation-only, no test deltas)
-**tsc:** clean (on ContextPanel-isolated state; CharacterPanel has unrelated in-flight edits)
+**Last code commit:** 8e0b2f0 (UI-PR3: NavigationBar nav card token system — PROMPT-LOG update)
+**jest baseline:** 854 (authoritative — post-foundation PR-1/PR-2 added ui-foundation suite; PR-3 zero delta)
+**tsc:** clean
 
 ## Gameplay Implementation Arc
 
@@ -57,6 +57,17 @@
 |---|--------|--------|-------|--------|
 | 1–6 | Larger name, plain badge, Present/Interact labels, NPC Talk→, object verb-label, region breadcrumb | 8f88f56 | 734 | ✅ |
 
+## Post-Foundation Visual Refactor — Token Discipline Pass
+
+Separate from the UI arc above. Goal: enforce the §5 workflow across all game surfaces — zero hardcoded hex strings in components/game/, all values via var(--token). ui-foundation suite enforces this in CI.
+
+| PR | Surface | Commit | Tests | Status |
+|----|---------|--------|-------|--------|
+| PR-1 | globals.css canonical tokens + legacy #f59e0b purge | 0be34aa | 854 | ✅ |
+| PR-2 | 42 semantic tokens (POI, status effects, dialogue tones, codex, loot rarity, nav, surfaces) | 6101441 | 854 | ✅ |
+| PR-3 | NavigationBar.tsx — 4 new nav tokens + 5 existing token aliases; zero hex strings remain | f31dec3 | 854 | ✅ |
+| PR-4 | StoryFeed.tsx + StoryComponents.tsx | — | — | ⏳ |
+
 ## Known Gaps (post-arc)
 
 - **Narrator streaming buffered (UI-4b).** Structural refactor prompt needed.
@@ -69,6 +80,7 @@
 - ~~**Sidebar width 280px (UI-9).** LogBook co-tenant blocks narrowing.~~ → resolved in UI-fix-F (16b5c78); LogBook fit cleanly at 196px / 160px without restructure.
 - **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass.
 - **OneDrive sync race (recurring).** Staged-as-you-go pattern for CombatMode files.
+- **PR-3b — Nav card layout.** Cards currently render as an unbounded single column. Design intent (CLAUDE.md rule 72): max 2 cards tall, overflow into additional columns horizontally. No token changes needed — layout only. Schedule after PR-5.
 
 ## Next Steps
 

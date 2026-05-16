@@ -204,6 +204,100 @@ function validateName(name: string): string {
   return "";
 }
 
+// UI-fix-B — truncate a description to its first N sentences by character
+// scan. The brief says "do not rewrite — truncate", so this only walks the
+// existing text and slices at the Nth sentence-ending punctuation. Falls
+// through to the full string when fewer sentences exist.
+function trimToSentences(text: string | undefined, maxSentences = 2): string {
+  if (!text) return "";
+  let count = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "." || ch === "!" || ch === "?") {
+      count += 1;
+      if (count >= maxSentences) {
+        // Include the punctuation; eat trailing whitespace for clean wrap.
+        let end = i + 1;
+        while (end < text.length && text[end] === " ") end += 1;
+        return text.slice(0, end).trim();
+      }
+    }
+  }
+  return text;
+}
+
+// UI-fix-B — selected-state ✓ overlay. Positioned absolute against the
+// card's relative wrapper (cardStyle / classCardStyle adds position:
+// relative on selected). Inter Tight, 10px, accent colour by default;
+// class cards pass the stat colour explicitly.
+interface CheckMarkProps { color?: string; }
+function CheckMark({ color = "var(--genre-accent)" }: CheckMarkProps) {
+  return (
+    <span
+      aria-hidden
+      className="ew-sans"
+      style={{
+        position:   "absolute",
+        top:        8,
+        right:      10,
+        fontSize:   10,
+        fontWeight: 700,
+        lineHeight: 1,
+        color,
+      }}
+    >
+      ✓
+    </span>
+  );
+}
+
+// UI-fix-B — single stat-modifier pill (Species step). Number rendered in
+// JetBrains Mono (tabular-nums), label in Inter Tight 9px uppercase, both
+// in the STAT_COLOR for that stat key. Falls back to var(--genre-accent)
+// for unknown stats (defensive — should never trip).
+interface StatModPillProps { statKey: string; value: number; }
+function StatModPill({ statKey, value }: StatModPillProps) {
+  const color = STAT_COLOR[statKey] ?? "var(--genre-accent)";
+  const label = STAT_SHORT[statKey] ?? statKey.slice(0, 3).toUpperCase();
+  const sign  = value > 0 ? "+" : "−";
+  return (
+    <span
+      style={{
+        display:      "inline-flex",
+        alignItems:   "center",
+        gap:          4,
+        padding:      "2px 8px",
+        borderRadius: 20,
+        border:       `1px solid color-mix(in srgb, ${color} 36%, transparent)`,
+        background:   `color-mix(in srgb, ${color} 12%, transparent)`,
+        color,
+      }}
+    >
+      <span
+        style={{
+          fontFamily:         "var(--mono)",
+          fontVariantNumeric: "tabular-nums",
+          fontSize:           11,
+          fontWeight:         600,
+        }}
+      >
+        {sign}{Math.abs(value)}
+      </span>
+      <span
+        className="ew-sans"
+        style={{
+          fontSize:      9,
+          letterSpacing: "0.10em",
+          fontWeight:    600,
+          textTransform: "uppercase",
+        }}
+      >
+        {label}
+      </span>
+    </span>
+  );
+}
+
 // ─── Step indicator (UI-12 CHANGE 8 — dot-style only) ───────────────────────
 //
 // Filled = genre accent for completed steps. Active = larger accent dot.
@@ -689,13 +783,36 @@ export default function NewGamePage() {
     if (!selectedGenre) return;
     setRandomNameLoading(true);
     try {
+      // UI-fix-B B6 — two changes vs. the original handler to defeat
+      // the "regenerate stops working" symptom:
+      //
+      //   1. cache: 'no-store' on the fetch. Belt for the suspenders
+      //      below: instructs the browser HTTP cache (and any
+      //      intermediate proxy) never to serve a stored response for
+      //      this URL+body combo.
+      //
+      //   2. _nonce: Date.now() in the body. Even when no-store is
+      //      respected, an LLM endpoint with no temperature parameter
+      //      can land on the same most-likely name token for identical
+      //      input. Adding a per-call nonce makes every request body
+      //      unique — the server ignores the field (the API route
+      //      destructures only genre/species_id/gender), and the
+      //      uniqueness propagates as input entropy that defeats any
+      //      Anthropic-side response repetition through prompt
+      //      identity.
+      //
+      // The handler was already correct on the React side: no latch,
+      // setRandomNameLoading reset in finally, button re-enables. The
+      // perceived "stops working" was the same name re-appearing.
       const res = await fetch("/api/game/generate-random-name", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
+        cache:   "no-store",
         body: JSON.stringify({
           genre:      selectedGenre,
           species_id: selectedSpeciesId ?? "human",
           gender,
+          _nonce:     Date.now(),
         }),
       });
       const data = (await res.json()) as { name?: string; error?: string };
@@ -961,20 +1078,48 @@ export default function NewGamePage() {
   const stepNum = STAGE_TO_STEP[stage];
   const showStepIndicator = typeof stepNum === "number";
 
-  // ── Card styling helper (UI-12 — genre token system) ──────────────────────
-  // Selected cards override border with var(--genre-accent) per spec.
-  // Hover brighten is handled inline by callers (transform scale already
-  // in place via Tailwind hover:scale on the buttons).
+  // ── Card styling helpers (UI-fix-B — standard template) ────────────────
+  //
+  // Both helpers follow the brief's "standard template":
+  //   bg var(--card-bg) · border var(--card-border) · radius var(--card-radius)
+  //   shadow var(--card-shadow) · cursor pointer
+  // Selected state adds 1.5px accent border, .08 accent tint over the
+  // card bg, and a relative position so the ✓ CheckMark sits top-right.
+  //
+  // cardStyle() — uses the active genre accent. Right for species,
+  // origin, appearance (genre is committed by that point).
+  // genreCardStyle() — neutral amber #c4943a hardcoded for selection,
+  // because the genre class is not yet active on the root (B1 rule).
   function cardStyle(isSelected: boolean): React.CSSProperties {
     return {
-      background:   "var(--card-bg)",
+      background:   isSelected
+        ? "linear-gradient(rgba(var(--genre-accent-rgb), 0.08), rgba(var(--genre-accent-rgb), 0.08)), var(--card-bg)"
+        : "var(--card-bg)",
       border:       isSelected
-        ? "2px solid var(--genre-accent)"
+        ? "1.5px solid rgba(var(--genre-accent-rgb), 0.70)"
         : "1px solid var(--card-border)",
       borderRadius: "var(--card-radius, 7px)",
       boxShadow:    isSelected
         ? "0 0 12px rgba(var(--genre-accent-rgb), 0.30)"
-        : "none",
+        : "var(--card-shadow)",
+      cursor:       "pointer",
+      position:     "relative",
+    };
+  }
+  function genreCardStyle(isSelected: boolean): React.CSSProperties {
+    return {
+      background:   isSelected
+        ? "linear-gradient(rgba(196,148,58,0.08), rgba(196,148,58,0.08)), var(--card-bg)"
+        : "var(--card-bg)",
+      border:       isSelected
+        ? "1.5px solid rgba(196,148,58,0.70)"
+        : "1px solid var(--card-border)",
+      borderRadius: "var(--card-radius, 7px)",
+      boxShadow:    isSelected
+        ? "0 0 12px rgba(196,148,58,0.30)"
+        : "var(--card-shadow)",
+      cursor:       "pointer",
+      position:     "relative",
     };
   }
 
@@ -986,21 +1131,40 @@ export default function NewGamePage() {
       className="min-h-screen ew-sans"
       data-genre={dataAttr || undefined}
       style={{
-        // UI-fix-A — character creation background per design ref §A3
-        // (#0f0d0a). Slightly warmer than the main menu's #08060a so
-        // the wizard reads as "inside the game" rather than menu chrome.
-        backgroundColor: "#0f0d0a",
+        // UI-fix-B — Group B1 carves out the genre step: that screen
+        // happens before any genre is selected, so the brief specifies
+        // the darker pre-game background (#08060a, matching Main Menu).
+        // Every other step uses #0f0d0a (design ref §A3) so the wizard
+        // reads as "inside the game" rather than menu chrome.
+        backgroundColor: stage === "genre" ? "#08060a" : "#0f0d0a",
         color:           "var(--color-text)",
       }}
     >
-      {/* Header */}
+      {/* Header — UI-fix-B B1: logo is Cormorant Garamond italic in
+          neutral amber #c4943a (not uppercase, not monospace). The
+          "New Character" right-side hint stays as muted UI chrome. */}
       <header className="border-b px-6 py-4" style={{ borderColor: "var(--color-border)" }}>
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <span className="text-sm font-bold tracking-widest uppercase text-glow"
-            style={{ color: "var(--color-primary)" }}>
-            ⬡ ENDLESS WORLDS
+          <span
+            className="ew-serif"
+            style={{
+              fontStyle:     "italic",
+              fontWeight:    500,
+              fontSize:      16,
+              color:         "#c4943a",
+              letterSpacing: "0.01em",
+            }}
+          >
+            ✦ Endless Worlds
           </span>
-          <span className="text-xs" style={{ color: "var(--color-muted)" }}>
+          <span
+            className="ew-sans uppercase"
+            style={{
+              fontSize:      9,
+              letterSpacing: "0.18em",
+              color:         "var(--color-muted)",
+            }}
+          >
             New Character
           </span>
         </div>
@@ -1024,27 +1188,33 @@ export default function NewGamePage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {GENRES.map((g) => {
                 const isSelected = selectedGenre === g.id;
-                // UI-12 CHANGE 3 — genre cards use the per-genre CSS
-                // variable sets (UI-1). data-genre on the card scopes the
-                // accent so each card paints its own colour pill +
-                // selected border, independent of the page-level genre.
+                // UI-fix-B B1 — genre cards still tag their own
+                // data-genre so each card's ASCII tracer reads in its
+                // own accent. Selected state uses neutral amber
+                // (genreCardStyle), since the page-level genre class
+                // is not active until the player advances past the
+                // genre step.
                 return (
                   <button
                     key={g.id}
                     onClick={() => handleGenreSelect(g.id)}
                     data-genre={g.dataAttr || "fantasy"}
-                    className="text-left p-4 transition-all duration-150 hover:scale-[1.02] active:scale-[0.99]"
-                    style={cardStyle(isSelected)}
+                    className="text-left transition-all duration-150 hover:scale-[1.02] active:scale-[0.99]"
+                    style={{ ...genreCardStyle(isSelected), padding: "10px 12px" }}
                   >
-                    {/* Artwork placeholder — Section 9 calls for genre
-                        art here. ASCII placeholder retained as a low-
-                        intensity tracer until art lands. */}
+                    {/* Selected ✓ — top-right of card. Neutral amber
+                        per B1 rule (genre class not active yet). */}
+                    {isSelected && <CheckMark color="#c4943a" />}
+
+                    {/* Artwork placeholder — Section 9 reserves this
+                        slot for genre art. ASCII tracer is a low-
+                        intensity stand-in until art lands. */}
                     <div
                       style={{
-                        height:     54,
-                        marginBottom: 10,
-                        display:    "flex",
-                        alignItems: "center",
+                        height:         54,
+                        marginBottom:   10,
+                        display:        "flex",
+                        alignItems:     "center",
                         justifyContent: "center",
                       }}
                     >
@@ -1059,30 +1229,32 @@ export default function NewGamePage() {
                         {g.asciiArt}
                       </pre>
                     </div>
-                    {/* Genre accent pill */}
-                    <span
+
+                    {/* Genre name — UI-fix-B B1: Inter Tight uppercase
+                        13px #e2cda0. The accent pill is gone (replaced
+                        by the selected-state border + ✓). */}
+                    <div
                       className="ew-sans uppercase"
                       style={{
-                        display:       "inline-block",
-                        fontSize:      8,
-                        letterSpacing: "0.20em",
-                        color:         "var(--genre-accent)",
-                        background:    "rgba(var(--genre-accent-rgb), 0.10)",
-                        border:        "1px solid rgba(var(--genre-accent-rgb), 0.32)",
-                        borderRadius:  20,
-                        padding:       "1px 8px",
-                        marginBottom:  8,
+                        fontSize:      13,
+                        letterSpacing: "0.10em",
+                        fontWeight:    600,
+                        color:         "#e2cda0",
+                        marginBottom:  4,
                       }}
                     >
                       {g.name}
-                    </span>
+                    </div>
+
+                    {/* Tagline — Cormorant Garamond italic 12px #6a5530
+                        per B1 spec. */}
                     <div
                       className="ew-serif"
                       style={{
-                        fontStyle: "italic",
-                        fontSize:  11,
+                        fontStyle:  "italic",
+                        fontSize:   12,
                         lineHeight: 1.45,
-                        color:     "#9a7e52",
+                        color:      "#6a5530",
                       }}
                     >
                       {g.description}
@@ -1160,18 +1332,21 @@ export default function NewGamePage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {effectiveSpecies.map((sp) => {
                   const isSelected = selectedSpeciesId === sp.id;
-                  const stat = Object.entries(sp.stat_modifiers ?? {})
+                  // UI-fix-B B3 — keep raw entries so the renderer can
+                  // emit per-stat pills (was a joined "+1 STR · -1 AGI"
+                  // string before).
+                  const statEntries = Object.entries(sp.stat_modifiers ?? {})
                     .filter(([, v]) => typeof v === "number" && v !== 0)
-                    .map(([k, v]) => {
-                      const sign = (v as number) > 0 ? "+" : "−";
-                      return `${sign}${Math.abs(v as number)} ${STAT_LABEL[k] ?? k}`;
-                    });
+                    .map(([k, v]) => [k, v as number] as const);
                   const trait = sp.passive_traits?.[0]?.label ?? "";
                   const seed  = sp.npc_disposition_seed ?? 0;
                   const disposition =
                     seed > 5  ? "Trusted among locals"
                     : seed < -5 ? "Regarded with suspicion"
                     : "";
+                  // UI-fix-B B3 — truncate description to 2 sentences
+                  // max. Brief says "do not rewrite — truncate".
+                  const shortDesc = trimToSentences(sp.description, 2);
                   return (
                     <button
                       key={sp.id}
@@ -1185,32 +1360,64 @@ export default function NewGamePage() {
                         }
                         setSelectedSpeciesId(sp.id);
                       }}
-                      className="text-left p-5 rounded border transition-all duration-150 hover:scale-[1.02] active:scale-[0.99] flex flex-col"
+                      className="text-left p-5 transition-all duration-150 hover:scale-[1.02] active:scale-[0.99] flex flex-col"
                       style={cardStyle(isSelected)}
                     >
+                      {isSelected && <CheckMark />}
                       <div
-                        className="text-base font-bold mb-2 tracking-wide"
-                        style={{ color: isSelected ? "var(--color-primary)" : "var(--color-text)" }}
+                        className="ew-serif mb-2"
+                        style={{
+                          fontStyle:  "italic",
+                          fontSize:   14,
+                          color:      "#e2cda0",
+                          lineHeight: 1.25,
+                        }}
                       >
                         {sp.name}
                       </div>
-                      <p className="text-xs leading-relaxed mb-4 flex-1" style={{ color: "var(--color-muted)" }}>
-                        {sp.description}
+                      <p
+                        className="ew-serif mb-4 flex-1"
+                        style={{
+                          fontStyle:  "italic",
+                          fontSize:   12,
+                          lineHeight: 1.5,
+                          color:      "#9a7e52",
+                        }}
+                      >
+                        {shortDesc}
                       </p>
-                      <div className="space-y-1 border-t pt-3 mt-auto"
-                        style={{ borderColor: "var(--color-border)" }}>
-                        {stat.length > 0 && (
-                          <div className="text-xs font-bold" style={{ color: "var(--color-accent)" }}>
-                            {stat.join(" · ")}
+                      <div
+                        className="border-t pt-3 mt-auto flex flex-col gap-2"
+                        style={{ borderColor: "var(--card-border)" }}
+                      >
+                        {statEntries.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {statEntries.map(([k, v]) => (
+                              <StatModPill key={k} statKey={k} value={v} />
+                            ))}
                           </div>
                         )}
                         {trait && (
-                          <div className="text-xs" style={{ color: "var(--color-accent)" }}>
+                          <div
+                            className="ew-sans uppercase"
+                            style={{
+                              fontSize:      9,
+                              letterSpacing: "0.12em",
+                              color:         "var(--genre-accent)",
+                            }}
+                          >
                             {trait}
                           </div>
                         )}
                         {disposition && (
-                          <div className="text-xs italic" style={{ color: "var(--color-muted)" }}>
+                          <div
+                            className="ew-serif"
+                            style={{
+                              fontStyle: "italic",
+                              fontSize:  11,
+                              color:     "#6a5530",
+                            }}
+                          >
                             {disposition}
                           </div>
                         )}
@@ -1246,18 +1453,25 @@ export default function NewGamePage() {
                 const description  = flavor?.description ?? "A path with its own quiet weight.";
                 const itemHint     = flavor?.startingItem ?? "Class kit";
                 const Icon         = CLASS_ICON[bgId];
-                // UI-12 CHANGE 5 — selected cards use the STAT colour
-                // (not the genre accent) as the 2px border so the
-                // class identity reads at a glance.
+                // UI-fix-B B2 — selected cards use the STAT colour
+                // (not genre accent) so each class's identity reads at
+                // a glance. position relative anchors the ✓ overlay;
+                // overflow hidden clips the bottom-edge stat strip
+                // against the card's rounded corners.
                 const cardSx: React.CSSProperties = {
-                  background:   "var(--card-bg)",
+                  background:   isSelected
+                    ? `linear-gradient(color-mix(in srgb, ${statColor} 8%, transparent), color-mix(in srgb, ${statColor} 8%, transparent)), var(--card-bg)`
+                    : "var(--card-bg)",
                   border:       isSelected
                     ? `2px solid ${statColor}`
                     : "1px solid var(--card-border)",
                   borderRadius: "var(--card-radius, 7px)",
                   boxShadow:    isSelected
                     ? `0 0 12px color-mix(in srgb, ${statColor} 30%, transparent)`
-                    : "none",
+                    : "var(--card-shadow)",
+                  cursor:       "pointer",
+                  position:     "relative",
+                  overflow:     "hidden",
                 };
                 return (
                   <button
@@ -1275,26 +1489,29 @@ export default function NewGamePage() {
                     className="text-left p-5 transition-all duration-150 hover:scale-[1.02] active:scale-[0.99] flex flex-col"
                     style={cardSx}
                   >
+                    {isSelected && <CheckMark color={statColor} />}
+
                     {/* Icon + class name + role badge row */}
                     <div className="flex items-start gap-3 mb-2">
                       <span
                         aria-hidden
                         style={{
-                          color:       statColor,
-                          display:     "inline-flex",
-                          flexShrink:  0,
-                          marginTop:   2,
+                          color:      statColor,
+                          display:    "inline-flex",
+                          flexShrink: 0,
+                          marginTop:  2,
                         }}
                       >
-                        {Icon ? <Icon size={24} stroke={1.75} /> : null}
+                        {/* UI-fix-B B2 — icon at 20px (was 24). */}
+                        {Icon ? <Icon size={20} stroke={1.75} /> : null}
                       </span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div
                           className="ew-serif"
                           style={{
-                            fontStyle: "italic",
-                            fontSize:  14,
-                            color:     "#e2cda0",
+                            fontStyle:  "italic",
+                            fontSize:   14,
+                            color:      "#e2cda0",
                             lineHeight: 1.2,
                           }}
                         >
@@ -1304,13 +1521,13 @@ export default function NewGamePage() {
                           className="ew-sans uppercase"
                           style={{
                             display:       "inline-block",
-                            fontSize:      7,
-                            letterSpacing: "0.18em",
+                            fontSize:      9,
+                            letterSpacing: "0.12em",
                             color:         statColor,
                             background:    `color-mix(in srgb, ${statColor} 14%, transparent)`,
                             border:        `1px solid color-mix(in srgb, ${statColor} 36%, transparent)`,
                             borderRadius:  20,
-                            padding:       "1px 6px",
+                            padding:       "1px 8px",
                             marginTop:     4,
                             fontWeight:    600,
                           }}
@@ -1323,47 +1540,61 @@ export default function NewGamePage() {
                     <p
                       className="ew-serif"
                       style={{
-                        fontStyle: "italic",
-                        fontSize:  11,
-                        lineHeight: 1.4,
-                        color:     "#9a7e52",
-                        flex:      1,
+                        fontStyle:    "italic",
+                        fontSize:     12,
+                        lineHeight:   1.5,
+                        color:        "#9a7e52",
+                        flex:         1,
                         marginBottom: 12,
                       }}
                     >
                       {description}
                     </p>
 
-                    {/* Bottom bar: primary stat label + starting item hint */}
+                    {/* Bottom block + 3px stat-color strip per B2.
+                        Strip bleeds through the p-5 padding via
+                        negative margins; card's overflow:hidden clips
+                        it to the radius. */}
                     <div
                       style={{
-                        borderTop:  `1px solid color-mix(in srgb, ${statColor} 20%, transparent)`,
-                        paddingTop: 8,
-                        display:    "flex",
+                        borderTop:     `1px solid color-mix(in srgb, ${statColor} 20%, transparent)`,
+                        paddingTop:    8,
+                        display:       "flex",
                         flexDirection: "column",
-                        gap:        2,
+                        gap:           2,
                       }}
                     >
                       <span
                         className="ew-sans uppercase"
                         style={{
-                          fontSize:      7,
-                          letterSpacing: "0.20em",
+                          fontSize:      8,
+                          letterSpacing: "0.18em",
                           color:         "#6a5530",
                         }}
                       >
                         Primary: {primaryLong}
                       </span>
                       <span
+                        className="ew-sans"
                         style={{
-                          fontFamily: "var(--mono)",
-                          fontSize:   10,
-                          color:      "#a08870",
+                          fontSize: 9,
+                          color:    "#6a5530",
                         }}
                       >
                         Starts with: {itemHint}
                       </span>
                     </div>
+                    <div
+                      aria-hidden
+                      style={{
+                        height:       3,
+                        background:   statColor,
+                        marginLeft:   -20,
+                        marginRight:  -20,
+                        marginBottom: -20,
+                        marginTop:    10,
+                      }}
+                    />
                   </button>
                 );
               })}
@@ -1422,29 +1653,73 @@ export default function NewGamePage() {
                 {originOptions.map((opt) => {
                   const isSelected = selectedOrigin?.id === opt.id;
                   const bonus = opt.starting_bonus;
+                  const shortDesc = trimToSentences(opt.description, 2);
                   return (
                     <button
                       key={opt.id}
                       onClick={() => setSelectedOrigin(opt)}
-                      className="text-left p-5 rounded border transition-all duration-150 hover:scale-[1.02] active:scale-[0.99] flex flex-col"
+                      className="text-left p-5 transition-all duration-150 hover:scale-[1.02] active:scale-[0.99] flex flex-col"
                       style={cardStyle(isSelected)}
                     >
+                      {isSelected && <CheckMark />}
                       <div
-                        className="text-base font-bold mb-2 tracking-wide"
-                        style={{ color: isSelected ? "var(--color-primary)" : "var(--color-text)" }}
+                        className="ew-serif mb-2"
+                        style={{
+                          fontStyle:  "italic",
+                          fontSize:   14,
+                          color:      "#e2cda0",
+                          lineHeight: 1.25,
+                        }}
                       >
                         {opt.label}
                       </div>
-                      <p className="text-xs leading-relaxed mb-4 flex-1" style={{ color: "var(--color-muted)" }}>
-                        {opt.description}
+                      <p
+                        className="ew-serif mb-4 flex-1"
+                        style={{
+                          fontStyle:  "italic",
+                          fontSize:   12,
+                          lineHeight: 1.5,
+                          color:      "#9a7e52",
+                        }}
+                      >
+                        {shortDesc}
                       </p>
-                      <div className="border-t pt-3 mt-auto" style={{ borderColor: "var(--color-border)" }}>
+                      <div
+                        className="border-t pt-3 mt-auto"
+                        style={{ borderColor: "var(--card-border)" }}
+                      >
                         {bonus.type === "gold" ? (
-                          <div className="text-xs font-bold" style={{ color: "var(--color-accent)" }}>
-                            +{bonus.gold_amount} Gold
+                          // Currency value — JetBrains Mono tabular for
+                          // the number, Inter Tight for the label.
+                          <div
+                            className="flex items-baseline gap-1.5"
+                            style={{ color: "var(--genre-accent)" }}
+                          >
+                            <span
+                              style={{
+                                fontFamily:         "var(--mono)",
+                                fontVariantNumeric: "tabular-nums",
+                                fontSize:           13,
+                                fontWeight:         600,
+                              }}
+                            >
+                              +{bonus.gold_amount}
+                            </span>
+                            <span
+                              className="ew-sans uppercase"
+                              style={{
+                                fontSize:      9,
+                                letterSpacing: "0.12em",
+                              }}
+                            >
+                              Gold
+                            </span>
                           </div>
                         ) : (
-                          <div className="text-xs" style={{ color: "var(--color-muted)" }}>
+                          <div
+                            className="ew-sans"
+                            style={{ fontSize: 9, color: "#6a5530" }}
+                          >
                             Starts with: {bonus.item_name}
                           </div>
                         )}
@@ -1534,24 +1809,52 @@ export default function NewGamePage() {
                     <button
                       key={idx}
                       onClick={() => setSelectedAppearance(opt)}
-                      className="text-left p-5 rounded border transition-all duration-150 hover:scale-[1.02] active:scale-[0.99] flex flex-col"
+                      className="text-left p-5 transition-all duration-150 hover:scale-[1.02] active:scale-[0.99] flex flex-col"
                       style={cardStyle(isSelected)}
                     >
-                      <div className="flex flex-wrap gap-1 mb-3">
+                      {isSelected && <CheckMark />}
+                      {/* UI-fix-B B5 — trait pills render in two states.
+                          At rest (unselected card): muted dark chrome
+                          (#181410 bg, #2d2618 border, #6a5530 text).
+                          Selected (card is chosen): warm amber tint
+                          (rgba(196,148,58,.10) bg, .55 border, #c4943a
+                          text). The state mirrors the card selection —
+                          per-trait toggling isn't part of this surface;
+                          the player picks one complete appearance and
+                          its pills brighten together. */}
+                      <div className="flex flex-wrap gap-1.5 mb-3">
                         {opt.descriptors.map((d, i) => (
                           <span
                             key={i}
-                            className="px-2 py-0.5 rounded text-[0.65rem] uppercase tracking-wider"
+                            className="ew-sans uppercase"
                             style={{
-                              backgroundColor: "color-mix(in srgb, var(--color-primary) 12%, transparent)",
-                              color: "var(--color-primary)",
+                              padding:       "4px 12px",
+                              borderRadius:  20,
+                              fontSize:      9,
+                              letterSpacing: "0.10em",
+                              fontWeight:    600,
+                              border:        isSelected
+                                ? "1.5px solid rgba(196,148,58,0.55)"
+                                : "1px solid #2d2618",
+                              background:    isSelected
+                                ? "rgba(196,148,58,0.10)"
+                                : "#181410",
+                              color:         isSelected ? "#c4943a" : "#6a5530",
                             }}
                           >
                             {d}
                           </span>
                         ))}
                       </div>
-                      <p className="text-xs italic leading-relaxed flex-1" style={{ color: "var(--color-muted)" }}>
+                      <p
+                        className="ew-serif flex-1"
+                        style={{
+                          fontStyle:  "italic",
+                          fontSize:   12,
+                          lineHeight: 1.5,
+                          color:      "#9a7e52",
+                        }}
+                      >
                         {opt.summary}
                       </p>
                     </button>
@@ -1657,20 +1960,24 @@ export default function NewGamePage() {
           </div>
         )}
 
-        {/* ── Motivation step ──────────────────────────────────────── */}
+        {/* ── Motivation step (UI-fix-B B7) ────────────────────────── */}
         {stage === "motivation" && (
           <div>
-            <h1 className="text-2xl font-bold mb-2 text-center tracking-wide text-glow"
-              style={{ color: "var(--color-primary)" }}>
-              What Drives You?
-            </h1>
-            <p className="text-center text-sm mb-6" style={{ color: "var(--color-muted)" }}>
-              Why are you in {wcdWorldName ?? worldNameFallback}? What do you want?
-            </p>
+            {/* Step header — Inter Tight 9px uppercase #6a5530.
+                Replaces the previous big h1 "What Drives You?". */}
+            <div
+              className="ew-sans uppercase text-center mb-6"
+              style={{
+                fontSize:      9,
+                letterSpacing: "0.12em",
+                color:         "#6a5530",
+              }}
+            >
+              Your Motivation
+            </div>
 
-            {/* Day 23.5B hotfix (FIX 4C) — character summary card.
-                Display-only — shows the player who they've built so
-                far so the motivation lands with the right context. */}
+            {/* Character summary card — preserved from prior UX so the
+                player sees who they've built before they commit. */}
             <div
               className="max-w-md mx-auto mb-6 p-3 rounded border text-xs leading-relaxed"
               style={{
@@ -1710,55 +2017,91 @@ export default function NewGamePage() {
             </div>
 
             <div className="max-w-md mx-auto">
+              {/* Prompt line — Cormorant Garamond italic 14px #9a7e52
+                  per B7 spec, sits ABOVE the textarea (the textarea's
+                  own placeholder is now the example instead). */}
+              <div
+                className="ew-serif mb-2"
+                style={{
+                  fontStyle: "italic",
+                  fontSize:  14,
+                  color:     "#9a7e52",
+                }}
+              >
+                I came to this world to…
+              </div>
+
               <textarea
                 value={motivation}
                 onChange={(e) => setMotivation(e.target.value.slice(0, 120))}
-                rows={3}
                 maxLength={120}
-                placeholder="I came to this world to..."
-                className="w-full px-4 py-3 outline-none ew-serif"
+                placeholder="e.g. seek the truth behind my village's destruction"
+                className="w-full ew-serif outline-none"
                 style={{
-                  // UI-12 CHANGE 7 — match the name input treatment.
-                  background:   "#141210",
-                  border:       "1px solid var(--card-border)",
-                  borderRadius: 6,
-                  color:        "#e2cda0",
-                  caretColor:   "var(--genre-accent)",
-                  fontStyle:    "italic",
-                  fontSize:     14,
+                  background:    "rgba(196,148,58,0.04)",
+                  border:        "1px solid rgba(196,148,58,0.20)",
+                  borderRadius:  "var(--card-radius, 7px)",
+                  padding:       "12px 14px",
+                  color:         "#e2cda0",
+                  caretColor:    "var(--genre-accent)",
+                  fontStyle:     "italic",
+                  fontSize:      14,
+                  minHeight:     80,
+                  resize:        "vertical",
                 }}
                 onFocus={(e) => { e.currentTarget.style.borderColor = "var(--genre-accent)"; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = "var(--card-border)"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(196,148,58,0.20)"; }}
               />
-              <div className="flex items-center justify-between mt-1 gap-3">
+
+              {/* Counter row — Inter Tight 8px #4a3828 right-aligned
+                  per B7 spec. Randomize button keeps its accent
+                  treatment so it stays scannable. */}
+              <div className="flex items-center mt-2 gap-3">
+                <button
+                  onClick={handleRandomMotivation}
+                  disabled={randomMotivationLoading || isLoading}
+                  className="ew-sans uppercase"
+                  style={{
+                    fontSize:      9,
+                    letterSpacing: "0.12em",
+                    fontWeight:    600,
+                    color:         "var(--color-accent)",
+                    cursor:        randomMotivationLoading ? "wait" : "pointer",
+                    opacity:       randomMotivationLoading ? 0.5 : 1,
+                  }}
+                >
+                  {randomMotivationLoading ? "..." : "✦ Randomize →"}
+                </button>
+                <span
+                  className="ew-sans ml-auto"
+                  style={{
+                    fontSize: 8,
+                    color:    motivation.length >= 100 ? "#ef4444" : "#4a3828",
+                  }}
+                >
+                  {motivation.length} / 120
+                </span>
+              </div>
+
+              {/* Skip link — Cormorant Garamond italic 10px #4a3828,
+                  underline on hover. Sits below the counter row so it
+                  reads as an escape hatch rather than a default. */}
+              <div className="mt-4 text-center">
                 <button
                   onClick={() => { setMotivation(""); handleSubmit(); }}
-                  className="text-xs underline whitespace-nowrap"
-                  style={{ color: "var(--color-muted)" }}
+                  className="ew-serif transition-colors"
+                  style={{
+                    fontStyle:      "italic",
+                    fontSize:       10,
+                    color:          "#4a3828",
+                    textDecoration: "none",
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.textDecoration = "underline"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.textDecoration = "none"; }}
                   disabled={isLoading}
                 >
                   Play as a blank slate
                 </button>
-                <div className="flex items-center gap-3 ml-auto">
-                  <button
-                    onClick={handleRandomMotivation}
-                    disabled={randomMotivationLoading || isLoading}
-                    className="text-xs font-bold tracking-widest"
-                    style={{
-                      color:  "var(--color-accent)",
-                      cursor: randomMotivationLoading ? "wait" : "pointer",
-                      opacity: randomMotivationLoading ? 0.5 : 1,
-                    }}
-                  >
-                    {randomMotivationLoading ? "..." : "✦ Randomize →"}
-                  </button>
-                  <span
-                    className="text-xs"
-                    style={{ color: motivation.length >= 100 ? "#ef4444" : "var(--color-muted)" }}
-                  >
-                    {motivation.length}/120
-                  </span>
-                </div>
               </div>
             </div>
 
@@ -1781,16 +2124,23 @@ export default function NewGamePage() {
         )}
 
         {/* ── Navigation buttons ─────────────────────────────────────── */}
+        {/* UI-fix-B — shared typography rule for wizard buttons:
+            var(--sans) uppercase 9px letter-spacing 0.12em. The Back
+            button is reduced to muted chrome on every step except the
+            genre step where it's invisibly disabled. */}
         {stage !== "forging" && (
           <div className="flex items-center justify-between mt-10 max-w-3xl mx-auto">
             <button
               onClick={handleBack}
               disabled={stage === "genre"}
-              className="px-5 py-2 rounded border text-sm font-bold transition-all"
+              className="ew-sans uppercase px-5 py-3 rounded border transition-all"
               style={{
-                borderColor: stage === "genre" ? "transparent" : "var(--color-border)",
-                color:       stage === "genre" ? "transparent" : "var(--color-muted)",
-                cursor:      stage === "genre" ? "default" : "pointer",
+                fontSize:      9,
+                letterSpacing: "0.12em",
+                fontWeight:    600,
+                borderColor:   stage === "genre" ? "transparent" : "var(--color-border)",
+                color:         stage === "genre" ? "transparent" : "var(--color-muted)",
+                cursor:        stage === "genre" ? "default" : "pointer",
               }}
             >
               ← Back
@@ -1800,10 +2150,13 @@ export default function NewGamePage() {
               <button
                 onClick={handleSubmit}
                 disabled={!canAdvance() || isLoading}
-                className="px-6 py-2 rounded border text-sm font-bold transition-all"
+                className="ew-sans uppercase px-6 py-3 rounded border transition-all"
                 style={{
-                  borderColor: canAdvance() && !isLoading ? "var(--color-primary)" : "var(--color-border)",
-                  color:       canAdvance() && !isLoading ? "var(--color-primary)" : "var(--color-muted)",
+                  fontSize:      9,
+                  letterSpacing: "0.12em",
+                  fontWeight:    600,
+                  borderColor:   canAdvance() && !isLoading ? "var(--color-primary)" : "var(--color-border)",
+                  color:         canAdvance() && !isLoading ? "var(--color-primary)" : "var(--color-muted)",
                   backgroundColor:
                     canAdvance() && !isLoading
                       ? "color-mix(in srgb, var(--color-primary) 10%, transparent)"
@@ -1818,10 +2171,13 @@ export default function NewGamePage() {
               <button
                 onClick={handleNext}
                 disabled={!canAdvance()}
-                className="px-6 py-2 rounded border text-sm font-bold transition-all"
+                className="ew-sans uppercase px-6 py-3 rounded border transition-all"
                 style={{
-                  borderColor: canAdvance() ? "var(--color-primary)" : "var(--color-border)",
-                  color:       canAdvance() ? "var(--color-primary)" : "var(--color-muted)",
+                  fontSize:      9,
+                  letterSpacing: "0.12em",
+                  fontWeight:    600,
+                  borderColor:   canAdvance() ? "var(--color-primary)" : "var(--color-border)",
+                  color:         canAdvance() ? "var(--color-primary)" : "var(--color-muted)",
                   backgroundColor: canAdvance()
                     ? "color-mix(in srgb, var(--color-primary) 10%, transparent)"
                     : "transparent",

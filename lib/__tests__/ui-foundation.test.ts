@@ -145,6 +145,17 @@ const ALLOWED_HEX_CODES = new Set<string>([
   // Journal destructive
   "#9a4040",
 
+  // ── Navigation Cards (PR-3) ─────────────────────────────────────
+  // All seven values are also covered by earlier sections (chip
+  // surface + cross-region overlap PR-2 surfaces; #4a3818 lives in
+  // breadcrumb tone descent from PR-1; #3a3020 / #c8b890 / #5a4828
+  // are in borders / map art palette / text inks). Listed again
+  // here so the nav-card system is documented as a group — Set
+  // dedupes, so this is informational, not functional.
+  "#c2410c", "#3a3020",           // left-border tier
+  "#111009", "#222015",           // chip surface
+  "#c8b890", "#5a4828", "#4a3818", // typography
+
   // ── Modal backdrops / generic dark fills ────────────────────────
   "#0a0a0a", "#1a1a1a",
 

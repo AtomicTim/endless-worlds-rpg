@@ -85,6 +85,23 @@
     --hl-pass:     #a3e635;
     --hl-fail:     #f87171;
 
+    /* ──────────────────────────────────────────────────────────────────
+       Navigation Cards (PR-3) — design ref §6
+       ──────────────────────────────────────────────────────────────────
+       Chip surface + dungeon left border are already covered by PR-2's
+       --bg-nav-card / --border-nav-card / --nav-cross-region. The tokens
+       below are the four additional values NavigationBar.tsx needs:
+       border tone for UNDISCOVERED, location-name ink, sub-label ink,
+       and breadcrumb / section-header ink (all three #4a3818 sites in
+       the file share this token — a single muted nav-chrome tone).
+       BACK / EXIT left border = var(--hl-dungeon); settlement left
+       border = var(--hl-loc) — no new tokens needed for those.
+       ────────────────────────────────────────────────────────────────── */
+    --nav-border-unknown: #3a3020;  /* very dim — UNDISCOVERED (dashed) */
+    --nav-name:           #c8b890;  /* location name in chip */
+    --nav-sublabel:       #5a4828;  /* type · direction sublabel */
+    --nav-breadcrumb:     #4a3818;  /* breadcrumb path text + "Where to go." header + Visited pill */
+
     /* Day 20 Combat — event color tokens (combat-spec §10) */
     --combat-player:           #7ab8c8;  /* routine player actions */
     --combat-enemy:            #e87c6d;  /* routine enemy actions */

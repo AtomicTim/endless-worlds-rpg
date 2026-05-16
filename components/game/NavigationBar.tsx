@@ -189,7 +189,7 @@ export function NavigationBar({
             fontFamily:    "var(--sans)",
             fontSize:      9,
             letterSpacing: "0.10em",
-            color:         "#4a3818",
+            color:         "var(--nav-breadcrumb)",
             whiteSpace:    "nowrap",
             overflow:      "hidden",
             textOverflow:  "ellipsis",
@@ -265,7 +265,7 @@ export function NavigationBar({
           style={{
             fontSize:      7,
             letterSpacing: "0.14em",
-            color:         "#4a3818",
+            color:         "var(--nav-breadcrumb)",
             marginBottom:  5,
           }}
         >
@@ -671,10 +671,10 @@ function NavCard({
   // precedence: UNDISCOVERED dashed dim → BACK / EXIT burnt copper →
   // settlement sky blue → dungeon burnt orange → else --card-border.
   const leftBorderColor =
-    isUnknown    ? "#3a3020"        // very dim, dashed
-    : isBack || isExit ? "#b45309"   // burnt copper
-    : isSettlement ? "#7dd3fc"       // sky blue
-    : isDungeon    ? "var(--nav-cross-region)" // burnt orange
+    isUnknown    ? "var(--nav-border-unknown)" // very dim, dashed
+    : isBack || isExit ? "var(--hl-dungeon)"   // burnt copper
+    : isSettlement ? "var(--hl-loc)"           // sky blue
+    : isDungeon    ? "var(--nav-cross-region)" // burnt orange (PR-2 token retained — same #c2410c)
     :                "var(--card-border)";
 
   // [[hover-state]] CSS-inline pattern — onMouseEnter / Leave swap a
@@ -756,7 +756,7 @@ function NavCard({
           fontSize:      14,
           // Arrow leans on the destination colour for at-a-glance
           // scanning; back arrows stay on the burnt-copper border tone.
-          color:         isUnknown ? "#3a3020" : leftBorderColor,
+          color:         isUnknown ? "var(--nav-border-unknown)" : leftBorderColor,
           flexShrink:    0,
           fontWeight:    600,
           opacity:       isBack || isExit ? 0.9 : 1,
@@ -790,7 +790,7 @@ function NavCard({
             className="ew-serif italic"
             style={{
               fontSize:      11,
-              color:         "#c8b890",
+              color:         "var(--nav-name)",
               overflow:      "hidden",
               textOverflow:  "ellipsis",
               whiteSpace:    "nowrap",
@@ -824,8 +824,8 @@ function NavCard({
               style={{
                 fontSize:      8,                       // UI-9b — chip floor 8px (was 6)
                 letterSpacing: "0.12em",
-                color:         "#4a3818",
-                border:        "1px solid #2d2618",
+                color:         "var(--nav-breadcrumb)",
+                border:        "1px solid var(--ui-border-default)",
                 borderRadius:  20,
                 padding:       "1px 6px",
                 flexShrink:    0,
@@ -847,7 +847,7 @@ function NavCard({
               fontFamily:    "var(--sans)",
               fontSize:      7.5,
               letterSpacing: "0.12em",
-              color:         "#5a4828",
+              color:         "var(--nav-sublabel)",
               overflow:      "hidden",
               textOverflow:  "ellipsis",
               whiteSpace:    "nowrap",

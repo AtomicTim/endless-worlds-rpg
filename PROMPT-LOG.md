@@ -3,7 +3,7 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** ffdedf4 (PROMPT-LOG: UI-10 complete — via Claude Code)
+**Last code commit:** 986f874 (UI-fix-H: top bar — height, logo font, icon tap targets, char pill, verbosity toggle)
 **jest baseline:** 734 (authoritative)
 **tsc:** clean
 
@@ -33,6 +33,12 @@
 | UI-11 | Transitions + Toast System | d4a99e5 | 734 | ✅ |
 | UI-12 | Character Creation Wizard | beeb2ef | 734 | ✅ |
 | UI-13 | Main Menu + Save Slots | 913578f | 734 | ✅ |
+
+## UI Fix Brief — Targeted Surface Passes
+
+| Group | Prompt | Commit | Tests | Status |
+|-------|--------|--------|-------|--------|
+| H | Top Bar — Section 17 conformance | 986f874 | 734 | ✅ |
 
 ## Known Gaps (post-arc)
 

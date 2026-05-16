@@ -3,8 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 8e0b2f0 (UI-PR3: NavigationBar nav card token system — PROMPT-LOG update)
-**jest baseline:** 854 (authoritative — post-foundation PR-1/PR-2 added ui-foundation suite; PR-3 zero delta)
+**Last code commit:** dbfd1af (UI-PR4: StoryFeed + StoryComponents story feed token system)
+**jest baseline:** 854 (authoritative — post-foundation PR-1/PR-2 added ui-foundation suite; PR-3/PR-4 zero delta)
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -66,7 +66,7 @@ Separate from the UI arc above. Goal: enforce the §5 workflow across all game s
 | PR-1 | globals.css canonical tokens + legacy #f59e0b purge | 0be34aa | 854 | ✅ |
 | PR-2 | 42 semantic tokens (POI, status effects, dialogue tones, codex, loot rarity, nav, surfaces) | 6101441 | 854 | ✅ |
 | PR-3 | NavigationBar.tsx — 4 new nav tokens + 5 existing token aliases; zero hex strings remain | f31dec3 | 854 | ✅ |
-| PR-4 | StoryFeed.tsx + StoryComponents.tsx | — | — | ⏳ |
+| PR-4 | StoryFeed.tsx + StoryComponents.tsx — 1 new token (--status-resolved); 12 hex strings → existing PR-1/PR-2/PR-3 tokens (all 5 brief-proposed tokens were duplicates of PR-1) | dbfd1af | 854 | ✅ |
 
 ## Known Gaps (post-arc)
 

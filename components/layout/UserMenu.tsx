@@ -89,7 +89,10 @@ export function UserMenu() {
         <Button
           variant="outline"
           size="sm"
-          className="border-amber-900/50 bg-black/60 font-mono text-amber-400 hover:bg-amber-950/40 hover:text-amber-300"
+          // UI-fix-A — UI chrome: Inter Tight (ew-sans), warm-brown
+          // surface instead of pure black so the menu sits with the
+          // rest of the topbar palette.
+          className="ew-sans border-amber-900/50 bg-[#1a1410]/80 text-amber-400 hover:bg-amber-950/40 hover:text-amber-300"
         >
           <span className="ascii-art mr-2 inline-block text-[0.45rem] leading-[1.05] text-amber-500">
             {asciiLines.join("\n")}
@@ -100,7 +103,8 @@ export function UserMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-52 border-amber-900/45 bg-[#0a0a0f] font-mono text-foreground"
+        // UI-fix-A — dropdown chrome → ew-sans, warm-brown bg.
+        className="ew-sans w-52 border-amber-900/45 bg-[#1a1410] text-foreground"
       >
         <DropdownMenuItem asChild>
           <Link

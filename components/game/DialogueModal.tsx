@@ -701,7 +701,8 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                       border:        "none",
                       background:    "rgba(var(--genre-accent-rgb), .14)",
                       color:         "var(--genre-accent)",
-                      fontFamily:    "var(--mono)",
+                      // UI-fix-A — button label is UI chrome → Inter Tight.
+                      fontFamily:    "var(--sans)",
                       fontSize:      10,
                       letterSpacing: "0.24em",
                       padding:       "6px 10px",

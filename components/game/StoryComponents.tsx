@@ -278,7 +278,11 @@ export function NPCSpeech({ name, color = "var(--accent)", children }: NPCSpeech
   return (
     <div style={{ margin: "16px 0" }}>
       <div
-        className="ew-mono"
+        // UI-fix-A — NPC name header is UI chrome, not a numeric
+        // value: switch from ew-mono to ew-sans (Inter Tight) per
+        // the three-font rule. Roll annotations (StatPill below)
+        // remain ew-mono — those *are* numeric.
+        className="ew-sans"
         style={{
           color,
           fontSize:      10,

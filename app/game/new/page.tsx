@@ -941,7 +941,10 @@ export default function NewGamePage() {
   if (stage === "forging" && selectedGenre) {
     return (
       <div
-        className="min-h-screen font-mono"
+        // UI-fix-A — was font-mono. Forging screen is a cinematic
+        // surface; let the WorldForgingScreen child set its own
+        // typography per element.
+        className="min-h-screen ew-sans"
         data-genre={dataAttr || undefined}
         style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
       >
@@ -977,11 +980,16 @@ export default function NewGamePage() {
 
   return (
     <div
-      className="min-h-screen font-mono"
+      // UI-fix-A — wizard shell drops font-mono (Courier→Inter Tight)
+      // and adopts ew-sans so per-step labels read as proper UI
+      // chrome; ew-serif overrides cascade for prose.
+      className="min-h-screen ew-sans"
       data-genre={dataAttr || undefined}
       style={{
-        // UI-12 CHANGE 2 — wizard shell uses #08060a (matches main menu).
-        backgroundColor: "#08060a",
+        // UI-fix-A — character creation background per design ref §A3
+        // (#0f0d0a). Slightly warmer than the main menu's #08060a so
+        // the wizard reads as "inside the game" rather than menu chrome.
+        backgroundColor: "#0f0d0a",
         color:           "var(--color-text)",
       }}
     >

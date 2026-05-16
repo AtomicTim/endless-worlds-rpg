@@ -55,7 +55,8 @@ const RARITY_COLORS: Record<ItemRarity, string> = {
   [ItemRarity.COMMON]:    "var(--color-muted)",
   [ItemRarity.UNCOMMON]:  "#22c55e",
   [ItemRarity.RARE]:      "#3b82f6",
-  [ItemRarity.LEGENDARY]: "#f59e0b",
+  // UI-fix-A — aligned with locked Fantasy accent #c4943a.
+  [ItemRarity.LEGENDARY]: "#c4943a",
 };
 
 const EQUIP_SLOTS = [

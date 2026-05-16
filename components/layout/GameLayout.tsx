@@ -232,7 +232,8 @@ export function GameLayout({
               border:        "1px solid var(--accent-soft)",
               background:    "var(--bg-1)",
               color:         "var(--accent)",
-              fontFamily:    "var(--mono)",
+              // UI-fix-A — UI label → Inter Tight via var(--sans).
+              fontFamily:    "var(--sans)",
               fontSize:      10,
               letterSpacing: "0.24em",
               borderRadius:  2,
@@ -278,7 +279,8 @@ export function GameLayout({
             style={{ borderBottom: "1px solid var(--line)" }}
           >
             <span
-              className="ew-mono"
+              // UI-fix-A — UI section label → Inter Tight (ew-sans).
+              className="ew-sans"
               style={{
                 fontSize:      9,
                 letterSpacing: "0.3em",

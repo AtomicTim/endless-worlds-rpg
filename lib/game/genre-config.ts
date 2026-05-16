@@ -54,7 +54,9 @@ export const GENRE_CONFIGS: Record<Genre, GenreConfig> = {
     name: "Fantasy",
     tone: "heroic",
     colorPalette: {
-      primary: "#f59e0b",
+      // UI-fix-A — Fantasy primary aligned with the locked accent
+      // #c4943a (design ref §2). Was #f59e0b.
+      primary: "#c4943a",
       accent:  "#22c55e",
       bg:      "#0a0a0a",
       text:    "#e5e7eb",

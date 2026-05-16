@@ -330,7 +330,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
             </div>
             <div
               style={{
-                fontFamily:    "var(--ui-sans, var(--mono))",
+                fontFamily:    "var(--sans)",
                 fontSize:      7,
                 letterSpacing: "0.22em",
                 textTransform: "uppercase",
@@ -409,7 +409,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
           </div>
           <div
             style={{
-              fontFamily:    "var(--ui-sans, var(--mono))",
+              fontFamily:    "var(--sans)",
               fontSize:      7,
               letterSpacing: "0.18em",
               textTransform: "uppercase",
@@ -458,7 +458,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
             >
               <span
                 style={{
-                  fontFamily:    "var(--ui-sans, var(--mono))",
+                  fontFamily:    "var(--sans)",
                   fontSize:      6,
                   letterSpacing: "0.18em",
                   textTransform: "uppercase",
@@ -485,7 +485,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
         <section aria-label="Equipped">
           <div
             style={{
-              fontFamily:    "var(--ui-sans, var(--mono))",
+              fontFamily:    "var(--sans)",
               fontSize:      7,
               letterSpacing: "0.24em",
               textTransform: "uppercase",
@@ -560,7 +560,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
         <section aria-label="Pack">
           <div
             style={{
-              fontFamily:    "var(--ui-sans, var(--mono))",
+              fontFamily:    "var(--sans)",
               fontSize:      7,
               letterSpacing: "0.24em",
               textTransform: "uppercase",
@@ -699,7 +699,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
           >
             <div
               style={{
-                fontFamily:    "var(--ui-sans, var(--mono))",
+                fontFamily:    "var(--sans)",
                 fontSize:      7,
                 letterSpacing: "0.24em",
                 textTransform: "uppercase",
@@ -932,7 +932,7 @@ function ItemDetailCard(props: ItemDetailCardProps) {
             border:        "none",
             color:         "#6a5530",
             cursor:        "pointer",
-            fontFamily:    "var(--ui-sans, var(--mono))",
+            fontFamily:    "var(--sans)",
             fontSize:      9,
             letterSpacing: "0.16em",
             textTransform: "uppercase",
@@ -946,7 +946,7 @@ function ItemDetailCard(props: ItemDetailCardProps) {
 
       <div
         style={{
-          fontFamily:    "var(--ui-sans, var(--mono))",
+          fontFamily:    "var(--sans)",
           fontSize:      9,
           letterSpacing: "0.18em",
           textTransform: "uppercase",
@@ -1044,7 +1044,7 @@ function ItemDetailCard(props: ItemDetailCardProps) {
         >
           <div
             style={{
-              fontFamily:    "var(--ui-sans, var(--mono))",
+              fontFamily:    "var(--sans)",
               fontSize:      8,
               letterSpacing: "0.20em",
               textTransform: "uppercase",
@@ -1122,7 +1122,7 @@ function ActionBtn({ label, tone, disabled, onClick }: ActionBtnProps) {
         borderRadius:  3,
         cursor:        disabled ? "not-allowed" : "pointer",
         opacity:       disabled ? 0.4 : 1,
-        fontFamily:    "var(--ui-sans, var(--mono))",
+        fontFamily:    "var(--sans)",
         fontSize:      9.5,
         letterSpacing: "0.16em",
         textTransform: "uppercase",

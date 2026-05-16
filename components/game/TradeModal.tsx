@@ -23,7 +23,10 @@ const RARITY_COLORS: Record<string, string> = {
   COMMON:    "var(--color-muted)",
   UNCOMMON:  "#22c55e",
   RARE:      "#3b82f6",
-  LEGENDARY: "#f59e0b",
+  // UI-fix-A — was #f59e0b. Aligned with the locked Fantasy accent
+  // #c4943a (design ref §2). LEGENDARY pills now match the rest of
+  // the warm-amber palette instead of the brighter web-amber.
+  LEGENDARY: "#c4943a",
 };
 
 type Tab = "buy" | "sell";

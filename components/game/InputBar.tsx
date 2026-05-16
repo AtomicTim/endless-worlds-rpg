@@ -104,7 +104,9 @@ export const InputBar = forwardRef<InputBarHandle, InputBarProps>(function Input
       <div className="mb-1.5 h-4 px-1">
         {disabled && processingStep && (
           <span
-            className="font-mono text-[11px] italic"
+            // UI-fix-A — processing hint is UI chrome, not numeric.
+            // Inter Tight via ew-sans replaces the old font-mono.
+            className="ew-sans text-[11px] italic"
             style={{ color: "var(--color-muted)" }}
           >
             <span className="cursor-blink mr-1.5" style={{ color: "var(--color-primary)" }}>
@@ -132,8 +134,14 @@ export const InputBar = forwardRef<InputBarHandle, InputBarProps>(function Input
             // Navigation redesign — 16px font on mobile prevents iOS Safari
             // from auto-zooming on focus. minHeight 52px hits the
             // touch-target floor without disturbing desktop visuals.
-            className="w-full rounded-sm bg-black pl-3 pr-8 font-mono transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+            // UI-fix-A — was bg-black + font-mono. Pure black bleeds
+            // through every other warm-brown surface; keep the input
+            // mono (player typing/echo per Story Feed Colors token,
+            // CLAUDE.md §"Story Feed Colors") but anchor the
+            // background to the surface palette via var(--bg-1).
+            className="ew-mono w-full rounded-sm pl-3 pr-8 transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
             style={{
+              backgroundColor: "var(--bg-1)",
               border: dialogueMode
                 ? "1px solid var(--color-accent)"
                 : "1px solid color-mix(in srgb, var(--color-primary) 35%, transparent)",
@@ -167,13 +175,19 @@ export const InputBar = forwardRef<InputBarHandle, InputBarProps>(function Input
         <Button
           onClick={handleSubmit}
           disabled={disabled || !value.trim()}
-          className="shrink-0 px-4 font-mono font-bold disabled:opacity-40"
+          // UI-fix-A — button label is UI chrome → ew-sans, uppercase
+          // tracked. Was font-mono font-bold (Courier).
+          className="ew-sans shrink-0 px-4 disabled:opacity-40"
           // Match the input's 52px height so the bottom row aligns
           // cleanly on mobile and gives a comfortable tap target.
           style={{
             backgroundColor: dialogueMode ? "var(--color-accent)" : "var(--color-primary)",
-            color: "#000",
-            minHeight: 52,
+            color:           "var(--bg-0)",
+            fontSize:        12,
+            fontWeight:      600,
+            letterSpacing:   "0.12em",
+            textTransform:   "uppercase",
+            minHeight:       52,
           }}
         >
           {dialogueMode ? "Speak" : "Act"}
@@ -183,7 +197,8 @@ export const InputBar = forwardRef<InputBarHandle, InputBarProps>(function Input
       {/* Hint + character counter */}
       <div className="mt-1 flex items-center justify-between gap-2">
         <span
-          className="font-mono text-[10px] italic"
+          // UI-fix-A — hint text is UI chrome → ew-sans italic.
+          className="ew-sans text-[10px] italic"
           style={{ color: dialogueMode ? "var(--color-accent)" : "var(--color-muted)" }}
         >
           {dialogueMode
@@ -191,8 +206,13 @@ export const InputBar = forwardRef<InputBarHandle, InputBarProps>(function Input
             : 'Tip: Use "quotes" to speak to nearby characters'}
         </span>
         <span
-          className="font-mono text-[10px]"
-          style={{ color: remaining <= 50 ? "#ef4444" : "var(--color-muted)" }}
+          // UI-fix-A — remaining-count is numeric → ew-mono with
+          // tabular figures stays consistent at every digit width.
+          className="ew-mono text-[10px]"
+          style={{
+            color:                remaining <= 50 ? "#ef4444" : "var(--color-muted)",
+            fontVariantNumeric:   "tabular-nums",
+          }}
         >
           {remaining}
         </span>

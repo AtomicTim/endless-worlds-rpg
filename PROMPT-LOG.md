@@ -38,6 +38,7 @@
 
 | Group | Prompt | Commit | Tests | Status |
 |-------|--------|--------|-------|--------|
+| A | Foundation — fonts, genre vars, bg colours, overlay divs | _pending_ | 734 | ✅ |
 | H | Top Bar — Section 17 conformance | 986f874 | 734 | ✅ |
 
 ## Known Gaps (post-arc)

@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 
 const GENRES = [
-  { label: "Fantasy",           color: "#f59e0b", border: "#b45309", desc: "Swords, sorcery, and ancient prophecies." },
+  // UI-fix-A — Fantasy genre pill uses the locked accent #c4943a.
+  { label: "Fantasy",           color: "#c4943a", border: "#b45309", desc: "Swords, sorcery, and ancient prophecies." },
   { label: "Cyberpunk",         color: "#06b6d4", border: "#0e7490", desc: "Hack the grid. Survive the neon sprawl." },
   { label: "Horror",            color: "#a855f7", border: "#6d28d9", desc: "Cosmic dread. Reality frays at the edges." },
   { label: "Space Opera",       color: "#c084fc", border: "#7c3aed", desc: "Galaxies burn. Empires fall. Your destiny spans the stars." },

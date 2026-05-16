@@ -177,7 +177,11 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
       className="ew-scroll min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-8 md:py-6"
       style={{
         position:        "relative",
-        background:      "var(--bg-0)",
+        // UI-fix-A — story feed background per design ref §A3:
+        // #191308 (very dark warm brown) — pulls the prose out of
+        // the cooler --bg-0 main shell so the feed reads as the
+        // game's central warm vellum surface.
+        background:      "#191308",
         fontFamily:      "var(--sans)",
       }}
       // UI-4: tap-to-skip hook. Today (no per-token feed stream yet)
@@ -192,7 +196,28 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
         className="ew-grain"
         style={{ ["--grain" as string]: 0.15 }}
       />
-      <div style={{ position: "relative", margin: "0 auto" }}>
+      {/* UI-fix-A — three overlay divs (design ref §3 + Group A
+          step 4d). Inert except where the active genre opts in
+          (.ol-tex amber candlelight for Fantasy, .ol-scan/.ol-grid
+          for the others). pointer-events:none so they never block
+          clicks; z-index 2 so they sit above .ew-grain but under
+          the content stack (which gets z-10 below). */}
+      <div
+        className="ol-tex"
+        aria-hidden
+        style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }}
+      />
+      <div
+        className="ol-scan"
+        aria-hidden
+        style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }}
+      />
+      <div
+        className="ol-grid"
+        aria-hidden
+        style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }}
+      />
+      <div style={{ position: "relative", zIndex: 10, margin: "0 auto" }}>
         {messages.map((msg) => (
           <MessageEntry
             key={msg.id}
@@ -480,11 +505,13 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
           );
         }
 
-        // Codex-add notification — small mono line with accent diamond.
+        // Codex-add notification — small UI-chrome label with accent
+        // diamond. UI-fix-A: was ew-mono; system labels are UI chrome,
+        // not numeric, so they take Inter Tight via ew-sans.
         if (content.includes("added to codex")) {
           return (
             <div
-              className="message-enter ew-mono"
+              className="message-enter ew-sans"
               style={{
                 fontSize:      10,
                 letterSpacing: "0.22em",
@@ -511,7 +538,8 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
         if (metadata?.level_up === true) {
           return (
             <div
-              className="message-enter ew-mono"
+              // UI-fix-A — banner label → ew-sans (Inter Tight).
+              className="message-enter ew-sans"
               style={{
                 fontSize:      13,
                 letterSpacing: "0.24em",
@@ -528,10 +556,11 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
           );
         }
 
-        // Generic system event — small italic accent.
+        // Generic system event — small italic UI label, accent colour.
+        // UI-fix-A: was ew-mono; system labels are UI chrome.
         return (
           <div
-            className="message-enter ew-mono"
+            className="message-enter ew-sans"
             style={{
               fontSize:      11,
               letterSpacing: "0.12em",
@@ -896,7 +925,10 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
           >
             {itemName && (
               <span
-                className="ew-mono"
+                // UI-fix-A — lore item name header is UI chrome label
+                // (uppercase tracked, accent-coloured), not a numeric
+                // value: switch ew-mono → ew-sans.
+                className="ew-sans"
                 style={{
                   display:       "block",
                   fontSize:      10,

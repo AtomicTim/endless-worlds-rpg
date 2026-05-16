@@ -92,11 +92,15 @@ export default function WorldIntroModal({
           pointerEvents: "none",
         }}
       >
-        {/* World name */}
+        {/* World name — UI-fix-A: prose/title context uses Cormorant
+            Garamond italic per the three-font rule. Was font-mono
+            (Courier) which read flat and modern; serif italic gives
+            the cinematic warmth the world reveal calls for. */}
         <div
-          className="text-3xl sm:text-4xl font-bold text-center text-glow font-mono"
+          className="text-3xl sm:text-4xl text-center text-glow ew-serif italic"
           style={{
             color:          "var(--color-primary)",
+            fontWeight:     500,
             marginBottom:   "1.5rem",
             opacity:        nameVisible ? 1 : 0,
             transition:     "opacity 200ms ease-out",
@@ -124,22 +128,26 @@ export default function WorldIntroModal({
         </div>
       </div>
 
-      {/* Hint — anchored to the bottom of the viewport. */}
+      {/* Hint — anchored to the bottom of the viewport. UI-fix-A:
+          UI chrome label uses Inter Tight (var(--sans)), uppercase
+          + tracking. Was font-mono (Courier). */}
       <div
-        className="font-mono animate-pulse text-center"
+        className="ew-sans animate-pulse text-center"
         style={{
-          position:     "absolute",
-          left:         0,
-          right:        0,
-          bottom:       "2rem",
-          fontSize:     "0.75rem",
-          color:        "var(--color-muted)",
-          opacity:      proseVisible ? 1 : 0,
-          transition:   "opacity 400ms ease-out",
+          position:      "absolute",
+          left:          0,
+          right:         0,
+          bottom:        "2rem",
+          fontSize:      "0.7rem",
+          letterSpacing: "0.18em",
+          textTransform: "uppercase",
+          color:         "var(--color-muted)",
+          opacity:       proseVisible ? 1 : 0,
+          transition:    "opacity 400ms ease-out",
           pointerEvents: "none",
         }}
       >
-        Click anywhere to begin...
+        Click anywhere to begin
       </div>
     </div>
   );

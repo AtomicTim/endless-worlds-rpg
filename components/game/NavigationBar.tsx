@@ -180,7 +180,8 @@ export function NavigationBar({
         <div
           style={{
             padding:       "6px 16px 0",
-            fontFamily:    "var(--mono)",
+            // UI-fix-A — breadcrumb is UI chrome → Inter Tight.
+            fontFamily:    "var(--sans)",
             fontSize:      8,
             letterSpacing: "0.2em",
             color:         "var(--ink-4)",
@@ -516,9 +517,13 @@ function DungeonNavCardButton({
           alignItems: "center",
           gap:        6,
           color,
-          fontFamily: "var(--mono)",
+          // UI-fix-A — nav card name is location prose per design ref
+          // §6 ("Cormorant Garamond italic, ~11px"). Was var(--mono).
+          // Group C will refine the rest of the nav card visuals.
+          fontFamily: "var(--serif)",
           fontSize:   11,
-          fontWeight: 700,
+          fontWeight: 500,
+          fontStyle:  "italic",
           letterSpacing: "0.04em",
         }}
       >
@@ -528,7 +533,8 @@ function DungeonNavCardButton({
       <div
         style={{
           marginTop:    2,
-          fontFamily:   "var(--mono)",
+          // UI-fix-A — sublabel "type · direction" → Inter Tight.
+          fontFamily:   "var(--sans)",
           fontSize:     9,
           letterSpacing: "0.2em",
           color:        "var(--ink-4)",

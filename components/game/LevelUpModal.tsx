@@ -293,7 +293,10 @@ export function LevelUpModal() {
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 modal-backdrop-in"
       >
         <div
-          className="w-full max-w-md rounded-sm font-mono shadow-2xl modal-card-in"
+          // UI-fix-A — was font-mono; the modal is mostly UI chrome
+          // + serif title, so inherit from body sans (Inter Tight)
+          // and let inner ew-serif/ew-mono override per element.
+          className="ew-sans w-full max-w-md rounded-sm shadow-2xl modal-card-in"
           style={{
             backgroundColor: "var(--color-bg)",
             border:          "1px solid var(--accent)",
@@ -424,7 +427,10 @@ export function LevelUpModal() {
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 modal-backdrop-in"
       >
         <div
-          className="w-full max-w-md rounded-sm font-mono shadow-2xl modal-card-in"
+          // UI-fix-A — was font-mono; the modal is mostly UI chrome
+          // + serif title, so inherit from body sans (Inter Tight)
+          // and let inner ew-serif/ew-mono override per element.
+          className="ew-sans w-full max-w-md rounded-sm shadow-2xl modal-card-in"
           style={{
             backgroundColor: "var(--color-bg)",
             border:          "1px solid var(--accent)",

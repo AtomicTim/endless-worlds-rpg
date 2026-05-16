@@ -28,7 +28,9 @@ export function VerbosityToggle() {
       role="group"
       aria-label="Narrator verbosity"
       className="hidden items-center gap-0 sm:flex"
-      style={{ fontFamily: "var(--font-mono)" }}
+      // UI-fix-A — Toggle is UI chrome (label triplet) → Inter Tight
+      // via var(--sans). Was --font-mono (Courier→JetBrains Mono).
+      style={{ fontFamily: "var(--sans)" }}
     >
       {OPTIONS.map((opt) => {
         const active = verbosity === opt.key;
@@ -46,7 +48,7 @@ export function VerbosityToggle() {
               color:           active ? "#e2e8f0" : "var(--color-muted)",
               borderBottom:    active ? `2px solid ${primary}` : "2px solid transparent",
               backgroundColor: "transparent",
-              fontFamily:      "var(--font-mono)",
+              fontFamily:      "var(--sans)",
             }}
             aria-pressed={active}
             title={`${opt.label} responses`}

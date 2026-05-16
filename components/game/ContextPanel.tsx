@@ -1,7 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
-import { Package, Box, BookOpen, Skull } from "lucide-react";
+// UI-fix-E 4b — swapped from Lucide to Tabler per design-reference §18.
+// Tabler is the icon library called out in the spec and is already a
+// project dependency (@tabler/icons-react ^3.44.0, used by the wizard,
+// dashboard, and TopBar). Mapping:
+//   container → IconPackage   (was lucide Package)
+//   lore      → IconBook      (was lucide BookOpen)
+//   remains   → IconSkull     (was lucide Skull)
+//   box/other → IconBox       (was lucide Box)
+import { IconPackage, IconBox, IconBook, IconSkull } from "@tabler/icons-react";
 import { LootModal } from "@/components/game/loot/LootModal";
 import { AssetCategory } from "@/types/game";
 import type {
@@ -58,7 +66,11 @@ const NAME_INK      = "#e2cda0";
 const PROSE_INK     = "#9a7e52";
 const NPC_NAME_INK  = "#d4bc88";
 const NPC_ROLE_INK  = "#7a6040";
-const OBJ_NAME_INK  = "#c4b090";
+// UI-fix-E 4a — object name now matches NPC name tone (#d4bc88, was
+// #c4b090). Per design-reference §18 both names are the primary
+// label inside their respective cards and share visual weight; the
+// previous #c4b090 made object names read as secondary.
+const OBJ_NAME_INK  = "#d4bc88";
 const ICON_INK      = "#7a6040";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -460,10 +472,10 @@ function ObjectCard({
   onClick:     () => void;
 }) {
   const IconCmp =
-    icon === "container" ? Package
-    : icon === "lore"    ? BookOpen
-    : icon === "remains" ? Skull
-    :                      Box;
+    icon === "container" ? IconPackage
+    : icon === "lore"    ? IconBook
+    : icon === "remains" ? IconSkull
+    :                      IconBox;
 
   return (
     <button

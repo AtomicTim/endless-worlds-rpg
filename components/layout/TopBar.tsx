@@ -2,6 +2,15 @@
 
 import React from "react";
 import { Save, Menu } from "lucide-react";
+import {
+  IconBook, IconNotebook, IconMap,
+  IconShield, IconEyeOff, IconWand, IconCrosshair, IconMessage,
+  IconCpu, IconBriefcase, IconSword, IconHammer, IconGhost,
+  IconSearch, IconMoon, IconHeart, IconMask, IconEye,
+  IconBadge, IconRocket, IconTool, IconAnchor, IconRadar,
+  IconAxe, IconFirstAidKit, IconRun, IconSpeakerphone,
+  type Icon as TablerIcon,
+} from "@tabler/icons-react";
 import { Genre } from "@/types/game";
 import type { WorldGraph } from "@/types/game";
 import { useGameStore } from "@/lib/stores/game-store";
@@ -9,59 +18,87 @@ import { genreSlug, GENRE_LABEL } from "@/lib/game/genre-slug";
 import { UserMenu } from "@/components/layout/UserMenu";
 
 /**
- * UI-2 — Top bar.
+ * UI-fix-H — Top bar, Section 17 of /docs/ui-design-reference.md.
  *
- * Section 17 of /docs/ui-design-reference.md. Dark chrome (#141210)
- * in all genres; only the logo, genre pill, character-pill border,
- * verbosity-active segment, loading dot, and icon hover-state pick
- * up the per-genre accent via var(--genre-accent) (UI-1).
+ * Dark chrome (#141210) in all genres; only the logo, genre pill,
+ * verbosity-active segment, loading dot, icon hover, and character pill
+ * pick up the per-genre accent via var(--genre-accent).
  *
- * Wiring is read-only from the store — no new state. The existing
- * verbosity store action, codex / journal / map modal toggles, and
- * the mobile sidebar local state are reused as-is.
+ * Hiding on main menu / character creation is by composition: GameLayout
+ * mounts the TopBar, and /dashboard + /game/new don't render GameLayout.
  *
- * Hiding on main menu / character creation is handled by composition
- * (GameLayout only mounts on /game; /dashboard and /game/new don't
- * render it).
+ * Wiring is read-only from the store — no new state.
  */
 
 export interface TopBarProps {
   genre: Genre;
-  /** True when the GameLayout caller wired a map panel. The MAP icon
-   *  is suppressed when false so there's no dead button. */
+  /** True when GameLayout wired a map panel. MAP icon suppressed when false. */
   mapPanelAvailable: boolean;
-  /** Toggles the mobile right-side character drawer. On desktop the
-   *  character sidebar is always visible, so this is a no-op
-   *  effect-wise — kept identical for layout symmetry. */
+  /** Toggles the right-side character drawer (mobile). */
   onToggleSidebar: () => void;
-  /** Existing Save & Exit handler from GameLayout. Kept rendered as
-   *  an additive desktop-only button — Section 17 doesn't list it
-   *  but removing it would be a UX regression with no replacement
-   *  path yet (UI-13 / Main Menu lands later). */
+  /** Existing Save & Exit handler from GameLayout. */
   onSaveAndExit: () => void;
-  /** Mirror of GameLayout's `saveState` so the button label can flip
-   *  through SAVE → SAVING… → SAVED ✓. */
+  /** Mirror of GameLayout's `saveState` for the SAVE label transitions. */
   saveLabel: "SAVE" | "SAVING…" | "SAVED ✓";
-  /** Disable the save button during the in-flight + post-save window
-   *  (matches the existing GameLayout behaviour). */
+  /** Disable save during in-flight + post-save window. */
   saveDisabled: boolean;
-  /** UI-3 — mobile hamburger handler. Opens the Context Panel left
-   *  drawer. Optional so GameLayout can pass nothing if no context
-   *  panel was wired (the hamburger is suppressed in that case). */
+  /** Hamburger handler — opens Context Panel left drawer. */
   onOpenContextPanel?: () => void;
 }
 
-const ACCENT       = "var(--genre-accent)";
-const BAR_BG       = "#141210";
-const BAR_BORDER   = "#2d2618";
-const BREADCRUMB   = "#6a5530";
-const BREADCRUMB_D = "#4a3818";
-const ICON_REST    = "#7a6040";
+// ── Tokens ──────────────────────────────────────────────────────────────────
+//
+// Pure colour literals match Section 17. Per-genre accents flow through
+// var(--genre-accent) / var(--genre-accent-rgb) (UI-1 in globals.css).
+
+const ACCENT   = "var(--genre-accent)";
+const BAR_BG   = "#141210";
+const BAR_BORDER = "#2d2618";
+
+/** Breadcrumb tier colours, per Section 17:
+ *  region segment, separator, current location. */
+const CRUMB_REGION  = "#5a4828";
+const CRUMB_SEP     = "#3a2a18";
+const CRUMB_CURRENT = "#a08060";
+
+/** Icon-button rest colour = var(--ink-3) per spec.
+ *  ink-3 is defined in globals.css as #a89e8c — wired through the var
+ *  so a future ink palette change carries through. */
+const ICON_REST = "var(--ink-3)";
+
+/** Verbosity toggle inactive label colour (per spec: #6a5530). */
+const VERBOSITY_INACTIVE = "#6a5530";
+
+/** Character pill name colour (per spec: #c0a878). */
+const CHAR_NAME = "#c0a878";
+
+// ── Class icon map (mirrors app/dashboard/page.tsx, UI-13) ───────────────
+//
+// Marine: @tabler/icons-react v3 has no IconShip, so IconAnchor is the
+// nearest naval analogue. Scavenger uses IconSearch (shares with
+// Investigator) — both are search-themed and the duplication is
+// intentional per the verified list in design-reference §9.
+const CLASS_ICON: Record<string, TablerIcon> = {
+  // Fantasy
+  knight: IconShield, rogue: IconEyeOff, mage: IconWand,
+  ranger: IconCrosshair, herald: IconMessage,
+  // Cyberpunk
+  netrunner: IconCpu, fixer: IconBriefcase, street_samurai: IconSword,
+  enforcer: IconHammer, ghost: IconGhost,
+  // Horror
+  investigator: IconSearch, cultist: IconMoon, survivor: IconHeart,
+  phantom: IconMask, medium: IconEye,
+  // Space Opera
+  commander: IconBadge, pilot: IconRocket, engineer: IconTool,
+  marine: IconAnchor, recon: IconRadar,
+  // Post-Apoc
+  scavenger: IconSearch, raider: IconAxe, medic: IconFirstAidKit,
+  runner: IconRun, demagogue: IconSpeakerphone,
+};
 
 /** Build the breadcrumb parts (Region › Settlement › Current).
- *  Mirrors NavigationBar.buildBreadcrumb's shape — kept private here
- *  so NavigationBar stays untouched. Returns whatever levels are
- *  available; the renderer joins with styled separators. */
+ *  Last entry is the current location (rendered in CRUMB_CURRENT);
+ *  preceding entries are region/settlement (CRUMB_REGION). */
 function buildBreadcrumbParts(worldGraph: WorldGraph | undefined): string[] {
   if (!worldGraph) return [];
   const current = worldGraph.nodes[worldGraph.current_node_id];
@@ -112,29 +149,26 @@ export function TopBar({
   const slug      = genreSlug(genre);
   const genreText = GENRE_LABEL[slug] ?? "FANTASY";
   const playerName = masterState?.player_state.name ?? "Adventurer";
-  const initials =
-    playerName
-      .split(/\s+/)
-      .map((w) => w[0]?.toUpperCase() ?? "")
-      .join("")
-      .slice(0, 2) || "??";
+  const classId    = masterState?.player_state.background ?? "knight";
+  const ClassIcon: TablerIcon = CLASS_ICON[classId] ?? IconShield;
 
   const breadcrumbParts = buildBreadcrumbParts(masterState?.world_graph);
-  const loading = generatingRegion !== null;
+  const lastCrumbIdx    = breadcrumbParts.length - 1;
+  const loading         = generatingRegion !== null;
 
   return (
     <header
       role="banner"
       className={[
         "flex items-center gap-2 px-3 shrink-0 border-b",
-        "h-[52px] md:h-11", // UI design ref §4 / §17: 52px mobile, 44px desktop
+        // §4 / §17: 52px mobile, 44px desktop. Fixed height — never
+        // grows with content. min-h pinned so 44px tap-target buttons
+        // can't expand the bar.
+        "h-[52px] md:h-11",
       ].join(" ")}
       style={{ background: BAR_BG, borderBottomColor: BAR_BORDER }}
     >
-      {/* UI-3 — Mobile hamburger (Context Panel drawer). Deferred from
-          UI-2; lands here now that ContextPanel exists. Suppressed on
-          desktop (lg+ shows the panel as a fixed column) and when the
-          GameLayout caller didn't wire a context panel. */}
+      {/* ── Mobile hamburger (Context Panel drawer) ──────────────────── */}
       {onOpenContextPanel && (
         <button
           type="button"
@@ -154,93 +188,101 @@ export function TopBar({
         aria-label="Endless Worlds"
         className="shrink-0 italic font-medium"
         style={{
-          fontFamily: "var(--serif)",
-          fontSize:   14,
-          color:      ACCENT,
+          fontFamily:    "var(--serif)",
+          fontSize:      14,
+          color:         ACCENT,
           letterSpacing: "0.01em",
         }}
       >
         ✦ Endless Worlds
       </div>
 
-      {/* ── B. Genre tag pill (desktop only per Section 17 mobile rules) ─ */}
+      {/* ── B. Genre tag pill (desktop) ──────────────────────────────── */}
       <div
         className="hidden md:inline-flex shrink-0 items-center uppercase"
         style={{
-          fontFamily:     "var(--sans)",
-          fontSize:       7,
-          letterSpacing:  "0.12em",
-          padding:        "2px 8px",
-          borderRadius:   20,
-          color:          ACCENT,
-          background:     "color-mix(in srgb, var(--genre-accent) 12%, transparent)",
-          border:         "1px solid color-mix(in srgb, var(--genre-accent) 28%, transparent)",
+          fontFamily:    "var(--sans)",
+          fontSize:      11,
+          letterSpacing: "0.1em",
+          padding:       "2px 8px",
+          borderRadius:  20,
+          color:         ACCENT,
+          background:    "rgba(var(--genre-accent-rgb), 0.10)",
+          border:        "1px solid rgba(var(--genre-accent-rgb), 0.25)",
         }}
       >
         {genreText}
       </div>
 
-      {/* ── C. Breadcrumb (desktop only) ──────────────────────────────── */}
+      {/* ── C. Breadcrumb (desktop) ──────────────────────────────────── */}
       {breadcrumbParts.length > 0 && (
         <div
           aria-label="Location breadcrumb"
           className="hidden md:flex min-w-0 items-center overflow-hidden whitespace-nowrap"
           style={{
-            fontFamily:    "var(--sans)",
-            fontSize:      8,
-            letterSpacing: "0.08em",
-            color:         BREADCRUMB,
-            textOverflow:  "ellipsis",
+            fontFamily: "var(--sans)",
+            fontSize:   11,
           }}
         >
-          {breadcrumbParts.map((p, i) => (
-            <React.Fragment key={`${i}-${p}`}>
-              {i > 0 && (
+          {breadcrumbParts.map((p, i) => {
+            const isCurrent = i === lastCrumbIdx;
+            return (
+              <React.Fragment key={`${i}-${p}`}>
+                {i > 0 && (
+                  <span
+                    aria-hidden
+                    className="mx-1.5"
+                    style={{ color: CRUMB_SEP }}
+                  >
+                    ›
+                  </span>
+                )}
                 <span
-                  aria-hidden
-                  className="mx-1.5"
-                  style={{ color: BREADCRUMB_D }}
+                  className="truncate"
+                  style={{
+                    maxWidth: 180,
+                    color:    isCurrent ? CRUMB_CURRENT : CRUMB_REGION,
+                  }}
                 >
-                  ›
+                  {p}
                 </span>
-              )}
-              <span className="truncate" style={{ maxWidth: 180 }}>
-                {p}
-              </span>
-            </React.Fragment>
-          ))}
+              </React.Fragment>
+            );
+          })}
         </div>
       )}
 
       {/* ── D. flex-1 spacer ─────────────────────────────────────────── */}
       <div className="flex-1" />
 
-      {/* ── E. Background loading dot (desktop + mobile) ─────────────── */}
+      {/* ── E. Background loading dot ────────────────────────────────── */}
+      {/* Section 17 + Pattern 3 (§5): 6px pulsing dot in genre accent
+          during WorldBible/RegionBible prefetch. Uses `ew-pulse` from
+          globals.css (line 420 / 428) — single source of truth for the
+          pulse keyframe. Hidden via opacity 0 when idle so layout
+          doesn't jump. */}
       <div
         aria-label={loading ? "Background generation in progress" : undefined}
         aria-hidden={!loading}
-        className="shrink-0"
+        className={loading ? "ew-pulse shrink-0" : "shrink-0"}
         style={{
-          width:     6,
-          height:    6,
+          width:        6,
+          height:       6,
           borderRadius: "50%",
           background:   ACCENT,
           opacity:      loading ? 1 : 0,
-          animation:    loading ? "ew-loading-dot 1.6s ease-in-out infinite" : "none",
           transition:   "opacity 200ms ease",
         }}
       />
 
-      {/* ── F. Verbosity toggle (desktop only) ───────────────────────── */}
+      {/* ── F. Verbosity toggle (desktop) ────────────────────────────── */}
+      {/* Section 17: per-button border on active, no shared container
+          border. Inactive = #6a5530 plain. Active = accent fg + .12 bg
+          + .30 border + 4px radius. */}
       <div
         role="group"
         aria-label="Narrator verbosity"
-        className="hidden md:inline-flex shrink-0 items-stretch overflow-hidden"
-        style={{
-          border:       `1px solid ${BAR_BORDER}`,
-          borderRadius: 4,
-          fontFamily:   "var(--sans)",
-        }}
+        className="hidden md:inline-flex shrink-0 items-center gap-1"
       >
         {(["terse", "standard", "rich"] as const).map((key) => {
           const active = verbosity === key;
@@ -250,16 +292,20 @@ export function TopBar({
               type="button"
               onClick={() => setVerbosity(key)}
               aria-pressed={active}
-              className="uppercase transition-colors min-h-[44px] md:min-h-0"
+              className="transition-colors min-h-[44px] md:min-h-0 inline-flex items-center"
               style={{
-                fontSize:      7,
-                letterSpacing: "0.12em",
-                padding:       "3px 7px",
-                color:         active ? ACCENT : BREADCRUMB_D,
+                fontFamily:    "var(--sans)",
+                fontSize:      11,
+                letterSpacing: "0.02em",
+                padding:       "3px 8px",
+                borderRadius:  4,
+                color:         active ? ACCENT : VERBOSITY_INACTIVE,
                 background:    active
-                  ? "color-mix(in srgb, var(--genre-accent) 14%, transparent)"
+                  ? "rgba(var(--genre-accent-rgb), 0.12)"
                   : "transparent",
-                borderLeft:    key === "terse" ? "none" : `1px solid ${BAR_BORDER}`,
+                border:        active
+                  ? "1px solid rgba(var(--genre-accent-rgb), 0.30)"
+                  : "1px solid transparent",
               }}
             >
               {key[0].toUpperCase() + key.slice(1)}
@@ -270,14 +316,14 @@ export function TopBar({
 
       {/* ── G. Icon buttons — Codex · Journal · Map ──────────────────── */}
       <IconButton ariaLabel="Open codex" onClick={() => toggleCodexModal()}>
-        <CodexIcon />
+        <IconBook size={15} stroke={1.5} aria-hidden />
       </IconButton>
       <IconButton ariaLabel="Open journal" onClick={() => toggleJournalModal()}>
-        <JournalIcon />
+        <IconNotebook size={15} stroke={1.5} aria-hidden />
       </IconButton>
       {mapPanelAvailable && (
         <IconButton ariaLabel="Open map" onClick={() => toggleMapPanel()}>
-          <MapIcon />
+          <IconMap size={15} stroke={1.5} aria-hidden />
         </IconButton>
       )}
 
@@ -286,43 +332,55 @@ export function TopBar({
         type="button"
         onClick={onToggleSidebar}
         aria-label="Open character panel"
-        className="group shrink-0 inline-flex items-center gap-2 transition-colors min-h-[44px] md:min-h-0"
-        style={{ background: "transparent", padding: "2px 4px" }}
+        className="shrink-0 inline-flex items-center gap-2 transition-colors min-h-[44px]"
+        style={{
+          // Pill container, per spec: rgba(.10) bg, rgba(.25) border,
+          // 20px radius, asymmetric padding (4px 10px 4px 4px) — the
+          // 4px left padding kisses the 24px avatar against the border.
+          background:   "rgba(var(--genre-accent-rgb), 0.10)",
+          border:       "1px solid rgba(var(--genre-accent-rgb), 0.25)",
+          borderRadius: 20,
+          padding:      "4px 10px 4px 4px",
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.background =
+            "rgba(var(--genre-accent-rgb), 0.18)";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.background =
+            "rgba(var(--genre-accent-rgb), 0.10)";
+        }}
       >
+        {/* Avatar — 24px circle, solid genre accent fill, class icon
+            12px in dark bar colour (#141210) so the icon reads as a
+            cut-out against the saturated accent. */}
         <span
           aria-hidden
-          className="inline-flex items-center justify-center font-medium"
+          className="inline-flex items-center justify-center shrink-0"
           style={{
-            width:         28,
-            height:        28,
-            borderRadius:  "50%",
-            border:        `1.5px solid ${ACCENT}`,
-            color:         ACCENT,
-            fontFamily:    "var(--mono)",
-            fontSize:      10,
-            letterSpacing: "0.06em",
-            background:    "color-mix(in srgb, var(--genre-accent) 10%, transparent)",
+            width:        24,
+            height:       24,
+            borderRadius: "50%",
+            background:   ACCENT,
+            color:        "#141210",
           }}
         >
-          {initials}
+          <ClassIcon size={12} stroke={2} />
         </span>
         <span
           className="hidden md:inline truncate"
           style={{
-            fontFamily:    "var(--sans)",
-            fontSize:      8,
-            letterSpacing: "0.10em",
-            color:         "#a08870",
-            maxWidth:      80,
-            textTransform: "uppercase",
+            fontFamily: "var(--sans)",
+            fontSize:   11,
+            color:      CHAR_NAME,
+            maxWidth:   120,
           }}
         >
           {playerName}
         </span>
       </button>
 
-      {/* ── Additive: Save & Exit (desktop) + UserMenu — preserves
-              functionality the redesign spec doesn't yet replace. ──── */}
+      {/* ── Additive: Save & Exit (desktop) + UserMenu ───────────────── */}
       <DesktopSave
         label={saveLabel}
         disabled={saveDisabled}
@@ -334,16 +392,6 @@ export function TopBar({
       <div className="shrink-0 flex items-center sm:hidden">
         <UserMenu />
       </div>
-
-      {/* Keyframes — kept inline so the keyframe lives with the dot it
-          drives. No globals.css touch (which is restricted to Story
-          Feed Colors token system constraints from UI-1). */}
-      <style jsx>{`
-        @keyframes ew-loading-dot {
-          0%, 100% { opacity: 0.4; }
-          50%      { opacity: 1; }
-        }
-      `}</style>
     </header>
   );
 }
@@ -355,6 +403,10 @@ interface IconButtonProps {
   onClick:   () => void;
   children:  React.ReactNode;
 }
+/** Icon button — 15px glyph centred in a 44×44 hit area at every
+ *  breakpoint (Section 17: "44px minimum tap target — achieve via
+ *  padding on the button wrapper, not by enlarging the icon").
+ *  Hover/focus adds a subtle accent-tinted background (.08). */
 function IconButton({ ariaLabel, onClick, children }: IconButtonProps) {
   return (
     <button
@@ -362,63 +414,31 @@ function IconButton({ ariaLabel, onClick, children }: IconButtonProps) {
       aria-label={ariaLabel}
       title={ariaLabel}
       onClick={onClick}
-      className="group shrink-0 inline-flex items-center justify-center transition-colors min-w-[44px] min-h-[44px] md:min-w-7 md:min-h-7"
-      style={{ color: ICON_REST }}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = ACCENT; }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = ICON_REST; }}
-      onFocus={(e)      => { (e.currentTarget as HTMLButtonElement).style.color = ACCENT; }}
-      onBlur={(e)       => { (e.currentTarget as HTMLButtonElement).style.color = ICON_REST; }}
+      className="shrink-0 inline-flex items-center justify-center min-w-[44px] min-h-[44px] transition-colors"
+      style={{ color: ICON_REST, background: "transparent", borderRadius: 4 }}
+      onMouseEnter={(e) => {
+        const t = e.currentTarget as HTMLButtonElement;
+        t.style.color      = ACCENT;
+        t.style.background = "rgba(var(--genre-accent-rgb), 0.08)";
+      }}
+      onMouseLeave={(e) => {
+        const t = e.currentTarget as HTMLButtonElement;
+        t.style.color      = ICON_REST;
+        t.style.background = "transparent";
+      }}
+      onFocus={(e) => {
+        const t = e.currentTarget as HTMLButtonElement;
+        t.style.color      = ACCENT;
+        t.style.background = "rgba(var(--genre-accent-rgb), 0.08)";
+      }}
+      onBlur={(e) => {
+        const t = e.currentTarget as HTMLButtonElement;
+        t.style.color      = ICON_REST;
+        t.style.background = "transparent";
+      }}
     >
       {children}
     </button>
-  );
-}
-
-/** Codex icon — book glyph (matches existing GameLayout SVG). */
-function CodexIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden>
-      <path
-        d="M 2 2 L 7 1 L 12 2 L 12 12 L 7 11 L 2 12 Z M 7 1 L 7 11"
-        stroke="currentColor"
-        strokeWidth="1.1"
-        fill="none"
-      />
-    </svg>
-  );
-}
-
-/** Journal icon — open-book glyph. */
-function JournalIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden>
-      <path
-        d="M 7 2 L 2 3 L 2 12 L 7 11 L 12 12 L 12 3 L 7 2 Z M 7 2 L 7 11"
-        stroke="currentColor"
-        strokeWidth="1.1"
-        fill="none"
-      />
-      <path
-        d="M 3.5 6 L 6 5.7 M 3.5 8 L 6 7.7 M 8 5.7 L 10.5 6 M 8 7.7 L 10.5 8"
-        stroke="currentColor"
-        strokeWidth="0.6"
-        opacity="0.55"
-      />
-    </svg>
-  );
-}
-
-/** Map icon — zig-zag terrain glyph. */
-function MapIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden>
-      <path
-        d="M 1 3 L 5 5 L 9 3 L 13 5 L 13 11 L 9 9 L 5 11 L 1 9 Z"
-        stroke="currentColor"
-        strokeWidth="1.1"
-        fill="none"
-      />
-    </svg>
   );
 }
 
@@ -454,4 +474,3 @@ function DesktopSave({ label, disabled, onClick }: SaveProps) {
     </button>
   );
 }
-

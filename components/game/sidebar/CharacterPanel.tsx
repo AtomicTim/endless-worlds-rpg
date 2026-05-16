@@ -123,13 +123,18 @@ const CURRENCY_ICON: Record<Genre, TablerIcon> = {
 // HP / XP helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** UI-9 CHANGE 3 — HP threshold colour ladder. */
+/** UI-9 CHANGE 3 — HP threshold colour ladder.
+ *  PR-5: returns CSS var() strings; React passes them straight into the
+ *  style prop where CSS resolves at paint time. The 5-band gradient lives
+ *  in globals.css as --hp-healthy / --hp-good / --hp-hurt / --hp-danger /
+ *  --hp-critical (design ref §8 HP STATES). Function is only consumed
+ *  inside this file (line 199 ↓ `background: hpColor`). */
 export function hpThresholdColor(pct: number): string {
-  if (pct >= 75) return "#4a8a4a";
-  if (pct >= 50) return "#5a9450";
-  if (pct >= 25) return "#a87830";
-  if (pct >= 10) return "#c84830";
-  return "#e03030";
+  if (pct >= 75) return "var(--hp-healthy)";
+  if (pct >= 50) return "var(--hp-good)";
+  if (pct >= 25) return "var(--hp-hurt)";
+  if (pct >= 10) return "var(--hp-danger)";
+  return "var(--hp-critical)";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -163,7 +168,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
         aria-label="Character"
         style={{
           padding:    "16px 12px",
-          color:      "#9a7e52",
+          color:      "var(--atmosphere)",
           fontStyle:  "italic",
           fontSize:   12,
           textAlign:  "center",
@@ -294,7 +299,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
       style={{
         position:    "relative",
         background:  "var(--content-bg)",
-        borderLeft:  "1px solid #2d2618",
+        borderLeft:  "1px solid var(--ui-border-default)",
         minHeight:   "100%",
       }}
     >
@@ -338,7 +343,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
               style={{
                 fontStyle:    "italic",
                 fontSize:     13,
-                color:        "#e2cda0",
+                color:        "var(--ui-text-1)",
                 whiteSpace:   "nowrap",
                 overflow:     "hidden",
                 textOverflow: "ellipsis",
@@ -353,7 +358,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                 fontSize:      7,
                 letterSpacing: "0.22em",
                 textTransform: "uppercase",
-                color:         "#6a5530",
+                color:         "var(--ui-text-muted)",
                 marginTop:     2,
               }}
             >
@@ -374,7 +379,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
               width:        "100%",
               height:       8,
               borderRadius: 4,
-              background:   "#1c1a17",
+              background:   "var(--ui-bg-primary)",
               overflow:     "hidden",
             }}
           >
@@ -392,7 +397,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
             style={{
               fontFamily: "var(--mono)",
               fontSize:   10,
-              color:      "#a08870",
+              color:      "var(--ui-text-2)",
               textAlign:  "right",
               marginTop:  2,
             }}
@@ -413,7 +418,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
               width:        "100%",
               height:       3,
               borderRadius: 2,
-              background:   "#1c1a17",
+              background:   "var(--ui-bg-primary)",
               overflow:     "hidden",
             }}
           >
@@ -432,7 +437,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
               fontSize:      7,
               letterSpacing: "0.18em",
               textTransform: "uppercase",
-              color:         "#4a3818",
+              color:         "var(--nav-breadcrumb)",
               marginTop:     2,
             }}
           >
@@ -481,7 +486,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                   fontSize:      6,
                   letterSpacing: "0.18em",
                   textTransform: "uppercase",
-                  color:         "#6a5530",
+                  color:         "var(--ui-text-muted)",
                 }}
               >
                 {STAT_LABELS[k]}
@@ -508,7 +513,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
               fontSize:      7,
               letterSpacing: "0.24em",
               textTransform: "uppercase",
-              color:         "#4a3818",
+              color:         "var(--nav-breadcrumb)",
               marginBottom:  4,
             }}
           >
@@ -577,7 +582,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
               style={{
                 fontFamily: "var(--mono)",
                 fontSize:   11,
-                color:      "#c4943a",
+                color:      "var(--genre-accent)",
               }}
             >
               {primaryCurrency.toLocaleString()}
@@ -593,7 +598,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
               fontSize:      7,
               letterSpacing: "0.24em",
               textTransform: "uppercase",
-              color:         "#4a3818",
+              color:         "var(--nav-breadcrumb)",
               marginBottom:  4,
             }}
           >
@@ -624,8 +629,8 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                     aria-hidden
                     style={{
                       aspectRatio:  "1",
-                      background:   "#181410",
-                      border:       "1px dashed #1e1912",
+                      background:   "var(--bg-2)",
+                      border:       "1px dashed var(--breadcrumb-rule)",
                       borderRadius: 6,
                       opacity:      0.4,
                     }}
@@ -642,10 +647,10 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                   title={item.name}
                   style={{
                     aspectRatio:  "1",
-                    background:   "#181410",
+                    background:   "var(--bg-2)",
                     border:       isSelected
-                      ? "1.5px solid rgba(196,148,58,.45)"
-                      : "1px solid #2d2618",
+                      ? "1.5px solid rgba(var(--genre-accent-rgb), .45)"
+                      : "1px solid var(--ui-border-default)",
                     borderRadius: 6,
                     display:      "flex",
                     alignItems:   "center",
@@ -657,14 +662,14 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                   onMouseEnter={(e) => {
                     if (isSelected) return;
                     (e.currentTarget as HTMLButtonElement).style.borderColor =
-                      "rgba(196,148,58,0.30)";
+                      "rgba(var(--genre-accent-rgb), 0.30)";
                   }}
                   onMouseLeave={(e) => {
                     if (isSelected) return;
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = "#2d2618";
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--ui-border-default)";
                   }}
                 >
-                  <Icon size={18} stroke={1.75} color="#7a6040" aria-hidden />
+                  <Icon size={18} stroke={1.75} color="var(--npc-role)" aria-hidden />
                 </button>
               );
             })}
@@ -725,7 +730,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                 fontSize:      7,
                 letterSpacing: "0.24em",
                 textTransform: "uppercase",
-                color:         "#4a3818",
+                color:         "var(--nav-breadcrumb)",
                 marginBottom:  4,
               }}
             >
@@ -739,7 +744,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                   style={{
                     fontSize:  10,
                     fontStyle: "italic",
-                    color:     "#9a7e52",
+                    color:     "var(--atmosphere)",
                     lineHeight: 1.5,
                   }}
                   title={p.description}
@@ -832,12 +837,12 @@ function EquipSlotTile({ kind, item, isSelected, onTap }: EquipSlotTileProps) {
       style={{
         width:          80,
         height:         80,
-        background:     "#181410",
+        background:     "var(--bg-2)",
         border:         isSelected
-          ? "1.5px solid rgba(196,148,58,0.45)"
+          ? "1.5px solid rgba(var(--genre-accent-rgb), 0.45)"
           : item
-            ? "1px solid #2d2618"
-            : "1px dashed #2d2618",
+            ? "1px solid var(--ui-border-default)"
+            : "1px dashed var(--ui-border-default)",
         borderRadius:   8,
         display:        "flex",
         flexDirection:  "column",
@@ -851,7 +856,7 @@ function EquipSlotTile({ kind, item, isSelected, onTap }: EquipSlotTileProps) {
         transition:     "border-color 120ms",
       }}
     >
-      <Icon size={22} stroke={1.75} color="#7a6040" aria-hidden />
+      <Icon size={22} stroke={1.75} color="var(--npc-role)" aria-hidden />
       {item && (
         <span
           style={{
@@ -874,7 +879,7 @@ function EquipSlotTile({ kind, item, isSelected, onTap }: EquipSlotTileProps) {
           style={{
             fontFamily: "var(--mono)",
             fontSize:   7,
-            color:      "#c4943a",
+            color:      "var(--genre-accent)",
             lineHeight: 1,
           }}
         >
@@ -910,26 +915,26 @@ function ItemDetailCard(props: ItemDetailCardProps) {
   // Loot-system stat colour (CHANGE 9 + UI design ref §15):
   //   weapon → #c4943a · heal → #7abb7a · accessory → #a888c8
   let statText:  string | null = null;
-  let statColor: string        = "#c4943a";
+  let statColor: string        = "var(--genre-accent)";
   if (item.type === ItemType.WEAPON && item.effect?.damage_die) {
     statText  = `Damage: ${item.effect.damage_die}`;
-    statColor = "#c4943a";
+    statColor = "var(--genre-accent)";
   } else if (item.type === ItemType.ARMOR && typeof item.effect?.armor_bonus === "number") {
     statText  = `Armor: ${item.effect.armor_bonus >= 0 ? "+" : ""}${item.effect.armor_bonus}`;
-    statColor = "#c4943a";
+    statColor = "var(--genre-accent)";
   } else if (item.type === ItemType.CONSUMABLE) {
     if (item.id === BASIC_HEALTH_POTION_ID) {
       statText  = "Heal: 1d8+4";
     } else if (typeof item.effect?.heal === "number") {
       statText  = `Heal: ${item.effect.heal}`;
     }
-    statColor = "#7abb7a";
+    statColor = "var(--stat-heal)";
   } else if (item.stat_bonus && Object.keys(item.stat_bonus).length > 0) {
     statText  = Object.entries(item.stat_bonus)
       .filter(([, v]) => typeof v === "number")
       .map(([k, v]) => `+${v as number} ${k.slice(0, 3).toUpperCase()}`)
       .join(", ");
-    statColor = "#a888c8";
+    statColor = "var(--stat-accessory)";
   }
 
   const showEquip = (item.type === ItemType.WEAPON || item.type === ItemType.ARMOR) && !inCombat;
@@ -959,7 +964,7 @@ function ItemDetailCard(props: ItemDetailCardProps) {
           style={{
             fontStyle:    "italic",
             fontSize:     12,
-            color:        "#e2cda0",
+            color:        "var(--ui-text-1)",
             whiteSpace:   "nowrap",
             overflow:     "hidden",
             textOverflow: "ellipsis",
@@ -969,7 +974,7 @@ function ItemDetailCard(props: ItemDetailCardProps) {
         >
           {item.name}
           {item.stackable && item.quantity > 1 && (
-            <span style={{ color: "#6a5530", marginLeft: 4 }}>×{item.quantity}</span>
+            <span style={{ color: "var(--ui-text-muted)", marginLeft: 4 }}>×{item.quantity}</span>
           )}
         </span>
         <button
@@ -979,7 +984,7 @@ function ItemDetailCard(props: ItemDetailCardProps) {
           style={{
             background:    "transparent",
             border:        "none",
-            color:         "#6a5530",
+            color:         "var(--ui-text-muted)",
             cursor:        "pointer",
             fontFamily:    "var(--sans)",
             fontSize:      9,
@@ -999,7 +1004,7 @@ function ItemDetailCard(props: ItemDetailCardProps) {
           fontSize:      9,
           letterSpacing: "0.18em",
           textTransform: "uppercase",
-          color:         "#6a5530",
+          color:         "var(--ui-text-muted)",
         }}
       >
         {item.type} · {item.rarity}
@@ -1024,7 +1029,7 @@ function ItemDetailCard(props: ItemDetailCardProps) {
             margin:     0,
             fontStyle:  "italic",
             fontSize:   10,
-            color:      "#9a7e52",
+            color:      "var(--atmosphere)",
             lineHeight: 1.4,
           }}
         >
@@ -1039,7 +1044,7 @@ function ItemDetailCard(props: ItemDetailCardProps) {
           style={{
             fontStyle: "italic",
             fontSize:  9,
-            color:     "#6a5530",
+            color:     "var(--ui-text-muted)",
             margin:    0,
           }}
         >
@@ -1097,7 +1102,7 @@ function ItemDetailCard(props: ItemDetailCardProps) {
               fontSize:      8,
               letterSpacing: "0.20em",
               textTransform: "uppercase",
-              color:         "#6a5530",
+              color:         "var(--ui-text-muted)",
               marginBottom:  4,
             }}
           >
@@ -1152,8 +1157,15 @@ function ActionBtn({ label, tone, disabled, onClick }: ActionBtnProps) {
     tone === "drop"
       ? {
           background:    "transparent",
+          // PR-5: drop button reuses var(--hp-danger) for its text colour
+          // — same hex (#c84830) as the HP 10–25% band. Cross-semantic
+          // reuse is intentional: "deep red = danger" applies to both
+          // a near-death HP bar and an inventory-drop confirm. The
+          // rgba(196,72,48,.35) border is a separate hex (#c44830,
+          // slightly darker red) that the harness doesn't flag — left
+          // as-is per PR-5 scope.
           border:        "1px solid rgba(196, 72, 48, 0.35)",
-          color:         "#c84830",
+          color:         "var(--hp-danger)",
         }
       : {
           background:    "rgba(var(--genre-accent-rgb), 0.18)",

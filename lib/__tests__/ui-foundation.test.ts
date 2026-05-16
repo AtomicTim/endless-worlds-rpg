@@ -170,6 +170,20 @@ const ALLOWED_HEX_CODES = new Set<string>([
   "#2d2618", "#6a5530", "#e2cda0", // scene arrival
   "#5a9a5a",                       // resolved status indicator
 
+  // ── Character Panel (PR-5) ─────────────────────────────────────
+  // The 5 HP-band hexes below were already in the Set under PR-1's
+  // "HP state bands" group (design ref §8); they now also have
+  // proper named tokens (--hp-healthy / --hp-good / --hp-hurt /
+  // --hp-danger / --hp-critical) consumed by hpThresholdColor().
+  // The other 13 hex values in CharacterPanel.tsx all map to
+  // pre-existing PR-1/PR-2/PR-3 tokens (--atmosphere /
+  // --ui-border-default / --ui-text-1 / --ui-text-muted /
+  // --ui-bg-primary / --ui-text-2 / --nav-breadcrumb / --bg-2 /
+  // --breadcrumb-rule / --npc-role / --stat-heal / --stat-accessory /
+  // --genre-accent) — no aliases added. Set dedupes; this header is
+  // documentation only.
+  "#4a8a4a", "#5a9450", "#a87830", "#c84830", "#e03030",  // HP bands
+
   // ── Modal backdrops / generic dark fills ────────────────────────
   "#0a0a0a", "#1a1a1a",
 

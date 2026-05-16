@@ -119,6 +119,24 @@
        ────────────────────────────────────────────────────────────────── */
     --status-resolved: #5a9a5a;  /* "Searched ✓" + resolved indicators */
 
+    /* ──────────────────────────────────────────────────────────────────
+       HP threshold colours (PR-5) — design ref §8 5-band HP gradient
+       ──────────────────────────────────────────────────────────────────
+       Driven by hpThresholdColor() in CharacterPanel.tsx. Returned as
+       var() strings from JS; React passes them straight through to
+       style props which CSS resolves at paint time. All 5 hexes were
+       already allow-listed under "HP state bands" from PR-1 — these
+       tokens give the band ladder a proper named home. The drop-
+       button color (#c84830, same hex as --hp-danger) reuses
+       var(--hp-danger) with an inline cross-semantic note; the
+       value-sharing is intentional ("deep red = danger").
+       ────────────────────────────────────────────────────────────────── */
+    --hp-healthy:  #4a8a4a;  /* 75–100% HP */
+    --hp-good:     #5a9450;  /* 50–75%  HP */
+    --hp-hurt:     #a87830;  /* 25–50%  HP */
+    --hp-danger:   #c84830;  /* 10–25%  HP (also CharacterSheet drop button) */
+    --hp-critical: #e03030;  /* <10%    HP — pulsing */
+
     /* Day 20 Combat — event color tokens (combat-spec §10) */
     --combat-player:           #7ab8c8;  /* routine player actions */
     --combat-enemy:            #e87c6d;  /* routine enemy actions */

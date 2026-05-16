@@ -3,8 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** dbfd1af (UI-PR4: StoryFeed + StoryComponents story feed token system)
-**jest baseline:** 854 (authoritative — post-foundation PR-1/PR-2 added ui-foundation suite; PR-3/PR-4 zero delta)
+**Last code commit:** 8cc5d9f (UI-PR4: StoryFeed + StoryComponents story feed token system — PROMPT-LOG update)
+**jest baseline:** 854 (authoritative — zero delta PR-4)
 **tsc:** clean
 
 ## Gameplay Implementation Arc
@@ -61,12 +61,15 @@
 
 Separate from the UI arc above. Goal: enforce the §5 workflow across all game surfaces — zero hardcoded hex strings in components/game/, all values via var(--token). ui-foundation suite enforces this in CI.
 
-| PR | Surface | Commit | Tests | Status |
-|----|---------|--------|-------|--------|
-| PR-1 | globals.css canonical tokens + legacy #f59e0b purge | 0be34aa | 854 | ✅ |
-| PR-2 | 42 semantic tokens (POI, status effects, dialogue tones, codex, loot rarity, nav, surfaces) | 6101441 | 854 | ✅ |
-| PR-3 | NavigationBar.tsx — 4 new nav tokens + 5 existing token aliases; zero hex strings remain | f31dec3 | 854 | ✅ |
-| PR-4 | StoryFeed.tsx + StoryComponents.tsx — 1 new token (--status-resolved); 12 hex strings → existing PR-1/PR-2/PR-3 tokens (all 5 brief-proposed tokens were duplicates of PR-1) | dbfd1af | 854 | ✅ |
+Pattern established across PR-3 and PR-4: proposed new tokens frequently turn out to be covered by PR-1/PR-2 names. Claude Code makes the hybrid call each time — reusing existing tokens rather than introducing aliases, and documenting the decision in the commit message.
+
+| PR | Surface | Commit | Tests | New tokens | Status |
+|----|---------|--------|-------|------------|--------|
+| PR-1 | globals.css canonical tokens + legacy #f59e0b purge | 0be34aa | 854 | ~canonical set | ✅ |
+| PR-2 | 42 semantic tokens (POI, status effects, dialogue tones, codex, loot rarity, nav, surfaces) | 6101441 | 854 | 42 | ✅ |
+| PR-3 | NavigationBar.tsx — zero hex strings remain | f31dec3 | 854 | 4 (--nav-border-unknown/name/sublabel/breadcrumb) | ✅ |
+| PR-4 | StoryFeed.tsx + StoryComponents.tsx — zero hex strings remain | dbfd1af | 854 | 1 (--status-resolved: #5a9a5a) | ✅ |
+| PR-5 | CharacterPanel.tsx | — | — | — | ⏳ |
 
 ## Known Gaps (post-arc)
 
@@ -77,7 +80,7 @@ Separate from the UI arc above. Goal: enforce the §5 workflow across all game s
 - **Combat panel exit animation deferred (UI-10).** Polish patch.
 - **FloorLootStrip still rendered (UI-8).** Retire in cleanup pass.
 - **Codex/Journal tab restructure deferred (UI-7).** Data shape change required.
-- ~~**Sidebar width 280px (UI-9).** LogBook co-tenant blocks narrowing.~~ → resolved in UI-fix-F (16b5c78); LogBook fit cleanly at 196px / 160px without restructure.
+- ~~**Sidebar width 280px (UI-9).** LogBook co-tenant blocks narrowing.~~ → resolved in UI-fix-F (16b5c78).
 - **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass.
 - **OneDrive sync race (recurring).** Staged-as-you-go pattern for CombatMode files.
 - **PR-3b — Nav card layout.** Cards currently render as an unbounded single column. Design intent (CLAUDE.md rule 72): max 2 cards tall, overflow into additional columns horizontally. No token changes needed — layout only. Schedule after PR-5.

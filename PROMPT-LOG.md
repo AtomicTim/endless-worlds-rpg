@@ -3,7 +3,7 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 10a772f (UI-PR5: CharacterPanel token pass + genre accent fix)
+**Last code commit:** e085e4f (UI-PR5 PROMPT-LOG hash correction — final state on origin/main)
 **jest baseline:** 854 (authoritative — zero delta PR-5, ui-foundation 120/120)
 **tsc:** clean
 
@@ -38,7 +38,7 @@
 
 | Group | Prompt | Commit | Tests | Status |
 |-------|--------|--------|-------|--------|
-| A | Foundation — fonts, genre vars, bg colours, overlay divgs | 3993bc9 | 734 | ✅ |
+| A | Foundation — fonts, genre vars, bg colours, overlay divs | 3993bc9 | 734 | ✅ |
 | B | Character wizard — cards, stat colours, fonts, name bug, motivation | e33e5e8 | 734 | ✅ |
 | C | Nav cards — compact chip style, typography, no-mono arrows | 8bbab32 | 734 | ✅ |
 | D | Arrival format confirmed, Attune button → Context Panel (also Group L item 3) | 2dbc973 | 734 | ✅ |
@@ -61,19 +61,20 @@
 
 Separate from the UI arc above. Goal: enforce the §5 workflow across all game surfaces — zero hardcoded hex strings in components/game/, all values via var(--token). ui-foundation suite enforces this in CI.
 
-Pattern established across PR-3 and PR-4: proposed new tokens frequently turn out to be covered by PR-1/PR-2 names. Claude Code makes the hybrid call each time — reusing existing tokens rather than introducing aliases, and documenting the decision in the commit message.
+Pattern: proposed new tokens frequently turn out to be covered by PR-1/PR-2 names. Claude Code makes the hybrid call each time — reusing existing tokens rather than introducing aliases. rgba() literals are not flagged by the harness; any that are not genre-bound are acceptable to leave as-is.
 
 | PR | Surface | Commit | Tests | New tokens | Status |
 |----|---------|--------|-------|------------|--------|
 | PR-1 | globals.css canonical tokens + legacy #f59e0b purge | 0be34aa | 854 | ~canonical set | ✅ |
 | PR-2 | 42 semantic tokens (POI, status effects, dialogue tones, codex, loot rarity, nav, surfaces) | 6101441 | 854 | 42 | ✅ |
 | PR-3 | NavigationBar.tsx — zero hex strings remain | f31dec3 | 854 | 4 (--nav-border-unknown/name/sublabel/breadcrumb) | ✅ |
-| PR-4 | StoryFeed.tsx + StoryComponents.tsx — zero hex strings remain | dbfd1af | 854 | 1 (--status-resolved: #5a9a5a) | ✅ |
-| PR-5 | CharacterPanel.tsx — zero hex strings remain; genre-accent bug fix (rgba 196,148,58 → genre-accent-rgb); hpThresholdColor() returns var() strings | 10a772f | 854 | 5 (--hp-healthy / good / hurt / danger / critical) | ✅ |
+| PR-4 | StoryFeed.tsx + StoryComponents.tsx — zero hex strings remain | dbfd1af | 854 | 1 (--status-resolved) | ✅ |
+| PR-5 | CharacterPanel.tsx — zero hex strings remain; genre-accent rgba bug fixed; hpThresholdColor() → var() | 10a772f | 854 | 5 (--hp-healthy/good/hurt/danger/critical) | ✅ |
+| PR-6 | Next surface (CharacterSheet.tsx audit or PR-3b nav layout) | — | — | — | ⏳ |
 
 ## Workflow note (post PR-4 merge conflict)
 
-Claude Code updates PROMPT-LOG.md in its own commit; Claude.ai updates it separately after receiving the result. These two writes race. Resolution going forward: Claude.ai waits for Tim to report the full final commit hash before writing to PROMPT-LOG.md, so Claude.ai's write always lands on top of Claude Code's. Tim resolves any conflict by taking origin (Claude.ai's version).
+Claude.ai waits for Tim to report the full final commit hash before writing to PROMPT-LOG.md, so Claude.ai's write lands on top of Claude Code's. Tim resolves any conflict by taking origin (Claude.ai's version).
 
 ## Known Gaps (post-arc)
 
@@ -85,9 +86,10 @@ Claude Code updates PROMPT-LOG.md in its own commit; Claude.ai updates it separa
 - **FloorLootStrip still rendered (UI-8).** Retire in cleanup pass.
 - **Codex/Journal tab restructure deferred (UI-7).** Data shape change required.
 - ~~**Sidebar width 280px (UI-9).** LogBook co-tenant blocks narrowing.~~ → resolved in UI-fix-F (16b5c78).
-- **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass.
+- **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass (or verify orphaned before PR-6).
 - **OneDrive sync race (recurring).** Staged-as-you-go pattern for CombatMode files.
-- **PR-3b — Nav card layout.** Cards currently render as an unbounded single column. Design intent (CLAUDE.md rule 72): max 2 cards tall, overflow into additional columns horizontally. No token changes needed — layout only. Schedule after PR-5.
+- **PR-3b — Nav card layout.** Cards render as unbounded single column. Design intent (CLAUDE.md rule 72): max 2 tall, horizontal overflow. No token changes — layout only. Ready to tackle as PR-6 or after CharacterSheet.tsx audit.
+- **CharacterPanel rgba() literals not flagged by harness.** Two intentional: rgba(74,138,74,X) STAT_XP picker (not genre-bound) · rgba(196,72,48,.35) drop border (danger red, not accent-bound). Acceptable as-is.
 
 ## Next Steps
 

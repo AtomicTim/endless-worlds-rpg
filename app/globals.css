@@ -102,6 +102,23 @@
     --nav-sublabel:       #5a4828;  /* type · direction sublabel */
     --nav-breadcrumb:     #4a3818;  /* breadcrumb path text + "Where to go." header + Visited pill */
 
+    /* ──────────────────────────────────────────────────────────────────
+       Story Feed — resolved status indicator (PR-4)
+       ──────────────────────────────────────────────────────────────────
+       Soft muted-green tone for "Searched ✓" loot-resolved + future
+       completed/resolved status text in the story feed. Distinct from
+       --combat-victory (#7dbb8e, brighter mossy green for victory
+       banners) and --action-success (#22c55e, alert / equip success).
+       This is the only genuinely new token PR-4 needed; the other 5
+       hex values the brief proposed (story-feed-bg / story-prose /
+       arrival-rule / arrival-type-label / arrival-name) all turned
+       out to be duplicates of existing PR-1 tokens (--bg-story-feed,
+       --ui-text-prose, --ui-border-default, --ui-text-muted,
+       --ui-text-1) so StoryFeed/StoryComponents reuse those instead
+       of introducing alias tokens.
+       ────────────────────────────────────────────────────────────────── */
+    --status-resolved: #5a9a5a;  /* "Searched ✓" + resolved indicators */
+
     /* Day 20 Combat — event color tokens (combat-spec §10) */
     --combat-player:           #7ab8c8;  /* routine player actions */
     --combat-enemy:            #e87c6d;  /* routine enemy actions */

@@ -249,7 +249,7 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
                 marginTop:     6,
                 fontSize:      7,
                 letterSpacing: "0.14em",
-                color:         "#4a3818",
+                color:         "var(--nav-breadcrumb)",
               }}
             >
               Revealing…
@@ -266,7 +266,7 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
                 style={{
                   fontSize:   14,
                   lineHeight: 1.82,
-                  color:      "#c0a878",
+                  color:      "var(--ui-text-prose)",
                   margin:     "0 0 6px",
                 }}
               >
@@ -370,7 +370,7 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
             <div
               className="message-enter"
               style={{
-                color:         "#7ab8c8",
+                color:         "var(--combat-player)",
                 fontFamily:    "var(--mono)",
                 fontSize:      12,
                 letterSpacing: "0.05em",
@@ -432,7 +432,7 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
             <div
               className="message-enter"
               style={{
-                color:         "#7ab8c8",
+                color:         "var(--combat-player)",
                 fontFamily:    "var(--mono)",
                 fontSize:      12,
                 letterSpacing: "0.05em",
@@ -776,7 +776,7 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
                         className="ew-serif"
                         role="status"
                         style={{
-                          color:     "#5a9a5a",
+                          color:     "var(--status-resolved)",
                           fontStyle: "italic",
                           fontSize:  12,
                           marginBottom: 6,

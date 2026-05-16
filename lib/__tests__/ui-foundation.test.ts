@@ -156,6 +156,20 @@ const ALLOWED_HEX_CODES = new Set<string>([
   "#111009", "#222015",           // chip surface
   "#c8b890", "#5a4828", "#4a3818", // typography
 
+  // ── Story Feed + Scene Arrival (PR-4) ──────────────────────────
+  // All 5 brief-proposed values turned out to be duplicates of PR-1
+  // tokens: #191308 = --bg-story-feed (PR-2 surfaces); #c0a878 =
+  // --ui-text-prose; #2d2618 = --ui-border-default; #6a5530 =
+  // --ui-text-muted; #e2cda0 = --ui-text-1. StoryFeed/StoryComponents
+  // reuse those existing tokens rather than introduce aliases.
+  // #5a9a5a was the only genuinely new value — it's now the
+  // --status-resolved token used for "Searched ✓" loot indicators.
+  // All hexes below are already in the Set from earlier sections;
+  // listed here for documentation discoverability — Set dedupes.
+  "#191308", "#c0a878",           // story surface
+  "#2d2618", "#6a5530", "#e2cda0", // scene arrival
+  "#5a9a5a",                       // resolved status indicator
+
   // ── Modal backdrops / generic dark fills ────────────────────────
   "#0a0a0a", "#1a1a1a",
 

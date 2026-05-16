@@ -163,7 +163,7 @@ export function NarrativeBlock({ children, skipQuoteWrap }: NarrativeBlockProps)
       className="ew-serif italic text-[14px] md:text-[15px]"
       style={{
         lineHeight: 1.82,
-        color:      "#c0a878",
+        color:      "var(--ui-text-prose)",
         margin:     "12px 0",
       }}
     >
@@ -225,14 +225,14 @@ export function SceneArrival({ name, typeLabel, region }: SceneArrivalProps) {
       className="message-enter"
       style={{ margin: "18px 0 10px", textAlign: "center" }}
     >
-      <div style={{ height: 1, background: "#2d2618" }} aria-hidden />
+      <div style={{ height: 1, background: "var(--ui-border-default)" }} aria-hidden />
       <div
         className="ew-sans uppercase"
         style={{
           marginTop:     8,
           fontSize:      7,
           letterSpacing: "0.14em",
-          color:         "#6a5530",
+          color:         "var(--ui-text-muted)",
         }}
       >
         ◆ {(typeLabel ?? "Location").toUpperCase()}
@@ -242,7 +242,7 @@ export function SceneArrival({ name, typeLabel, region }: SceneArrivalProps) {
         style={{
           marginTop: 4,
           fontSize:  13,
-          color:     "#e2cda0",
+          color:     "var(--ui-text-1)",
         }}
       >
         {name}
@@ -254,14 +254,14 @@ export function SceneArrival({ name, typeLabel, region }: SceneArrivalProps) {
             marginTop:     2,
             fontSize:      7,
             letterSpacing: "0.10em",
-            color:         "#4a3818",
+            color:         "var(--nav-breadcrumb)",
           }}
         >
           {region}
         </div>
       )}
       <div
-        style={{ marginTop: 8, height: 1, background: "#2d2618" }}
+        style={{ marginTop: 8, height: 1, background: "var(--ui-border-default)" }}
         aria-hidden
       />
     </div>
@@ -311,7 +311,7 @@ export function NPCSpeech({ name, color = "var(--accent)", children }: NPCSpeech
         style={{
           fontSize:    13,
           lineHeight:  1.82,
-          color:       "#f0c060",
+          color:       "var(--hl-said)",
           fontWeight:  500,
           borderLeft:  `2px solid ${color}`,
           paddingLeft: 14,

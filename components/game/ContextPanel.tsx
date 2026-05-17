@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
-// Change 5 — the ObjectCard refactor moved to a verb-label + name
-// layout with no icon column, so the Tabler icon imports (added by
-// UI-fix-E 4b and UI-fix-D 4b) are no longer referenced. Removing
-// them satisfies @typescript-eslint/no-unused-vars at build time;
-// reintroduce as needed when an icon-style affordance returns.
+// PR-6v: IconMap reintroduced for the region footer's left-side
+// glyph (design ref §18 + design/mockups/context panel.png). The
+// other Tabler icons stay dropped — ObjectCard's verb-label + name
+// layout has no icon column.
+import { IconMap } from "@tabler/icons-react";
 import { LootModal } from "@/components/game/loot/LootModal";
 import { AssetCategory } from "@/types/game";
 import type {
@@ -16,6 +16,8 @@ import type {
   WorldAsset,
   WorldBible,
   RegionBible,
+  WorldGraph,
+  WorldNode,
 } from "@/types/game";
 import { useGameStore } from "@/lib/stores/game-store";
 import { findNpcInRegistry } from "@/lib/game/state-utils";
@@ -64,7 +66,9 @@ export interface ContextPanelProps {
 // Story Feed Colors token system, so no globals.css contamination).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const HEADING_LABEL = "#6a5530";
+// PR-6v: HEADING_LABEL (#6a5530) const dropped — section labels now
+// consume var(--ui-text-2) directly per (C). The hex is still on the
+// allow-list as it backs --ui-text-muted globally.
 const NAME_INK      = "#e2cda0";
 const PROSE_INK     = "#9a7e52";
 const NPC_NAME_INK  = "#d4bc88";
@@ -130,6 +134,56 @@ function trustFor(state: MasterState, npcAsset: WorldAsset): number {
   if (found) return found.npc.trust_score;
   const byName = findNpcInRegistry(state.npc_registry, npcAsset.name);
   return byName?.npc.trust_score ?? 50;
+}
+
+/** PR-6v — broad category label for the header's top-left chip.
+ *  Maps WorldNode metadata to one of three coarse buckets per
+ *  design ref §18 + design/mockups/context panel.png:
+ *    region zone (is_expandable && self-zoned)   → "REGION"
+ *    settlement (is_settlement_node || node_type → "SETTLEMENT"
+ *    containing "settlement")
+ *    everything else                              → "PLACE"
+ *  Coarser than the specific typeBadge below the name (which can be
+ *  TAVERN / DUNGEON / WILDERNESS / etc.), so the header reads as a
+ *  two-level hierarchy: kind-of-place, then name, then exact-type. */
+function broadCategoryLabel(node: WorldNode): string {
+  if (node.is_expandable === true && node.zone_id === node.id) return "REGION";
+  if (
+    node.is_settlement_node === true ||
+    (typeof node.node_type === "string" && node.node_type.includes("settlement"))
+  ) {
+    return "SETTLEMENT";
+  }
+  return "PLACE";
+}
+
+/** PR-6v — presence badge text for the header's top-right pill.
+ *  Renders only when at least one NPC is present:
+ *    1 NPC   → "WITH NPC"
+ *    2 NPCs  → "WITH NPCS"
+ *    3+ NPCs → "WITH PRESENCE"   (matches the busy-tavern mockup) */
+function presenceBadgeText(npcCount: number): string | null {
+  if (npcCount <= 0)  return null;
+  if (npcCount === 1) return "WITH NPC";
+  if (npcCount === 2) return "WITH NPCS";
+  return "WITH PRESENCE";
+}
+
+/** PR-6v — walk up the zone_id chain until self-zoned is_expandable,
+ *  returning the geographic region the node belongs to. Returns the
+ *  node itself when it IS a region. Returns null when the chain
+ *  breaks. Mirrors lib/game/nav-cards.ts `regionOfNode` (kept inline
+ *  rather than exported from nav-cards to avoid widening that
+ *  module's surface for a single Context Panel consumer). */
+function regionOfNode(node: WorldNode, graph: WorldGraph): WorldNode | null {
+  let cur: WorldNode | undefined = node;
+  const seen = new Set<string>();
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    if (cur.is_expandable === true && cur.zone_id === cur.id) return cur;
+    cur = graph.nodes[cur.zone_id];
+  }
+  return null;
 }
 
 /** Action verb per LocationObject.type (CLAUDE.md rule 87).
@@ -237,43 +291,68 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
     node?.node_type === "settlement_hub" &&
     masterState?.combat?.active !== true;
 
-  const showObjects = showAttune || objects.length > 0 || floorLoot.length > 0;
-  const objectsSection = !showObjects ? null : (
+  // PR-6v (E): when the node is discovered but has zero interactables,
+  // surface an explicit "Nothing to interact with here." line inside
+  // the Interact section instead of hiding the section entirely.
+  // This keeps the panel rhythm stable (PRESENT / INTERACT / REGION
+  // always in the same vertical slots when explored) and gives the
+  // player closure: "no, you really didn't miss anything here."
+  // The section still hides pre-discovery so unvisited spaces don't
+  // spoil their lack of objects.
+  const hasInteractables = showAttune || objects.length > 0 || floorLoot.length > 0;
+  const showEmptyInteract = !hasInteractables && node?.discovered === true;
+  const objectsSection = !(hasInteractables || showEmptyInteract) ? null : (
     <Section label="Interact">
-      {showAttune && (
-        <ObjectCard
-          key="attune"
-          name="Attune abilities"
-          icon="attune"
-          actionLabel="Attune"
-          onClick={() => onAttune?.()}
-        />
+      {hasInteractables ? (
+        <>
+          {showAttune && (
+            <ObjectCard
+              key="attune"
+              name="Attune abilities"
+              icon="attune"
+              actionLabel="Attune"
+              onClick={() => onAttune?.()}
+            />
+          )}
+          {objects.map((obj) => {
+            const a = actionFor(obj);
+            return (
+              <ObjectCard
+                key={obj.id}
+                name={obj.name}
+                icon={a.icon}
+                actionLabel={a.label}
+                onClick={() => onSubmit(`${a.verb} ${obj.name}`)}
+              />
+            );
+          })}
+          {floorLoot.map((entry) => (
+            <ObjectCard
+              key={`loot-${entry.id}`}
+              name={entry.source === "enemy" ? "Remains" : "Container"}
+              icon={entry.source === "enemy" ? "remains" : "container"}
+              actionLabel="Search"
+              // UI-8 — open the loot modal. The entry disappears from this
+              // list automatically once items + gold are all taken (the
+              // floor_loot filter at the top of this component drops fully-
+              // looted entries).
+              onClick={() => setLootModalEntryId(entry.id)}
+            />
+          ))}
+        </>
+      ) : (
+        <p
+          className="italic"
+          style={{
+            fontFamily: "var(--serif)",
+            fontSize:   11,
+            color:      "var(--ui-text-muted)",
+            margin:     0,
+          }}
+        >
+          Nothing to interact with here.
+        </p>
       )}
-      {objects.map((obj) => {
-        const a = actionFor(obj);
-        return (
-          <ObjectCard
-            key={obj.id}
-            name={obj.name}
-            icon={a.icon}
-            actionLabel={a.label}
-            onClick={() => onSubmit(`${a.verb} ${obj.name}`)}
-          />
-        );
-      })}
-      {floorLoot.map((entry) => (
-        <ObjectCard
-          key={`loot-${entry.id}`}
-          name={entry.source === "enemy" ? "Remains" : "Container"}
-          icon={entry.source === "enemy" ? "remains" : "container"}
-          actionLabel="Search"
-          // UI-8 — open the loot modal. The entry disappears from this
-          // list automatically once items + gold are all taken (the
-          // floor_loot filter at the top of this component drops fully-
-          // looted entries).
-          onClick={() => setLootModalEntryId(entry.id)}
-        />
-      ))}
     </Section>
   );
 
@@ -292,10 +371,20 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
     <div
       role="complementary"
       aria-label="Context Panel"
+      // PR-6v (A): panel wrapper matches the CharacterPanel card
+      // treatment from PR-5v — visible warm-charcoal background,
+      // soft border, rounded corners. Was var(--content-bg) (the
+      // genre gradient) with no border, so the panel read as a
+      // bleed of the page bg rather than a contained surface.
+      // overflow-y-auto preserved so internal content still scrolls
+      // when long; modern browsers clip the scroll content to the
+      // border-radius cleanly.
       className="relative flex h-full flex-col overflow-y-auto"
       style={{
-        background: "var(--content-bg)",
-        color:      NPC_NAME_INK,
+        background:   "var(--bg-2)",
+        border:       "1px solid var(--card-border)",
+        borderRadius: 8,
+        color:        NPC_NAME_INK,
       }}
     >
       {/* UI-1 overlay trio — let the genre class on the GameLayout
@@ -319,43 +408,88 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
 
       {/* Content stack — sits above the overlay z-index 2 layer. */}
       <div className="relative z-10 flex flex-col gap-3 p-3">
-        {/* ── Section A: Location header ────────────────────────────────── */}
-        {/* Change 1 — name promoted to 20px / weight 500 / line-height 1.2;
-            still serif italic, still truncated, still NAME_INK so it
-            reads as a proper page header rather than a body line.
-            Change 2 — type badge demoted from pill to plain muted
-            uppercase label: no background, no border, no pill padding;
-            just Inter Tight 8px / 0.14em ls / #6a5530. */}
-        {node && (
-          <div className="flex items-center gap-2">
-            <div
-              className="min-w-0 flex-1 italic truncate"
-              style={{
-                fontFamily: "var(--serif)",
-                fontSize:   20,
-                fontWeight: 500,
-                lineHeight: 1.2,
-                color:      NAME_INK,
-              }}
-            >
-              {node.name}
-            </div>
-            {typeBadge && (
-              <span
-                aria-label="Location type"
-                className="shrink-0 uppercase"
+        {/* ── Section A: Location header (PR-6v (B): 3-row hierarchy) ──
+            Row 1 — broad category left + presence badge right
+            Row 2 — location name large
+            Row 3 — specific type (only when distinct from broad)
+            Replaces the prior single-row name + muted-type-label
+            layout (which read as two ranks of equal weight). The
+            new hierarchy puts the broad kind-of-place on top, the
+            named place in the visual centre, and the exact type
+            below — match design/mockups/context panel.png. */}
+        {node && (() => {
+          const broad        = broadCategoryLabel(node);
+          const specific     = (typeBadge ?? "").toString().toUpperCase();
+          const presenceText = presenceBadgeText(npcAssets.length);
+          return (
+            <header style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <div
                 style={{
-                  fontFamily:    "var(--sans)",
-                  fontSize:      8,
-                  letterSpacing: "0.14em",
-                  color:         "#6a5530",
+                  display:        "flex",
+                  alignItems:     "center",
+                  justifyContent: "space-between",
+                  gap:            6,
                 }}
               >
-                {typeBadge}
-              </span>
-            )}
-          </div>
-        )}
+                <span
+                  className="uppercase"
+                  style={{
+                    fontFamily:    "var(--sans)",
+                    fontSize:      8,
+                    letterSpacing: "0.14em",
+                    color:         "var(--ui-text-muted)",
+                  }}
+                >
+                  {broad}
+                </span>
+                {presenceText && (
+                  <span
+                    aria-label="NPCs present"
+                    className="uppercase"
+                    style={{
+                      fontFamily:    "var(--sans)",
+                      fontSize:      8,
+                      letterSpacing: "0.14em",
+                      color:         "var(--genre-accent)",
+                      background:    "rgba(var(--genre-accent-rgb), .12)",
+                      border:        "1px solid rgba(var(--genre-accent-rgb), .30)",
+                      borderRadius:  20,
+                      padding:       "2px 8px",
+                      flexShrink:    0,
+                    }}
+                  >
+                    {presenceText}
+                  </span>
+                )}
+              </div>
+              <div
+                className="italic"
+                style={{
+                  fontFamily: "var(--serif)",
+                  fontSize:   20,
+                  fontWeight: 500,
+                  lineHeight: 1.2,
+                  color:      NAME_INK,
+                }}
+              >
+                {node.name}
+              </div>
+              {specific && specific !== broad && (
+                <div
+                  className="uppercase"
+                  style={{
+                    fontFamily:    "var(--sans)",
+                    fontSize:      9,
+                    letterSpacing: "0.12em",
+                    color:         "var(--genre-accent)",
+                  }}
+                >
+                  {specific}
+                </div>
+              )}
+            </header>
+          );
+        })()}
 
         {/* ── Section B: Atmosphere prose ───────────────────────────────── */}
         {atmosphere && (
@@ -379,40 +513,98 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
         {/* ── Section D: IN THIS SPACE (Objects) ────────────────────────── */}
         {objectsSection}
 
-        {/* ── Section E: Region breadcrumb ──────────────────────────────── */}
-        {/* Change 6 — quiet "parent zone › current node" trail anchored
-            at the bottom of the panel so the player always has the
-            location hierarchy at a glance without scrolling back to
-            the top bar's breadcrumb. Three-tone palette descends
-            #3a2a18 (parent) → #2a1e10 (›) → #6a4a28 (current),
-            keeping the visual weight on the current location.
-            Renders null when world_graph isn't loaded yet, when the
-            node has no zone_id, when zone_id points at the node
-            itself (the node IS the zone), or when zone_id misses
-            the nodes registry — never throws, never empty <div>. */}
+        {/* ── Section E: Region footer (PR-6v (F): map icon + REGION
+            label + parent name) ─────────────────────────────────────
+            Two-row footer per design ref §18 + mockup:
+              Row 1 — [map icon] [REGION] [region.name italic serif]
+              Row 2 — existing "parent › current" 3-tone breadcrumb
+                       (unchanged; preserves the at-a-glance hierarchy
+                        Change 6 introduced)
+
+            Row 1 anchors the panel to its containing region — even
+            for a tavern three levels deep (sub-location → settlement
+            → region), the footer always names the REGION, not the
+            immediate parent zone. The walk-up uses regionOfNode().
+
+            Row 2 still renders only when zone_id resolves to a
+            different node (the existing guard); for a region node
+            itself the breadcrumb collapses to null, leaving just
+            row 1 — matches panel 3 of the mockup. */}
         {(() => {
           const wg = masterState?.world_graph;
           if (!wg || !node) return null;
+          const region = regionOfNode(node, wg);
           const parentId = node.zone_id;
-          if (!parentId || parentId === node.id) return null;
-          const parent = wg.nodes[parentId];
-          if (!parent) return null;
+          const parent = parentId && parentId !== node.id ? wg.nodes[parentId] : undefined;
+          if (!region && !parent) return null;
           return (
             <div
               style={{
-                borderTop:     "1px solid #1e1912",
-                marginTop:     8,
-                paddingTop:    8,
-                fontFamily:    "var(--sans)",
-                fontSize:      8,
-                letterSpacing: "0.08em",
-                color:         "#4a3818",
-                lineHeight:    1.5,
+                borderTop:  "1px solid var(--breadcrumb-rule)",
+                marginTop:  8,
+                paddingTop: 8,
+                display:    "flex",
+                flexDirection: "column",
+                gap:        4,
               }}
             >
-              <span style={{ color: "#3a2a18" }}>{parent.name}</span>
-              <span style={{ color: "#2a1e10", margin: "0 4px" }}>›</span>
-              <span style={{ color: "#6a4a28" }}>{node.name}</span>
+              {region && (
+                <div
+                  style={{
+                    display:    "flex",
+                    alignItems: "center",
+                    gap:        6,
+                  }}
+                >
+                  <IconMap
+                    size={10}
+                    stroke={1.75}
+                    color="var(--ui-text-muted)"
+                    aria-hidden
+                  />
+                  <span
+                    className="uppercase"
+                    style={{
+                      fontFamily:    "var(--sans)",
+                      fontSize:      8,
+                      letterSpacing: "0.14em",
+                      color:         "var(--ui-text-muted)",
+                    }}
+                  >
+                    Region
+                  </span>
+                  <span
+                    className="italic"
+                    style={{
+                      fontFamily: "var(--serif)",
+                      fontSize:   11,
+                      color:      "var(--ui-text-2)",
+                      flex:       1,
+                      minWidth:   0,
+                      overflow:   "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {region.name}
+                  </span>
+                </div>
+              )}
+              {parent && (
+                <div
+                  style={{
+                    fontFamily:    "var(--sans)",
+                    fontSize:      8,
+                    letterSpacing: "0.08em",
+                    color:         "var(--nav-breadcrumb)",
+                    lineHeight:    1.5,
+                  }}
+                >
+                  <span style={{ color: "var(--breadcrumb-parent)" }}>{parent.name}</span>
+                  <span style={{ color: "var(--breadcrumb-sep)", margin: "0 4px" }}>›</span>
+                  <span style={{ color: "var(--breadcrumb-current)" }}>{node.name}</span>
+                </div>
+              )}
             </div>
           );
         })()}
@@ -449,12 +641,16 @@ function Section({ label, children }: { label: string; children: React.ReactNode
           }}
         />
         <span
+          // PR-6v (C): section label brightness lift — matches the
+          // CharacterPanel PR-5v-b treatment (var(--ui-text-2) 9px
+          // 0.12em). Was 7px / 0.14em / HEADING_LABEL (#6a5530), which
+          // washed out against the new BG-1 / panel-card surface.
           className="uppercase"
           style={{
             fontFamily:    "var(--sans)",
-            fontSize:      7,
-            letterSpacing: "0.14em",
-            color:         HEADING_LABEL,
+            fontSize:      9,
+            letterSpacing: "0.12em",
+            color:         "var(--ui-text-2)",
           }}
         >
           {label}
@@ -514,9 +710,13 @@ function NpcCard({
         <div
           className="truncate"
           style={{
+            // PR-6v (D): NPC name lifted 12 → 14px to match the
+            // primary-label weight in design/mockups/context panel.png.
+            // Roles + Talk → affordance stay at their PR-5 sizes
+            // so the name reads as the dominant element in the row.
             fontFamily: "var(--sans)",
             fontWeight: 600,
-            fontSize:   12,
+            fontSize:   14,
             color:      NPC_NAME_INK,
           }}
         >

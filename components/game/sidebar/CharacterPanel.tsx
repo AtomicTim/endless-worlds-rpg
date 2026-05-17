@@ -635,20 +635,64 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
           >
             Pack
           </div>
+          {/* PR-5v-c (B): ItemDetailCard moved ABOVE the grid. Was
+              below the grid (post PR-5v); on tap the expanded card
+              would push the grid out of view. Above the grid means
+              the detail is always visible without scrolling, and
+              the selection-target tile sits below the detail for
+              an obvious visual link. */}
+          {selectedItem && (
+            <ItemDetailCard
+              item={selectedItem}
+              onClose={() => { setSelectedId(null); setStatPickerOpen(false); }}
+              onEquip={() => {
+                if (!onSubmit) return;
+                const verb = selectedItem.equipped ? "unequip" : "equip";
+                onSubmit(`${verb} ${selectedItem.name}`);
+                setSelectedId(null);
+              }}
+              onUse={() => {
+                if (inCombat) {
+                  void submitCombatAction({ action: "use_item", item_id: selectedItem.id });
+                  setSelectedId(null);
+                } else if (selectedItem.type === ItemType.STAT_XP) {
+                  setStatPickerOpen((open) => !open);
+                } else {
+                  handleDirectConsumeItem(selectedItem);
+                }
+              }}
+              onRead={() => {
+                if (!onSubmit) return;
+                onSubmit(`read ${selectedItem.name}`);
+                setSelectedId(null);
+              }}
+              onDrop={() => {
+                if (!onSubmit) return;
+                onSubmit(`drop ${selectedItem.name}`);
+                setSelectedId(null);
+              }}
+              statPickerOpen={statPickerOpen}
+              onPickStat={(stat) => applyStatXpAndConsume(selectedItem.id, stat)}
+              attributes={attributes}
+              inCombat={!!inCombat}
+              isProcessing={isProcessing || combatResolving}
+            />
+          )}
           {/* PR-5v-b (A) — 4-col grid, fixed 20 cells (INVENTORY_CAP).
               Replaces PR-5v's dynamic 3-col count with a stable
               4×5 = 20 grid that matches mockup 3 (inventory.png).
-              At 4-col in a 196px sidebar each cell is ~40-44px square;
-              the name label from PR-5v doesn't fit cleanly at that
-              size, so pack tiles are icon-only at this scale —
-              full name is available in the inline ItemDetailCard
-              below the grid on tap. Empty cells stay as the same
-              dim dashed bordered tiles introduced in PR-5v. */}
+              PR-5v-c lifted the sidebar to 200/240px so each cell
+              is now ~44-50px square; pack tiles are still icon-only
+              at this scale — full name is available in the inline
+              ItemDetailCard above the grid (PR-5v-c moved it above
+              on tap). Empty cells stay as the same dim bordered
+              tiles introduced in PR-5v. */}
           <div
             style={{
               display:             "grid",
               gridTemplateColumns: "repeat(4, 1fr)",
               gap:                 6,
+              marginTop:           selectedItem ? 8 : 0,
             }}
           >
             {Array.from({ length: INVENTORY_CAP }).map((_, i) => {
@@ -706,44 +750,6 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
             })}
           </div>
 
-          {/* Inline detail expand — renders directly below the grid */}
-          {selectedItem && (
-            <ItemDetailCard
-              item={selectedItem}
-              onClose={() => { setSelectedId(null); setStatPickerOpen(false); }}
-              onEquip={() => {
-                if (!onSubmit) return;
-                const verb = selectedItem.equipped ? "unequip" : "equip";
-                onSubmit(`${verb} ${selectedItem.name}`);
-                setSelectedId(null);
-              }}
-              onUse={() => {
-                if (inCombat) {
-                  void submitCombatAction({ action: "use_item", item_id: selectedItem.id });
-                  setSelectedId(null);
-                } else if (selectedItem.type === ItemType.STAT_XP) {
-                  setStatPickerOpen((open) => !open);
-                } else {
-                  handleDirectConsumeItem(selectedItem);
-                }
-              }}
-              onRead={() => {
-                if (!onSubmit) return;
-                onSubmit(`read ${selectedItem.name}`);
-                setSelectedId(null);
-              }}
-              onDrop={() => {
-                if (!onSubmit) return;
-                onSubmit(`drop ${selectedItem.name}`);
-                setSelectedId(null);
-              }}
-              statPickerOpen={statPickerOpen}
-              onPickStat={(stat) => applyStatXpAndConsume(selectedItem.id, stat)}
-              attributes={attributes}
-              inCombat={!!inCombat}
-              isProcessing={isProcessing || combatResolving}
-            />
-          )}
         </section>
 
         {/* ── CHANGE 10 — Owned perks (hidden when empty) ──────────────── */}

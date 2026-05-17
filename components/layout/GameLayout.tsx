@@ -36,9 +36,10 @@ interface GameLayoutProps {
    *  bottom sheet) and the data-genre selector for theming. */
   mapPanel?: React.ReactNode;
   /** UI-3 — Context Panel. Renders as a fixed left column at lg+
-   *  (160/196px wide) and as a slide-from-left drawer below lg
-   *  (toggled by the TopBar hamburger). Always rendered when
-   *  provided so the desktop column doesn't pop in. */
+   *  (200/240px wide; PR-5v-c lifted from 160/196px) and as a
+   *  slide-from-left drawer below lg (toggled by the TopBar
+   *  hamburger). Always rendered when provided so the desktop
+   *  column doesn't pop in. */
   contextPanel?: React.ReactNode;
 }
 
@@ -127,7 +128,7 @@ export function GameLayout({
         {contextPanel && (
           <aside
             aria-label="Context Panel"
-            className="hidden lg:flex shrink-0 overflow-hidden lg:w-[160px] lg:min-w-[160px] lg:max-w-[160px] xl:w-[196px] xl:min-w-[196px] xl:max-w-[196px]"
+            className="hidden lg:flex shrink-0 overflow-hidden lg:w-[200px] lg:min-w-[200px] lg:max-w-[200px] xl:w-[240px] xl:min-w-[240px] xl:max-w-[240px]"
             style={{ borderRight: "1px solid #2d2618" }}
           >
             <div className="h-full w-full overflow-y-auto">
@@ -264,20 +265,21 @@ export function GameLayout({
         )}
 
         {/* Right sidebar — character panel.
-            UI-fix-F 4c — sidebar widths per design ref §13:
-              ≥ 1280 (xl) → 196px docked
-              1024–1279 (lg) → 160px docked
+            UI-fix-F 4c → PR-5v-c sidebar widths:
+              ≥ 1280 (xl) → 240px docked (was 196px)
+              1024–1279 (lg) → 200px docked (was 160px)
               < 1024     → fixed drawer w-72 with translate-x slide
-            Was md:w-[280px] uniformly across tablet+desktop, which
-            forced LogBook + Context Panel to fight for centre-column
-            real estate. Mirroring the Context Panel's lg/xl pattern
-            (line 130) keeps the layout symmetric. */}
+            The PR-5v Character Panel pack-grid + equipped-row
+            layout needed more horizontal room than the prior
+            160/196 budget allowed; this PR lifts both breakpoints
+            in lockstep with the Context Panel above so the two
+            sidebars stay symmetric. */}
         <aside
           className={[
             "fixed right-0 top-14 z-20 h-[calc(100vh-3.5rem)] w-72 overflow-y-auto",
             "lg:relative lg:top-auto lg:z-auto lg:h-auto",
-            "lg:w-[160px] lg:min-w-[160px] lg:max-w-[160px]",
-            "xl:w-[196px] xl:min-w-[196px] xl:max-w-[196px]",
+            "lg:w-[200px] lg:min-w-[200px] lg:max-w-[200px]",
+            "xl:w-[240px] xl:min-w-[240px] xl:max-w-[240px]",
             "transition-transform duration-300 ease-in-out",
             sidebarOpen ? "translate-x-0 sidebar-slide-in" : "translate-x-full lg:translate-x-0",
           ].join(" ")}

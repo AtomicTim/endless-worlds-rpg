@@ -102,8 +102,8 @@
        border = var(--hl-loc) — no new tokens needed for those.
        ────────────────────────────────────────────────────────────────── */
     --nav-border-unknown: #3a3020;  /* very dim — UNDISCOVERED (dashed) */
-    --nav-name:           #c8b890;  /* location name in chip */
-    --nav-sublabel:       #5a4828;  /* type · direction sublabel */
+    --nav-name:           #dfcea5;  /* location name in chip (BG-2: was #c8b890 — lifted for #1e1b17 surface) */
+    --nav-sublabel:       #584e37;  /* type · direction sublabel (BG-2: was #5a4828 — lifted for #1e1b17 surface) */
     --nav-breadcrumb:     #4a3818;  /* breadcrumb path text + "Where to go." header + Visited pill */
 
     /* ──────────────────────────────────────────────────────────────────

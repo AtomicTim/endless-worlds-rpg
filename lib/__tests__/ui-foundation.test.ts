@@ -160,7 +160,13 @@ const ALLOWED_HEX_CODES = new Set<string>([
   // dedupes, so this is informational, not functional.
   "#c2410c", "#3a3020",           // left-border tier
   "#222015",                       // chip border (BG-1 retired #111009 bg)
-  "#c8b890", "#5a4828", "#4a3818", // typography
+  // BG-2: --nav-name lifted #c8b890 → #dfcea5 and --nav-sublabel
+  // lifted #5a4828 → #584e37 against the BG-1 #1e1b17 chip surface.
+  // The old values stay in the Set because they're still active
+  // elsewhere (#c8b890 in the map renderer art palette + #5a4828
+  // as --ui-text-hint).
+  "#dfcea5", "#584e37",            // typography (BG-2 nav-name + nav-sublabel)
+  "#c8b890", "#5a4828", "#4a3818", // typography (#c8b890 still used by map art; #5a4828 still --ui-text-hint)
 
   // ── Story Feed + Scene Arrival (PR-4) ──────────────────────────
   // All 5 brief-proposed values turned out to be duplicates of PR-1

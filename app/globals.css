@@ -53,10 +53,14 @@
     --accent-faint:  color-mix(in oklab, var(--accent) 12%, transparent);
     --accent-dim:    color-mix(in oklab, var(--accent) 60%, #0b0a09);
 
-    /* Surfaces — warm ink-on-vellum-on-night */
+    /* Surfaces — warm ink-on-vellum-on-night.
+       BG-1: --bg-1 / --bg-2 lifted to the mockup's warm-charcoal base
+       (#181511 main, #1e1b17 surface) per eyedropper readings on
+       design/mockups/nav cards.png. --bg-0 (#0a0907) untouched —
+       deepest shadow / overlay, already correct. */
     --bg-0: #0a0907;
-    --bg-1: #110f0c;
-    --bg-2: #181410;
+    --bg-1: #181511;
+    --bg-2: #1e1b17;
     --bg-3: #211c16;
     --line:   #2a2520;
     --line-2: #3a342c;
@@ -252,8 +256,8 @@
     --rarity-epic:           #c084fc;  /* purple — EPIC / LEGENDARY tier */
 
     /* Surface backgrounds (design ref §5 + §6) */
-    --bg-story-feed:   #191308;  /* StoryFeed scroll surface */
-    --bg-nav-card:     #111009;  /* NavigationBar card background */
+    --bg-story-feed:   #181511;  /* StoryFeed scroll surface (BG-1: was #191308) */
+    --bg-nav-card:     #1e1b17;  /* NavigationBar card background (BG-1: was #111009) */
     --border-nav-card: #222015;  /* NavigationBar card subtle border */
 
     /* Cross-region nav arrow */

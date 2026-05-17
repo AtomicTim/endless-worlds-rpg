@@ -59,7 +59,10 @@ const ALLOWED_HEX_CODES = new Set<string>([
   "#c4943a", "#22d3ee", "#84cc16", "#a855f7", "#ea580c",
 
   // ── Surfaces (globals.css --bg-* / --ui-bg-*) ───────────────────
-  "#0a0907", "#110f0c", "#181410", "#211c16",
+  // BG-1: --bg-1 (#110f0c → #181511) and --bg-2 (#181410 → #1e1b17)
+  // shifted to the mockup's warm-charcoal base; the legacy hexes
+  // are no longer referenced anywhere and were removed.
+  "#0a0907", "#181511", "#1e1b17", "#211c16",
   "#1c1a17", "#1e1b16", "#141210", "#221e19",
 
   // ── Borders / lines (--line / --ui-border-*) ───────────────────
@@ -136,8 +139,11 @@ const ALLOWED_HEX_CODES = new Set<string>([
   "#cbb888", "#9a8060",
   // Loot quality
   "#d8884c",
-  // Surfaces
-  "#191308", "#111009", "#222015",
+  // Surfaces (BG-1: PR-2 nav-card #111009 + story-feed #191308 retired
+  // — both tokens now consume the BG-1 warm-charcoal values #1e1b17 /
+  // #181511 listed in the foundation Surfaces section above. #222015
+  // is still the live --border-nav-card value.)
+  "#222015",
   // Cross-region nav
   "#c2410c",
   // Semantic action colours
@@ -153,7 +159,7 @@ const ALLOWED_HEX_CODES = new Set<string>([
   // here so the nav-card system is documented as a group — Set
   // dedupes, so this is informational, not functional.
   "#c2410c", "#3a3020",           // left-border tier
-  "#111009", "#222015",           // chip surface
+  "#222015",                       // chip border (BG-1 retired #111009 bg)
   "#c8b890", "#5a4828", "#4a3818", // typography
 
   // ── Story Feed + Scene Arrival (PR-4) ──────────────────────────
@@ -166,7 +172,7 @@ const ALLOWED_HEX_CODES = new Set<string>([
   // --status-resolved token used for "Searched ✓" loot indicators.
   // All hexes below are already in the Set from earlier sections;
   // listed here for documentation discoverability — Set dedupes.
-  "#191308", "#c0a878",           // story surface
+  "#c0a878",                       // prose (BG-1 retired #191308 story surface)
   "#2d2618", "#6a5530", "#e2cda0", // scene arrival
   "#5a9a5a",                       // resolved status indicator
 

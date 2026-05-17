@@ -3,7 +3,7 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** dd6cbe5 (BG-1: background temperature correction — match mockup base)
+**Last code commit:** 6990d25 (BG-1 PROMPT-LOG update — final state on origin/main)
 **jest baseline:** 854 (authoritative — zero delta BG-1; ui-foundation 120/120)
 **tsc:** clean
 
@@ -18,22 +18,23 @@ Every surface is verified against its mockup before moving to the next PR.
 
 | PR | Handoff §4 row | Surface | Mockup | Commit | Tests | Visual ✓ | Status |
 |----|----------------|---------|--------|--------|-------|----------|--------|
-| BG-1 | — | globals.css (4 bg tokens) | nav cards.png eyedropper | dd6cbe5 | 854 | ⏳ Tim to verify | ⏳ |
-| PR-3v | Row 3 | NavigationBar.tsx | nav cards.png | f266ebb | 854 | ⏳ Tim to verify | ⏳ |
-| PR-4v | Row 4 | StoryFeed.tsx | design ref §5 + combat panel mobile | — | — | — | ⏳ next |
+| BG-1 | pre-track | Global background temperature | nav cards.png (eyedropper) | dd6cbe5 | 854 | ✅ | ✅ |
+| BG-2 | pre-track | Nav card text contrast | nav cards.png (eyedropper needed) | — | — | — | ⏳ next |
+| PR-3v | Row 3 | NavigationBar.tsx | nav cards.png | f266ebb | 854 | ✅ | ✅ |
+| PR-4v | Row 4 | StoryFeed.tsx | design ref §5 + combat panel mobile | — | — | — | ⏳ |
 | PR-5v | Row 5 | CharacterPanel.tsx | character panel fantasy.png, inventory and character panel.png, inventory.png | — | — | — | ⏳ |
 | PR-6v | Row 6 | CharacterSheet.tsx (if not orphaned) | same as PR-5v | — | — | — | ⏳ |
 | PR-7v | Row 7 | DialogueModal.tsx | npc dialogue mobile.png | — | — | — | ⏳ |
 | PR-8v | Row 8 | CodexContent.tsx + CodexModal.tsx | codex mobile.png | — | — | — | ⏳ |
 | PR-9v | Row 9 | JournalModal.tsx | quest and journal mobile.png, quests cyberpunk.png, quests space.png | — | — | — | ⏳ |
 | PR-10v | Row 10 | LevelUpModal.tsx | ability panel expanded mobile.png | — | — | — | ⏳ |
-| PR-11v | Row 11 | CombatMode/* | combat desktop.png, ocmbat panel mobile.png, turn resolution timing.png, health bar and damage numbers.png | — | — | — | ⏳ |
+| PR-11v | Row 11 | CombatMode/* | combat desktop.png, combat panel mobile.png, turn resolution timing.png, health bar and damage numbers.png | — | — | — | ⏳ |
 | PR-12v | Row 12 | loot/* + FloorLootStrip.tsx | loot panel.png | — | — | — | ⏳ |
 | PR-13v | Row 13 | TradeModal.tsx | design ref only | — | — | — | ⏳ |
 | PR-14v | Row 14 | AttunementModal.tsx | design ref only | — | — | — | ⏳ |
 | PR-15v | Row 15 | InputBar.tsx + VerbosityToggle.tsx | design ref §17 | — | — | — | ⏳ |
 | PR-16v | Row 16 | Save slots + Main Menu | save slots.png, genre select mobile.png | — | — | — | ⏳ |
-| PR-17v | Row 17 | map/renderers/* | world map.png, reigon map.png, settlement map.png, dungeon map.png | — | — | — | ⏳ |
+| PR-17v | Row 17 | map/renderers/* | world map.png, region map.png, settlement map.png, dungeon map.png | — | — | — | ⏳ |
 
 ---
 

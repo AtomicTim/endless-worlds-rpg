@@ -3,8 +3,8 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** c391403 (BG-2: nav card text contrast — match mockup eyedropper values)
-**jest baseline:** 854 (authoritative — zero delta BG-2; ui-foundation 120/120)
+**Last code commit:** 7ab070c (UI-PR5v-d: item detail card — value right-aligned in header)
+**jest baseline:** 854 (authoritative — zero delta all PR-5v sub-commits; ui-foundation 120/120)
 **tsc:** clean
 
 ---
@@ -19,11 +19,14 @@ Every surface is verified against its mockup before moving to the next PR.
 | PR | Surface | Mockup | Commit | Visual ✓ | Status |
 |----|---------|--------|--------|----------|--------|
 | BG-1 | Global background temperature | nav cards.png eyedropper | dd6cbe5 | ✅ | ✅ |
-| BG-2 | Nav card text contrast | nav cards.png eyedropper | c391403 | ⏳ Tim to verify | ⏳ |
+| BG-2 | Nav card text contrast | nav cards.png eyedropper | c391403 | ✅ | ✅ |
 | PR-3v | NavigationBar.tsx | nav cards.png | f266ebb | ✅ | ✅ |
-| PR-4v | StoryFeed.tsx | design ref §5 + combat panel mobile.png | — | — | ⏳ next |
-| PR-5v | CharacterPanel.tsx | character panel fantasy.png, inventory and character panel.png, inventory.png | — | — | ⏳ |
-| PR-6v | CharacterSheet.tsx (if not orphaned) | same as PR-5v | — | — | ⏳ |
+| PR-4v | StoryFeed.tsx | skipped — arrival format accepted as-is | — | ✅ | ✅ |
+| PR-5v | CharacterPanel.tsx — card bg, stat blocks, equipped rows, pack tiles | character panel fantasy.png + inventory*.png | 38966c7 | ✅ | ✅ |
+| PR-5v-b | CharacterPanel — 4-col pack grid, section label contrast | — | bc5e0d3 | ✅ | ✅ |
+| PR-5v-c | Sidebar width 196→240px / 160→200px; item detail above pack grid | — | a2d428c | ✅ | ✅ |
+| PR-5v-d | CharacterPanel — item detail card value right-aligned | — | 7ab070c | ✅ | ✅ |
+| PR-6v | ContextPanel.tsx full visual rework | context panel.png | — | — | ⏳ next |
 | PR-7v | DialogueModal.tsx | npc dialogue mobile.png | — | — | ⏳ |
 | PR-8v | CodexContent.tsx + CodexModal.tsx | codex mobile.png | — | — | ⏳ |
 | PR-9v | JournalModal.tsx | quest and journal mobile.png, quests cyberpunk.png, quests space.png | — | — | ⏳ |
@@ -63,7 +66,7 @@ Every surface is verified against its mockup before moving to the next PR.
 ## Workflow notes
 
 - Claude.ai waits for Tim's final commit hash before writing to PROMPT-LOG.md.
-- Claude Code does NOT update PROMPT-LOG.md — "Do not update PROMPT-LOG.md" is in every prompt.
+- Claude Code does NOT update PROMPT-LOG.md.
 - Visual verification is non-negotiable before each PR is marked ✅.
 - Previous UI arc work (UI-1–UI-13, fix groups A–L) is not treated as correct baseline.
 
@@ -74,7 +77,6 @@ Every surface is verified against its mockup before moving to the next PR.
 - **Enemy-side status ticks not running (P7).** Follow-up HF.
 - **Bug 2 — zone_id cache leak.** Defensive fix shipped. Root cause pending.
 - **FloorLootStrip still rendered.** Retire in PR-12v.
-- **CharacterSheet.tsx + InventoryPanel.tsx.** Verify orphaned before PR-6v; delete if so.
-- **CharacterPanel equipped tiles too wide.** 3 × 80px tiles overflow 196px sidebar. Fix in PR-5v.
+- **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass.
 - **OneDrive sync race (recurring).** Staged-as-you-go pattern for CombatMode files.
-- **#c8b890 still active in FantasyMap.tsx:388** canvas fillStyle — map art palette, not a token consumer. Flag for PR-17v.
+- **Perks section header in CharacterPanel** still at old dim styling — one-line fix, bundle into next CharacterPanel touch.

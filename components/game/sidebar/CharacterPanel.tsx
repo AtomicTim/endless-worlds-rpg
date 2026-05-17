@@ -297,10 +297,16 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
     <section
       aria-label="Character"
       style={{
-        position:    "relative",
-        background:  "var(--content-bg)",
-        borderLeft:  "1px solid var(--ui-border-default)",
-        minHeight:   "100%",
+        position:     "relative",
+        // PR-5v (A): panel wrapper is a visible card now — was a
+        // bare borderLeft-only edge against the page background.
+        // mockup: character panel fantasy.png shows the panel sitting
+        // as a rounded card distinct from the page bg.
+        background:   "var(--bg-2)",
+        border:       "1px solid var(--card-border)",
+        borderRadius: 8,
+        overflow:     "hidden",
+        minHeight:    "100%",
       }}
     >
       {/* CHANGE 1 — three overlay divs. Inert until the surface opts in
@@ -461,52 +467,10 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
           </div>
         )}
 
-        {/* ── CHANGE 6 — Attribute block (single inline row) ───────────── */}
-        <div
-          aria-label="Attributes"
-          style={{
-            display:        "grid",
-            gridTemplateColumns: "repeat(5, 1fr)",
-            gap:            0,
-          }}
-        >
-          {STAT_KEYS.map((k) => (
-            <div
-              key={k}
-              style={{
-                display:        "flex",
-                flexDirection:  "column",
-                alignItems:     "center",
-                gap:            2,
-              }}
-            >
-              <span
-                style={{
-                  fontFamily:    "var(--sans)",
-                  fontSize:      6,
-                  letterSpacing: "0.18em",
-                  textTransform: "uppercase",
-                  color:         "var(--ui-text-muted)",
-                }}
-              >
-                {STAT_LABELS[k]}
-              </span>
-              <span
-                style={{
-                  fontFamily: "var(--mono)",
-                  fontSize:   12,
-                  color:      "var(--attribute-value)", // CHANGE 6 — neutral, never colour-coded
-                  fontWeight: 500,
-                }}
-              >
-                {attributes[k]}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        {/* ── CHANGE 7 — Equipped items (3 slots) ──────────────────────── */}
-        <section aria-label="Equipped">
+        {/* ── PR-5v (B) — Attribute block: bordered cells, number TOP
+              + label BOTTOM (mockup 1: character panel fantasy.png).
+              Section header "ATTRIBUTES" matches mockup 1. */}
+        <section aria-label="Attributes">
           <div
             style={{
               fontFamily:    "var(--sans)",
@@ -514,20 +478,116 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
               letterSpacing: "0.24em",
               textTransform: "uppercase",
               color:         "var(--nav-breadcrumb)",
+              marginBottom:  6,
+            }}
+          >
+            Attributes
+          </div>
+          <div
+            style={{
+              display:             "grid",
+              gridTemplateColumns: "repeat(5, 1fr)",
+              gap:                 6,
+            }}
+          >
+            {STAT_KEYS.map((k) => (
+              <div
+                key={k}
+                style={{
+                  display:        "flex",
+                  flexDirection:  "column",
+                  alignItems:     "center",
+                  gap:            2,
+                  padding:        "6px 8px",
+                  background:     "rgba(0,0,0,.15)",
+                  border:         "1px solid var(--card-border)",
+                  borderRadius:   7,
+                  minWidth:       0,
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "var(--mono)",
+                    fontSize:   22,
+                    lineHeight: 1,
+                    color:      "var(--ui-text-1)",
+                    fontWeight: 500,
+                  }}
+                >
+                  {attributes[k]}
+                </span>
+                <span
+                  style={{
+                    fontFamily:    "var(--sans)",
+                    fontSize:      8,
+                    letterSpacing: "0.18em",
+                    textTransform: "uppercase",
+                    color:         "var(--ui-text-muted)",
+                  }}
+                >
+                  {STAT_LABELS[k]}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── PR-5v (C+D) — Equipped: 3 full-width rows + gold in header.
+              The 3 × 80px tile layout from the previous char-panel pass
+              overflowed the 196px sidebar (known gap closed by this PR).
+              Rows always render all 3 slots — empty slots show "— empty"
+              with the slot type on the right so the player can see
+              which slots are open. */}
+        <section aria-label="Equipped">
+          <div
+            style={{
+              display:       "flex",
+              alignItems:    "center",
+              gap:           6,
               marginBottom:  4,
             }}
           >
-            Equipped
+            <span
+              style={{
+                fontFamily:    "var(--sans)",
+                fontSize:      7,
+                letterSpacing: "0.24em",
+                textTransform: "uppercase",
+                color:         "var(--nav-breadcrumb)",
+                flex:          1,
+              }}
+            >
+              Equipped
+            </span>
+            {primaryCurrency !== null && currencyLabel !== null && (
+              <span
+                aria-label={currencyLabel}
+                title={currencyLabel}
+                style={{
+                  display:    "inline-flex",
+                  alignItems: "center",
+                  gap:        4,
+                  color:      "var(--genre-accent)",
+                }}
+              >
+                {(() => {
+                  const Icon = CURRENCY_ICON[genre] ?? IconCoins;
+                  return <Icon size={12} stroke={1.75} aria-hidden />;
+                })()}
+                <span
+                  style={{
+                    fontFamily: "var(--mono)",
+                    fontSize:   11,
+                    color:      "var(--genre-accent)",
+                  }}
+                >
+                  {primaryCurrency.toLocaleString()}g
+                </span>
+              </span>
+            )}
           </div>
-          {/* char-panel — 3-tile flex row replaces the column-list of
-              EquipSlotRow. Each tile is the standard 80×80 chip with
-              icon / name / stat stacked centre-aligned. isSelected
-              wires the active-tile border to the same selectedId
-              state the pack grid uses, so tapping an equipped tile
-              opens the inline detail card below the pack just like
-              tapping a pack tile does. */}
-          <div style={{ display: "flex", flexDirection: "row", gap: 8 }}>
-            <EquipSlotTile
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <EquipSlotRow
               kind="weapon"
               item={equippedWeapon}
               isSelected={!!equippedWeapon && selectedId === equippedWeapon.id}
@@ -535,7 +595,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                 selectedId === equippedWeapon.id ? null : equippedWeapon.id
               )}
             />
-            <EquipSlotTile
+            <EquipSlotRow
               kind="armor"
               item={equippedArmor}
               isSelected={!!equippedArmor && selectedId === equippedArmor.id}
@@ -543,7 +603,7 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                 selectedId === equippedArmor.id ? null : equippedArmor.id
               )}
             />
-            <EquipSlotTile
+            <EquipSlotRow
               kind="accessory"
               item={equippedAccessory}
               isSelected={!!equippedAccessory && selectedId === equippedAccessory.id}
@@ -553,42 +613,6 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
             />
           </div>
         </section>
-
-        {/* ── CHANGE 8 — Currency ──────────────────────────────────────── */}
-        {primaryCurrency !== null && currencyLabel !== null && (
-          <div
-            aria-label={currencyLabel}
-            title={currencyLabel}
-            style={{
-              display:    "flex",
-              alignItems: "center",
-              gap:        6,
-            }}
-          >
-            <span
-              aria-hidden
-              style={{
-                color:           "var(--genre-accent)",
-                display:         "inline-flex",
-                alignItems:      "center",
-              }}
-            >
-              {(() => {
-                const Icon = CURRENCY_ICON[genre] ?? IconCoins;
-                return <Icon size={14} stroke={1.75} />;
-              })()}
-            </span>
-            <span
-              style={{
-                fontFamily: "var(--mono)",
-                fontSize:   11,
-                color:      "var(--genre-accent)",
-              }}
-            >
-              {primaryCurrency.toLocaleString()}
-            </span>
-          </div>
-        )}
 
         {/* ── CHANGE 9 — Pack inventory (3-col, actual items only) ─────── */}
         <section aria-label="Pack">
@@ -604,75 +628,99 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
           >
             Pack
           </div>
-          {/* char-panel — 4-col icon-only grid. Always renders
-              INVENTORY_CAP (20) cells so the pack reads as a fixed
-              capacity strip (no more "— empty —" placeholder line);
-              empty cells use a quieter dashed border so a partially
-              filled pack still scans at a glance. Names + rarity
-              tinting were removed per the new spec — the icon alone
-              carries the slot, and the full item name + details
-              expand inline via ItemDetailCard below the grid when
-              a cell is tapped. */}
+          {/* PR-5v (E) — 3-col grid, dynamic cell count.
+              Tim's override of design ref §13: always show empty cells
+              as visible dim bordered tiles. Cell count grows with
+              inventory but always shows at least 8 cells (3+3+2);
+              caps at INVENTORY_CAP (20). Item tiles regain the name
+              label below the icon per mockup 2 (inventory and
+              character panel.png) — earlier UI-fix-F dropped the
+              label; PR-5v restores it. */}
           <div
             style={{
               display:             "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
+              gridTemplateColumns: "repeat(3, 1fr)",
               gap:                 6,
             }}
           >
-            {Array.from({ length: INVENTORY_CAP }).map((_, i) => {
-              const item       = packItems[i];
-              if (!item) {
+            {(() => {
+              const items      = packItems;
+              // ceil((items.length + 3) / 3) * 3 — pad up to next
+              // multiple of 3 with at least 3 trailing empties; floor
+              // at 8 cells; cap at INVENTORY_CAP.
+              const padded     = Math.ceil((items.length + 3) / 3) * 3;
+              const cellCount  = Math.min(INVENTORY_CAP, Math.max(8, padded));
+              return Array.from({ length: cellCount }).map((_, i) => {
+                const item = items[i];
+                if (!item) {
+                  return (
+                    <div
+                      key={`empty-${i}`}
+                      aria-hidden
+                      style={{
+                        aspectRatio:  "1",
+                        background:   "transparent",
+                        border:       "1px solid var(--card-border)",
+                        borderRadius: 6,
+                        opacity:      0.4,
+                      }}
+                    />
+                  );
+                }
+                const isSelected = selectedId === item.id;
+                const Icon       = ITEM_TABLER_ICONS[item.type] ?? IconQuestionMark;
                 return (
-                  <div
-                    key={`empty-${i}`}
-                    aria-hidden
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSelectedId(isSelected ? null : item.id)}
+                    title={item.name}
                     style={{
-                      aspectRatio:  "1",
-                      background:   "var(--bg-2)",
-                      border:       "1px dashed var(--breadcrumb-rule)",
-                      borderRadius: 6,
-                      opacity:      0.4,
+                      aspectRatio:    "1",
+                      background:     "var(--bg-2)",
+                      border:         isSelected
+                        ? "1.5px solid rgba(var(--genre-accent-rgb), .45)"
+                        : "1px solid var(--card-border)",
+                      borderRadius:   6,
+                      display:        "flex",
+                      flexDirection:  "column",
+                      alignItems:     "center",
+                      justifyContent: "center",
+                      gap:            4,
+                      cursor:         "pointer",
+                      padding:        4,
+                      transition:     "border-color 120ms",
                     }}
-                  />
+                    onMouseEnter={(e) => {
+                      if (isSelected) return;
+                      (e.currentTarget as HTMLButtonElement).style.borderColor =
+                        "rgba(var(--genre-accent-rgb), 0.30)";
+                    }}
+                    onMouseLeave={(e) => {
+                      if (isSelected) return;
+                      (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--card-border)";
+                    }}
+                  >
+                    <Icon size={20} stroke={1.75} color="var(--npc-role)" aria-hidden />
+                    <span
+                      style={{
+                        fontFamily:   "var(--sans)",
+                        fontSize:     9,
+                        color:        "var(--ui-text-muted)",
+                        textAlign:    "center",
+                        width:        "100%",
+                        whiteSpace:   "nowrap",
+                        overflow:     "hidden",
+                        textOverflow: "ellipsis",
+                        lineHeight:   1.1,
+                      }}
+                    >
+                      {item.name}
+                    </span>
+                  </button>
                 );
-              }
-              const isSelected = selectedId === item.id;
-              const Icon       = ITEM_TABLER_ICONS[item.type] ?? IconQuestionMark;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setSelectedId(isSelected ? null : item.id)}
-                  title={item.name}
-                  style={{
-                    aspectRatio:  "1",
-                    background:   "var(--bg-2)",
-                    border:       isSelected
-                      ? "1.5px solid rgba(var(--genre-accent-rgb), .45)"
-                      : "1px solid var(--ui-border-default)",
-                    borderRadius: 6,
-                    display:      "flex",
-                    alignItems:   "center",
-                    justifyContent: "center",
-                    cursor:       "pointer",
-                    padding:      0,
-                    transition:   "border-color 120ms",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (isSelected) return;
-                    (e.currentTarget as HTMLButtonElement).style.borderColor =
-                      "rgba(var(--genre-accent-rgb), 0.30)";
-                  }}
-                  onMouseLeave={(e) => {
-                    if (isSelected) return;
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--ui-border-default)";
-                  }}
-                >
-                  <Icon size={18} stroke={1.75} color="var(--npc-role)" aria-hidden />
-                </button>
-              );
-            })}
+              });
+            })()}
           </div>
 
           {/* Inline detail expand — renders directly below the grid */}
@@ -769,35 +817,47 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Equipped tile — char-panel rebuild
+// Equipped row — PR-5v rebuild
 //
-// 80×80 chip per slot (weapon / armor / accessory) with the icon,
-// item name, and short stat stacked centre-aligned. Replaces the
-// prior EquipSlotRow (full-width row, name left + stat right). The
-// row layout sat oddly between the inline attribute strip above and
-// the pack grid below; uniform tiles let the three slots share the
-// same visual language as the pack cells while still showing the
-// "what's equipped" info at a glance.
+// Full-width row per slot (weapon / armor / accessory) with:
+//   [icon] [italic-serif name flex:1] [stat OR slot type, right-aligned]
+//
+// Replaces the 3×80px EquipSlotTile from the previous pass — those
+// tiles overflowed the 196px sidebar and clipped the accessory slot
+// (known gap noted in PROMPT-LOG, closed by this PR). Always renders
+// all 3 slots; empty slots show "— empty" + the slot type so the
+// player can see which slots are open. Filled slots show stat
+// (d6+1, +2 arm, +1 INT) right-aligned per design ref §13 + mockup 2
+// (inventory and character panel.png).
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface EquipSlotTileProps {
+interface EquipSlotRowProps {
   kind:        "weapon" | "armor" | "accessory";
   item:        Item | null;
   isSelected:  boolean;
   onTap:       () => void;
 }
 
-function EquipSlotTile({ kind, item, isSelected, onTap }: EquipSlotTileProps) {
-  const slotLabel =
+function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
+  const slotLabelLong =
     kind === "weapon"    ? "Weapon"
     : kind === "armor"   ? "Armor"
     : "Accessory";
 
-  // Stat abbreviation reuses the prior EquipSlotRow logic verbatim:
-  // weapons collapse "1d6" → "d6", armor renders "+N arm", accessories
-  // surface the first stat_bonus entry. Returns null when the item has
-  // no stat-worthy field so the third line collapses cleanly.
-  let statLine: string | null = null;
+  // Slot-type label for the right side of empty rows. Matches mockup 1
+  // (character panel fantasy.png) — WEAPON / ARMOUR / ACCESSORY in
+  // Inter Tight uppercase muted.
+  const slotLabelShort =
+    kind === "weapon"    ? "WEAPON"
+    : kind === "armor"   ? "ARMOUR"
+    : "ACCESSORY";
+
+  // Stat abbreviation, preserved from the prior EquipSlotTile logic:
+  // weapons collapse "1d6" → "d6"; armor renders "+N arm"; accessories
+  // surface the first stat_bonus entry. PR-5v adds an "—" fallback
+  // per brief: filled slot with no stat-worthy field shows the em dash
+  // rather than an empty right column.
+  let statLine: string = "—";
   if (item) {
     if (kind === "weapon") {
       const die = item.effect?.damage_die;
@@ -821,9 +881,9 @@ function EquipSlotTile({ kind, item, isSelected, onTap }: EquipSlotTileProps) {
     }
   }
 
-  // Icon source: equipped item uses ITEM_TABLER_ICONS; empty slot
-  // falls back to SLOT_TABLER_ICONS so the tile still reads as
-  // "this is the weapon slot" even when nothing is equipped.
+  // Icon source: equipped item uses its ItemType icon; empty slot
+  // falls back to SLOT_TABLER_ICONS so the row still reads as "this
+  // is the weapon slot" even when empty.
   const Icon = item
     ? (ITEM_TABLER_ICONS[item.type] ?? IconQuestionMark)
     : SLOT_TABLER_ICONS[kind];
@@ -833,57 +893,63 @@ function EquipSlotTile({ kind, item, isSelected, onTap }: EquipSlotTileProps) {
       type="button"
       onClick={onTap}
       disabled={!item}
-      title={item ? item.name : `${slotLabel} (empty)`}
+      title={item ? item.name : `${slotLabelLong} (empty)`}
       style={{
-        width:          80,
-        height:         80,
-        background:     "var(--bg-2)",
+        display:        "flex",
+        alignItems:     "center",
+        gap:            10,
+        width:          "100%",
+        padding:        "8px 10px",
+        background:     "rgba(0,0,0,.2)",
         border:         isSelected
           ? "1.5px solid rgba(var(--genre-accent-rgb), 0.45)"
-          : item
-            ? "1px solid var(--ui-border-default)"
-            : "1px dashed var(--ui-border-default)",
-        borderRadius:   8,
-        display:        "flex",
-        flexDirection:  "column",
-        alignItems:     "center",
-        justifyContent: "center",
-        gap:            6,
+          : "1px solid var(--card-border)",
+        borderRadius:   7,
         cursor:         item ? "pointer" : "default",
-        opacity:        item ? 1 : 0.5,
-        padding:        0,
-        flexShrink:     0,
+        opacity:        item ? 1 : 0.45,
+        textAlign:      "left",
         transition:     "border-color 120ms",
       }}
     >
-      <Icon size={22} stroke={1.75} color="var(--npc-role)" aria-hidden />
-      {item && (
-        <span
-          style={{
-            fontFamily:   "var(--sans)",
-            fontSize:     8,
-            color:        "var(--equipped-name)",
-            textAlign:    "center",
-            maxWidth:     70,
-            whiteSpace:   "nowrap",
-            overflow:     "hidden",
-            textOverflow: "ellipsis",
-            lineHeight:   1,
-          }}
-        >
-          {item.name}
-        </span>
-      )}
-      {statLine && (
+      <Icon size={14} stroke={1.75} color="var(--npc-role)" aria-hidden />
+      <span
+        className="ew-serif"
+        style={{
+          flex:         1,
+          minWidth:     0,
+          fontStyle:    "italic",
+          fontSize:     12,
+          color:        "var(--npc-name)",
+          whiteSpace:   "nowrap",
+          overflow:     "hidden",
+          textOverflow: "ellipsis",
+        }}
+      >
+        {item ? item.name : "— empty"}
+      </span>
+      {item ? (
         <span
           style={{
             fontFamily: "var(--mono)",
-            fontSize:   7,
+            fontSize:   11,
             color:      "var(--genre-accent)",
-            lineHeight: 1,
+            flexShrink: 0,
           }}
         >
           {statLine}
+        </span>
+      ) : (
+        <span
+          style={{
+            fontFamily:    "var(--sans)",
+            fontSize:      8,
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            color:         "var(--ui-text-muted)",
+            flexShrink:    0,
+          }}
+        >
+          {slotLabelShort}
         </span>
       )}
     </button>

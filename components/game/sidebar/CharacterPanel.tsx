@@ -1032,6 +1032,23 @@ function ItemDetailCard(props: ItemDetailCardProps) {
             <span style={{ color: "var(--ui-text-muted)", marginLeft: 4 }}>×{item.quantity}</span>
           )}
         </span>
+        {/* PR-5v-d: item value in genre accent — Common 5-15, Uncommon
+            20-50, Rare 100-300, Legendary 500+ (Item.value JSDoc).
+            Suppressed when value is missing, zero, or this is a
+            starting item (sell value 0 per CLAUDE.md ECONOMY BASELINE
+            — starting gear can't be sold so showing "0g" would mislead). */}
+        {typeof item.value === "number" && item.value > 0 && !item.starting_item && (
+          <span
+            style={{
+              fontFamily: "var(--mono)",
+              fontSize:   11,
+              color:      "var(--genre-accent)",
+              flexShrink: 0,
+            }}
+          >
+            {item.value}g
+          </span>
+        )}
         <button
           type="button"
           onClick={onClose}

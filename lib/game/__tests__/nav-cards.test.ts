@@ -248,7 +248,10 @@ describe("buildCards — region-zone BACK card", () => {
     const back = cards.find((c) => c.kind === "back");
     expect(back).toBeDefined();
     expect(back!.targetId).toBe("settle_a");
-    expect(back!.name).toBe("CHAIN'S REST");
+    // PR-3v: mixed-case name (was "CHAIN'S REST"); sublabel is the
+    // standard TYPE · DIRECTION composite.
+    expect(back!.name).toBe("Chain's Rest");
+    expect(back!.sublabel).toBe("SETTLEMENT · BACK");
     expect(back!.tier).toBe("settlement");
   });
 
@@ -260,7 +263,7 @@ describe("buildCards — region-zone BACK card", () => {
     const back = cards.find((c) => c.kind === "back");
     expect(back).toBeDefined();
     expect(back!.targetId).toBe("settle_a");
-    expect(back!.name).toBe("CHAIN'S REST");
+    expect(back!.name).toBe("Chain's Rest");
   });
 
   it("targets the PREVIOUS region's settlement on cross-region arrival", () => {
@@ -272,7 +275,7 @@ describe("buildCards — region-zone BACK card", () => {
     expect(back).toBeDefined();
     // The previous region was region_a, whose settlement is settle_a.
     expect(back!.targetId).toBe("settle_a");
-    expect(back!.name).toBe("CHAIN'S REST");
+    expect(back!.name).toBe("Chain's Rest");
     expect(back!.tier).toBe("settlement");
   });
 
@@ -284,7 +287,7 @@ describe("buildCards — region-zone BACK card", () => {
     const back = cards.find((c) => c.kind === "back");
     expect(back).toBeDefined();
     expect(back!.targetId).toBe("settle_a");
-    expect(back!.name).toBe("CHAIN'S REST");
+    expect(back!.name).toBe("Chain's Rest");
   });
 });
 
@@ -545,9 +548,12 @@ describe("buildCards — peer card sublabels reflect node_type (not legacy categ
     const state = makeMasterState({ trail: ["settle_a", "region_a"] });
     const cards = buildCards(graph, state);
     const byId = new Map(cards.map((c) => [c.targetId, c]));
-    expect(byId.get("dungeon_a")?.sublabel).toBe("DUNGEON");
-    expect(byId.get("landmark_a")?.sublabel).toBe("LANDMARK");
-    expect(byId.get("wild_a")?.sublabel).toBe("WILDERNESS");
+    // PR-3v: TYPE · DIRECTION sublabel format. peer-known cards get
+    // the "· NEARBY" suffix; the TYPE half still derives from
+    // node_type so dungeon/landmark/wilderness stay distinct.
+    expect(byId.get("dungeon_a")?.sublabel).toBe("DUNGEON · NEARBY");
+    expect(byId.get("landmark_a")?.sublabel).toBe("LANDMARK · NEARBY");
+    expect(byId.get("wild_a")?.sublabel).toBe("WILDERNESS · NEARBY");
   });
 
   it("falls back to legacy category when node_type is absent (back-compat)", () => {
@@ -582,7 +588,9 @@ describe("buildCards — peer card sublabels reflect node_type (not legacy categ
     const state = makeMasterState({ trail: ["settle_a", "region_a"] });
     const cards = buildCards(graph, state);
     const oldCard = cards.find((c) => c.targetId === "old_dungeon");
-    // Should fall back to category.toUpperCase() since no node_type.
-    expect(oldCard?.sublabel).toBe("RUIN");
+    // PR-3v: TYPE · DIRECTION format. category.toUpperCase() fallback
+    // fills the TYPE slot when node_type is absent; "· NEARBY" comes
+    // from the peer-known direction.
+    expect(oldCard?.sublabel).toBe("RUIN · NEARBY");
   });
 });

@@ -48,9 +48,17 @@ export interface Card {
   kind:       CardKind;
   /** Node id (or adjacent region outline id) handed to onNavigate. */
   targetId:   string;
-  /** Primary label — destination name, ALL CAPS. */
+  /** Primary label — destination name, mixed case (PR-3v) per
+   *  design ref §6 / design/mockups/nav cards.png. Pre-PR-3v this
+   *  field was ALL CAPS; the mockup-driven rebuild keeps the
+   *  source casing so names like "Chain's Rest" render with the
+   *  apostrophe + lower-case as intended for italic serif. */
   name:       string;
-  /** Secondary label — category / "EXIT TO REGION" / etc., ALL CAPS. */
+  /** Secondary label — `TYPE · DIRECTION` (PR-3v). Examples:
+   *  "SETTLEMENT · BACK", "DUNGEON · NEARBY", "REGION · BACK".
+   *  Peer-unknown overrides the TYPE slot with the literal
+   *  "UNEXPLORED" → "UNEXPLORED · NEARBY". The renderer reads
+   *  this verbatim; no further transformation. */
   sublabel:   string;
   /** Whether the player has already visited this node. */
   discovered: boolean;
@@ -85,6 +93,21 @@ export function directionOfCard(card: Card): CardDirection {
     case "deeper":       return "deeper";
     case "peer-known":   return "peer";
     case "peer-unknown": return "undiscovered";
+  }
+}
+
+/** PR-3v — direction text for the sublabel's right half.
+ *  EXIT collapses to BACK visually (folds into the back row).
+ *  peer-known/peer-unknown both render "NEARBY"; peer-unknown
+ *  separately overrides the TYPE slot with "UNEXPLORED" so its
+ *  full sublabel reads "UNEXPLORED · NEARBY". */
+export function directionLabel(kind: CardKind): string {
+  switch (kind) {
+    case "back":         return "BACK";
+    case "exit":         return "BACK";
+    case "deeper":       return "DEEPER";
+    case "peer-known":   return "NEARBY";
+    case "peer-unknown": return "NEARBY";
   }
 }
 
@@ -279,8 +302,8 @@ export function buildCards(
         key:        `back-${parent.id}`,
         kind:       "back",
         targetId:   parent.id,
-        name:       parent.name.toUpperCase(),
-        sublabel:   typeLabel(parent),
+        name:       parent.name,
+        sublabel:   `${typeLabel(parent)} · ${directionLabel("back")}`,
         discovered: parent.discovered,
         tier:       tierOfNode(parent),
       });
@@ -292,8 +315,8 @@ export function buildCards(
         key:        `back-${parent.id}`,
         kind:       "back",
         targetId:   parent.id,
-        name:       parent.name.toUpperCase(),
-        sublabel:   typeLabel(parent),
+        name:       parent.name,
+        sublabel:   `${typeLabel(parent)} · ${directionLabel("back")}`,
         discovered: parent.discovered,
         tier:       tierOfNode(parent),
       });
@@ -320,8 +343,8 @@ export function buildCards(
         key:        `back-${prevSettlement.id}`,
         kind:       "back",
         targetId:   prevSettlement.id,
-        name:       prevSettlement.name.toUpperCase(),
-        sublabel:   typeLabel(prevSettlement),
+        name:       prevSettlement.name,
+        sublabel:   `${typeLabel(prevSettlement)} · ${directionLabel("back")}`,
         discovered: prevSettlement.discovered,
         tier:       tierOfNode(prevSettlement),
       });
@@ -330,8 +353,8 @@ export function buildCards(
         key:        `back-${settlementHub.id}`,
         kind:       "back",
         targetId:   settlementHub.id,
-        name:       settlementHub.name.toUpperCase(),
-        sublabel:   typeLabel(settlementHub),
+        name:       settlementHub.name,
+        sublabel:   `${typeLabel(settlementHub)} · ${directionLabel("back")}`,
         discovered: settlementHub.discovered,
         tier:       tierOfNode(settlementHub),
       });
@@ -359,8 +382,8 @@ export function buildCards(
         key:        `deeper-${settlementHub.id}`,
         kind:       "deeper",
         targetId:   settlementHub.id,
-        name:       settlementHub.name.toUpperCase(),
-        sublabel:   typeLabel(settlementHub),
+        name:       settlementHub.name,
+        sublabel:   `${typeLabel(settlementHub)} · ${directionLabel("deeper")}`,
         discovered: settlementHub.discovered,
         tier:       tierOfNode(settlementHub),
       });
@@ -375,8 +398,8 @@ export function buildCards(
         key:        `deeper-${node.id}`,
         kind:       "deeper",
         targetId:   node.id,
-        name:       node.name.toUpperCase(),
-        sublabel:   typeLabel(node),
+        name:       node.name,
+        sublabel:   `${typeLabel(node)} · ${directionLabel("deeper")}`,
         discovered: node.discovered,
         tier:       tierOfNode(node),
       });
@@ -391,8 +414,8 @@ export function buildCards(
         key:        `deeper-${node.id}`,
         kind:       "deeper",
         targetId:   node.id,
-        name:       node.name.toUpperCase(),
-        sublabel:   typeLabel(node),
+        name:       node.name,
+        sublabel:   `${typeLabel(node)} · ${directionLabel("deeper")}`,
         discovered: node.discovered,
         tier:       tierOfNode(node),
       });
@@ -406,8 +429,11 @@ export function buildCards(
       key:        `exit-${regionZone.id}`,
       kind:       "exit",
       targetId:   regionZone.id,
-      name:       regionZone.name.toUpperCase(),
-      sublabel:   "EXIT TO REGION",
+      name:       regionZone.name,
+      // PR-3v: EXIT folds into BACK visually — sublabel uses the
+      // standard TYPE · BACK shape, replacing the earlier bespoke
+      // "EXIT TO REGION" string.
+      sublabel:   `${typeLabel(regionZone)} · ${directionLabel("exit")}`,
       discovered: regionZone.discovered,
       tier:       tierOfNode(regionZone),
     });
@@ -428,8 +454,8 @@ export function buildCards(
         key:        `peer-known-${node.id}`,
         kind:       "peer-known",
         targetId:   node.id,
-        name:       node.name.toUpperCase(),
-        sublabel:   typeLabel(node),
+        name:       node.name,
+        sublabel:   `${typeLabel(node)} · ${directionLabel("peer-known")}`,
         discovered: node.discovered,
         tier:       tierOfNode(node),
       });
@@ -453,12 +479,17 @@ export function buildCards(
         seen.add(r.id);
         const graphNode  = worldGraph.nodes[r.id];
         const isExpanded = !!graphNode && graphNode.discovered === true;
+        // PR-3v: TYPE · DIRECTION sublabels. peer-known regions read
+        // "REGION · NEARBY"; peer-unknown overrides the TYPE slot
+        // with "UNEXPLORED" since the player hasn't seen what's there.
         peerCards.push({
           key:        isExpanded ? `peer-known-${r.id}` : `peer-unknown-${r.id}`,
           kind:       isExpanded ? "peer-known" : "peer-unknown",
           targetId:   r.id,
-          name:       r.name.toUpperCase(),
-          sublabel:   isExpanded ? "REGION" : "UNDISCOVERED REGION",
+          name:       r.name,
+          sublabel:   isExpanded
+            ? `REGION · ${directionLabel("peer-known")}`
+            : `UNEXPLORED · ${directionLabel("peer-unknown")}`,
           discovered: isExpanded,
           tier:       graphNode ? tierOfNode(graphNode) : "region",
         });
@@ -478,8 +509,10 @@ export function buildCards(
           key:        isExpanded ? `peer-known-${connNode.id}` : `peer-unknown-${connNode.id}`,
           kind:       isExpanded ? "peer-known" : "peer-unknown",
           targetId:   connNode.id,
-          name:       connNode.name.toUpperCase(),
-          sublabel:   isExpanded ? "REGION" : "UNDISCOVERED REGION",
+          name:       connNode.name,
+          sublabel:   isExpanded
+            ? `REGION · ${directionLabel("peer-known")}`
+            : `UNEXPLORED · ${directionLabel("peer-unknown")}`,
           discovered: isExpanded,
           tier:       tierOfNode(connNode),
         });

@@ -273,37 +273,65 @@ export function NavigationBar({
         </div>
       </div>
       )}
-      {!inDungeon && (
-      <div
-        className="ew-nav-cols"
-        style={{
-          // UI-9b — single-column list. Cards fill the nav-bar container
-          // width; one card per row. Replaces the 4-group × per-mini-
-          // column 140px-wide grid that left cards unreadable at 1280px.
-          // Grouping logic (BACK / DEEPER / PEER / UNDISCOVERED) is
-          // preserved via the colOrder flat-map below; the visual
-          // dividers that used to live between groups are gone — the
-          // single "Where to go." header above replaces them.
-          display:        "flex",
-          flexDirection:  "column",
-          gap:            6,
-          padding:        "0 16px 12px",
-          width:          "100%",
-        }}
-      >
-        {colOrder.flatMap((dir) => grouped[dir] ?? []).map((c) => (
-          <NavCard
-            key={c.key}
-            card={c}
-            onClick={() => onNavigate(c.targetId)}
-            generatingRegionId={generatingRegionId}
-            isLoading={isLoading}
-            isHere={worldGraph?.current_node_id === c.targetId}
-            fullWidth
-          />
-        ))}
-      </div>
-      )}
+      {!inDungeon && (() => {
+        // PR-3v — design ref §6 + design/mockups/nav cards.png: known
+        // destinations (back / deeper / peer-known) sit side-by-side
+        // in a horizontal flex row at the top, each chip flex: 1 to
+        // share the row evenly; UNDISCOVERED destinations (peer-unknown)
+        // stack full-width below as their own rows. The internal
+        // grouping logic (BACK / DEEPER / PEER / UNDISCOVERED buckets
+        // from groupCardsByDirection) is preserved — only the visual
+        // arrangement of the buckets changed.
+        const orderedCards    = colOrder.flatMap((dir) => grouped[dir] ?? []);
+        const knownCards      = orderedCards.filter((c) => c.kind !== "peer-unknown");
+        const undiscoveredCards = orderedCards.filter((c) => c.kind === "peer-unknown");
+        return (
+          <div
+            className="ew-nav-cols"
+            style={{
+              display:        "flex",
+              flexDirection:  "column",
+              gap:            6,
+              padding:        "0 16px 12px",
+              width:          "100%",
+            }}
+          >
+            {knownCards.length > 0 && (
+              <div
+                style={{
+                  display:        "flex",
+                  flexDirection:  "row",
+                  gap:            8,
+                  width:          "100%",
+                }}
+              >
+                {knownCards.map((c) => (
+                  <NavCard
+                    key={c.key}
+                    card={c}
+                    onClick={() => onNavigate(c.targetId)}
+                    generatingRegionId={generatingRegionId}
+                    isLoading={isLoading}
+                    isHere={worldGraph?.current_node_id === c.targetId}
+                    layout="row"
+                  />
+                ))}
+              </div>
+            )}
+            {undiscoveredCards.map((c) => (
+              <NavCard
+                key={c.key}
+                card={c}
+                onClick={() => onNavigate(c.targetId)}
+                generatingRegionId={generatingRegionId}
+                isLoading={isLoading}
+                isHere={worldGraph?.current_node_id === c.targetId}
+                layout="full"
+              />
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -349,15 +377,21 @@ function DungeonBackColumn({
     const parent = exitId ? worldGraph?.nodes[exitId] : undefined;
     if (parent) {
       targetId = parent.id;
-      label = parent.name.toUpperCase();
-      sublabel = nodeTypeLabel(parent.node_type) ?? "REGION";
+      // PR-3v: mixed-case name + TYPE · BACK sublabel to match the
+      // standard nav-card grammar (design ref §6).
+      label = parent.name;
+      sublabel = `${nodeTypeLabel(parent.node_type) ?? "REGION"} · BACK`;
     }
   } else {
     // Step back to entrance room.
     const entrance = (dungeonNode.dungeon_rooms ?? []).find((r) => r.room_type === "entrance");
     if (entrance) {
       targetId = entrance.id;
-      label = entrance.name.toUpperCase();
+      // PR-3v: mixed-case name; the dungeon-room sublabel keeps its
+      // bespoke "ENTRANCE" form since dungeon nav doesn't use the
+      // TYPE · DIRECTION grammar (room-to-room nav has its own
+      // visual language).
+      label = entrance.name;
       sublabel = "ENTRANCE";
     }
   }
@@ -473,7 +507,8 @@ function DungeonRoomsColumn({
                 key={card.room_id}
                 onClick={finalClick}
                 arrow={isLocked || hasKeyButLocked ? "🔒" : "→"}
-                name={card.name.toUpperCase()}
+                /* PR-3v: mixed-case room names (no toUpperCase). */
+                name={card.name}
                 sublabel={card.type_label}
                 color="var(--hl-dungeon)"
                 background={card.visited
@@ -639,7 +674,7 @@ function NavCard({
   generatingRegionId,
   isLoading = false,
   isHere = false,
-  fullWidth = false,
+  layout = "row",
 }: {
   card: Card;
   onClick: () => void;
@@ -652,9 +687,10 @@ function NavCard({
   /** UI-5 — destination IS the player's current location (rare;
    *  defensive). Shows HERE chip + suppresses VISITED. */
   isHere?: boolean;
-  /** Column layout mode — card fills the column width instead of using
-   *  fixed min/maxWidth. Set by the column container. */
-  fullWidth?: boolean;
+  /** PR-3v — chip layout mode. "row" = known card in the horizontal
+   *  flex row of equal-width chips (flex: 1, minWidth: 0). "full" =
+   *  full-width chip on its own row (peer-unknown / UNDISCOVERED). */
+  layout?: "row" | "full";
 }) {
   const isBack       = card.kind === "back";
   const isExit       = card.kind === "exit";
@@ -691,11 +727,12 @@ function NavCard({
 
   // GENERATING... badge takes precedence over the type sublabel on
   // the in-flight ◇ card so the player sees the wait state.
+  // PR-3v: dropped the legacy "UNDISCOVERED" override — nav-cards.ts
+  // now produces the full "UNEXPLORED · NEARBY" sublabel directly
+  // for peer-unknown cards, so we render card.sublabel verbatim.
   const typeLabel = isGeneratingTarget
     ? "GENERATING..."
-    : isUnknown
-      ? "UNDISCOVERED"
-      : (card.sublabel ?? "");
+    : (card.sublabel ?? "");
 
   return (
     <button
@@ -714,10 +751,14 @@ function NavCard({
         display:        "flex",
         alignItems:     "center",
         gap:            6,
-        // fullWidth (column mode): fill the column; row mode: fixed range.
-        ...(fullWidth
+        // PR-3v: layout="row" → chip shares the horizontal flex row
+        // with siblings, flex: 1 + minWidth: 0 lets the row split
+        // evenly and the name truncate with ellipsis when it gets
+        // long. layout="full" → chip stretches the parent container
+        // (peer-unknown UNDISCOVERED row below the known row).
+        ...(layout === "full"
           ? { width: "100%" }
-          : { minWidth: 140, maxWidth: 200, flexShrink: 0 }
+          : { flex: 1, minWidth: 0 }
         ),
         // UI-fix-C — touch-target floor 44px, compact padding 7×10.
         // Was 56 / 10×14. Nav cards are now lighter chips, not full

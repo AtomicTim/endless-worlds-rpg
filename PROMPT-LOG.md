@@ -3,8 +3,8 @@
 # CLAUDE.md is only rewritten when rules or architecture decisions change.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 8719040 (UI-PR3v PROMPT-LOG update — final state on origin/main)
-**jest baseline:** 854 (authoritative — zero delta PR-3v; nav-cards 32/32; ui-foundation 120/120)
+**Last code commit:** dd6cbe5 (BG-1: background temperature correction — match mockup base)
+**jest baseline:** 854 (authoritative — zero delta BG-1; ui-foundation 120/120)
 **tsc:** clean
 
 ---
@@ -18,6 +18,7 @@ Every surface is verified against its mockup before moving to the next PR.
 
 | PR | Handoff §4 row | Surface | Mockup | Commit | Tests | Visual ✓ | Status |
 |----|----------------|---------|--------|--------|-------|----------|--------|
+| BG-1 | — | globals.css (4 bg tokens) | nav cards.png eyedropper | dd6cbe5 | 854 | ⏳ Tim to verify | ⏳ |
 | PR-3v | Row 3 | NavigationBar.tsx | nav cards.png | f266ebb | 854 | ⏳ Tim to verify | ⏳ |
 | PR-4v | Row 4 | StoryFeed.tsx | design ref §5 + combat panel mobile | — | — | — | ⏳ next |
 | PR-5v | Row 5 | CharacterPanel.tsx | character panel fantasy.png, inventory and character panel.png, inventory.png | — | — | — | ⏳ |

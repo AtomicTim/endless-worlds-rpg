@@ -439,11 +439,14 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
           </div>
           <div
             style={{
+              // PR-5v-b (B): XP line lifted to match the section-label
+              // brightness — was 7px / 0.18em / var(--nav-breadcrumb)
+              // (washed out against the new BG-1 surface).
               fontFamily:    "var(--sans)",
-              fontSize:      7,
-              letterSpacing: "0.18em",
+              fontSize:      9,
+              letterSpacing: "0.12em",
               textTransform: "uppercase",
-              color:         "var(--nav-breadcrumb)",
+              color:         "var(--ui-text-2)",
               marginTop:     2,
             }}
           >
@@ -473,11 +476,13 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
         <section aria-label="Attributes">
           <div
             style={{
+              // PR-5v-b (B): section-label brightness lift —
+              // var(--ui-text-2) 9px 0.12em was 7px / 0.24em / dim.
               fontFamily:    "var(--sans)",
-              fontSize:      7,
-              letterSpacing: "0.24em",
+              fontSize:      9,
+              letterSpacing: "0.12em",
               textTransform: "uppercase",
-              color:         "var(--nav-breadcrumb)",
+              color:         "var(--ui-text-2)",
               marginBottom:  6,
             }}
           >
@@ -549,11 +554,12 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
           >
             <span
               style={{
+                // PR-5v-b (B): brightness lift (see Attributes header).
                 fontFamily:    "var(--sans)",
-                fontSize:      7,
-                letterSpacing: "0.24em",
+                fontSize:      9,
+                letterSpacing: "0.12em",
                 textTransform: "uppercase",
-                color:         "var(--nav-breadcrumb)",
+                color:         "var(--ui-text-2)",
                 flex:          1,
               }}
             >
@@ -618,109 +624,86 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
         <section aria-label="Pack">
           <div
             style={{
+              // PR-5v-b (B): brightness lift (see Attributes header).
               fontFamily:    "var(--sans)",
-              fontSize:      7,
-              letterSpacing: "0.24em",
+              fontSize:      9,
+              letterSpacing: "0.12em",
               textTransform: "uppercase",
-              color:         "var(--nav-breadcrumb)",
+              color:         "var(--ui-text-2)",
               marginBottom:  4,
             }}
           >
             Pack
           </div>
-          {/* PR-5v (E) — 3-col grid, dynamic cell count.
-              Tim's override of design ref §13: always show empty cells
-              as visible dim bordered tiles. Cell count grows with
-              inventory but always shows at least 8 cells (3+3+2);
-              caps at INVENTORY_CAP (20). Item tiles regain the name
-              label below the icon per mockup 2 (inventory and
-              character panel.png) — earlier UI-fix-F dropped the
-              label; PR-5v restores it. */}
+          {/* PR-5v-b (A) — 4-col grid, fixed 20 cells (INVENTORY_CAP).
+              Replaces PR-5v's dynamic 3-col count with a stable
+              4×5 = 20 grid that matches mockup 3 (inventory.png).
+              At 4-col in a 196px sidebar each cell is ~40-44px square;
+              the name label from PR-5v doesn't fit cleanly at that
+              size, so pack tiles are icon-only at this scale —
+              full name is available in the inline ItemDetailCard
+              below the grid on tap. Empty cells stay as the same
+              dim dashed bordered tiles introduced in PR-5v. */}
           <div
             style={{
               display:             "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
+              gridTemplateColumns: "repeat(4, 1fr)",
               gap:                 6,
             }}
           >
-            {(() => {
-              const items      = packItems;
-              // ceil((items.length + 3) / 3) * 3 — pad up to next
-              // multiple of 3 with at least 3 trailing empties; floor
-              // at 8 cells; cap at INVENTORY_CAP.
-              const padded     = Math.ceil((items.length + 3) / 3) * 3;
-              const cellCount  = Math.min(INVENTORY_CAP, Math.max(8, padded));
-              return Array.from({ length: cellCount }).map((_, i) => {
-                const item = items[i];
-                if (!item) {
-                  return (
-                    <div
-                      key={`empty-${i}`}
-                      aria-hidden
-                      style={{
-                        aspectRatio:  "1",
-                        background:   "transparent",
-                        border:       "1px solid var(--card-border)",
-                        borderRadius: 6,
-                        opacity:      0.4,
-                      }}
-                    />
-                  );
-                }
-                const isSelected = selectedId === item.id;
-                const Icon       = ITEM_TABLER_ICONS[item.type] ?? IconQuestionMark;
+            {Array.from({ length: INVENTORY_CAP }).map((_, i) => {
+              const item = packItems[i];
+              if (!item) {
                 return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setSelectedId(isSelected ? null : item.id)}
-                    title={item.name}
+                  <div
+                    key={`empty-${i}`}
+                    aria-hidden
                     style={{
-                      aspectRatio:    "1",
-                      background:     "var(--bg-2)",
-                      border:         isSelected
-                        ? "1.5px solid rgba(var(--genre-accent-rgb), .45)"
-                        : "1px solid var(--card-border)",
-                      borderRadius:   6,
-                      display:        "flex",
-                      flexDirection:  "column",
-                      alignItems:     "center",
-                      justifyContent: "center",
-                      gap:            4,
-                      cursor:         "pointer",
-                      padding:        4,
-                      transition:     "border-color 120ms",
+                      aspectRatio:  "1",
+                      background:   "transparent",
+                      border:       "1px solid var(--card-border)",
+                      borderRadius: 6,
+                      opacity:      0.4,
                     }}
-                    onMouseEnter={(e) => {
-                      if (isSelected) return;
-                      (e.currentTarget as HTMLButtonElement).style.borderColor =
-                        "rgba(var(--genre-accent-rgb), 0.30)";
-                    }}
-                    onMouseLeave={(e) => {
-                      if (isSelected) return;
-                      (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--card-border)";
-                    }}
-                  >
-                    <Icon size={20} stroke={1.75} color="var(--npc-role)" aria-hidden />
-                    <span
-                      style={{
-                        fontFamily:   "var(--sans)",
-                        fontSize:     9,
-                        color:        "var(--ui-text-muted)",
-                        textAlign:    "center",
-                        width:        "100%",
-                        whiteSpace:   "nowrap",
-                        overflow:     "hidden",
-                        textOverflow: "ellipsis",
-                        lineHeight:   1.1,
-                      }}
-                    >
-                      {item.name}
-                    </span>
-                  </button>
+                  />
                 );
-              });
-            })()}
+              }
+              const isSelected = selectedId === item.id;
+              const Icon       = ITEM_TABLER_ICONS[item.type] ?? IconQuestionMark;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setSelectedId(isSelected ? null : item.id)}
+                  title={item.name}
+                  style={{
+                    aspectRatio:    "1",
+                    background:     "var(--bg-2)",
+                    border:         isSelected
+                      ? "1.5px solid rgba(var(--genre-accent-rgb), .45)"
+                      : "1px solid var(--card-border)",
+                    borderRadius:   6,
+                    display:        "flex",
+                    alignItems:     "center",
+                    justifyContent: "center",
+                    cursor:         "pointer",
+                    padding:        0,
+                    transition:     "border-color 120ms",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (isSelected) return;
+                    (e.currentTarget as HTMLButtonElement).style.borderColor =
+                      "rgba(var(--genre-accent-rgb), 0.30)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (isSelected) return;
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--card-border)";
+                  }}
+                >
+                  <Icon size={18} stroke={1.75} color="var(--npc-role)" aria-hidden />
+                </button>
+              );
+            })}
           </div>
 
           {/* Inline detail expand — renders directly below the grid */}

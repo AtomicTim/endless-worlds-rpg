@@ -3,9 +3,8 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 5c8a9a2 (BG-3b: rarity abbreviations + remove panel genre overlays)
-**jest baseline:** 852 (was 854 — 2 OVERLAY_REQUIRED entries retired for CharacterPanel + ContextPanel; intentional)
-**ui-foundation baseline:** 118 (was 120 — same reason)
+**Last code commit:** 8dcd7b1 (BG-3c: equipped row rarity no-truncate + visible separator)
+**jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
 ---
@@ -28,12 +27,13 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 | PR-5v-b | CharacterPanel — 4-col pack grid, section label contrast | — | bc5e0d3 | ✅ | ✅ |
 | PR-5v-c | Sidebar width 196→240px / 160→200px; item detail above pack grid | — | a2d428c | ✅ | ✅ |
 | PR-5v-d | CharacterPanel — item detail card value right-aligned | — | 7ab070c | ✅ | ✅ |
-| PR-5v-e | Rarity color system (5 tiers) + pack/equipped indicators | — | 36e45f6 | ⏳ | ⏳ |
+| PR-5v-e | Rarity color system (5 tiers) + pack/equipped indicators | — | 36e45f6 | ✅ | ✅ |
 | PR-6v | ContextPanel.tsx full visual rework | context panel.png | 6090f56 | ✅ | ✅ |
-| PR-6v-b | ContextPanel — NPC/object card backgrounds + region footer contrast | — | 2ad5974 | ⏳ | ⏳ |
+| PR-6v-b | ContextPanel — NPC/object card backgrounds + region footer contrast | — | 2ad5974 | ✅ | ✅ |
 | PR-6v-c | ContextPanel — remove redundant region footer | — | 997e75b | ✅ | ✅ |
 | BG-3 | Neutral panels + equipped name·RARITY·stat + thicker rarity borders | — | dd56263 | ✅ | ✅ |
-| BG-3b | Rarity abbreviations (COM/UNC/RARE/EPIC/LEG) + remove panel overlays | — | 5c8a9a2 | ⏳ | ⏳ |
+| BG-3b | Rarity abbreviations (COM/UNC/RARE/EPIC/LEG) + remove panel overlays | — | 5c8a9a2 | ✅ | ✅ |
+| BG-3c | Equipped row rarity no-truncate + visible pipe separator | — | 8dcd7b1 | ✅ | ✅ |
 | PR-7v | DialogueModal.tsx | npc dialogue mobile.png | — | — | ⏳ next |
 | PR-8v | CodexContent.tsx + CodexModal.tsx | codex mobile.png | — | — | ⏳ |
 | PR-9v | JournalModal.tsx | quest and journal mobile.png, quests cyberpunk.png, quests space.png | — | — | ⏳ |
@@ -78,8 +78,8 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 - Visual verification required before each PR marked ✅.
 - Mobile note included in every prompt going forward; dedicated mobile pass at end of visual track.
 - Previous UI arc work (UI-1–UI-13, fix groups A–L) not treated as correct baseline.
-- Genre overlays (.ol-tex/.ol-scan/.ol-grid): intentionally removed from CharacterPanel + ContextPanel (neutral gray
-  panels should not carry genre texture). Retained in StoryFeed, CodexModal, JournalModal, DialogueModal.
+- Genre overlays (.ol-tex/.ol-scan/.ol-grid): removed from CharacterPanel + ContextPanel (neutral panels should not
+  carry genre texture). Retained in StoryFeed, CodexModal, JournalModal, DialogueModal.
 
 ## Known Gaps
 
@@ -92,3 +92,5 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.
 - **Perks section header in CharacterPanel** still dim — bundle into next CharacterPanel touch.
 - **LootList.tsx** consumes --loot-quality-uncommon alias (now green via PR-5v-e) — verify in PR-12v.
+- **Equipped row item name truncation** ("Robes" → "Ro...") — name flex:3 may be too tight at some widths.
+  Fix: increase name to flex:4, reduce stat to flex:1. Defer to next CharacterPanel touch or fix now if bothers Tim.

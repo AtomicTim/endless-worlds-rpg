@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getAllCodex, getWorldAssetsByCategory } from "@/lib/game/codex";
 import { AssetCategory } from "@/types/game";
-import type { CodexEntry, MasterState, WorldAsset } from "@/types/game";
+import type { CodexEntry, MasterState, WorldAsset, WorldGraph } from "@/types/game";
 import { useGameStore } from "@/lib/stores/game-store";
 
 /**
- * Day 20.4.2 TASK 4 / PR-8v — Codex body, extracted from the standalone
- * codex page so the same renderer runs inside the modal overlay on top
- * of /game without unmounting CombatMode.
+ * Day 20.4.2 TASK 4 / PR-8v / PR-8v-b — Codex body, extracted from
+ * the standalone codex page so the same renderer runs inside the modal
+ * overlay on top of /game without unmounting CombatMode.
  *
  * PR-8v rework:
  *   • ALL tab as default, first in the tab strip
@@ -23,6 +23,19 @@ import { useGameStore } from "@/lib/stores/game-store";
  *   • Section headers on ALL tab, reverse-insertion order so the most
  *     recently discovered entry sits at the top of each group
  *   • Hardcoded hex values replaced with tokens per the brief's map
+ *
+ * PR-8v-b polish:
+ *   • Tab underline now sits flush with the nav's bottom border
+ *     (nav vertical padding stripped on the bottom edge)
+ *   • Stored entry names title-cased at render
+ *   • LOCATION rows + expanded header show the world-graph node type
+ *     ("SETTLEMENT HUB", "DUNGEON" …) next to the place name
+ *   • LOCATION expanded view drops the redundant TYPE row — the
+ *     header now carries the type label
+ *   • Expanded-panel typography lifted for readability
+ *     (panel bg → bg-3, prose 13/1.8/ui-text-1, labels 9/ui-text-2,
+ *     values 12/ui-text-1)
+ *   • Row preview shows the first complete sentence, not a mid-word cut
  */
 
 type TabId    = "LOCATION" | "CHARACTER" | "FACTION" | "ITEM" | "LORE" | "BESTIARY";
@@ -106,16 +119,48 @@ function parseBestiaryStats(desc: string): {
   };
 }
 
-// PR-8v — first 70 chars of description for the closed-row preview
-// line. Trims at the nearest word boundary so the ellipsis doesn't
-// land mid-syllable; falls back to a hard cut when no space exists
-// inside the window.
-function previewText(desc: string | undefined, limit = 70): string {
-  if (!desc) return "";
-  if (desc.length <= limit) return desc;
-  const window = desc.slice(0, limit);
-  const lastSpace = window.lastIndexOf(" ");
-  return (lastSpace > 40 ? window.slice(0, lastSpace) : window) + "…";
+// PR-8v-b — first complete sentence preview. Replaces PR-8v's
+// previewText() char-window cut. Looks for `.` `!` `?` followed by a
+// space or end-of-string; falls back to an 80-char ellipsis cut when
+// no sentence terminator is found in the input. The follow-up HF
+// for a `short_description` field on CodexEntry will retire this
+// helper — it's a best-effort heuristic against AI-generated prose.
+function firstSentence(text: string | undefined): string {
+  if (!text) return "";
+  const m = text.match(/^[^.!?]+[.!?]/);
+  return m ? m[0].trim() : text.slice(0, 80).trim() + "…";
+}
+
+// PR-8v-b — title-case stored slug names. CodexEntry names are
+// often persisted lowercase (or as kebab/snake slugs); render-time
+// title-casing keeps the display surface uniform without mutating
+// the data layer. Boundary regex matches both word start and the
+// first letter after any whitespace.
+function toTitleCase(s: string): string {
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// PR-8v-b — resolve a LOCATION's world-graph node type for the
+// row subtitle + expanded header. Walks WorldGraph.nodes looking
+// for an id / slugified name / asset_id substring match against
+// the codex entry's first_seen_location, then prefers node_type
+// over the generic category. Returns undefined when the lookup
+// misses so the caller can fall back to the bare name without a
+// trailing dash + label.
+function getLocationTypeLabel(
+  firstSeen: string,
+  wg: WorldGraph | undefined,
+): string | undefined {
+  if (!wg || !firstSeen) return undefined;
+  const node = Object.values(wg.nodes).find(
+    (n) =>
+      n.id === firstSeen
+      || n.name.toLowerCase().replace(/\s+/g, "_") === firstSeen
+      || (n.asset_id?.includes(firstSeen) ?? false),
+  );
+  if (!node) return undefined;
+  const raw = node.node_type ?? node.category ?? "";
+  return raw ? raw.replace(/_/g, " ").toUpperCase() : undefined;
 }
 
 export function CodexContent({ onCharacterNameLoaded }: Props) {
@@ -129,6 +174,10 @@ export function CodexContent({ onCharacterNameLoaded }: Props) {
   // store updates unless registry contents change, so the lookup
   // below is cheap.
   const npcRegistry        = useGameStore((s) => s.masterState?.npc_registry);
+  // PR-8v-b — world_graph powers the LOCATION row subtitle + expanded
+  // header type-label lookup. Same identity-stability story as the
+  // registry selector above.
+  const worldGraph         = useGameStore((s) => s.masterState?.world_graph);
 
   const [entries, setEntries]                         = useState<CodexEntry[]>([]);
   const [, setLocationWorldAssets]                    = useState<WorldAsset[]>([]);
@@ -268,12 +317,14 @@ export function CodexContent({ onCharacterNameLoaded }: Props) {
 
   return (
     <>
-      {/* PR-8v — Tab bar. 7 tabs (ALL + 6) with no emoji icons. At
-          mobile widths the strip lets a horizontal scroll fall in
-          rather than wrapping the labels onto two rows. Counts sit
-          inline after each label as small muted suffixes. */}
+      {/* PR-8v / PR-8v-b — Tab bar. 7 tabs (ALL + 6) with no emoji
+          icons. PR-8v-b (A) stripped the nav's bottom padding so the
+          active-tab 2px borderBottom sits flush against the nav's own
+          1px bottom border — together they form a single tab-indicator
+          line below the active label rather than a floating underline
+          with a gap below it. */}
       <nav
-        className="flex gap-1 px-4 py-2 overflow-x-auto"
+        className="flex gap-1 px-4 pt-2 overflow-x-auto"
         style={{
           borderBottom: "1px solid var(--ui-border-default)",
           // Hide native scrollbar but keep horizontal scrolling
@@ -296,10 +347,18 @@ export function CodexContent({ onCharacterNameLoaded }: Props) {
                 background:    "transparent",
                 color:         active ? "var(--genre-accent)" : "var(--ui-text-muted)",
                 border:        "none",
+                // PR-8v-b (A) — paddingBottom: 6 keeps the underline
+                // anchored 6px below the label text; the nav's
+                // borderBottom (above) sits directly under this
+                // button's 2px line so the two visually merge into a
+                // single indicator stack.
                 borderBottom:  active
                   ? "2px solid var(--genre-accent)"
                   : "2px solid transparent",
-                padding:       "6px 10px",
+                paddingTop:    6,
+                paddingBottom: 6,
+                paddingLeft:   10,
+                paddingRight:  10,
                 fontSize:      8,
                 letterSpacing: "0.12em",
                 cursor:        "pointer",
@@ -408,6 +467,7 @@ export function CodexContent({ onCharacterNameLoaded }: Props) {
                           setSelectedId((id) => (id === entry.id ? null : entry.id))
                         }
                         npcRegistry={npcRegistry}
+                        worldGraph={worldGraph}
                       />
                     ))}
                   </div>
@@ -428,6 +488,7 @@ export function CodexContent({ onCharacterNameLoaded }: Props) {
                   setSelectedId((id) => (id === entry.id ? null : entry.id))
                 }
                 npcRegistry={npcRegistry}
+                worldGraph={worldGraph}
               />
             ))}
           </div>
@@ -448,14 +509,26 @@ interface EntryRowProps {
   isNew:       boolean;
   onToggle:    () => void;
   npcRegistry: MasterState["npc_registry"] | undefined;
+  worldGraph:  WorldGraph | undefined;
 }
 
-function EntryRow({ entry, isOpen, isNew, onToggle, npcRegistry }: EntryRowProps) {
+function EntryRow({ entry, isOpen, isNew, onToggle, npcRegistry, worldGraph }: EntryRowProps) {
   const isMajor   = entry.significance === "MAJOR";
   const leftColor = ENTRY_TYPE_COLOR[entry.category];
-  const subtitle  = entry.first_seen_location
-    ? entry.first_seen_location.replace(/_/g, " ")
+
+  // PR-8v-b (B/C) — subtitle is the title-cased first_seen_location.
+  // For LOCATION entries the world-graph node type (when known) is
+  // appended after a dash so the player sees both place + kind at a
+  // glance. The lookup is undefined-safe (returns undefined when the
+  // graph isn't hydrated or the slug doesn't match a node).
+  const subtitleBase = entry.first_seen_location
+    ? toTitleCase(entry.first_seen_location.replace(/_/g, " "))
     : "";
+  const typeLabel = entry.category === "LOCATION"
+    ? getLocationTypeLabel(entry.first_seen_location, worldGraph)
+    : undefined;
+  const subtitle = subtitleBase
+    + (typeLabel ? ` — ${typeLabel}` : "");
 
   return (
     <div
@@ -507,7 +580,8 @@ function EntryRow({ entry, isOpen, isNew, onToggle, npcRegistry }: EntryRowProps
                 ◈
               </span>
             )}
-            {entry.name}
+            {/* PR-8v-b (B) — title-case stored slug names at render. */}
+            {toTitleCase(entry.name)}
           </div>
           {subtitle && (
             <div
@@ -534,7 +608,9 @@ function EntryRow({ entry, isOpen, isNew, onToggle, npcRegistry }: EntryRowProps
                 marginTop:  2,
               }}
             >
-              {previewText(entry.description)}
+              {/* PR-8v-b (F) — first complete sentence preview
+                  replaces the prior char-window cut. */}
+              {firstSentence(entry.description)}
             </div>
           )}
         </div>
@@ -586,16 +662,22 @@ function EntryRow({ entry, isOpen, isNew, onToggle, npcRegistry }: EntryRowProps
 
       {/* Expanded panel — category-specific layout. Renders inside
           the same card so the left tier-colour bar continues into
-          the expansion. */}
+          the expansion. PR-8v-b (E) lifted the panel surface from
+          var(--bg-0) to var(--bg-3) for the brighter, more
+          readable plate behind the prose + structured metadata. */}
       {isOpen && (
         <div
           style={{
             padding:      "10px 12px",
             borderTop:    "1px solid var(--card-border)",
-            background:   "var(--bg-0)",
+            background:   "var(--bg-3)",
           }}
         >
-          <ExpandedPanel entry={entry} npcRegistry={npcRegistry} />
+          <ExpandedPanel
+            entry={entry}
+            npcRegistry={npcRegistry}
+            typeLabel={typeLabel}
+          />
         </div>
       )}
     </div>
@@ -604,21 +686,26 @@ function EntryRow({ entry, isOpen, isNew, onToggle, npcRegistry }: EntryRowProps
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ExpandedPanel — switches on entry.category to render the right
-// structured layout. All labels share the same uppercase 7px muted
-// tone; values fork between prose (Cormorant italic) and data (Inter
-// Tight 11px ui-text-2) depending on field semantics.
+// structured layout. PR-8v-b (E) lifted the typography:
+//   labels  9px var(--ui-text-2) 0.10em  (was 7px var(--ui-text-muted) 0.12em)
+//   values  12px var(--ui-text-1)        (was 11px var(--ui-text-2))
+//   prose   13px lineHeight 1.8          (was 12px lineHeight 1.7)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ExpandedPanelProps {
   entry:       CodexEntry;
   npcRegistry: MasterState["npc_registry"] | undefined;
+  /** Pre-computed by EntryRow so the LOCATION header doesn't have to
+   *  re-walk the world graph. Undefined for non-LOCATION entries and
+   *  for LOCATION entries that don't resolve to a node. */
+  typeLabel?:  string;
 }
 
 const PANEL_LABEL_STYLE: React.CSSProperties = {
   fontFamily:    "var(--sans)",
-  fontSize:      7,
-  letterSpacing: "0.12em",
-  color:         "var(--ui-text-muted)",
+  fontSize:      9,
+  letterSpacing: "0.10em",
+  color:         "var(--ui-text-2)",
   textTransform: "uppercase",
   display:       "block",
   marginBottom:  2,
@@ -626,17 +713,17 @@ const PANEL_LABEL_STYLE: React.CSSProperties = {
 
 const PANEL_VALUE_STYLE: React.CSSProperties = {
   fontFamily: "var(--sans)",
-  fontSize:   11,
-  color:      "var(--ui-text-2)",
+  fontSize:   12,
+  color:      "var(--ui-text-1)",
   lineHeight: 1.4,
 };
 
 const PANEL_PROSE_STYLE: React.CSSProperties = {
   fontFamily: "var(--serif)",
   fontStyle:  "italic",
-  fontSize:   12,
+  fontSize:   13,
   color:      "var(--ui-text-1)",
-  lineHeight: 1.7,
+  lineHeight: 1.8,
   margin:     0,
 };
 
@@ -655,9 +742,9 @@ function PanelField({ label, value }: { label: string; value?: string }) {
   );
 }
 
-function ExpandedPanel({ entry, npcRegistry }: ExpandedPanelProps) {
+function ExpandedPanel({ entry, npcRegistry, typeLabel }: ExpandedPanelProps) {
   const sourceLocation = entry.first_seen_location
-    ? entry.first_seen_location.replace(/_/g, " ")
+    ? toTitleCase(entry.first_seen_location.replace(/_/g, " "))
     : "";
 
   // CHARACTER: pull trust → disposition pill from npc_registry.
@@ -688,11 +775,14 @@ function ExpandedPanel({ entry, npcRegistry }: ExpandedPanelProps) {
               style={{
                 display:    "flex",
                 flexWrap:   "wrap",
-                gap:        6,
+                gap:        8,
                 alignItems: "center",
               }}
             >
               {dispLabel && (
+                // Disposition pill keeps its compact 7px tone — it's
+                // a pill, not a metadata label, so the PR-8v-b
+                // label-tier lift doesn't apply.
                 <span
                   className="ew-sans uppercase"
                   style={{
@@ -709,12 +799,17 @@ function ExpandedPanel({ entry, npcRegistry }: ExpandedPanelProps) {
                 </span>
               )}
               {sourceLocation && (
+                // "Met at <location>" reads as metadata, so it picks
+                // up the lifted PR-8v-b label tier (9px, ui-text-2,
+                // 0.10em). Slightly larger than the disposition pill
+                // beside it so the eye lands on it as informational
+                // text rather than another tag.
                 <span
                   className="ew-sans uppercase"
                   style={{
-                    fontSize:      7,
-                    letterSpacing: "0.12em",
-                    color:         "var(--ui-text-muted)",
+                    fontSize:      9,
+                    letterSpacing: "0.10em",
+                    color:         "var(--ui-text-2)",
                   }}
                 >
                   Met at {sourceLocation}
@@ -756,22 +851,42 @@ function ExpandedPanel({ entry, npcRegistry }: ExpandedPanelProps) {
     );
   }
 
-  // LOCATION: prose + 2-col TYPE / REGION grid.
+  // LOCATION: PR-8v-b (C+D) — header with title-cased name + type
+  // tag, then prose, then a single REGION line (the prior TYPE row
+  // is gone since the header now carries that information).
   if (entry.category === "LOCATION") {
     return (
       <>
+        <header style={{ marginBottom: 6 }}>
+          <span
+            className="ew-sans"
+            style={{
+              fontFamily: "var(--sans)",
+              fontWeight: 600,
+              fontSize:   14,
+              color:      "var(--ui-text-1)",
+              lineHeight: 1.25,
+            }}
+          >
+            {toTitleCase(entry.name)}
+          </span>
+          {typeLabel && (
+            <span
+              className="ew-sans uppercase"
+              style={{
+                fontSize:      10,
+                letterSpacing: "0.10em",
+                color:         "var(--ui-text-muted)",
+                marginLeft:    8,
+              }}
+            >
+              — {typeLabel}
+            </span>
+          )}
+        </header>
         {entry.description && <p style={PANEL_PROSE_STYLE}>{entry.description}</p>}
         <div style={PANEL_DIVIDER_STYLE} aria-hidden />
-        <div
-          style={{
-            display:             "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap:                 8,
-          }}
-        >
-          <PanelField label="Type"   value={entry.category} />
-          <PanelField label="Region" value={sourceLocation} />
-        </div>
+        <PanelField label="Region" value={sourceLocation} />
       </>
     );
   }
@@ -792,7 +907,7 @@ function ExpandedPanel({ entry, npcRegistry }: ExpandedPanelProps) {
   }
 
   // ITEM: prose + 2-col TYPE / RARITY grid. Rarity is unknown at
-  // the CodexEntry layer; leaves both as the category fallback.
+  // the CodexEntry layer; renders as a blank cell.
   if (entry.category === "ITEM") {
     return (
       <>
@@ -812,16 +927,12 @@ function ExpandedPanel({ entry, npcRegistry }: ExpandedPanelProps) {
     );
   }
 
-  // LORE: prose + source line. lineHeight 1.8 for lore prose only
-  // — gives the long-form text more vertical breath.
+  // LORE: prose + source line. Inherits the lifted PR-8v-b prose
+  // lineHeight (1.8) so the standalone override is gone.
   if (entry.category === "LORE") {
     return (
       <>
-        {entry.description && (
-          <p style={{ ...PANEL_PROSE_STYLE, lineHeight: 1.8 }}>
-            {entry.description}
-          </p>
-        )}
+        {entry.description && <p style={PANEL_PROSE_STYLE}>{entry.description}</p>}
         {sourceLocation && (
           <>
             <div style={PANEL_DIVIDER_STYLE} aria-hidden />

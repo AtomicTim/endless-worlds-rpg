@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 4ce1ead (UI-PR7vc: dialogue modal viewport fit + 700px desktop width)
+**Last code commit:** 721c59c (UI-PR7vg: DialogueBar NPC card — species next to role)
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -37,11 +37,8 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 | BG-3d | Equipped row name flex 4, rarity/stat flex 1 | — | 0cc5e3f | ✅ | ✅ |
 | BG-3e | Equipped row stat minWidth + separator margin fix | — | a4dcf0b | — | superseded by BG-3f |
 | BG-3f | Equipped row fixed-width columns (name flex:1 / rarity 38px / stat 52px) | — | 53629b1 | ✅ | ✅ |
-| PR-7v | DialogueModal — conversation history + header badge + option cards | npc dialogue mobile.png | 53dd529 | ⏳ | ⏳ |
-| PR-7v-b | DialogueModal — compact inline option cards, smaller history | — | 137a67f | ⏳ | ⏳ |
-| PR-7v-c | DialogueModal — viewport fit + 700px desktop width | — | 4ce1ead | ⏳ still too tall | ⏳ |
-| PR-7v-d | DialogueModal — remaining height issue | — | — | — | ⏳ next session |
-| PR-8v | CodexContent.tsx + CodexModal.tsx | codex mobile.png | — | — | ⏳ |
+| PR-7v | DialogueBar — full chain (modal→bar rebuild, NPC card, speech colors, species) | npc dialogue mobile.png | 721c59c | ✅ | ✅ |
+| PR-8v | CodexContent.tsx + CodexModal.tsx | codex mobile.png | — | — | ⏳ next |
 | PR-9v | JournalModal.tsx | quest and journal mobile.png, quests cyberpunk.png, quests space.png | — | — | ⏳ |
 | PR-10v | LevelUpModal.tsx | ability panel expanded mobile.png | — | — | ⏳ |
 | PR-11v | CombatMode/* | combat desktop.png, combat panel mobile.png, turn resolution timing.png, health bar and damage numbers.png | — | — | ⏳ |
@@ -55,12 +52,17 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 
 ---
 
-## Resume point (next session)
+## PR-7v sub-commit chain (for archaeology)
 
-PR-7v-d: dialogue modal still too tall after PR-7v-c. The flex column layout is in place but height is not constrained
-correctly. Need a screenshot at session start to diagnose. The bottom section (options + type-own + END CONVERSATION)
-may be taller than expected — consider: reduce option card padding further, reduce end conversation button padding,
-or cap the options section height and make it scroll rather than the whole modal.
+| Sub-PR | Change | Commit |
+|--------|--------|--------|
+| PR-7v | Conversation history strip + header badge + option cards | 53dd529 |
+| PR-7v-b | Compact inline option cards, smaller history | 137a67f |
+| PR-7v-c | Viewport fit + 700px desktop width | 4ce1ead |
+| PR-7v-d | DialogueBar architectural rebuild (bottom bar replaces nav+input) | 64cd623 |
+| PR-7v-e | NPC speech cream, header strip, card sizing, bold options | 525b5c5 |
+| PR-7v-f | parseSpokenText — prose amber, quoted words cream bold | 5b9938f |
+| PR-7v-g | NPC species next to role (code correct; data gap in pre-23.5A saves) | 721c59c |
 
 ---
 
@@ -94,7 +96,8 @@ or cap the options section height and make it scroll rather than the whole modal
 - Mobile note included in every prompt going forward; dedicated mobile pass at end of visual track.
 - Previous UI arc work (UI-1–UI-13, fix groups A–L) not treated as correct baseline.
 - Genre overlays removed from CharacterPanel + ContextPanel; retained in StoryFeed + modals.
-- Equipped row layout: fixed-width columns (rarity 38px, stat 52px) established in BG-3f — do not revert to flex proportions.
+- Equipped row layout: fixed-width columns (rarity 38px, stat 52px) — do not revert to flex proportions.
+- --hl-said: bright cream #f5f0e4 — permanently off the amber axis. Do not revert.
 
 ## Known Gaps
 
@@ -107,6 +110,6 @@ or cap the options section height and make it scroll rather than the whole modal
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.
 - **Perks section header in CharacterPanel** still dim — bundle into next CharacterPanel touch.
 - **LootList.tsx** consumes --loot-quality-uncommon alias (now green via PR-5v-e) — verify in PR-12v.
-- **Dialogue empty slots.** 2 empty dashed placeholders show when fewer than 4 options. Fix: remove fixed 4-slot grid, render only real options. Next DialogueModal touch.
-- **Dialogue history content.** History section shows general story feed messages rather than filtering to current NPC conversation only. Needs scoped filter by npcKey/conversationId. After PR-7v stabilises.
-- **Dialogue modal height.** Still too tall after PR-7v-c. flex column layout is in place but bottom section taller than expected. PR-7v-d next session.
+- **Dialogue empty slots.** Render only real options (remove fixed 4-slot grid). Next DialogueModal touch.
+- **Dialogue history content.** Filter to current NPC conversation only. After PR-7v stabilises.
+- **NPC species in DialogueBar.** Code correct; current save NPCDefinitions lack species_id (pre-23.5A world). Will show automatically on new game.

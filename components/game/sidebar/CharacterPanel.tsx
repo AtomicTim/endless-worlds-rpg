@@ -119,6 +119,24 @@ const CURRENCY_ICON: Record<Genre, TablerIcon> = {
   [Genre.POST_APOCALYPTIC]:    IconTool,
 };
 
+/** PR-5v-e — rarity → CSS variable name. Returns the var() expression
+ *  rather than a hex so theming + the ui-foundation hex sweep both
+ *  stay clean. The five tier names match types/game.ts ItemRarity
+ *  enum values (COMMON / UNCOMMON / RARE / LEGENDARY); "epic" is
+ *  carried defensively for any future tier expansion — the enum
+ *  doesn't expose it today but the colour is defined in globals.css
+ *  and may surface via lore items / loot card uplift later. Unknown
+ *  / undefined input falls back to common (gray). */
+function rarityColor(rarity: string | undefined): string {
+  switch ((rarity ?? "").toLowerCase()) {
+    case "uncommon":  return "var(--rarity-uncommon)";
+    case "rare":      return "var(--rarity-rare)";
+    case "epic":      return "var(--rarity-epic)";
+    case "legendary": return "var(--rarity-legendary)";
+    default:          return "var(--rarity-common)";
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HP / XP helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -714,6 +732,16 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
               }
               const isSelected = selectedId === item.id;
               const Icon       = ITEM_TABLER_ICONS[item.type] ?? IconQuestionMark;
+              // PR-5v-e — pack cell border tinted by rarity colour.
+              // Selected: full-brightness rarity border at 1.5px,
+              // replacing the prior genre-accent treatment so the
+              // rarity reads as the cell's identity. Unselected: the
+              // rarity colour rendered at ~45% via color-mix against
+              // transparent — visible but subtle. Empty cells (the
+              // earlier branch above) keep the dim --card-border
+              // dashed style so they read as "slot, not item."
+              const tier      = rarityColor(item.rarity);
+              const tierSoft  = `color-mix(in srgb, ${tier} 45%, transparent)`;
               return (
                 <button
                   key={item.id}
@@ -724,8 +752,8 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                     aspectRatio:    "1",
                     background:     "var(--bg-2)",
                     border:         isSelected
-                      ? "1.5px solid rgba(var(--genre-accent-rgb), .45)"
-                      : "1px solid var(--card-border)",
+                      ? `1.5px solid ${tier}`
+                      : `1px solid ${tierSoft}`,
                     borderRadius:   6,
                     display:        "flex",
                     alignItems:     "center",
@@ -736,12 +764,11 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                   }}
                   onMouseEnter={(e) => {
                     if (isSelected) return;
-                    (e.currentTarget as HTMLButtonElement).style.borderColor =
-                      "rgba(var(--genre-accent-rgb), 0.30)";
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = tier;
                   }}
                   onMouseLeave={(e) => {
                     if (isSelected) return;
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--card-border)";
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = tierSoft;
                   }}
                 >
                   <Icon size={18} stroke={1.75} color="var(--npc-role)" aria-hidden />
@@ -916,6 +943,24 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
       >
         {item ? item.name : "— empty"}
       </span>
+      {/* PR-5v-e — 5px rarity dot sits between the name and the stat
+          column when the slot is filled. Empty slots skip the dot
+          entirely (nothing to grade); the rest of the row continues
+          to right-align WEAPON / ARMOUR / ACCESSORY in the same slot. */}
+      {item && (
+        <span
+          aria-hidden
+          style={{
+            width:        5,
+            height:       5,
+            borderRadius: "50%",
+            background:   rarityColor(item.rarity),
+            flexShrink:   0,
+            marginRight:  6,
+            alignSelf:    "center",
+          }}
+        />
+      )}
       {item ? (
         <span
           style={{
@@ -998,6 +1043,12 @@ function ItemDetailCard(props: ItemDetailCardProps) {
   const showRead  = item.type === ItemType.LORE && !inCombat;
   const showDrop  = !inCombat && item.type !== ItemType.KEY;
 
+  // PR-5v-e — detail card border picks up the item's rarity colour
+  // at ~45% (matching the pack cell unselected tint) so the rarity
+  // reads as the card's identity. Background stays the genre-accent
+  // wash for tonal continuity with the surrounding sidebar.
+  const rarityTier      = rarityColor(item.rarity);
+  const rarityBorderTone = `color-mix(in srgb, ${rarityTier} 45%, transparent)`;
   return (
     <div
       role="region"
@@ -1006,7 +1057,7 @@ function ItemDetailCard(props: ItemDetailCardProps) {
         marginTop:    8,
         padding:      8,
         background:   "rgba(var(--genre-accent-rgb), 0.06)",
-        border:       "1px solid rgba(var(--genre-accent-rgb), 0.30)",
+        border:       `1px solid ${rarityBorderTone}`,
         borderRadius: 3,
         display:      "flex",
         flexDirection: "column",
@@ -1070,16 +1121,24 @@ function ItemDetailCard(props: ItemDetailCardProps) {
         </button>
       </div>
 
+      {/* PR-5v-e — type / rarity meta line. Split so the TYPE keeps
+          the existing muted UI ink and the RARITY word picks up its
+          tier colour. Both spans inherit the row-level tracking and
+          uppercase treatment from the parent div. */}
       <div
         style={{
           fontFamily:    "var(--sans)",
           fontSize:      9,
           letterSpacing: "0.18em",
           textTransform: "uppercase",
-          color:         "var(--ui-text-muted)",
         }}
       >
-        {item.type} · {item.rarity}
+        <span style={{ color: "var(--ui-text-muted)" }}>
+          {item.type} ·{" "}
+        </span>
+        <span style={{ color: rarityTier }}>
+          {item.rarity}
+        </span>
       </div>
 
       {statText && (

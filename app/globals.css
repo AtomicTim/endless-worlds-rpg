@@ -250,10 +250,26 @@
     --attribute-value: #cbb888;  /* attribute number — never colour-coded per stat */
     --equipped-name:   #9a8060;  /* equipped item name in sidebar */
 
-    /* Loot rarity / quality tints */
-    --loot-quality-uncommon: #d8884c;  /* warm rust — UNCOMMON tier */
-    --rarity-rare:           #fbbf24;  /* gold — RARE tier */
-    --rarity-epic:           #c084fc;  /* purple — EPIC / LEGENDARY tier */
+    /* ── Item rarity tiers (PR-5v-e) ───────────────────────────────
+       Tim's 5-tier system. The old --rarity-rare (#fbbf24 gold) and
+       --loot-quality-uncommon (#d8884c rust) were misnamed against
+       Tim's intent and have been retired. Several values double-up
+       on existing tokens — listed inline for traceability:
+         common    = #6e6557 (also --ink-4)
+         uncommon  = #5a9a5a (also --status-resolved)
+         rare      = #60a8d0 (new — cool blue)
+         epic      = #c084fc (also --status-frightened, kept name)
+         legendary = #f97316 (also --poi-dungeon, --status-burning)
+       --loot-quality-uncommon kept as a back-compat alias so the one
+       existing consumer (loot/LootList.tsx) keeps working without an
+       out-of-scope edit — its visual switches from rust → green,
+       which is the correct new uncommon semantic. */
+    --rarity-common:    #6e6557;
+    --rarity-uncommon:  #5a9a5a;
+    --rarity-rare:      #60a8d0;
+    --rarity-epic:      #c084fc;
+    --rarity-legendary: #f97316;
+    --loot-quality-uncommon: var(--rarity-uncommon);
 
     /* Surface backgrounds (design ref §5 + §6) */
     --bg-story-feed:   #181511;  /* StoryFeed scroll surface (BG-1: was #191308) */

@@ -137,8 +137,10 @@ const ALLOWED_HEX_CODES = new Set<string>([
   "#4a9888",
   // Character sheet
   "#cbb888", "#9a8060",
-  // Loot quality
-  "#d8884c",
+  // Loot quality — #d8884c (legacy --loot-quality-uncommon rust value)
+  // was retired in PR-5v-e when the rarity token system was rebuilt.
+  // --loot-quality-uncommon is now an alias for --rarity-uncommon
+  // (#5a9a5a), so no component still references the rust hex.
   // Surfaces (BG-1: PR-2 nav-card #111009 + story-feed #191308 retired
   // — both tokens now consume the BG-1 warm-charcoal values #1e1b17 /
   // #181511 listed in the foundation Surfaces section above. #222015
@@ -195,6 +197,18 @@ const ALLOWED_HEX_CODES = new Set<string>([
   // --genre-accent) — no aliases added. Set dedupes; this header is
   // documentation only.
   "#4a8a4a", "#5a9450", "#a87830", "#c84830", "#e03030",  // HP bands
+
+  // ── Item rarity tiers (PR-5v-e) ────────────────────────────────
+  // Five-tier system mapped to design decisions:
+  //   common    → #6e6557 (= --ink-4)             — gray
+  //   uncommon  → #5a9a5a (= --status-resolved)   — muted green
+  //   rare      → #60a8d0 (genuinely new)         — cool blue
+  //   epic      → #c084fc (= --status-frightened) — purple
+  //   legendary → #f97316 (= --poi-dungeon)       — bright orange
+  // Set dedupes; only #60a8d0 is a new allow-list entry. CharacterPanel
+  // consumes the values via var(--rarity-*) so no hex literals enter
+  // the component scan, but listing them here documents the system.
+  "#60a8d0",
 
   // ── Modal backdrops / generic dark fills ────────────────────────
   "#0a0a0a", "#1a1a1a",

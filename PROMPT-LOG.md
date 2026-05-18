@@ -3,8 +3,9 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 997e75b (UI-PR6vc: remove redundant region footer from ContextPanel)
-**jest baseline:** 854 (authoritative — zero delta; ui-foundation 120/120)
+**Last code commit:** 5c8a9a2 (BG-3b: rarity abbreviations + remove panel genre overlays)
+**jest baseline:** 852 (was 854 — 2 OVERLAY_REQUIRED entries retired for CharacterPanel + ContextPanel; intentional)
+**ui-foundation baseline:** 118 (was 120 — same reason)
 **tsc:** clean
 
 ---
@@ -31,8 +32,9 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 | PR-6v | ContextPanel.tsx full visual rework | context panel.png | 6090f56 | ✅ | ✅ |
 | PR-6v-b | ContextPanel — NPC/object card backgrounds + region footer contrast | — | 2ad5974 | ⏳ | ⏳ |
 | PR-6v-c | ContextPanel — remove redundant region footer | — | 997e75b | ✅ | ✅ |
-| BG-3 | Neutral panels + equipped name·RARITY·stat + thicker rarity borders | — | — | — | ⏳ running |
-| PR-7v | DialogueModal.tsx | npc dialogue mobile.png | — | — | ⏳ |
+| BG-3 | Neutral panels + equipped name·RARITY·stat + thicker rarity borders | — | dd56263 | ✅ | ✅ |
+| BG-3b | Rarity abbreviations (COM/UNC/RARE/EPIC/LEG) + remove panel overlays | — | 5c8a9a2 | ⏳ | ⏳ |
+| PR-7v | DialogueModal.tsx | npc dialogue mobile.png | — | — | ⏳ next |
 | PR-8v | CodexContent.tsx + CodexModal.tsx | codex mobile.png | — | — | ⏳ |
 | PR-9v | JournalModal.tsx | quest and journal mobile.png, quests cyberpunk.png, quests space.png | — | — | ⏳ |
 | PR-10v | LevelUpModal.tsx | ability panel expanded mobile.png | — | — | ⏳ |
@@ -76,6 +78,8 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 - Visual verification required before each PR marked ✅.
 - Mobile note included in every prompt going forward; dedicated mobile pass at end of visual track.
 - Previous UI arc work (UI-1–UI-13, fix groups A–L) not treated as correct baseline.
+- Genre overlays (.ol-tex/.ol-scan/.ol-grid): intentionally removed from CharacterPanel + ContextPanel (neutral gray
+  panels should not carry genre texture). Retained in StoryFeed, CodexModal, JournalModal, DialogueModal.
 
 ## Known Gaps
 
@@ -87,4 +91,4 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 - **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass.
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.
 - **Perks section header in CharacterPanel** still dim — bundle into next CharacterPanel touch.
-- **LootList.tsx** consumes --loot-quality-uncommon alias (now green via PR-5v-e) — verify loot cards look right in PR-12v.
+- **LootList.tsx** consumes --loot-quality-uncommon alias (now green via PR-5v-e) — verify in PR-12v.

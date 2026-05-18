@@ -22,7 +22,7 @@
 | PR-7v suite | DialogueBar | npc dialogue mobile.png | 721c59c | ✅ | ✅ |
 | PR-8v suite | Codex | codex mobile.png | 353dc23 | ✅ | ✅ |
 | PR-9v | JournalModal | quests cyberpunk.png + quests space.png | 3545637 | ✅ | ✅ |
-| PR-10v | LevelUpModal.tsx | ability panel expanded mobile.png | — | — | ⏳ next |
+| PR-10v | LevelUpModal.tsx | Tim's mockup (no PNG) | — | — | ⏳ next |
 | PR-11v | CombatMode/* | combat desktop.png, combat panel mobile.png, health bar and damage numbers.png | — | — | ⏳ |
 | PR-12v | loot/* + FloorLootStrip.tsx | loot panel.png | — | — | ⏳ |
 | PR-13v | TradeModal.tsx | design ref only | — | — | ⏳ |
@@ -42,6 +42,16 @@
 Fix: reuse session ID on retry OR rebind GamePage. Observed on Space Opera (token cap hit).
 
 **HF-encounter-roster:** Unknown enemy IDs stripped on generation. Need canonical IDs or fallback enemy.
+
+**HF-space-opera-token-cap:** Space Opera regional bible consistently hitting max_tokens: 7000
+(output_tokens: 7000 = exact cap). Causes truncated generation and potentially invalid JSON.
+Fix options: (a) increase regional bible max_tokens for Space Opera, (b) reduce prompt size by
+trimming non-essential context sections, (c) split region generation into two passes. Affects
+ALL Space Opera playthroughs. Same issue likely applies to world bible (10000 cap).
+
+**HF-combat-double-entries:** Some combat actions appear twice in the story feed. Observed in
+Space Opera combat. Root cause unknown — likely a duplicate message dispatch somewhere in the
+combat resolution loop. Low priority until combat PR-11v is underway.
 
 ---
 
@@ -86,6 +96,8 @@ Fix: reuse session ID on retry OR rebind GamePage. Observed on Space Opera (toke
 - **Bug 2 — zone_id cache leak.** Defensive fix shipped. Root cause pending.
 - **World-bible retry session binding.** See HF-world-bible-retry above.
 - **Encounter roster unknown enemy references.** See HF-encounter-roster above.
+- **Space Opera token cap.** See HF-space-opera-token-cap above. HIGH PRIORITY — blocks all SO playthroughs.
+- **Combat entries firing twice.** See HF-combat-double-entries above.
 
 ### UI / design
 - **FloorLootStrip still rendered.** Retire in PR-12v.
@@ -102,5 +114,4 @@ Fix: reuse session ID on retry OR rebind GamePage. Observed on Space Opera (toke
 
 ### Infrastructure
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.
-- **Webpack cache large string warning (dev only).** "Serializing big strings (231kiB)" — world bible JSON
-  likely cause. Dev-mode performance only, no production impact. Low priority.
+- **Webpack cache large string warning (dev only).** 231kiB string serialization. No production impact.

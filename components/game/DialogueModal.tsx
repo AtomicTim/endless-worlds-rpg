@@ -1,11 +1,20 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Send, X } from "lucide-react";
 import { useGameStore } from "@/lib/stores/game-store";
+import type { StoryMessage } from "@/lib/stores/game-store";
 import { getNpcDisposition } from "@/lib/game/state-utils";
 import { AssetCategory, Genre } from "@/types/game";
 import type { Attributes, DialogueOption } from "@/types/game";
+
+// PR-7v — DialogueOption may carry a short flavour `description` line
+// rendered under the option text in the new card layout. The global
+// DialogueOption type doesn't yet expose this field, but we read it
+// defensively so the row appears whenever the data starts including
+// one (e.g. code-built options from buildDialogueOptions, future
+// NPC-knowledge enrichment) without a global type churn.
+type DialogueOptionView = DialogueOption & { description?: string };
 
 /**
  * Dialogue Modal — inline panel that lives inside the story-feed scroll
@@ -16,6 +25,13 @@ import type { Attributes, DialogueOption } from "@/types/game";
  * Minimize is a local UI state — collapsing rolls the panel up to its
  * 48px header row and clicking the header re-expands it. Closing fires
  * the global clearDialogueOptions() so the panel disappears entirely.
+ *
+ * PR-7v rework — the modal now embeds the last few NARRATIVE / DIALOGUE
+ * messages inside its own scroll strip so the player never needs to
+ * scroll the outer feed to recover context. NPC header swaps the 6px
+ * disposition bar for a colour-themed pill, and the option list moves
+ * from flat rows to bordered cards with prominent stat badges on top.
+ * See design/mockups/npc dialogue mobile.png + docs/ui-design-reference.md §10.
  */
 
 interface DialogueModalProps {
@@ -63,6 +79,17 @@ const DISPOSITION_COLOR: Record<string, string> = {
   friendly:   "#5a9a5a",
   allied:     "#4a8a4a",
 };
+
+// PR-7v — disposition → uppercase pill label. Keyed to the same five
+// bands DISPOSITION_COLOR uses (getNpcDisposition lowercase output).
+const DISPOSITION_LABEL: Record<string, string> = {
+  hostile:    "HOSTILE",
+  suspicious: "SUSPICIOUS",
+  neutral:    "NEUTRAL",
+  friendly:   "FRIENDLY",
+  allied:     "ALLIED",
+};
+
 /** UI-6 — odds label for stat-gated options. Mod uses rule 92's
  *  floor((score-2)/2). Pure helper, no side effects. */
 function oddsLabel(rawStat: number): "Good odds" | "Risky" | "Long shot" {
@@ -122,6 +149,30 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
     if (!npcKey || !s.masterState) return null;
     return s.masterState.npc_registry[npcKey]?.trust_score ?? null;
   });
+
+  // PR-7v (B) — conversation history. Read the full feed and keep
+  // the last few NARRATIVE / DIALOGUE messages so the player has the
+  // most recent prose + speech visible inside the modal without
+  // scrolling the outer feed. Filtering excludes SYSTEM / COMBAT /
+  // ASCII_ART / LORE because those don't read as conversation
+  // beats and would muddy the at-a-glance context.
+  const allMessages = useGameStore((s) => s.messages);
+  const history = useMemo<StoryMessage[]>(
+    () =>
+      allMessages
+        .filter((m) => m.type === "NARRATIVE" || m.type === "DIALOGUE")
+        .slice(-6),
+    [allMessages],
+  );
+
+  // Auto-scroll to the bottom of the history strip on open and
+  // whenever a new message lands — keeps the most recent line in view.
+  const historyRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = historyRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [npcKey, history.length, collapsed]);
 
   if (options.length === 0) return null;
 
@@ -229,12 +280,13 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
   const disposition    = getNpcDisposition(effectiveTrust);
   const dispColor      = DISPOSITION_COLOR[disposition] ?? DISPOSITION_COLOR.neutral;
 
-  // ── UI-6 NPC header card (CHANGE 2) ───────────────────────────────────────
-  // Fixed (non-scrolling) header — name (serif italic 15px #e2cda0),
-  // role (Inter Tight 8px uppercase #6a5530), and a 6px disposition
-  // pill whose filled segment width tracks the trust score 0-100.
-  // Click on the header re-expands a collapsed panel; the ─ / ×
-  // buttons stop propagation so they don't toggle expand on click.
+  // ── PR-7v (A) NPC header card ─────────────────────────────────────────────
+  // Fixed (non-scrolling) header. Avatar (32px circle) + name (Inter
+  // Tight 600 16px var(--ui-text-1)) + role (Inter Tight 8px uppercase
+  // var(--ui-text-muted)). Disposition is now a colour-themed badge
+  // pill at the header's flex level (no longer a 6px bar inside the
+  // name column). Click on the header re-expands a collapsed panel;
+  // the ─ / × buttons stop propagation so they don't toggle expand.
   const header = (
     <div
       onClick={collapsed ? () => setCollapsed(false) : undefined}
@@ -250,15 +302,9 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
       role={collapsed ? "button" : undefined}
       aria-label={collapsed ? "Expand dialogue" : undefined}
     >
-      {/* 32px initials / portrait chip.
-          UI-fix-G 4a — borderRadius: 50% gives the "avatar circle"
-          called for in design-reference §10. overflow:hidden already
-          clips the portrait SVG (h-full w-full) to whatever shape the
-          parent enforces, so the same clip handles both portrait and
-          initials fallback paths.
-          UI-fix-G 4b — initials are a 2-char label, not numerics, so
-          fontFamily moves from var(--mono) to var(--sans). Size,
-          colour, and letter-spacing stay per spec. */}
+      {/* 32px initials / portrait chip. Kept verbatim from UI-fix-G.
+          borderRadius 50% gives the avatar circle (design ref §10);
+          overflow:hidden clips the portrait SVG to the parent shape. */}
       <div
         style={{
           width:          32,
@@ -288,13 +334,20 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
         )}
       </div>
 
-      {/* Name + role + disposition bar */}
+      {/* PR-7v (A) — Name + role wrapper. Disposition moved OUT of this
+          column and into a header-level pill so the wrapper just holds
+          speaker identity. Name lifted from serif italic 15px (#e2cda0)
+          to Inter Tight 600 16px var(--ui-text-1) — the modal's
+          primary speaker label now reads as UI chrome, not a narrator
+          beat, matching design/mockups/npc dialogue mobile.png. */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
-          className="ew-serif italic"
+          className="ew-sans"
           style={{
-            fontSize:    15,
-            color:       "#e2cda0",
+            fontFamily:  "var(--sans)",
+            fontWeight:  600,
+            fontSize:    16,
+            color:       "var(--ui-text-1)",
             lineHeight:  1.2,
             overflow:    "hidden",
             textOverflow:"ellipsis",
@@ -309,59 +362,39 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
             style={{
               fontSize:      8,
               letterSpacing: "0.16em",
-              color:         "#6a5530",
+              color:         "var(--ui-text-muted)",
               marginTop:     2,
             }}
           >
             {npcRole}
           </div>
         )}
-        {trustScore !== null && (
-          <div
-            style={{
-              marginTop:  6,
-              display:    "flex",
-              alignItems: "center",
-              gap:        8,
-            }}
-            aria-label={`Disposition ${disposition}, trust ${effectiveTrust} of 100`}
-          >
-            <div
-              style={{
-                position:     "relative",
-                flex:         1,
-                height:       6,
-                borderRadius: 6,
-                background:   "color-mix(in srgb, #2d2618 70%, transparent)",
-                overflow:     "hidden",
-              }}
-            >
-              <div
-                style={{
-                  position:     "absolute",
-                  top:          0,
-                  left:         0,
-                  height:       "100%",
-                  width:        `${Math.max(0, Math.min(100, effectiveTrust))}%`,
-                  background:   dispColor,
-                  transition:   "width 200ms ease",
-                }}
-              />
-            </div>
-            <span
-              className="ew-sans uppercase"
-              style={{
-                fontSize:      7,
-                letterSpacing: "0.14em",
-                color:         dispColor,
-                flexShrink:    0,
-              }}
-            >
-              {disposition}
-            </span>
-          </div>
-        )}
       </div>
+
+      {/* PR-7v (A) — Disposition badge pill replaces the 6px progress
+          bar. Sits at the header's flex level (right of the name
+          column, before minimize/close). Pill colours derive from
+          DISPOSITION_COLOR via color-mix at 15% fill / 40% border so
+          all five bands theme automatically; no new hex literals. */}
+      {trustScore !== null && (
+        <span
+          aria-label={`Disposition ${disposition}, trust ${effectiveTrust} of 100`}
+          className="ew-sans uppercase"
+          style={{
+            alignSelf:     "flex-start",
+            flexShrink:    0,
+            fontSize:      7,
+            letterSpacing: "0.12em",
+            color:         dispColor,
+            background:    `color-mix(in srgb, ${dispColor} 15%, transparent)`,
+            border:        `1px solid color-mix(in srgb, ${dispColor} 40%, transparent)`,
+            borderRadius:  20,
+            padding:       "2px 8px",
+          }}
+        >
+          {DISPOSITION_LABEL[disposition] ?? disposition.toUpperCase()}
+        </span>
+      )}
 
       {/* Minimize ─ */}
       <button
@@ -410,6 +443,93 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
     </div>
   );
 
+  // PR-7v (B) — render one history entry. Three visual treatments:
+  //   NPC speech (DIALOGUE)           — speaker label + gold italic
+  //   Player echo (NARRATIVE+flag)    — left genre-accent bar + italic
+  //   Narrator prose (NARRATIVE)      — amber italic, no border
+  // The renderer is local so we don't have to plumb a renderer prop;
+  // matches StoryFeed's prose/speech treatment but at modal-strip scale.
+  const renderHistoryEntry = (m: StoryMessage) => {
+    const isPlayerEcho =
+      m.type === "NARRATIVE" && m.metadata?.isPlayerDialogue === true;
+    const isNpcSpeech  = m.type === "DIALOGUE";
+    const speaker      = isNpcSpeech
+      ? (typeof m.metadata?.npcName === "string" ? m.metadata.npcName : npcName ?? "")
+      : "";
+
+    if (isNpcSpeech) {
+      return (
+        <div key={m.id} style={{ marginTop: 8 }}>
+          {speaker && (
+            <div
+              className="ew-sans uppercase"
+              style={{
+                fontFamily:    "var(--sans)",
+                fontSize:      7,
+                letterSpacing: "0.16em",
+                color:         "var(--ui-text-muted)",
+                marginBottom:  2,
+              }}
+            >
+              {speaker}
+            </div>
+          )}
+          <div
+            className="ew-serif italic"
+            style={{
+              fontFamily: "var(--serif)",
+              fontStyle:  "italic",
+              fontSize:   13,
+              lineHeight: 1.7,
+              color:      "var(--hl-said)",
+            }}
+          >
+            {m.content.replace(/^"|"$/g, "")}
+          </div>
+        </div>
+      );
+    }
+
+    if (isPlayerEcho) {
+      return (
+        <div
+          key={m.id}
+          className="ew-serif italic"
+          style={{
+            marginTop:   8,
+            borderLeft:  "2px solid var(--genre-accent)",
+            paddingLeft: 10,
+            fontFamily:  "var(--serif)",
+            fontStyle:   "italic",
+            fontSize:    13,
+            lineHeight:  1.7,
+            color:       "var(--ui-text-2)",
+          }}
+        >
+          {m.content.replace(/^"|"$/g, "")}
+        </div>
+      );
+    }
+
+    // Narrator prose.
+    return (
+      <div
+        key={m.id}
+        className="ew-serif italic"
+        style={{
+          marginTop:  8,
+          fontFamily: "var(--serif)",
+          fontStyle:  "italic",
+          fontSize:   13,
+          lineHeight: 1.7,
+          color:      "var(--ui-text-prose)",
+        }}
+      >
+        {m.content}
+      </div>
+    );
+  };
+
   // ── UI-6 — slot population (CHANGE 4) ─────────────────────────────────────
   // Primary options fill exactly 4 slots: knowledge / AI-emitted tone-only
   // options. Pad with placeholders below 4; clip to 4 above. Trade / rest /
@@ -451,6 +571,17 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
         color:        "var(--ink-2)",
       }}
     >
+      {/* PR-7v — scoped media query: the conversation history strip
+          shrinks from 220→160 maxHeight at ≤480px so the slot grid +
+          End Conversation button still fit above the fold on small
+          phones. Kept inline so the change doesn't bleed into
+          globals.css (out of brief scope). */}
+      <style>{`
+        @media (max-width: 480px) {
+          .ew-dialogue-history { max-height: 160px !important; }
+        }
+      `}</style>
+
       {/* UI-1 overlay trio — inert on genres that don't opt in;
           pointer-events:none so they never block clicks. */}
       <div
@@ -475,7 +606,47 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
 
         {!collapsed && (
           <>
-            {/* UI-6 (CHANGE 4) — exactly 4 fixed slots. */}
+            {/* PR-7v (B) — Conversation history strip. Renders the last
+                few NARRATIVE / DIALOGUE messages so the player has full
+                context inside the modal — no scrolling the outer feed.
+                Hidden when empty; the "WHAT DO YOU SAY?" divider hides
+                with it so the slot grid sits cleanly under the header. */}
+            {history.length > 0 && (
+              <>
+                <div
+                  ref={historyRef}
+                  className="ew-dialogue-history"
+                  style={{
+                    maxHeight:    220,
+                    overflowY:    "auto",
+                    padding:      "10px 14px",
+                    borderBottom: "1px solid var(--card-border)",
+                  }}
+                >
+                  {history.map(renderHistoryEntry)}
+                </div>
+
+                {/* PR-7v (C) — "WHAT DO YOU SAY?" section divider above
+                    the option slots. Lives outside the history block so
+                    it stays put while the history scrolls. */}
+                <div
+                  className="ew-sans uppercase"
+                  style={{
+                    padding:       "8px 14px 4px",
+                    fontFamily:    "var(--sans)",
+                    fontSize:      7,
+                    letterSpacing: "0.14em",
+                    color:         "var(--ui-text-muted)",
+                  }}
+                >
+                  What do you say?
+                </div>
+              </>
+            )}
+
+            {/* UI-6 (CHANGE 4) / PR-7v (D) — exactly 4 fixed slots,
+                option rows now render as bordered cards with a
+                prominent stat badge on top. */}
             <div
               style={{
                 display:        "flex",
@@ -485,7 +656,7 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
               }}
             >
               {Array.from({ length: slotCount }).map((_, i) => {
-                const option = primaryOptions[i];
+                const option = primaryOptions[i] as DialogueOptionView | undefined;
                 if (!option) {
                   // Empty slot — dim dashed placeholder.
                   return (
@@ -508,79 +679,135 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                   !badge ? "STANDARD"
                   : badge.stat === "PER" ? "OBSERVATION"
                   : "STAT_GATED";
+
+                // PR-7v (D) — option.description (when present) renders
+                // as a muted flavour line under the text. Defensive read:
+                // see DialogueOptionView at top of file.
+                const description = option.description;
+
                 return (
                   <button
                     key={option.id}
                     onClick={() => handleOption(option)}
                     style={{
-                      width:        "100%",
-                      minHeight:    44,
-                      padding:      "8px 12px",
-                      display:      "flex",
-                      alignItems:   "center",
-                      gap:          10,
-                      background:   "transparent",
-                      border:       "1px solid #2d2618",
-                      borderRadius: 4,
-                      color:        "#c4b090",
-                      fontFamily:   "var(--serif)",
-                      fontStyle:    "italic",
-                      fontSize:     13,
-                      textAlign:    "left",
-                      cursor:       "pointer",
-                      transition:   "background 120ms",
+                      // PR-7v (D) — card shell: bg-3 + bordered + rounded,
+                      // two-row column layout so the stat badge sits on top
+                      // and the text + description stack below. minHeight
+                      // 44 keeps the touch target at the iOS guideline.
+                      width:         "100%",
+                      minHeight:     44,
+                      padding:       "10px 12px",
+                      display:       "flex",
+                      flexDirection: "column",
+                      alignItems:    "flex-start",
+                      gap:           6,
+                      background:    "var(--bg-3)",
+                      border:        "1px solid var(--card-border)",
+                      borderRadius:  7,
+                      color:         "var(--ui-text-1)",
+                      fontFamily:    "var(--serif)",
+                      fontStyle:     "italic",
+                      fontSize:      13,
+                      textAlign:     "left",
+                      cursor:        "pointer",
+                      transition:    "background 120ms",
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background =
-                        "rgba(var(--genre-accent-rgb), .06)";
+                        "rgba(var(--genre-accent-rgb), .10)";
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "transparent";
+                      e.currentTarget.style.background = "var(--bg-3)";
                     }}
                   >
-                    <span style={{ flex: 1, minWidth: 0 }}>{option.text}</span>
-                    {/* UI-fix-G 4c — badges bumped from fontSize 6 to 7.
-                        At 6px the "CHA · Good odds" / "Observe" labels
-                        crowded into illegibility on most monitors; 7
-                        keeps the chip dense without sacrificing the
-                        odds read. Letter-spacing, radius, padding,
-                        and colours unchanged. */}
+                    {/* PR-7v (D) — stat badge on TOP of the card.
+                        STAT_GATED: amber pill "STAT N ✓ · odds".
+                        OBSERVATION: teal pill "◉ STAT N ✓".
+                        Both keep the existing colour tokens
+                        (--genre-accent / --observation-teal) and
+                        their existing rgba surfaces — no new hexes. */}
                     {kind === "STAT_GATED" && badge && (
                       <span
                         className="ew-sans uppercase"
                         title={`${badge.stat} ${badge.value}${badge.note ? ` (${badge.note})` : ""}`}
                         style={{
-                          fontSize:      7,
+                          display:       "inline-flex",
+                          alignItems:    "center",
+                          gap:           4,
+                          fontSize:      8,
                           letterSpacing: "0.10em",
-                          color:         "#c4943a",
+                          color:         "var(--genre-accent)",
                           background:    "rgba(196,148,58,.12)",
+                          border:        "1px solid color-mix(in srgb, var(--genre-accent) 35%, transparent)",
                           borderRadius:  20,
-                          padding:       "1px 6px",
+                          padding:       "2px 8px",
                           flexShrink:    0,
                         }}
                       >
-                        {badge.stat} · {oddsLabel(badge.value)}
+                        {badge.stat} {badge.value} ✓
+                        <span
+                          aria-hidden
+                          style={{ color: "var(--ui-text-muted)", margin: "0 2px" }}
+                        >·</span>
+                        {oddsLabel(badge.value)}
                       </span>
                     )}
-                    {kind === "OBSERVATION" && (
+                    {kind === "OBSERVATION" && badge && (
                       <span
                         className="ew-sans uppercase"
-                        title={`Perception probe — your PER: ${badge!.value}`}
+                        title={`Perception probe — your PER: ${badge.value}`}
                         style={{
                           display:       "inline-flex",
                           alignItems:    "center",
                           gap:           4,
-                          fontSize:      7,
+                          fontSize:      8,
                           letterSpacing: "0.10em",
                           color:         "var(--observation-teal)",
                           background:    "rgba(74,152,136,.12)",
+                          border:        "1px solid color-mix(in srgb, var(--observation-teal) 35%, transparent)",
                           borderRadius:  20,
-                          padding:       "1px 6px",
+                          padding:       "2px 8px",
                           flexShrink:    0,
                         }}
                       >
                         <span aria-hidden style={{ fontSize: 10, lineHeight: 1 }}>◉</span>
-                        Observe
+                        {badge.stat} {badge.value} ✓
+                      </span>
+                    )}
+
+                    {/* PR-7v (D) — option text. Cormorant Garamond italic
+                        13px var(--ui-text-1); inherits font-family +
+                        style from the card style above but explicit here
+                        so future overrides on the card don't bleed. */}
+                    <span
+                      style={{
+                        width:        "100%",
+                        minWidth:     0,
+                        fontFamily:   "var(--serif)",
+                        fontStyle:    "italic",
+                        fontSize:     13,
+                        lineHeight:   1.45,
+                        color:        "var(--ui-text-1)",
+                      }}
+                    >
+                      {option.text}
+                    </span>
+
+                    {/* PR-7v (D) — optional description row. Renders
+                        only when option.description exists (defensive
+                        read; field isn't on the global type yet). */}
+                    {description && (
+                      <span
+                        className="ew-serif italic"
+                        style={{
+                          fontFamily: "var(--serif)",
+                          fontStyle:  "italic",
+                          fontSize:   11,
+                          lineHeight: 1.4,
+                          color:      "var(--ui-text-muted)",
+                        }}
+                      >
+                        {description}
                       </span>
                     )}
                   </button>

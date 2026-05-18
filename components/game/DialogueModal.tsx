@@ -571,14 +571,15 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
         color:        "var(--ink-2)",
       }}
     >
-      {/* PR-7v — scoped media query: the conversation history strip
-          shrinks from 220→160 maxHeight at ≤480px so the slot grid +
-          End Conversation button still fit above the fold on small
+      {/* PR-7v / PR-7v-b — scoped media query: the conversation
+          history strip shrinks from 160 (desktop, set inline below)
+          to 120 maxHeight at ≤480px so the slot grid + End
+          Conversation button still fit above the fold on small
           phones. Kept inline so the change doesn't bleed into
           globals.css (out of brief scope). */}
       <style>{`
         @media (max-width: 480px) {
-          .ew-dialogue-history { max-height: 160px !important; }
+          .ew-dialogue-history { max-height: 120px !important; }
         }
       `}</style>
 
@@ -617,7 +618,11 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                   ref={historyRef}
                   className="ew-dialogue-history"
                   style={{
-                    maxHeight:    220,
+                    // PR-7v-b (B) — desktop maxHeight lifted from 220 →
+                    // 160 so the history strip stays scannable without
+                    // dominating the modal. Mobile override at the
+                    // <style> block above drops further to 120.
+                    maxHeight:    160,
                     overflowY:    "auto",
                     padding:      "10px 14px",
                     borderBottom: "1px solid var(--card-border)",
@@ -658,13 +663,17 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
               {Array.from({ length: slotCount }).map((_, i) => {
                 const option = primaryOptions[i] as DialogueOptionView | undefined;
                 if (!option) {
-                  // Empty slot — dim dashed placeholder.
+                  // Empty slot — dim dashed placeholder. PR-7v-b (C)
+                  // trimmed 28 → 20 in step with the slot card minHeight
+                  // 44 → 40 compaction; the placeholder reads as a
+                  // narrower divider when most of the slot grid is
+                  // empty rather than four equal-height ghosts.
                   return (
                     <div
                       key={`slot-${i}-empty`}
                       aria-hidden
                       style={{
-                        height:       28,
+                        height:       20,
                         border:       "1px dashed #2d2618",
                         borderRadius: 4,
                         opacity:      0.6,
@@ -680,27 +689,25 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                   : badge.stat === "PER" ? "OBSERVATION"
                   : "STAT_GATED";
 
-                // PR-7v (D) — option.description (when present) renders
-                // as a muted flavour line under the text. Defensive read:
-                // see DialogueOptionView at top of file.
-                const description = option.description;
-
                 return (
                   <button
                     key={option.id}
                     onClick={() => handleOption(option)}
                     style={{
-                      // PR-7v (D) — card shell: bg-3 + bordered + rounded,
-                      // two-row column layout so the stat badge sits on top
-                      // and the text + description stack below. minHeight
-                      // 44 keeps the touch target at the iOS guideline.
+                      // PR-7v-b (A) — single inline row replaces the
+                      // PR-7v column layout: badge sits left, text fills
+                      // the remaining width on the same line. Card
+                      // shell (bg-3 + bordered + rounded) preserved.
+                      // Padding tightened 10/12 → 7/10 and minHeight
+                      // 44 → 40 so four cards stack inside the modal
+                      // viewport at mobile widths without the slot
+                      // grid pushing End Conversation off-screen.
                       width:         "100%",
-                      minHeight:     44,
-                      padding:       "10px 12px",
+                      minHeight:     40,
+                      padding:       "7px 10px",
                       display:       "flex",
-                      flexDirection: "column",
-                      alignItems:    "flex-start",
-                      gap:           6,
+                      alignItems:    "center",
+                      gap:           8,
                       background:    "var(--bg-3)",
                       border:        "1px solid var(--card-border)",
                       borderRadius:  7,
@@ -720,12 +727,12 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                       e.currentTarget.style.background = "var(--bg-3)";
                     }}
                   >
-                    {/* PR-7v (D) — stat badge on TOP of the card.
-                        STAT_GATED: amber pill "STAT N ✓ · odds".
-                        OBSERVATION: teal pill "◉ STAT N ✓".
-                        Both keep the existing colour tokens
-                        (--genre-accent / --observation-teal) and
-                        their existing rgba surfaces — no new hexes. */}
+                    {/* PR-7v-b (A) — stat badge inline LEFT of the
+                        option text. Same five-band colour palette as
+                        before (--genre-accent / --observation-teal);
+                        fontSize dropped 8 → 7 to match the compact
+                        single-row treatment. odds tail kept on the
+                        STAT_GATED pill ("CHA 6 ✓ · Good odds"). */}
                     {kind === "STAT_GATED" && badge && (
                       <span
                         className="ew-sans uppercase"
@@ -734,7 +741,7 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                           display:       "inline-flex",
                           alignItems:    "center",
                           gap:           4,
-                          fontSize:      8,
+                          fontSize:      7,
                           letterSpacing: "0.10em",
                           color:         "var(--genre-accent)",
                           background:    "rgba(196,148,58,.12)",
@@ -760,7 +767,7 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                           display:       "inline-flex",
                           alignItems:    "center",
                           gap:           4,
-                          fontSize:      8,
+                          fontSize:      7,
                           letterSpacing: "0.10em",
                           color:         "var(--observation-teal)",
                           background:    "rgba(74,152,136,.12)",
@@ -775,13 +782,16 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                       </span>
                     )}
 
-                    {/* PR-7v (D) — option text. Cormorant Garamond italic
-                        13px var(--ui-text-1); inherits font-family +
-                        style from the card style above but explicit here
-                        so future overrides on the card don't bleed. */}
+                    {/* PR-7v-b (A) — option text fills remaining row
+                        width via flex:1 + minWidth:0. Cormorant
+                        Garamond italic 13px var(--ui-text-1). The
+                        PR-7v option.description third row was dropped
+                        as part of the single-row compactness pass —
+                        DialogueOptionView at top of file still allows
+                        the field type-side for future reintroduction. */}
                     <span
                       style={{
-                        width:        "100%",
+                        flex:         1,
                         minWidth:     0,
                         fontFamily:   "var(--serif)",
                         fontStyle:    "italic",
@@ -792,24 +802,6 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                     >
                       {option.text}
                     </span>
-
-                    {/* PR-7v (D) — optional description row. Renders
-                        only when option.description exists (defensive
-                        read; field isn't on the global type yet). */}
-                    {description && (
-                      <span
-                        className="ew-serif italic"
-                        style={{
-                          fontFamily: "var(--serif)",
-                          fontStyle:  "italic",
-                          fontSize:   11,
-                          lineHeight: 1.4,
-                          color:      "var(--ui-text-muted)",
-                        }}
-                      >
-                        {description}
-                      </span>
-                    )}
                   </button>
                 );
               })}

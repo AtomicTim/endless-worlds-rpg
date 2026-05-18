@@ -551,35 +551,49 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
     <div
       role="dialog"
       aria-label="Dialogue options"
+      className="ew-dialogue-modal"
       style={{
         // UI-6 (CHANGE 1) — genre card shell: var(--content-bg) +
-        // var(--card-border) + var(--card-radius). Width constrained
-        // to 520px / 94vw so the inline panel doesn't span the full
-        // feed at desktop widths. Position stays inline (bottomSlot
-        // of GameLayout / StoryFeed) so the conversation feed above
-        // and the option panel below read as one continuous scroll.
-        position:     "relative",
-        width:        "min(520px, 94vw)",
-        maxHeight:    "85vh",
-        margin:       "24px auto 0",
-        background:   "var(--content-bg)",
-        border:       "1px solid var(--card-border)",
-        borderRadius: "var(--card-radius)",
-        boxShadow:    "var(--card-shadow)",
-        overflow:     "hidden",
-        fontFamily:   "var(--sans)",
-        color:        "var(--ink-2)",
+        // var(--card-border) + var(--card-radius). Position stays
+        // inline (bottomSlot of GameLayout / StoryFeed) so the
+        // conversation feed above and the option panel below read
+        // as one continuous scroll.
+        //
+        // PR-7v-c (A) — width lifted 520 → 700 so the desktop modal
+        // matches the wider story-feed measure; maxHeight switched
+        // from 85vh to calc(100vh - 140px) so it leaves clean space
+        // for the top bar + nav bar without depending on viewport
+        // ratio. display:flex + flexDirection:column turns this
+        // container into the layout root for the
+        // header/history/bottom three-band flex system below.
+        // overflow:hidden clips internal scroll containers rather
+        // than the modal itself.
+        position:      "relative",
+        width:         "min(700px, 94vw)",
+        maxHeight:     "calc(100vh - 140px)",
+        margin:        "24px auto 0",
+        background:    "var(--content-bg)",
+        border:        "1px solid var(--card-border)",
+        borderRadius:  "var(--card-radius)",
+        boxShadow:     "var(--card-shadow)",
+        overflow:      "hidden",
+        display:       "flex",
+        flexDirection: "column",
+        fontFamily:    "var(--sans)",
+        color:         "var(--ink-2)",
       }}
     >
-      {/* PR-7v / PR-7v-b — scoped media query: the conversation
-          history strip shrinks from 160 (desktop, set inline below)
-          to 120 maxHeight at ≤480px so the slot grid + End
-          Conversation button still fit above the fold on small
-          phones. Kept inline so the change doesn't bleed into
-          globals.css (out of brief scope). */}
+      {/* PR-7v-c (C) — scoped media query: at ≤480px the modal
+          itself becomes the outer scroll container as a fallback,
+          since the calc(100vh - 140px) cap can still over-flow on
+          small phones once the keyboard opens or the URL bar
+          collapses. The PR-7v-b history maxHeight override is gone
+          — the flex:1 history band absorbs available space instead,
+          so capping it would fight the new layout. Kept inline so
+          the change doesn't bleed into globals.css. */}
       <style>{`
         @media (max-width: 480px) {
-          .ew-dialogue-history { max-height: 120px !important; }
+          .ew-dialogue-modal { overflow-y: auto !important; }
         }
       `}</style>
 
@@ -601,8 +615,25 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
         style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }}
       />
 
-      {/* Content sits above the overlay layer. */}
-      <div style={{ position: "relative", zIndex: 10 }}>
+      {/* Content sits above the overlay layer.
+          PR-7v-c (B) — promoted from a static block to a flex column
+          that fills the modal's constrained height. The three flex
+          children below (header / history / bottom-section) divide
+          that height: header + bottom-section are flexShrink:0
+          (always fully visible) and history takes flex:1 to absorb
+          the remaining space and scroll its own overflow. overflow:
+          hidden keeps the inner scroll containers from spilling out
+          of the wrapper's bounds when the modal is at its cap. */}
+      <div
+        style={{
+          position:      "relative",
+          zIndex:        10,
+          display:       "flex",
+          flexDirection: "column",
+          height:        "100%",
+          overflow:      "hidden",
+        }}
+      >
         {header}
 
         {!collapsed && (
@@ -610,30 +641,46 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
             {/* PR-7v (B) — Conversation history strip. Renders the last
                 few NARRATIVE / DIALOGUE messages so the player has full
                 context inside the modal — no scrolling the outer feed.
-                Hidden when empty; the "WHAT DO YOU SAY?" divider hides
-                with it so the slot grid sits cleanly under the header. */}
+                Hidden when empty so the slot grid sits cleanly under
+                the header.
+                PR-7v-c (B) — promoted from fixed-maxHeight to flex:1
+                so this band absorbs whatever vertical space remains
+                between the fixed header above and the fixed bottom
+                section below. minHeight:0 is the flex-shrink fix that
+                lets overflowY:auto actually clip; without it the band
+                refuses to shrink past its content height and the
+                bottom section gets pushed off-screen. The "WHAT DO
+                YOU SAY?" divider moved out of this block into the
+                bottom section so the modal's three-band flex layout
+                stays clean. */}
             {history.length > 0 && (
-              <>
-                <div
-                  ref={historyRef}
-                  className="ew-dialogue-history"
-                  style={{
-                    // PR-7v-b (B) — desktop maxHeight lifted from 220 →
-                    // 160 so the history strip stays scannable without
-                    // dominating the modal. Mobile override at the
-                    // <style> block above drops further to 120.
-                    maxHeight:    160,
-                    overflowY:    "auto",
-                    padding:      "10px 14px",
-                    borderBottom: "1px solid var(--card-border)",
-                  }}
-                >
-                  {history.map(renderHistoryEntry)}
-                </div>
+              <div
+                ref={historyRef}
+                className="ew-dialogue-history"
+                style={{
+                  flex:         1,
+                  minHeight:    0,
+                  overflowY:    "auto",
+                  padding:      "10px 14px",
+                  borderBottom: "1px solid var(--card-border)",
+                }}
+              >
+                {history.map(renderHistoryEntry)}
+              </div>
+            )}
 
-                {/* PR-7v (C) — "WHAT DO YOU SAY?" section divider above
-                    the option slots. Lives outside the history block so
-                    it stays put while the history scrolls. */}
+            {/* PR-7v-c (B) — BOTTOM SECTION wrapper. flexShrink:0 so
+                the slot grid + free-type input + End Conversation
+                button never get squeezed out when the history above
+                grows; overflow:visible so the existing
+                content-clipping happens at the modal level only. The
+                "WHAT DO YOU SAY?" divider lives here (instead of
+                inside the history conditional) so the three-band
+                flex layout above stays clean — it still hides when
+                there's no history, since the divider needs something
+                above to separate from. */}
+            <div style={{ flexShrink: 0, overflow: "visible" }}>
+              {history.length > 0 && (
                 <div
                   className="ew-sans uppercase"
                   style={{
@@ -646,8 +693,7 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                 >
                   What do you say?
                 </div>
-              </>
-            )}
+              )}
 
             {/* UI-6 (CHANGE 4) / PR-7v (D) — exactly 4 fixed slots,
                 option rows now render as bordered cards with a
@@ -1003,6 +1049,7 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                 End conversation
               </button>
             </div>
+            </div>{/* PR-7v-c (B) — close BOTTOM SECTION wrapper. */}
           </>
         )}
       </div>

@@ -140,13 +140,25 @@ function toTitleCase(s: string): string {
   return s.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// PR-8v-c — normalise a raw node_type / category slug for display.
+// Replaces underscores with spaces, then title-cases. Used by both
+// the LOCATION row subtitle and the expanded header, plus mirrored
+// in ContextPanel.tsx so the same slugs render consistently in
+// both places. Examples:
+//   "settlement_hub" → "Settlement Hub"
+//   "DUNGEON"        → "Dungeon"
+//   "LANDMARK"       → "Landmark"
+function formatNodeType(raw: string): string {
+  return raw.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 // PR-8v-b — resolve a LOCATION's world-graph node type for the
 // row subtitle + expanded header. Walks WorldGraph.nodes looking
 // for an id / slugified name / asset_id substring match against
 // the codex entry's first_seen_location, then prefers node_type
-// over the generic category. Returns undefined when the lookup
-// misses so the caller can fall back to the bare name without a
-// trailing dash + label.
+// over the generic category. PR-8v-c — output is now title case
+// via formatNodeType rather than uppercase, so the styling can
+// drop the .uppercase className and read as a clean tag.
 function getLocationTypeLabel(
   firstSeen: string,
   wg: WorldGraph | undefined,
@@ -160,7 +172,40 @@ function getLocationTypeLabel(
   );
   if (!node) return undefined;
   const raw = node.node_type ?? node.category ?? "";
-  return raw ? raw.replace(/_/g, " ").toUpperCase() : undefined;
+  return raw ? formatNodeType(raw) : undefined;
+}
+
+// PR-8v-c — resolve a LOCATION's parent region. The PR-8v REGION
+// PanelField was showing first_seen_location (the location's own
+// slug) which is misleading for sub-locations — a tavern's "region"
+// was the tavern itself, not the city it sits in.
+// Walk:
+//   1. Find the node matching the codex entry's first_seen_location
+//      (same matchers as getLocationTypeLabel).
+//   2. If the node is itself a region (no zone_id, or zone_id ===
+//      its own id), return the title-cased node name — it IS the
+//      region for this purpose.
+//   3. Otherwise return the title-cased name of its parent zone.
+// Returns undefined when the lookup misses; the caller falls back
+// to the bare first_seen_location string.
+function getRegionLabel(
+  firstSeen: string,
+  wg: WorldGraph | undefined,
+): string | undefined {
+  if (!wg || !firstSeen) return undefined;
+  const node = Object.values(wg.nodes).find(
+    (n) =>
+      n.id === firstSeen
+      || n.id === firstSeen.replace(/\s+/g, "_").toLowerCase()
+      || firstSeen.includes(n.id)
+      || n.id.includes(firstSeen),
+  );
+  if (!node) return undefined;
+  if (!node.zone_id || node.zone_id === node.id) {
+    return toTitleCase(node.name);
+  }
+  const parentZone = wg.nodes[node.zone_id];
+  return parentZone ? toTitleCase(parentZone.name) : undefined;
 }
 
 export function CodexContent({ onCharacterNameLoaded }: Props) {
@@ -339,47 +384,65 @@ export function CodexContent({ onCharacterNameLoaded }: Props) {
               : entries.filter((e) => e.category === tab.id).length;
           const active = tab.id === activeTab;
           return (
+            // PR-8v-c (C) — tab indicator decoupled from the button's
+            // box model. PR-8v-b put borderBottom on the button
+            // itself; that line could collide with the text baseline
+            // depending on browser font metrics. The indicator now
+            // lives in a dedicated 2px <div> beneath the label
+            // (alignItems stretch on the column flex so it spans the
+            // button's content width). With paddingBottom 0 on the
+            // button, the indicator sits flush above the nav's own
+            // 1px bottom border for a single clean tab-indicator
+            // stack — no chance of intersecting the text glyphs.
             <button
               key={tab.id}
               onClick={() => handleTabChange(tab.id)}
-              className="ew-sans uppercase"
               style={{
                 background:    "transparent",
                 color:         active ? "var(--genre-accent)" : "var(--ui-text-muted)",
                 border:        "none",
-                // PR-8v-b (A) — paddingBottom: 6 keeps the underline
-                // anchored 6px below the label text; the nav's
-                // borderBottom (above) sits directly under this
-                // button's 2px line so the two visually merge into a
-                // single indicator stack.
-                borderBottom:  active
-                  ? "2px solid var(--genre-accent)"
-                  : "2px solid transparent",
-                paddingTop:    6,
-                paddingBottom: 6,
-                paddingLeft:   10,
-                paddingRight:  10,
-                fontSize:      8,
-                letterSpacing: "0.12em",
+                display:       "flex",
+                flexDirection: "column",
+                alignItems:    "stretch",
+                gap:           4,
+                padding:       "6px 10px 0",
                 cursor:        "pointer",
                 transition:    "color 120ms",
                 flexShrink:    0,
                 whiteSpace:    "nowrap",
               }}
             >
-              {tab.label}
-              {count > 0 && (
-                <span
-                  style={{
-                    marginLeft: 4,
-                    color:      active ? "var(--genre-accent)" : "var(--ui-text-muted)",
-                    fontSize:   7,
-                    opacity:    0.7,
-                  }}
-                >
-                  {count}
-                </span>
-              )}
+              <span
+                className="ew-sans uppercase"
+                style={{
+                  fontFamily:    "var(--sans)",
+                  fontSize:      8,
+                  letterSpacing: "0.12em",
+                  textAlign:     "center",
+                }}
+              >
+                {tab.label}
+                {count > 0 && (
+                  <span
+                    style={{
+                      marginLeft: 4,
+                      color:      active ? "var(--genre-accent)" : "var(--ui-text-muted)",
+                      fontSize:   7,
+                      opacity:    0.7,
+                    }}
+                  >
+                    {count}
+                  </span>
+                )}
+              </span>
+              <div
+                aria-hidden
+                style={{
+                  height:       2,
+                  background:   active ? "var(--genre-accent)" : "transparent",
+                  borderRadius: 1,
+                }}
+              />
             </button>
           );
         })}
@@ -519,13 +582,17 @@ function EntryRow({ entry, isOpen, isNew, onToggle, npcRegistry, worldGraph }: E
   // PR-8v-b (B/C) — subtitle is the title-cased first_seen_location.
   // For LOCATION entries the world-graph node type (when known) is
   // appended after a dash so the player sees both place + kind at a
-  // glance. The lookup is undefined-safe (returns undefined when the
-  // graph isn't hydrated or the slug doesn't match a node).
+  // glance. PR-8v-c — typeLabel is now title case (formatNodeType)
+  // and the regionLabel walks up the zone_id chain so the expanded
+  // panel can show the parent region, not the location's own slug.
   const subtitleBase = entry.first_seen_location
     ? toTitleCase(entry.first_seen_location.replace(/_/g, " "))
     : "";
   const typeLabel = entry.category === "LOCATION"
     ? getLocationTypeLabel(entry.first_seen_location, worldGraph)
+    : undefined;
+  const regionLabel = entry.category === "LOCATION"
+    ? getRegionLabel(entry.first_seen_location, worldGraph)
     : undefined;
   const subtitle = subtitleBase
     + (typeLabel ? ` — ${typeLabel}` : "");
@@ -677,6 +744,7 @@ function EntryRow({ entry, isOpen, isNew, onToggle, npcRegistry, worldGraph }: E
             entry={entry}
             npcRegistry={npcRegistry}
             typeLabel={typeLabel}
+            regionLabel={regionLabel}
           />
         </div>
       )}
@@ -699,6 +767,10 @@ interface ExpandedPanelProps {
    *  re-walk the world graph. Undefined for non-LOCATION entries and
    *  for LOCATION entries that don't resolve to a node. */
   typeLabel?:  string;
+  /** PR-8v-c — pre-computed parent region for the LOCATION REGION
+   *  PanelField. Undefined for non-LOCATION entries; falls back to
+   *  the codex entry's first_seen_location string when undefined. */
+  regionLabel?: string;
 }
 
 const PANEL_LABEL_STYLE: React.CSSProperties = {
@@ -742,7 +814,7 @@ function PanelField({ label, value }: { label: string; value?: string }) {
   );
 }
 
-function ExpandedPanel({ entry, npcRegistry, typeLabel }: ExpandedPanelProps) {
+function ExpandedPanel({ entry, npcRegistry, typeLabel, regionLabel }: ExpandedPanelProps) {
   const sourceLocation = entry.first_seen_location
     ? toTitleCase(entry.first_seen_location.replace(/_/g, " "))
     : "";
@@ -854,6 +926,12 @@ function ExpandedPanel({ entry, npcRegistry, typeLabel }: ExpandedPanelProps) {
   // LOCATION: PR-8v-b (C+D) — header with title-cased name + type
   // tag, then prose, then a single REGION line (the prior TYPE row
   // is gone since the header now carries that information).
+  // PR-8v-c — typeLabel arrives title case (formatNodeType) so the
+  // `.uppercase` className on the type span is gone; the suffix
+  // reads as "— Settlement Hub" / "— Dungeon". REGION value now
+  // resolves to the parent zone via regionLabel rather than the
+  // location's own slug; falls back to sourceLocation when the
+  // graph lookup misses (legacy saves, transient hydration windows).
   if (entry.category === "LOCATION") {
     return (
       <>
@@ -872,10 +950,10 @@ function ExpandedPanel({ entry, npcRegistry, typeLabel }: ExpandedPanelProps) {
           </span>
           {typeLabel && (
             <span
-              className="ew-sans uppercase"
+              className="ew-sans"
               style={{
                 fontSize:      10,
-                letterSpacing: "0.10em",
+                letterSpacing: "0.06em",
                 color:         "var(--ui-text-muted)",
                 marginLeft:    8,
               }}
@@ -886,7 +964,7 @@ function ExpandedPanel({ entry, npcRegistry, typeLabel }: ExpandedPanelProps) {
         </header>
         {entry.description && <p style={PANEL_PROSE_STYLE}>{entry.description}</p>}
         <div style={PANEL_DIVIDER_STYLE} aria-hidden />
-        <PanelField label="Region" value={sourceLocation} />
+        <PanelField label="Region" value={regionLabel ?? sourceLocation} />
       </>
     );
   }

@@ -134,6 +134,16 @@ function trustFor(state: MasterState, npcAsset: WorldAsset): number {
   return byName?.npc.trust_score ?? 50;
 }
 
+/** PR-8v-c — normalise a raw node_type / category slug for display.
+ *  Replaces underscores with spaces, then title-cases. Mirrored
+ *  verbatim in components/game/CodexContent.tsx so the same slugs
+ *  render consistently in both surfaces. Examples:
+ *    "settlement_hub" → "Settlement Hub"
+ *    "DUNGEON"        → "Dungeon" */
+function formatNodeType(raw: string): string {
+  return raw.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 /** PR-6v — broad category label for the header's top-left chip.
  *  Maps WorldNode metadata to one of three coarse buckets per
  *  design ref §18 + design/mockups/context panel.png:
@@ -388,7 +398,11 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
             below — match design/mockups/context panel.png. */}
         {node && (() => {
           const broad        = broadCategoryLabel(node);
-          const specific     = (typeBadge ?? "").toString().toUpperCase();
+          // PR-8v-c — render specific node_type / category in title
+          // case via formatNodeType, dropping the prior .toUpperCase()
+          // + .uppercase className that left raw slugs like
+          // "SETTLEMENT_HUB" on screen. Reads as "Settlement Hub" now.
+          const specific     = formatNodeType((typeBadge ?? "").toString());
           const presenceText = presenceBadgeText(npcAssets.length);
           return (
             <header style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -443,13 +457,21 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
               >
                 {node.name}
               </div>
-              {specific && specific !== broad && (
+              {/* PR-8v-c — case-insensitive comparison: `broad`
+                  stays uppercase ("REGION" / "SETTLEMENT" / "PLACE")
+                  while `specific` is now title case, so the strict
+                  `!==` would never collapse the redundant case
+                  ("Region" vs "REGION"). Uppercasing `specific` for
+                  the test (broad is already uppercase) preserves
+                  the PR-6v "hide-when-redundant" behaviour. The
+                  `.uppercase` className is gone so the title-cased
+                  text renders as written. */}
+              {specific && specific.toUpperCase() !== broad && (
                 <div
-                  className="uppercase"
                   style={{
                     fontFamily:    "var(--sans)",
                     fontSize:      9,
-                    letterSpacing: "0.12em",
+                    letterSpacing: "0.06em",
                     color:         "var(--genre-accent)",
                   }}
                 >

@@ -936,36 +936,37 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
     ? (ITEM_TABLER_ICONS[item.type] ?? IconQuestionMark)
     : SLOT_TABLER_ICONS[kind];
 
-  // BG-3 (D) — filled-slot inner layout: name · RARITY · stat with
-  // middle-dot separators. The card container (background, border,
-  // padding, radius, height) is unchanged — only the inner flex
-  // structure shifts so the rarity is now a labelled column instead
-  // of a 5px dot. Empty slots keep their prior shape (no separators,
-  // no rarity column).
+  // BG-3 (D) — filled-slot inner layout: name | RARITY | stat with
+  // pipe separators. Card container (background, border, padding,
+  // radius, height) unchanged.
   //
-  // Flex proportions on filled rows:
-  //   name   : flex 3   (truncated, ellipsis)
-  //   RARITY : flex 1.5 (centred, Inter Tight uppercase)
-  //   stat   : flex 1.5 (right-aligned, JetBrains Mono accent)
+  // BG-3f — flex-proportion layout (BG-3c/d/e) replaced with a clean
+  // fixed-width column system. The rarity (38px) and stat (52px)
+  // columns are hard-fixed; the name takes 100% of the remaining
+  // space via flex:1 + minWidth:0. This eliminates the unpredictable
+  // truncation chain caused by ratio-based flex with shifting
+  // minWidth floors. At 240px sidebar the name gets ~70px after the
+  // icon and fixed columns; at 200px it gets ~30px — both render
+  // typical short names ("Staff", "Robes") in full and longer names
+  // ellipsize cleanly without ever stealing room from the right
+  // columns.
   //
-  // BG-3c (B) — separator switched from middle-dot to pipe and lifted
-  // in contrast (var(--ui-border-strong) → var(--ui-text-muted)), with
-  // 6→8px side margins for breathing room. The pipe stroke reads at
-  // the 200px sidebar width where the middle-dot had been visually
-  // disappearing. Explicit fontSize: 10 stops it inheriting the row's
-  // 12px serif italic and rendering oversized in the gap.
-  // BG-3e — separator margins trimmed 0 8px → 0 5px (6px total saved
-  // per separator, 12px over both) to hand the recovered space to
-  // the name and stat columns. The pipe still reads cleanly because
-  // it has its own glyph weight; the 8px breathing room turned out
-  // to be more than the layout needed once the stat column got its
-  // minWidth guarantee.
+  // Container gap is 0 — every child manages its own spacing
+  // explicitly (icon marginRight, sep margins, empty-slot label
+  // marginLeft). This prevents the row's natural flex `gap` from
+  // multiplying spacing around the separators.
+  //
+  // BG-3c (B) — separator: pipe in --ui-text-muted, fontSize: 10
+  // overrides the row's 12px serif italic so the pipe stays sized
+  // for chrome rather than prose.
+  // BG-3f — separator margins trimmed 0 5px → 0 4px to claw back
+  // 4px total across the two seps for the name column.
   const sep = (
     <span
       aria-hidden
       style={{
         color:      "var(--ui-text-muted)",
-        margin:     "0 5px",
+        margin:     "0 4px",
         flexShrink: 0,
         fontSize:   10,
       }}
@@ -983,7 +984,12 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
       style={{
         display:        "flex",
         alignItems:     "center",
-        gap:            10,
+        // BG-3f — container gap dropped 10 → 0. Every child manages
+        // its own spacing explicitly so the row's natural flex `gap`
+        // can't multiply spacing around the separators (each pipe
+        // sat between two container-gaps + its own margins, which
+        // produced ~30px of dead space on each side).
+        gap:            0,
         width:          "100%",
         padding:        "8px 10px",
         // BG-3 (B) — equipped card now sits on --bg-3 (neutral dark
@@ -999,17 +1005,25 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
         transition:     "border-color 120ms",
       }}
     >
-      <Icon size={14} stroke={1.75} color="var(--npc-role)" aria-hidden />
+      {/* BG-3f — icon gets the 8px icon→name gap directly. flexShrink:0
+          stops the icon from collapsing under tight widths. */}
+      <Icon
+        size={14}
+        stroke={1.75}
+        color="var(--npc-role)"
+        aria-hidden
+        style={{ flexShrink: 0, marginRight: 8 }}
+      />
       {item ? (
         <>
-          {/* Name — flex 4, truncated. BG-3d lifted 3→4 so common
-              short names ("Robes", "Staff") render in full at the
-              200px sidebar breakpoint without the rarity/stat
-              columns stealing space. */}
+          {/* BG-3f — name is the only flex-growing column. flex:1 +
+              minWidth:0 lets it take 100% of the remaining space
+              after the two fixed columns and separators, and
+              ellipsize cleanly when the row is tight. */}
           <span
             className="ew-serif"
             style={{
-              flex:         4,
+              flex:         1,
               minWidth:     0,
               fontStyle:    "italic",
               fontSize:     12,
@@ -1024,22 +1038,19 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
 
           {sep}
 
-          {/* RARITY — Inter Tight uppercase tinted by the item's tier
-              colour. BG-3c (A) — must never truncate: flexShrink: 0
-              pins width to content, minWidth: 38 reserves enough room
-              for the longest 4-char label (RARE / EPIC) even when
-              the name column is squeezing the row. overflow: visible
-              + no text-overflow: ellipsis means the column will push
-              the name shorter rather than clip itself. BG-3d dropped
-              the growth weight 1.5→1 so the name column (now flex 4)
-              keeps the lion's share of any slack at wider breakpoints
-              instead of splitting it three ways. */}
+          {/* BG-3f — RARITY is a hard-fixed 38px column. width:38 +
+              flexShrink:0 replaces the prior flex:1 / flexShrink:0 /
+              minWidth:38 trio so the column can never grow OR shrink
+              — a single source of truth for its width. textAlign
+              center keeps short labels (COM, RARE) visually balanced
+              against the cell; overflow:visible + whiteSpace:nowrap
+              means the longest label (LEGENDARY) renders in full
+              even if it nudges its own bounding box. */}
           <span
             className="uppercase"
             style={{
-              flex:          1,
+              width:         38,
               flexShrink:    0,
-              minWidth:      38,
               fontFamily:    "var(--sans)",
               fontSize:      8,
               letterSpacing: "0.10em",
@@ -1054,24 +1065,20 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
 
           {sep}
 
-          {/* Stat — flex 1, right-aligned, JetBrains Mono accent.
-              BG-3d dropped 1.5→1 alongside rarity so the name column
-              gets the row's growth budget. BG-3e raised minWidth
-              from 0 to 44 — the widest expected string ("+0 arm")
-              at JetBrains Mono 11px lands just inside that, so the
-              column will push the name shorter rather than clip
-              itself. Without the floor, a tight 200px sidebar was
-              truncating "d6" → "d" and "+0 arm" → "+". */}
+          {/* BG-3f — stat is a hard-fixed 52px column. width:52 +
+              flexShrink:0 holds room for the widest expected string
+              ("+0 arm" in JetBrains Mono 11px ≈ ~46px) with a small
+              cushion. Replaces the prior flex:1 / minWidth:44 pair
+              that was still letting tight widths chew the column. */}
           <span
             style={{
-              flex:       1,
-              minWidth:   44,
+              width:      52,
+              flexShrink: 0,
               fontFamily: "var(--mono)",
               fontSize:   11,
               color:      "var(--genre-accent)",
               textAlign:  "right",
               whiteSpace: "nowrap",
-              overflow:   "hidden",
             }}
           >
             {statLine}
@@ -1079,9 +1086,9 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
         </>
       ) : (
         <>
-          {/* Empty-slot layout unchanged — name "— empty" on the left,
-              slot type label (WEAPON / ARMOUR / ACCESSORY) on the
-              right. No separators, no rarity column. */}
+          {/* Empty-slot layout — name "— empty" on the left, slot
+              type label (WEAPON / ARMOUR / ACCESSORY) on the right.
+              No separators, no rarity column. */}
           <span
             className="ew-serif"
             style={{
@@ -1097,6 +1104,11 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
           >
             — empty
           </span>
+          {/* BG-3f — slot label gets explicit marginLeft: 8 to replace
+              the spacing lost when the container `gap` dropped to 0.
+              Empty rows had been visually balanced at gap:10 between
+              name and label; 8px is the same chrome unit the icon
+              uses, so the row stays consistent. */}
           <span
             style={{
               fontFamily:    "var(--sans)",
@@ -1105,6 +1117,7 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
               textTransform: "uppercase",
               color:         "var(--ui-text-muted)",
               flexShrink:    0,
+              marginLeft:    8,
             }}
           >
             {slotLabelShort}

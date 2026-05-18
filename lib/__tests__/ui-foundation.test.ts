@@ -103,6 +103,14 @@ const ALLOWED_HEX_CODES = new Set<string>([
   "#7dd3fc", "#c4b5fd", "#94d8b8", "#b45309",
   "#e8c547", "#f0c060", "#f5f0e4", "#a3e635", "#f87171",
 
+  // ── Codex genre backgrounds (PR-8v) ─────────────────────────────
+  // Flat near-black surfaces tinted with a subtle genre hue. Live
+  // only inside components/game/CodexModal.tsx as a Record<Genre,
+  // string> map; not yet hoisted to globals.css because the codex
+  // is the first surface to use a per-genre background plate — a
+  // token system around that lives in BG-4 if more surfaces opt in.
+  "#141008", "#0a1414", "#100808", "#08080f", "#161008",
+
   // ── Combat event colours (--combat-*) ───────────────────────────
   "#7ab8c8", "#e87c6d", "#3b82a8", "#c0392b",
   "#7dbb8e", "#a93226", "#a8a29c", "#f4a07a",

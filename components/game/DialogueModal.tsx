@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Send } from "lucide-react";
 import { useGameStore } from "@/lib/stores/game-store";
 import { getNpcDisposition } from "@/lib/game/state-utils";
@@ -122,6 +122,31 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
   const locationAssets = useGameStore((s) => s.locationAssets);
 
   const playerStats = useGameStore((s) => s.masterState?.player_state.attributes);
+
+  // PR-7v-g — NPC species lookup for the identity-card role line.
+  // The bible-side NPCDefinition carries an optional species_id;
+  // metadata.species (hoisted from the WCD at apply time) carries
+  // the displayable species names. We walk both the starting region
+  // and every region bible so the lookup works regardless of where
+  // the NPC was first registered. masterState is read whole here to
+  // keep the lookup chain readable; the useMemo bails when the
+  // input references don't change so the re-render cost stays low.
+  const masterState = useGameStore((s) => s.masterState);
+  const npcDef = useMemo(() => {
+    if (!masterState || !npcKey) return undefined;
+    const wb      = masterState.metadata.world_bible;
+    const rbibles = masterState.metadata.region_bibles ?? {};
+    return (
+      wb?.starting_region.npcs.find((n) => n.id === npcKey)
+      ?? Object.values(rbibles)
+           .flatMap((r) => r.npcs)
+           .find((n) => n.id === npcKey)
+    );
+  }, [masterState, npcKey]);
+  const speciesName = useMemo(() => {
+    if (!npcDef?.species_id || !masterState?.metadata.species) return undefined;
+    return masterState.metadata.species.find((s) => s.id === npcDef.species_id)?.name;
+  }, [npcDef, masterState]);
 
   // Inline-input state for the "type your own response" row. PR-7v-d
   // dropped the `collapsed` minimize state along with the modal
@@ -462,7 +487,13 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                   whiteSpace:    "nowrap",
                 }}
               >
-                {npcRole}
+                {/* PR-7v-g — append species after role when known
+                    ("ORE HANDLER · HUMAN"). Same muted span / same
+                    typography — the species reads as a sibling tag
+                    rather than competing with the role label.
+                    Gracefully falls back to bare role when the NPC
+                    has no species_id or the lookup misses. */}
+                {npcRole}{speciesName ? ` · ${speciesName.toUpperCase()}` : ""}
               </div>
             )}
             {trustScore !== null && (

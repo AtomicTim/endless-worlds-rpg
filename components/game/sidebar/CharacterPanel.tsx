@@ -996,11 +996,14 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
       <Icon size={14} stroke={1.75} color="var(--npc-role)" aria-hidden />
       {item ? (
         <>
-          {/* Name — flex 3, truncated. */}
+          {/* Name — flex 4, truncated. BG-3d lifted 3→4 so common
+              short names ("Robes", "Staff") render in full at the
+              200px sidebar breakpoint without the rarity/stat
+              columns stealing space. */}
           <span
             className="ew-serif"
             style={{
-              flex:         3,
+              flex:         4,
               minWidth:     0,
               fontStyle:    "italic",
               fontSize:     12,
@@ -1021,14 +1024,14 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
               for the longest 4-char label (RARE / EPIC) even when
               the name column is squeezing the row. overflow: visible
               + no text-overflow: ellipsis means the column will push
-              the name shorter rather than clip itself. flex: 1.5 is
-              retained as a growth weight so the column still expands
-              proportionally when there's slack to share with the stat
-              column at wider breakpoints. */}
+              the name shorter rather than clip itself. BG-3d dropped
+              the growth weight 1.5→1 so the name column (now flex 4)
+              keeps the lion's share of any slack at wider breakpoints
+              instead of splitting it three ways. */}
           <span
             className="uppercase"
             style={{
-              flex:          1.5,
+              flex:          1,
               flexShrink:    0,
               minWidth:      38,
               fontFamily:    "var(--sans)",
@@ -1045,10 +1048,12 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
 
           {sep}
 
-          {/* Stat — flex 1.5, right-aligned, JetBrains Mono accent. */}
+          {/* Stat — flex 1, right-aligned, JetBrains Mono accent.
+              BG-3d dropped 1.5→1 alongside rarity so the name column
+              gets the row's growth budget. */}
           <span
             style={{
-              flex:       1.5,
+              flex:       1,
               minWidth:   0,
               fontFamily: "var(--mono)",
               fontSize:   11,

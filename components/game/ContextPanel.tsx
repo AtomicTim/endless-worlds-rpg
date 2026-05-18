@@ -1,11 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-// PR-6v: IconMap reintroduced for the region footer's left-side
-// glyph (design ref §18 + design/mockups/context panel.png). The
-// other Tabler icons stay dropped — ObjectCard's verb-label + name
-// layout has no icon column.
-import { IconMap } from "@tabler/icons-react";
+// PR-6v-c: IconMap import dropped alongside the region footer. The
+// panel no longer renders any Tabler glyph — verb-label + name carries
+// the row, the footer's map icon went away with the footer itself.
 import { LootModal } from "@/components/game/loot/LootModal";
 import { AssetCategory } from "@/types/game";
 import type {
@@ -16,7 +14,6 @@ import type {
   WorldAsset,
   WorldBible,
   RegionBible,
-  WorldGraph,
   WorldNode,
 } from "@/types/game";
 import { useGameStore } from "@/lib/stores/game-store";
@@ -167,23 +164,6 @@ function presenceBadgeText(npcCount: number): string | null {
   if (npcCount === 1) return "WITH NPC";
   if (npcCount === 2) return "WITH NPCS";
   return "WITH PRESENCE";
-}
-
-/** PR-6v — walk up the zone_id chain until self-zoned is_expandable,
- *  returning the geographic region the node belongs to. Returns the
- *  node itself when it IS a region. Returns null when the chain
- *  breaks. Mirrors lib/game/nav-cards.ts `regionOfNode` (kept inline
- *  rather than exported from nav-cards to avoid widening that
- *  module's surface for a single Context Panel consumer). */
-function regionOfNode(node: WorldNode, graph: WorldGraph): WorldNode | null {
-  let cur: WorldNode | undefined = node;
-  const seen = new Set<string>();
-  while (cur && !seen.has(cur.id)) {
-    seen.add(cur.id);
-    if (cur.is_expandable === true && cur.zone_id === cur.id) return cur;
-    cur = graph.nodes[cur.zone_id];
-  }
-  return null;
 }
 
 /** Action verb per LocationObject.type (CLAUDE.md rule 87).
@@ -513,118 +493,13 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
         {/* ── Section D: IN THIS SPACE (Objects) ────────────────────────── */}
         {objectsSection}
 
-        {/* ── Section E: Region footer (PR-6v (F): map icon + REGION
-            label + parent name) ─────────────────────────────────────
-            Two-row footer per design ref §18 + mockup:
-              Row 1 — [map icon] [REGION] [region.name italic serif]
-              Row 2 — existing "parent › current" 3-tone breadcrumb
-                       (unchanged; preserves the at-a-glance hierarchy
-                        Change 6 introduced)
-
-            Row 1 anchors the panel to its containing region — even
-            for a tavern three levels deep (sub-location → settlement
-            → region), the footer always names the REGION, not the
-            immediate parent zone. The walk-up uses regionOfNode().
-
-            Row 2 still renders only when zone_id resolves to a
-            different node (the existing guard); for a region node
-            itself the breadcrumb collapses to null, leaving just
-            row 1 — matches panel 3 of the mockup. */}
-        {(() => {
-          const wg = masterState?.world_graph;
-          if (!wg || !node) return null;
-          const region = regionOfNode(node, wg);
-          const parentId = node.zone_id;
-          const parent = parentId && parentId !== node.id ? wg.nodes[parentId] : undefined;
-          if (!region && !parent) return null;
-          return (
-            <div
-              // PR-6v-b (B): region footer promoted from dim top-rule
-              // section to a proper bordered card — sits at the bottom
-              // of the panel as a distinct surface against the
-              // var(--bg-2) panel wrapper. var(--bg-0) (#0a0907) is the
-              // deepest shadow tone, contrasted against
-              // var(--ui-border-default) (#2d2618) for a clean edge.
-              style={{
-                background:   "var(--bg-0)",
-                border:       "1px solid var(--ui-border-default)",
-                borderRadius: 7,
-                padding:      "8px 10px",
-                marginTop:    12,
-                display:      "flex",
-                flexDirection: "column",
-                gap:          4,
-              }}
-            >
-              {region && (
-                <div
-                  style={{
-                    display:    "flex",
-                    alignItems: "center",
-                    gap:        6,
-                  }}
-                >
-                  <IconMap
-                    // PR-6v-b: icon brightness + size lifted in step
-                    // with the row text — 10→11px / var(--ui-text-muted)
-                    // → var(--ui-text-2).
-                    size={11}
-                    stroke={1.75}
-                    color="var(--ui-text-2)"
-                    aria-hidden
-                  />
-                  <span
-                    className="uppercase"
-                    style={{
-                      fontFamily:    "var(--sans)",
-                      fontSize:      8,
-                      letterSpacing: "0.12em",
-                      color:         "var(--ui-text-muted)",
-                    }}
-                  >
-                    Region
-                  </span>
-                  <span
-                    className="italic"
-                    style={{
-                      fontFamily: "var(--serif)",
-                      fontSize:   12,
-                      color:      "var(--ui-text-1)",
-                      flex:       1,
-                      minWidth:   0,
-                      overflow:   "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {region.name}
-                  </span>
-                </div>
-              )}
-              {parent && (
-                <div
-                  // PR-6v-b (B): breadcrumb row recoloured in step with
-                  // the new card surface — 8→9px (legible at the panel
-                  // width), parent → var(--ui-text-muted), sep →
-                  // var(--ui-text-hint), current → var(--ui-text-2).
-                  // The PR-1 --breadcrumb-* tones are kept on the
-                  // allow-list (still used by other surfaces).
-                  style={{
-                    fontFamily:    "var(--sans)",
-                    fontSize:      9,
-                    letterSpacing: "0.08em",
-                    marginTop:     4,
-                    lineHeight:    1.5,
-                  }}
-                >
-                  <span style={{ color: "var(--ui-text-muted)" }}>{parent.name}</span>
-                  <span style={{ color: "var(--ui-text-hint)", margin: "0 4px" }}>›</span>
-                  <span style={{ color: "var(--ui-text-2)" }}>{node.name}</span>
-                </div>
-              )}
-            </div>
-          );
-        })()}
+        {/* PR-6v-c: Section E (region footer + breadcrumb) removed —
+            the TopBar breadcrumb and StoryFeed header both already
+            communicate location, making the panel-foot card a third
+            redundant restatement. The panel now ends on the Interact
+            section; the wrapper's p-3 supplies the bottom padding
+            (12px, matches the gap between sections), so no orphaned
+            footer-margin remains at 375px or any other viewport. */}
       </div>
 
       {/* UI-8 — Loot modal overlay. Mounts adjacent to the panel so it

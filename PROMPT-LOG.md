@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 8dcd7b1 (BG-3c: equipped row rarity no-truncate + visible separator)
+**Last code commit:** 0cc5e3f (BG-3d: equipped row name flex 3→4, rarity/stat 1.5→1)
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -32,8 +32,9 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 | PR-6v-b | ContextPanel — NPC/object card backgrounds + region footer contrast | — | 2ad5974 | ✅ | ✅ |
 | PR-6v-c | ContextPanel — remove redundant region footer | — | 997e75b | ✅ | ✅ |
 | BG-3 | Neutral panels + equipped name·RARITY·stat + thicker rarity borders | — | dd56263 | ✅ | ✅ |
-| BG-3b | Rarity abbreviations (COM/UNC/RARE/EPIC/LEG) + remove panel overlays | — | 5c8a9a2 | ✅ | ✅ |
+| BG-3b | Rarity abbreviations + remove panel overlays | — | 5c8a9a2 | ✅ | ✅ |
 | BG-3c | Equipped row rarity no-truncate + visible pipe separator | — | 8dcd7b1 | ✅ | ✅ |
+| BG-3d | Equipped row name flex 4, rarity/stat flex 1 | — | 0cc5e3f | ✅ | ✅ |
 | PR-7v | DialogueModal.tsx | npc dialogue mobile.png | — | — | ⏳ next |
 | PR-8v | CodexContent.tsx + CodexModal.tsx | codex mobile.png | — | — | ⏳ |
 | PR-9v | JournalModal.tsx | quest and journal mobile.png, quests cyberpunk.png, quests space.png | — | — | ⏳ |
@@ -78,8 +79,7 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 - Visual verification required before each PR marked ✅.
 - Mobile note included in every prompt going forward; dedicated mobile pass at end of visual track.
 - Previous UI arc work (UI-1–UI-13, fix groups A–L) not treated as correct baseline.
-- Genre overlays (.ol-tex/.ol-scan/.ol-grid): removed from CharacterPanel + ContextPanel (neutral panels should not
-  carry genre texture). Retained in StoryFeed, CodexModal, JournalModal, DialogueModal.
+- Genre overlays removed from CharacterPanel + ContextPanel; retained in StoryFeed + modals.
 
 ## Known Gaps
 
@@ -92,5 +92,3 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.
 - **Perks section header in CharacterPanel** still dim — bundle into next CharacterPanel touch.
 - **LootList.tsx** consumes --loot-quality-uncommon alias (now green via PR-5v-e) — verify in PR-12v.
-- **Equipped row item name truncation** ("Robes" → "Ro...") — name flex:3 may be too tight at some widths.
-  Fix: increase name to flex:4, reduce stat to flex:1. Defer to next CharacterPanel touch or fix now if bothers Tim.

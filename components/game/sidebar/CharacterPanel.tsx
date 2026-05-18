@@ -948,20 +948,23 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
   //   RARITY : flex 1.5 (centred, Inter Tight uppercase)
   //   stat   : flex 1.5 (right-aligned, JetBrains Mono accent)
   //
-  // Separator is a single middle-dot character in --ui-border-strong
-  // with 6px side margins. If the visual reads too heavy at 200px
-  // (1024–1279px breakpoint, --sidebar-width 200px), swap to a thin
-  // 1px × 50% vertical rule — kept here as the lighter touch first.
+  // BG-3c (B) — separator switched from middle-dot to pipe and lifted
+  // in contrast (var(--ui-border-strong) → var(--ui-text-muted)), with
+  // 6→8px side margins for breathing room. The pipe stroke reads at
+  // the 200px sidebar width where the middle-dot had been visually
+  // disappearing. Explicit fontSize: 10 stops it inheriting the row's
+  // 12px serif italic and rendering oversized in the gap.
   const sep = (
     <span
       aria-hidden
       style={{
-        color:      "var(--ui-border-strong)",
-        margin:     "0 6px",
+        color:      "var(--ui-text-muted)",
+        margin:     "0 8px",
         flexShrink: 0,
+        fontSize:   10,
       }}
     >
-      ·
+      |
     </span>
   );
 
@@ -1012,21 +1015,29 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
 
           {sep}
 
-          {/* RARITY — flex 1.5, centred, Inter Tight uppercase tinted
-              by the item's tier colour. */}
+          {/* RARITY — Inter Tight uppercase tinted by the item's tier
+              colour. BG-3c (A) — must never truncate: flexShrink: 0
+              pins width to content, minWidth: 38 reserves enough room
+              for the longest 4-char label (RARE / EPIC) even when
+              the name column is squeezing the row. overflow: visible
+              + no text-overflow: ellipsis means the column will push
+              the name shorter rather than clip itself. flex: 1.5 is
+              retained as a growth weight so the column still expands
+              proportionally when there's slack to share with the stat
+              column at wider breakpoints. */}
           <span
             className="uppercase"
             style={{
               flex:          1.5,
-              minWidth:      0,
+              flexShrink:    0,
+              minWidth:      38,
               fontFamily:    "var(--sans)",
               fontSize:      8,
               letterSpacing: "0.10em",
               color:         rarityColor(item.rarity),
               textAlign:     "center",
               whiteSpace:    "nowrap",
-              overflow:      "hidden",
-              textOverflow:  "ellipsis",
+              overflow:      "visible",
             }}
           >
             {rarityLabel(item.rarity)}

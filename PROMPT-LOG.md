@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 53629b1 (BG-3f: equipped row fixed-width columns — name/rarity/stat)
+**Last code commit:** 53629b1 (BG-3f) + PR-7v sub-commits in progress
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -37,7 +37,9 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 | BG-3d | Equipped row name flex 4, rarity/stat flex 1 | — | 0cc5e3f | ✅ | ✅ |
 | BG-3e | Equipped row stat minWidth + separator margin fix | — | a4dcf0b | — | superseded by BG-3f |
 | BG-3f | Equipped row fixed-width columns (name flex:1 / rarity 38px / stat 52px) | — | 53629b1 | ✅ | ✅ |
-| PR-7v | DialogueModal.tsx | npc dialogue mobile.png | — | — | ⏳ running |
+| PR-7v | DialogueModal.tsx — conversation history + header badge + option cards | npc dialogue mobile.png | 53dd529 | ⏳ | ⏳ |
+| PR-7v-b | DialogueModal — compact option cards, smaller history | — | ⏳ | — | ⏳ |
+| PR-7v-c | DialogueModal — viewport fit + 700px desktop width | — | — | — | ⏳ running |
 | PR-8v | CodexContent.tsx + CodexModal.tsx | codex mobile.png | — | — | ⏳ |
 | PR-9v | JournalModal.tsx | quest and journal mobile.png, quests cyberpunk.png, quests space.png | — | — | ⏳ |
 | PR-10v | LevelUpModal.tsx | ability panel expanded mobile.png | — | — | ⏳ |
@@ -95,3 +97,5 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.
 - **Perks section header in CharacterPanel** still dim — bundle into next CharacterPanel touch.
 - **LootList.tsx** consumes --loot-quality-uncommon alias (now green via PR-5v-e) — verify in PR-12v.
+- **Dialogue empty slots (PR-7v).** 2 empty dashed placeholders show when fewer than 4 options exist. Fix: remove fixed 4-slot grid, render only real options. Schedule in next DialogueModal touch.
+- **Dialogue history content (PR-7v).** History section shows general story feed messages rather than filtering to current NPC conversation only. Needs scoped message filter by npcKey/conversationId. Schedule after PR-7v stabilises.

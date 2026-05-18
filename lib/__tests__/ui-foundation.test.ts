@@ -245,9 +245,14 @@ const SKIPPED_FILES = new Set<string>([
 // These are the surfaces that the design ref §3 calls out as "every
 // scrollable content area." When you add a new top-level surface
 // (a modal, a new sidebar panel), add it here.
+//
+// BG-3b: ContextPanel + sidebar/CharacterPanel removed from this list.
+// The Fantasy candlelight overlay was bleeding amber into the sidebars
+// against the BG-3 neutral panel surface, which read as a smudge
+// rather than a treatment. The new policy is "overlays belong in the
+// story feed + modals, not the sidebars" — the panel components must
+// therefore NOT carry the trio.
 const OVERLAY_REQUIRED = [
-  "components/game/ContextPanel.tsx",
-  "components/game/sidebar/CharacterPanel.tsx",
   "components/game/StoryFeed.tsx",
   "components/game/CodexModal.tsx",
   "components/game/JournalModal.tsx",

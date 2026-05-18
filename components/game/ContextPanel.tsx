@@ -40,9 +40,10 @@ import { findNpcInRegistry } from "@/lib/game/state-utils";
  * loot modal.
  *
  * Genre-aware via the per-genre CSS variable sets seeded in UI-1 +
- * `--genre-accent-rgb` introduced here. The three overlay divs
- * (`.ol-tex`, `.ol-scan`, `.ol-grid`) opt this surface into the
- * existing UI-1 genre overlay treatment.
+ * `--genre-accent-rgb` introduced here. BG-3b dropped the .ol-tex /
+ * .ol-scan / .ol-grid overlay opt-in — the candlelight gradient was
+ * bleeding amber into the sidebar against the BG-3 neutral surface.
+ * Overlays belong in the story feed, not the sidebars.
  */
 
 export interface ContextPanelProps {
@@ -367,26 +368,14 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
         color:        NPC_NAME_INK,
       }}
     >
-      {/* UI-1 overlay trio — let the genre class on the GameLayout
-          root paint the texture; .ol-* are inert on genres that don't
-          opt in. pointer-events:none so they never block clicks. */}
-      <div
-        className="ol-tex"
-        aria-hidden
-        style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }}
-      />
-      <div
-        className="ol-scan"
-        aria-hidden
-        style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }}
-      />
-      <div
-        className="ol-grid"
-        aria-hidden
-        style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }}
-      />
-
-      {/* Content stack — sits above the overlay z-index 2 layer. */}
+      {/* BG-3b (C): .ol-tex / .ol-scan / .ol-grid overlay trio removed.
+          The candlelight gradient was bleeding amber into the panel
+          against the BG-3 neutral surface — overlays belong in the
+          story feed, not the sidebars. The content stack keeps its
+          `relative` so absolutely-positioned children inside (modals,
+          popovers) still anchor to the panel; the z-10 is now redundant
+          but kept so the stacking context doesn't subtly shift if an
+          overlay is reintroduced later. */}
       <div className="relative z-10 flex flex-col gap-3 p-3">
         {/* ── Section A: Location header (PR-6v (B): 3-row hierarchy) ──
             Row 1 — broad category left + presence badge right

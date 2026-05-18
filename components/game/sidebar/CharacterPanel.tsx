@@ -137,14 +137,21 @@ function rarityColor(rarity: string | undefined): string {
   }
 }
 
-/** BG-3 (D) — rarity → uppercase display string for the EquipSlotRow's
- *  middle column. ItemRarity enum values are already uppercase, so
- *  the canonical pass-through is `toUpperCase()`; this helper exists
- *  for symmetry with rarityColor() (which lowercases input first) +
- *  to give a stable fallback when rarity is missing or unknown. */
+/** BG-3 (D) / BG-3b (A) — rarity → short display string for the
+ *  EquipSlotRow's middle column. The full enum words ("UNCOMMON",
+ *  "LEGENDARY") overflowed the 1.5-flex rarity slot in the equipped
+ *  row, so we map to a 3–4 char abbreviation. RARE and EPIC are
+ *  already short enough to keep their full form. Unknown / missing
+ *  rarity falls back to "COM" so the column never blanks. */
 function rarityLabel(rarity: string | undefined): string {
-  const v = (rarity ?? "").trim();
-  return v.length > 0 ? v.toUpperCase() : "COMMON";
+  switch ((rarity ?? "").trim().toLowerCase()) {
+    case "common":    return "COM";
+    case "uncommon":  return "UNC";
+    case "rare":      return "RARE";
+    case "epic":      return "EPIC";
+    case "legendary": return "LEG";
+    default:          return "COM";
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -337,11 +344,12 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
         minHeight:    "100%",
       }}
     >
-      {/* CHANGE 1 — three overlay divs. Inert until the surface opts in
-          via genre-X classes on the root (UI-1). */}
-      <div className="ol-tex"  style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />
-      <div className="ol-scan" style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />
-      <div className="ol-grid" style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />
+      {/* BG-3b (B): genre overlay trio (.ol-tex / .ol-scan / .ol-grid)
+          removed. The Fantasy candlelight gradient was bleeding amber
+          into the sidebar against the BG-3 neutral panel surface, which
+          read as a smudge rather than a treatment. Overlays belong in
+          the story feed, not the sidebars — see UI-1 for the original
+          opt-in pattern. */}
 
       <div
         style={{

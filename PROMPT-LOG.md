@@ -25,9 +25,7 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 | PR-5v suite | CharacterPanel.tsx (5v → 5ve + BG-3 → BG-3f) | character panel fantasy.png + inventory*.png | 53629b1 | ✅ | ✅ |
 | PR-6v suite | ContextPanel.tsx (6v → 6v-c) | context panel.png | 997e75b | ✅ | ✅ |
 | PR-7v suite | DialogueBar full rebuild (7v → 7vg) | npc dialogue mobile.png | 721c59c | ✅ | ✅ |
-| PR-8v | Codex genre bg, ALL tab, search, compact rows, accordion | codex mobile.png | a28c1bf | ⏳ | ⏳ |
-| PR-8v-b | Codex polish — tabs, names, location type, readability | — | 9174077 | ⏳ | ⏳ |
-| PR-8v-c | Codex region lookup, formatNodeType, tab underline, ContextPanel type | — | 353dc23 | ⏳ testing on fresh world | ⏳ |
+| PR-8v suite | Codex full rework (8v → 8v-c) | codex mobile.png | 353dc23 | ✅ | ✅ |
 | PR-9v | JournalModal.tsx | quest and journal mobile.png, quests cyberpunk.png, quests space.png | — | — | ⏳ next |
 | PR-10v | LevelUpModal.tsx | ability panel expanded mobile.png | — | — | ⏳ |
 | PR-11v | CombatMode/* | combat desktop.png, combat panel mobile.png, turn resolution timing.png, health bar and damage numbers.png | — | — | ⏳ |
@@ -73,12 +71,15 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 - Gate: idempotent — skip if entry already exists
 
 **HF-world-bible-retry:** World-bible retry binds to wrong session on truncation.
-- Root cause: world-bible generation hits max_tokens (10000) mid-JSON, truncation causes retry, but GamePage is already
-  bound to the first failed session. Retry creates a new session (different UUID) so the game starts at the placeholder
-  location space_opera_start_01 with no world loaded.
-- Fix: wizard flow must either (a) reuse the same session ID on retry, or (b) rebind GamePage to the new session ID
-  before the player reaches /game. The retry should also increase the world-bible prompt budget or split generation.
-- Observed on Space Opera (longer world names + descriptions push token count higher).
+- Root cause: world-bible hits max_tokens (10000) mid-JSON, retry creates a new session UUID, GamePage stays bound
+  to the first failed session → game starts at placeholder location space_opera_start_01 with no world.
+- Fix: wizard must reuse session ID on retry, OR rebind GamePage to the new session before reaching /game.
+- Observed on Space Opera (longer descriptions push token count to cap).
+
+**HF-encounter-roster:** Unknown enemy IDs stripped on world generation.
+- apply-world-bible strips enemy refs that don't match the master registry (e.g. space_opera_security_drone).
+- Fix: either ensure world-bible generation uses canonical enemy IDs, or make encounter_roster tolerant of unknown IDs
+  by falling back to a genre-appropriate generic enemy.
 
 ---
 
@@ -122,25 +123,23 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 - **Perk gold/xp consumers not wired (P8).** Small follow-up.
 - **Enemy-side status ticks not running (P7).** Follow-up HF.
 - **Bug 2 — zone_id cache leak.** Defensive fix shipped. Root cause pending.
-- **World-bible retry session binding.** See HF-world-bible-retry above. Observed on Space Opera genre where longer
-  world descriptions push token count to the 10k cap. Short-term workaround: retry new game creation manually.
-- **Encounter roster unknown enemy references.** apply-world-bible strips unknown enemy IDs on generation
-  (e.g. space_opera_security_drone, space_opera_mining_bot). World-bible enemy IDs must match the master enemy registry.
-  Affects encounter diversity in Space Opera + other non-Fantasy genres.
+- **World-bible retry session binding.** See HF-world-bible-retry above.
+- **Encounter roster unknown enemy references.** See HF-encounter-roster above.
 
 ### UI / design
 - **FloorLootStrip still rendered.** Retire in PR-12v.
 - **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass.
 - **Perks section header in CharacterPanel** still dim — next CharacterPanel touch.
-- **Dialogue empty slots.** Render only real options (remove fixed 4-slot grid). Next DialogueModal touch.
-- **Dialogue history content.** Filter to current NPC conversation only (by npcKey/conversationId).
-- **Codex short_description.** First-sentence heuristic is temporary. True fix: add short_description field to
-  CodexEntry + update saveCodexEntry writers. Separate data pipeline HF.
+- **Dialogue empty slots.** Render only real options. Next DialogueModal touch.
+- **Dialogue history content.** Filter to current NPC conversation only.
+- **Codex short_description.** First-sentence heuristic is temporary. True fix: short_description field on CodexEntry.
+- **Codex LOCATION subtitle repeats name.** For location entries, subtitle shows "The Rationed Tap — Tavern" which
+  repeats the name. Should show the parent location instead (e.g. "Oxygen Junction — Tavern"). Minor.
+- **Codex CHARACTER role prefix in description.** NPC description starts with role text ("innkeeper Veska runs...")
+  because codex writer includes role in description field. Data pipeline fix needed.
 - **Bestiary auto-entry on first kill.** See Pending HFs above.
 - **NPC species in DialogueBar.** Shows on new games only (pre-23.5A saves lack species_id).
-- **LootList.tsx** consumes --loot-quality-uncommon alias (green) — verify correct in PR-12v.
+- **LootList.tsx** consumes --loot-quality-uncommon alias (green) — verify in PR-12v.
 
 ### Infrastructure
-- **OneDrive sync race (recurring).** Staged-as-you-go pattern for CombatMode files. Windows-native temp path needed
-  for reliable next build outside OneDrive sync window.
-- **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass.
+- **OneDrive sync race (recurring).** Staged-as-you-go pattern for CombatMode files.

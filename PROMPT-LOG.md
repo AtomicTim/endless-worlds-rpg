@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 0cc5e3f (BG-3d: equipped row name flex 3→4, rarity/stat 1.5→1)
+**Last code commit:** 53629b1 (BG-3f: equipped row fixed-width columns — name/rarity/stat)
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -35,7 +35,9 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 | BG-3b | Rarity abbreviations + remove panel overlays | — | 5c8a9a2 | ✅ | ✅ |
 | BG-3c | Equipped row rarity no-truncate + visible pipe separator | — | 8dcd7b1 | ✅ | ✅ |
 | BG-3d | Equipped row name flex 4, rarity/stat flex 1 | — | 0cc5e3f | ✅ | ✅ |
-| PR-7v | DialogueModal.tsx | npc dialogue mobile.png | — | — | ⏳ next |
+| BG-3e | Equipped row stat minWidth + separator margin fix | — | a4dcf0b | — | superseded by BG-3f |
+| BG-3f | Equipped row fixed-width columns (name flex:1 / rarity 38px / stat 52px) | — | 53629b1 | ✅ | ✅ |
+| PR-7v | DialogueModal.tsx | npc dialogue mobile.png | — | — | ⏳ running |
 | PR-8v | CodexContent.tsx + CodexModal.tsx | codex mobile.png | — | — | ⏳ |
 | PR-9v | JournalModal.tsx | quest and journal mobile.png, quests cyberpunk.png, quests space.png | — | — | ⏳ |
 | PR-10v | LevelUpModal.tsx | ability panel expanded mobile.png | — | — | ⏳ |
@@ -80,6 +82,7 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 - Mobile note included in every prompt going forward; dedicated mobile pass at end of visual track.
 - Previous UI arc work (UI-1–UI-13, fix groups A–L) not treated as correct baseline.
 - Genre overlays removed from CharacterPanel + ContextPanel; retained in StoryFeed + modals.
+- Equipped row layout: fixed-width columns (rarity 38px, stat 52px) established in BG-3f — do not revert to flex proportions.
 
 ## Known Gaps
 

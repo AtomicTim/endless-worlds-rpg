@@ -94,8 +94,14 @@ const ALLOWED_HEX_CODES = new Set<string>([
   "#b0956a", "#ceaf78",
 
   // ── Highlight roles (--hl-*) ────────────────────────────────────
+  // PR-7v-e shifted --hl-said from #f0c060 (amber) to #f5f0e4 (bright
+  // cream, off the amber axis) so NPC speech reads as the brightest
+  // text on screen instead of overlapping the genre accent. #f0c060
+  // is intentionally retained — it remains in the comment trail in
+  // StoryComponents.tsx + globals.css history note, and the Set dedupes
+  // so leaving both is harmless if any legacy reference resurfaces.
   "#7dd3fc", "#c4b5fd", "#94d8b8", "#b45309",
-  "#e8c547", "#f0c060", "#a3e635", "#f87171",
+  "#e8c547", "#f0c060", "#f5f0e4", "#a3e635", "#f87171",
 
   // ── Combat event colours (--combat-*) ───────────────────────────
   "#7ab8c8", "#e87c6d", "#3b82a8", "#c0392b",

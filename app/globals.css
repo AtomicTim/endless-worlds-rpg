@@ -89,13 +89,18 @@
     --hl-dungeon:     #b45309;  /* dungeon / hostile zone nav cards — burnt copper (Polish 4a TASK 2) */
     --hl-item:        #e8c547;  /* items — golden yellow, distinct from amber accent */
     --hl-landmark:    #94d8b8;  /* landmarks (WCD-known places) — soft mint, distinct from region lavender */
-    /* NPC quoted speech — UX (V8.47+): the previous #f4e8c8 cream sat
-       too close to var(--ink-1) narrator prose, so dialogue and
-       description read as the same colour at a glance. #f0c060 (warmer
-       golden) gives spoken word a distinct amber-leaning tint while
-       staying paired with italic + weight-600 for clear typographic
-       hierarchy. Tim — toggle to #e8b84b for a slightly darker amber. */
-    --hl-said:        #f0c060;  /* alt: #e8b84b (darker amber) */
+    /* NPC quoted speech — PR-7v-e re-evaluation: the V8.47+ #f0c060
+       amber overlapped the genre accent on Fantasy + a handful of
+       item / status amber tints, so spoken word kept drifting back
+       toward "yet another warm token" instead of standing out. The
+       new #f5f0e4 (bright near-white cream) is intentionally OFF
+       the amber axis entirely — paired with italic + weight-600 it
+       reads as the brightest text on screen, immediately distinct
+       from var(--ink-1) prose without competing with the genre
+       accent. History: #f4e8c8 cream (pre-V8.47, too close to
+       prose) → #f0c060 amber (V8.47, drifted into accent space) →
+       #f5f0e4 cream (PR-7v-e, off-axis bright). */
+    --hl-said:        #f5f0e4;
     --hl-pass:     #a3e635;
     --hl-fail:     #f87171;
 

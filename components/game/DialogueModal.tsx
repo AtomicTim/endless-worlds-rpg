@@ -320,6 +320,52 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
         <span className="ol-grid" />
       </div>
 
+      {/* PR-7v-e (B) — "SPEAKING WITH [NAME]" header strip. Lives
+          at the top of the bar (above the NPC card + grid row) so
+          the player has a persistent at-a-glance reminder of who
+          they're talking to without scanning the avatar / name
+          inside the NPC card. var(--bg-3) gives it a slight inset
+          contrast against the var(--bg-2) bar surface; the bottom
+          border separates it from the row below. The bar's own
+          2px top border still anchors the strip to the swap edge,
+          so no top border here. Hidden when npcName is null
+          (transient between dispatches). */}
+      {npcName && (
+        <div
+          style={{
+            padding:       "5px 14px",
+            background:    "var(--bg-3)",
+            borderBottom:  "1px solid var(--card-border)",
+            margin:        "-10px -12px 0",
+          }}
+        >
+          <span
+            className="ew-sans uppercase"
+            style={{
+              fontFamily:    "var(--sans)",
+              fontSize:      7,
+              letterSpacing: "0.16em",
+              color:         "var(--ui-text-muted)",
+            }}
+          >
+            Speaking with
+          </span>
+          <span
+            className="ew-sans uppercase"
+            style={{
+              fontFamily:    "var(--sans)",
+              fontWeight:    600,
+              fontSize:      11,
+              color:         "var(--genre-accent)",
+              marginLeft:    6,
+              letterSpacing: "0.10em",
+            }}
+          >
+            {npcName}
+          </span>
+        </div>
+      )}
+
       <div
         className="ew-dlg-row"
         style={{
@@ -335,7 +381,10 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
         <div
           className="ew-dlg-npc"
           style={{
-            width:          160,
+            // PR-7v-e (C) — desktop width 160 → 200. The mobile media
+            // query overrides to width:100% so the strip still spans
+            // the full bar on phones.
+            width:          200,
             flexShrink:     0,
             background:     "var(--bg-3)",
             border:         "1px solid var(--card-border)",
@@ -473,7 +522,7 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                     background:    "var(--bg-3)",
                     border:        "1px solid var(--card-border)",
                     borderRadius:  7,
-                    padding:       "7px 10px",
+                    padding:       "5px 8px",
                     minHeight:     40,
                     opacity:       0.3,
                     pointerEvents: "none",
@@ -570,6 +619,11 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
                     minWidth:   0,
                     fontFamily: "var(--serif)",
                     fontStyle:  "italic",
+                    // PR-7v-e (D) — weight 500 on the option text so
+                    // it reads as a notch heavier than the surrounding
+                    // chrome (badges + bottom row labels) without
+                    // tipping into bold.
+                    fontWeight: 500,
                     fontSize:   13,
                     lineHeight: 1.45,
                     color:      "var(--ui-text-1)",

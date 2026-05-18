@@ -3,8 +3,8 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 2ad5974 (UI-PR6v-b: ContextPanel NPC/object card backgrounds + region footer contrast)
-**jest baseline:** 854 (authoritative — zero delta all recent commits; ui-foundation 120/120)
+**Last code commit:** 997e75b (UI-PR6vc: remove redundant region footer from ContextPanel)
+**jest baseline:** 854 (authoritative — zero delta; ui-foundation 120/120)
 **tsc:** clean
 
 ---
@@ -30,8 +30,8 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 | PR-5v-e | Rarity color system (5 tiers) + pack/equipped indicators | — | 36e45f6 | ⏳ | ⏳ |
 | PR-6v | ContextPanel.tsx full visual rework | context panel.png | 6090f56 | ✅ | ✅ |
 | PR-6v-b | ContextPanel — NPC/object card backgrounds + region footer contrast | — | 2ad5974 | ⏳ | ⏳ |
-| PR-6v-c | ContextPanel — remove redundant region footer | — | — | — | ⏳ queued |
-| BG-3 | Neutral panel backgrounds (#1c1c1c / #242424 / #2a2a2a) | — | — | — | ⏳ queued |
+| PR-6v-c | ContextPanel — remove redundant region footer | — | 997e75b | ✅ | ✅ |
+| BG-3 | Neutral panels + equipped name·RARITY·stat + thicker rarity borders | — | — | — | ⏳ running |
 | PR-7v | DialogueModal.tsx | npc dialogue mobile.png | — | — | ⏳ |
 | PR-8v | CodexContent.tsx + CodexModal.tsx | codex mobile.png | — | — | ⏳ |
 | PR-9v | JournalModal.tsx | quest and journal mobile.png, quests cyberpunk.png, quests space.png | — | — | ⏳ |
@@ -44,13 +44,6 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 | PR-16v | Save slots + Main Menu | save slots.png, genre select mobile.png | — | — | ⏳ |
 | PR-17v | map/renderers/* | world map.png, region map.png, settlement map.png, dungeon map.png | — | — | ⏳ |
 | MOBILE | Full mobile layout pass | all mobile mockups | — | — | ⏳ end |
-
----
-
-## Run order for queued PRs
-
-PR-6v-c (ContextPanel only) → then BG-3 (globals + both panels).
-PR-5v-e already pushed (36e45f6) — visual check pending.
 
 ---
 
@@ -94,4 +87,4 @@ PR-5v-e already pushed (36e45f6) — visual check pending.
 - **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass.
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.
 - **Perks section header in CharacterPanel** still dim — bundle into next CharacterPanel touch.
-- **LootList.tsx** consumes --loot-quality-uncommon alias (now green via PR-5v-e) — visual change is correct semantically but verify loot cards look right in PR-12v.
+- **LootList.tsx** consumes --loot-quality-uncommon alias (now green via PR-5v-e) — verify loot cards look right in PR-12v.

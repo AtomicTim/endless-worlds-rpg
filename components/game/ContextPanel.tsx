@@ -576,22 +576,27 @@ function NpcCard({
       // NPC and equipped-item cards read at the same visual weight
       // across the two sidebars. Was a faint genre-accent tinted bg
       // (rgba .06 / .10) which made the NPC list float against the
-      // PR-6v warm-charcoal card; the solid dark rgba(0,0,0,.20)
-      // (= the equipped-row background) sits firmly inside the panel.
+      // PR-6v warm-charcoal card; the solid dark surface sits firmly
+      // inside the panel.
+      // BG-3 (C): swapped from rgba(0,0,0,.20) to var(--bg-3) so the
+      // card tier tracks the new neutral palette in lockstep with
+      // CharacterPanel's equipped + pack cells. Hover lifts to
+      // var(--bg-elevated) — one tier brighter, same single source
+      // of truth as the item-detail expand card.
       className="group flex w-full items-center gap-2 transition-colors text-left"
       style={{
-        background:   "rgba(0,0,0,.20)",
+        background:   "var(--bg-3)",
         border:       "1px solid var(--card-border)",
         borderRadius: 7,
         padding:      "8px 10px",
       }}
       onMouseEnter={(e) => {
         (e.currentTarget as HTMLButtonElement).style.background =
-          "rgba(0,0,0,.30)";
+          "var(--bg-elevated)";
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLButtonElement).style.background =
-          "rgba(0,0,0,.20)";
+          "var(--bg-3)";
       }}
     >
       <span
@@ -681,24 +686,29 @@ function ObjectCard({
     <button
       type="button"
       onClick={onClick}
-      // PR-6v-b (A): match the NpcCard / EquipSlotRow dark card shell.
-      // Hover is one notch brighter (rgba .28 vs the NpcCard's .30)
-      // so the two card types still read as a hierarchy — NPC slightly
-      // more prominent than object — without the prior accent tint.
+      // PR-6v-b (A): match the NpcCard / EquipSlotRow dark card shell
+      // so the two card types still read as a hierarchy — NPC and
+      // object cards live on the same base, hover lifts ride the
+      // same token tier.
+      // BG-3 (C): swapped from rgba(0,0,0,.20) to var(--bg-3) for
+      // the neutral-palette migration. Hover lifts to
+      // var(--bg-elevated). The NPC/object visual hierarchy still
+      // holds because NpcCard has the disposition dot + Talk → cue
+      // pulling weight.
       className="group flex w-full items-center transition-colors text-left"
       style={{
-        background:   "rgba(0,0,0,.20)",
+        background:   "var(--bg-3)",
         border:       "1px solid var(--card-border)",
         borderRadius: 7,
         padding:      "7px 10px",
       }}
       onMouseEnter={(e) => {
         (e.currentTarget as HTMLButtonElement).style.background =
-          "rgba(0,0,0,.28)";
+          "var(--bg-elevated)";
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLButtonElement).style.background =
-          "rgba(0,0,0,.20)";
+          "var(--bg-3)";
       }}
     >
       <span

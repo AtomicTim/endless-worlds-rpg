@@ -57,11 +57,21 @@
        BG-1: --bg-1 / --bg-2 lifted to the mockup's warm-charcoal base
        (#181511 main, #1e1b17 surface) per eyedropper readings on
        design/mockups/nav cards.png. --bg-0 (#0a0907) untouched —
-       deepest shadow / overlay, already correct. */
+       deepest shadow / overlay, already correct.
+       BG-3: --bg-2 and --bg-3 shifted off the warm-brown palette to a
+       neutral dark gray (#1c1c1c / #242424) for the right + left
+       sidebar panels per design/mockups/character panel fantasy.png +
+       inventory and character panel.png. --bg-elevated (#2a2a2a) is
+       a new token that drives the item-detail expand card; one tier
+       above --bg-3 so the elevated state reads against the panel.
+       --bg-nav-card keeps the warm #1e1b17 hex literal (line below)
+       so nav cards stay the warm charcoal they currently are — the
+       sidebars and nav cards live on different surfaces now. */
     --bg-0: #0a0907;
     --bg-1: #181511;
-    --bg-2: #1e1b17;
-    --bg-3: #211c16;
+    --bg-2: #1c1c1c;
+    --bg-3: #242424;
+    --bg-elevated: #2a2a2a;
     --line:   #2a2520;
     --line-2: #3a342c;
 

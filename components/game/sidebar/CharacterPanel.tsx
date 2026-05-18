@@ -137,6 +137,16 @@ function rarityColor(rarity: string | undefined): string {
   }
 }
 
+/** BG-3 (D) — rarity → uppercase display string for the EquipSlotRow's
+ *  middle column. ItemRarity enum values are already uppercase, so
+ *  the canonical pass-through is `toUpperCase()`; this helper exists
+ *  for symmetry with rarityColor() (which lowercases input first) +
+ *  to give a stable fallback when rarity is missing or unknown. */
+function rarityLabel(rarity: string | undefined): string {
+  const v = (rarity ?? "").trim();
+  return v.length > 0 ? v.toUpperCase() : "COMMON";
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HP / XP helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -522,7 +532,13 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                   alignItems:     "center",
                   gap:            2,
                   padding:        "6px 8px",
-                  background:     "rgba(0,0,0,.15)",
+                  // BG-3 (B) — attribute cell on the new neutral
+                  // panel surface. var(--bg-3) sits one step above
+                  // the panel wrapper (--bg-2) for visible card
+                  // separation; was rgba(0,0,0,.15) which produced
+                  // an ad-hoc dark wash that no longer reads against
+                  // the neutral gray panel.
+                  background:     "var(--bg-3)",
                   border:         "1px solid var(--card-border)",
                   borderRadius:   7,
                   minWidth:       0,
@@ -750,10 +766,18 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                   title={item.name}
                   style={{
                     aspectRatio:    "1",
-                    background:     "var(--bg-2)",
+                    // BG-3 (B) — pack cell on the neutral surface tier.
+                    // Was var(--bg-2) (the panel wrapper); now one step
+                    // above so the grid cells still pop against the
+                    // panel after both --bg-2 and --bg-3 shifted to the
+                    // neutral gray palette.
+                    background:     "var(--bg-3)",
+                    // BG-3 (E) — rarity border thickened: 1px → 2px
+                    // unselected, 1.5px → 3px selected, so the rarity
+                    // colour reads at a glance against the dark cell.
                     border:         isSelected
-                      ? `1.5px solid ${tier}`
-                      : `1px solid ${tierSoft}`,
+                      ? `3px solid ${tier}`
+                      : `2px solid ${tierSoft}`,
                     borderRadius:   6,
                     display:        "flex",
                     alignItems:     "center",
@@ -904,6 +928,35 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
     ? (ITEM_TABLER_ICONS[item.type] ?? IconQuestionMark)
     : SLOT_TABLER_ICONS[kind];
 
+  // BG-3 (D) — filled-slot inner layout: name · RARITY · stat with
+  // middle-dot separators. The card container (background, border,
+  // padding, radius, height) is unchanged — only the inner flex
+  // structure shifts so the rarity is now a labelled column instead
+  // of a 5px dot. Empty slots keep their prior shape (no separators,
+  // no rarity column).
+  //
+  // Flex proportions on filled rows:
+  //   name   : flex 3   (truncated, ellipsis)
+  //   RARITY : flex 1.5 (centred, Inter Tight uppercase)
+  //   stat   : flex 1.5 (right-aligned, JetBrains Mono accent)
+  //
+  // Separator is a single middle-dot character in --ui-border-strong
+  // with 6px side margins. If the visual reads too heavy at 200px
+  // (1024–1279px breakpoint, --sidebar-width 200px), swap to a thin
+  // 1px × 50% vertical rule — kept here as the lighter touch first.
+  const sep = (
+    <span
+      aria-hidden
+      style={{
+        color:      "var(--ui-border-strong)",
+        margin:     "0 6px",
+        flexShrink: 0,
+      }}
+    >
+      ·
+    </span>
+  );
+
   return (
     <button
       type="button"
@@ -916,7 +969,9 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
         gap:            10,
         width:          "100%",
         padding:        "8px 10px",
-        background:     "rgba(0,0,0,.2)",
+        // BG-3 (B) — equipped card now sits on --bg-3 (neutral dark
+        // gray) instead of rgba(0,0,0,.2). Container shape unchanged.
+        background:     "var(--bg-3)",
         border:         isSelected
           ? "1.5px solid rgba(var(--genre-accent-rgb), 0.45)"
           : "1px solid var(--card-border)",
@@ -928,63 +983,98 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
       }}
     >
       <Icon size={14} stroke={1.75} color="var(--npc-role)" aria-hidden />
-      <span
-        className="ew-serif"
-        style={{
-          flex:         1,
-          minWidth:     0,
-          fontStyle:    "italic",
-          fontSize:     12,
-          color:        "var(--npc-name)",
-          whiteSpace:   "nowrap",
-          overflow:     "hidden",
-          textOverflow: "ellipsis",
-        }}
-      >
-        {item ? item.name : "— empty"}
-      </span>
-      {/* PR-5v-e — 5px rarity dot sits between the name and the stat
-          column when the slot is filled. Empty slots skip the dot
-          entirely (nothing to grade); the rest of the row continues
-          to right-align WEAPON / ARMOUR / ACCESSORY in the same slot. */}
-      {item && (
-        <span
-          aria-hidden
-          style={{
-            width:        5,
-            height:       5,
-            borderRadius: "50%",
-            background:   rarityColor(item.rarity),
-            flexShrink:   0,
-            marginRight:  6,
-            alignSelf:    "center",
-          }}
-        />
-      )}
       {item ? (
-        <span
-          style={{
-            fontFamily: "var(--mono)",
-            fontSize:   11,
-            color:      "var(--genre-accent)",
-            flexShrink: 0,
-          }}
-        >
-          {statLine}
-        </span>
+        <>
+          {/* Name — flex 3, truncated. */}
+          <span
+            className="ew-serif"
+            style={{
+              flex:         3,
+              minWidth:     0,
+              fontStyle:    "italic",
+              fontSize:     12,
+              color:        "var(--npc-name)",
+              whiteSpace:   "nowrap",
+              overflow:     "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {item.name}
+          </span>
+
+          {sep}
+
+          {/* RARITY — flex 1.5, centred, Inter Tight uppercase tinted
+              by the item's tier colour. */}
+          <span
+            className="uppercase"
+            style={{
+              flex:          1.5,
+              minWidth:      0,
+              fontFamily:    "var(--sans)",
+              fontSize:      8,
+              letterSpacing: "0.10em",
+              color:         rarityColor(item.rarity),
+              textAlign:     "center",
+              whiteSpace:    "nowrap",
+              overflow:      "hidden",
+              textOverflow:  "ellipsis",
+            }}
+          >
+            {rarityLabel(item.rarity)}
+          </span>
+
+          {sep}
+
+          {/* Stat — flex 1.5, right-aligned, JetBrains Mono accent. */}
+          <span
+            style={{
+              flex:       1.5,
+              minWidth:   0,
+              fontFamily: "var(--mono)",
+              fontSize:   11,
+              color:      "var(--genre-accent)",
+              textAlign:  "right",
+              whiteSpace: "nowrap",
+              overflow:   "hidden",
+            }}
+          >
+            {statLine}
+          </span>
+        </>
       ) : (
-        <span
-          style={{
-            fontFamily:    "var(--sans)",
-            fontSize:      8,
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            color:         "var(--ui-text-muted)",
-            flexShrink:    0,
-          }}
-        >
-          {slotLabelShort}
-        </span>
+        <>
+          {/* Empty-slot layout unchanged — name "— empty" on the left,
+              slot type label (WEAPON / ARMOUR / ACCESSORY) on the
+              right. No separators, no rarity column. */}
+          <span
+            className="ew-serif"
+            style={{
+              flex:         1,
+              minWidth:     0,
+              fontStyle:    "italic",
+              fontSize:     12,
+              color:        "var(--npc-name)",
+              whiteSpace:   "nowrap",
+              overflow:     "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            — empty
+          </span>
+          <span
+            style={{
+              fontFamily:    "var(--sans)",
+              fontSize:      8,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color:         "var(--ui-text-muted)",
+              flexShrink:    0,
+            }}
+          >
+            {slotLabelShort}
+          </span>
+        </>
       )}
     </button>
   );
@@ -1056,8 +1146,16 @@ function ItemDetailCard(props: ItemDetailCardProps) {
       style={{
         marginTop:    8,
         padding:      8,
-        background:   "rgba(var(--genre-accent-rgb), 0.06)",
-        border:       `1px solid ${rarityBorderTone}`,
+        // BG-3 (B) — item detail expand card sits on --bg-elevated
+        // (#2a2a2a), one tier above --bg-3 cells, so the elevated
+        // state reads against the panel. Was a faint genre-accent
+        // wash that drifted against the neutral palette.
+        background:   "var(--bg-elevated)",
+        // BG-3 (E) — rarity border thickened 1px → 2px to match the
+        // pack cells. rarityBorderTone is still the rarity colour at
+        // ~45% via color-mix so the tier reads without overpowering
+        // the elevated surface.
+        border:       `2px solid ${rarityBorderTone}`,
         borderRadius: 3,
         display:      "flex",
         flexDirection: "column",

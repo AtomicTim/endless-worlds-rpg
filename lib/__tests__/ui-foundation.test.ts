@@ -62,7 +62,15 @@ const ALLOWED_HEX_CODES = new Set<string>([
   // BG-1: --bg-1 (#110f0c → #181511) and --bg-2 (#181410 → #1e1b17)
   // shifted to the mockup's warm-charcoal base; the legacy hexes
   // are no longer referenced anywhere and were removed.
-  "#0a0907", "#181511", "#1e1b17", "#211c16",
+  // BG-3: --bg-2 and --bg-3 then shifted again off the warm palette
+  // to neutral dark gray (#1c1c1c / #242424) for the sidebar panels,
+  // and --bg-elevated (#2a2a2a) was added for the item-detail expand
+  // card. --bg-nav-card keeps #1e1b17 as a literal so nav cards
+  // stay warm — that's why #1e1b17 stays in the Set. #211c16 was
+  // the old --bg-3 value; no consumer references it any more, so
+  // it has been retired from the Set.
+  "#0a0907", "#181511", "#1e1b17",
+  "#1c1c1c", "#242424", "#2a2a2a",  // BG-3 neutral surfaces
   "#1c1a17", "#1e1b16", "#141210", "#221e19",
 
   // ── Borders / lines (--line / --ui-border-*) ───────────────────

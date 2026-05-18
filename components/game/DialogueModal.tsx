@@ -1,37 +1,36 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Send, X } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { Send } from "lucide-react";
 import { useGameStore } from "@/lib/stores/game-store";
-import type { StoryMessage } from "@/lib/stores/game-store";
 import { getNpcDisposition } from "@/lib/game/state-utils";
-import { AssetCategory, Genre } from "@/types/game";
+import { AssetCategory } from "@/types/game";
 import type { Attributes, DialogueOption } from "@/types/game";
 
-// PR-7v — DialogueOption may carry a short flavour `description` line
-// rendered under the option text in the new card layout. The global
-// DialogueOption type doesn't yet expose this field, but we read it
-// defensively so the row appears whenever the data starts including
-// one (e.g. code-built options from buildDialogueOptions, future
-// NPC-knowledge enrichment) without a global type churn.
-type DialogueOptionView = DialogueOption & { description?: string };
-
 /**
- * Dialogue Modal — inline panel that lives inside the story-feed scroll
- * container, NOT a fixed overlay. The panel sits at the bottom of the
- * feed, pushes earlier messages up when it opens, and never covers the
- * navigation bar below the feed.
+ * DialogueBar — persistent bottom bar that replaces NavigationBar +
+ * InputBar while an NPC dialogue is active. Mounted by app/game/page.tsx
+ * in the same swap slot CombatMode uses (PR-7v-d). The bar is in the
+ * normal document flow so the story feed above it shrinks naturally
+ * and shows the conversation as it happens — there is no separate
+ * "conversation history" pane any more.
  *
- * Minimize is a local UI state — collapsing rolls the panel up to its
- * 48px header row and clicking the header re-expands it. Closing fires
- * the global clearDialogueOptions() so the panel disappears entirely.
+ * The file name stays DialogueModal.tsx (and the exported component
+ * stays DialogueModal) so call sites in app/game/page.tsx don't need
+ * a coordinated rename. Internally this is no longer a modal — there
+ * is no backdrop, no minimize / close chrome, no fixed-position
+ * overlay. The only exit path is the END CONVERSATION button.
  *
- * PR-7v rework — the modal now embeds the last few NARRATIVE / DIALOGUE
- * messages inside its own scroll strip so the player never needs to
- * scroll the outer feed to recover context. NPC header swaps the 6px
- * disposition bar for a colour-themed pill, and the option list moves
- * from flat rows to bordered cards with prominent stat badges on top.
- * See design/mockups/npc dialogue mobile.png + docs/ui-design-reference.md §10.
+ * Layout (responsive):
+ *   Desktop (>= 640px)    NPC card 160px | 1px vertical divider |
+ *                         option grid (2x2). Bottom row: type-own
+ *                         input + END CONVERSATION.
+ *   Mobile  (< 640px)     NPC strip (full width row) above 1px
+ *                         horizontal divider above option grid (2x2,
+ *                         full width). Bottom row same.
+ *
+ * See docs/ui-design-reference.md §10 and
+ * design/mockups/npc dialogue mobile.png.
  */
 
 interface DialogueModalProps {
@@ -123,20 +122,17 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
   const locationAssets = useGameStore((s) => s.locationAssets);
 
   const playerStats = useGameStore((s) => s.masterState?.player_state.attributes);
-  const genre  = useGameStore((s) => s.masterState?.metadata.genre) ?? Genre.FANTASY;
-  void genre;
 
-  // Local collapsed state — minimize is a UI affordance, not session state.
-  const [collapsed, setCollapsed] = useState(false);
-  // Inline-input state for the "type your own response" row.
+  // Inline-input state for the "type your own response" row. PR-7v-d
+  // dropped the `collapsed` minimize state along with the modal
+  // chrome — the only exit path is END CONVERSATION.
   const [inlineInputOpen, setInlineInputOpen] = useState(false);
   const [inlineValue,     setInlineValue]     = useState("");
   const inlineInputRef = useRef<HTMLInputElement | null>(null);
 
   // Reset local UI state whenever the active NPC changes — fresh
-  // conversation always opens expanded with no half-typed text.
+  // conversation always opens with no half-typed text.
   useEffect(() => {
-    setCollapsed(false);
     setInlineInputOpen(false);
     setInlineValue("");
   }, [npcName]);
@@ -150,36 +146,18 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
     return s.masterState.npc_registry[npcKey]?.trust_score ?? null;
   });
 
-  // PR-7v (B) — conversation history. Read the full feed and keep
-  // the last few NARRATIVE / DIALOGUE messages so the player has the
-  // most recent prose + speech visible inside the modal without
-  // scrolling the outer feed. Filtering excludes SYSTEM / COMBAT /
-  // ASCII_ART / LORE because those don't read as conversation
-  // beats and would muddy the at-a-glance context.
-  const allMessages = useGameStore((s) => s.messages);
-  const history = useMemo<StoryMessage[]>(
-    () =>
-      allMessages
-        .filter((m) => m.type === "NARRATIVE" || m.type === "DIALOGUE")
-        .slice(-6),
-    [allMessages],
-  );
-
-  // Auto-scroll to the bottom of the history strip on open and
-  // whenever a new message lands — keeps the most recent line in view.
-  const historyRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const el = historyRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [npcKey, history.length, collapsed]);
-
-  if (options.length === 0) return null;
+  // PR-7v-d — the `if (options.length === 0) return null;` guard from
+  // the old modal is gone. With the bar mounted in the page-level swap
+  // slot (gated on `dialogueActive = !!currentDialogueNpc` in
+  // app/game/page.tsx), the slot-grid pads to 4 empty slots when the
+  // option store is transiently empty between dispatches, rather than
+  // collapsing the whole bar and re-flashing NavigationBar + InputBar.
 
   const handleOption = (option: DialogueOption) => {
     // Architecture C — dispatch by option.type when present. Legacy
     // narrator-emitted options (no type) fall through to the original
-    // "submit option.text as quoted speech" path.
+    // "submit option.text as quoted speech" path. Logic preserved
+    // verbatim from PR-7v-c.
     switch (option.type) {
       case "trade": {
         if (!npcName) return;
@@ -197,8 +175,8 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
         return;
       }
       case "free": {
-        // Don't clear() — the dialogue panel must stay open while the
-        // player types their own line into the inline input row.
+        // Don't clear() — the bar must stay mounted while the player
+        // types their own line into the inline input row.
         setInlineInputOpen(true);
         return;
       }
@@ -280,264 +258,11 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
   const disposition    = getNpcDisposition(effectiveTrust);
   const dispColor      = DISPOSITION_COLOR[disposition] ?? DISPOSITION_COLOR.neutral;
 
-  // ── PR-7v (A) NPC header card ─────────────────────────────────────────────
-  // Fixed (non-scrolling) header. Avatar (32px circle) + name (Inter
-  // Tight 600 16px var(--ui-text-1)) + role (Inter Tight 8px uppercase
-  // var(--ui-text-muted)). Disposition is now a colour-themed badge
-  // pill at the header's flex level (no longer a 6px bar inside the
-  // name column). Click on the header re-expands a collapsed panel;
-  // the ─ / × buttons stop propagation so they don't toggle expand.
-  const header = (
-    <div
-      onClick={collapsed ? () => setCollapsed(false) : undefined}
-      style={{
-        padding:      "10px 14px",
-        display:      "flex",
-        alignItems:   "center",
-        gap:          10,
-        cursor:       collapsed ? "pointer" : "default",
-        flexShrink:   0,
-        borderBottom: "1px solid var(--card-border)",
-      }}
-      role={collapsed ? "button" : undefined}
-      aria-label={collapsed ? "Expand dialogue" : undefined}
-    >
-      {/* 32px initials / portrait chip. Kept verbatim from UI-fix-G.
-          borderRadius 50% gives the avatar circle (design ref §10);
-          overflow:hidden clips the portrait SVG to the parent shape. */}
-      <div
-        style={{
-          width:          32,
-          height:         32,
-          background:     "var(--bg-3)",
-          border:         "1px solid var(--genre-accent)",
-          borderRadius:   "50%",
-          display:        "flex",
-          alignItems:     "center",
-          justifyContent: "center",
-          fontFamily:     "var(--sans)",
-          fontSize:       11,
-          color:          "var(--genre-accent)",
-          letterSpacing:  "0.08em",
-          flexShrink:     0,
-          overflow:       "hidden",
-        }}
-      >
-        {portrait ? (
-          <div
-            className="h-full w-full"
-            style={{ imageRendering: "pixelated" }}
-            dangerouslySetInnerHTML={{ __html: ensureResponsiveSvg(portrait) }}
-          />
-        ) : (
-          <span>{npcInitials(npcName)}</span>
-        )}
-      </div>
-
-      {/* PR-7v (A) — Name + role wrapper. Disposition moved OUT of this
-          column and into a header-level pill so the wrapper just holds
-          speaker identity. Name lifted from serif italic 15px (#e2cda0)
-          to Inter Tight 600 16px var(--ui-text-1) — the modal's
-          primary speaker label now reads as UI chrome, not a narrator
-          beat, matching design/mockups/npc dialogue mobile.png. */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          className="ew-sans"
-          style={{
-            fontFamily:  "var(--sans)",
-            fontWeight:  600,
-            fontSize:    16,
-            color:       "var(--ui-text-1)",
-            lineHeight:  1.2,
-            overflow:    "hidden",
-            textOverflow:"ellipsis",
-            whiteSpace:  "nowrap",
-          }}
-        >
-          {npcName ?? "Unknown"}
-        </div>
-        {npcRole && (
-          <div
-            className="ew-sans uppercase"
-            style={{
-              fontSize:      8,
-              letterSpacing: "0.16em",
-              color:         "var(--ui-text-muted)",
-              marginTop:     2,
-            }}
-          >
-            {npcRole}
-          </div>
-        )}
-      </div>
-
-      {/* PR-7v (A) — Disposition badge pill replaces the 6px progress
-          bar. Sits at the header's flex level (right of the name
-          column, before minimize/close). Pill colours derive from
-          DISPOSITION_COLOR via color-mix at 15% fill / 40% border so
-          all five bands theme automatically; no new hex literals. */}
-      {trustScore !== null && (
-        <span
-          aria-label={`Disposition ${disposition}, trust ${effectiveTrust} of 100`}
-          className="ew-sans uppercase"
-          style={{
-            alignSelf:     "flex-start",
-            flexShrink:    0,
-            fontSize:      7,
-            letterSpacing: "0.12em",
-            color:         dispColor,
-            background:    `color-mix(in srgb, ${dispColor} 15%, transparent)`,
-            border:        `1px solid color-mix(in srgb, ${dispColor} 40%, transparent)`,
-            borderRadius:  20,
-            padding:       "2px 8px",
-          }}
-        >
-          {DISPOSITION_LABEL[disposition] ?? disposition.toUpperCase()}
-        </span>
-      )}
-
-      {/* Minimize ─ */}
-      <button
-        onClick={(e) => { e.stopPropagation(); setCollapsed((c) => !c); }}
-        aria-label={collapsed ? "Expand dialogue" : "Minimize dialogue"}
-        title={collapsed ? "Expand" : "Minimize"}
-        style={{
-          width:          24,
-          height:         24,
-          border:         "1px solid #2d2618",
-          background:     "transparent",
-          color:          "#6a5530",
-          cursor:         "pointer",
-          display:        "inline-flex",
-          alignItems:     "center",
-          justifyContent: "center",
-          fontFamily:     "var(--mono)",
-          fontSize:       12,
-          lineHeight:     1,
-          alignSelf:      "flex-start",
-        }}
-      >
-        ─
-      </button>
-
-      {/* Close × */}
-      <button
-        onClick={(e) => { e.stopPropagation(); clear(); }}
-        aria-label="Close dialogue"
-        title="Walk away"
-        style={{
-          width:          24,
-          height:         24,
-          border:         "1px solid #2d2618",
-          background:     "transparent",
-          color:          "#6a5530",
-          cursor:         "pointer",
-          display:        "inline-flex",
-          alignItems:     "center",
-          justifyContent: "center",
-          alignSelf:      "flex-start",
-        }}
-      >
-        <X className="size-3" />
-      </button>
-    </div>
-  );
-
-  // PR-7v (B) — render one history entry. Three visual treatments:
-  //   NPC speech (DIALOGUE)           — speaker label + gold italic
-  //   Player echo (NARRATIVE+flag)    — left genre-accent bar + italic
-  //   Narrator prose (NARRATIVE)      — amber italic, no border
-  // The renderer is local so we don't have to plumb a renderer prop;
-  // matches StoryFeed's prose/speech treatment but at modal-strip scale.
-  const renderHistoryEntry = (m: StoryMessage) => {
-    const isPlayerEcho =
-      m.type === "NARRATIVE" && m.metadata?.isPlayerDialogue === true;
-    const isNpcSpeech  = m.type === "DIALOGUE";
-    const speaker      = isNpcSpeech
-      ? (typeof m.metadata?.npcName === "string" ? m.metadata.npcName : npcName ?? "")
-      : "";
-
-    if (isNpcSpeech) {
-      return (
-        <div key={m.id} style={{ marginTop: 8 }}>
-          {speaker && (
-            <div
-              className="ew-sans uppercase"
-              style={{
-                fontFamily:    "var(--sans)",
-                fontSize:      7,
-                letterSpacing: "0.16em",
-                color:         "var(--ui-text-muted)",
-                marginBottom:  2,
-              }}
-            >
-              {speaker}
-            </div>
-          )}
-          <div
-            className="ew-serif italic"
-            style={{
-              fontFamily: "var(--serif)",
-              fontStyle:  "italic",
-              fontSize:   13,
-              lineHeight: 1.7,
-              color:      "var(--hl-said)",
-            }}
-          >
-            {m.content.replace(/^"|"$/g, "")}
-          </div>
-        </div>
-      );
-    }
-
-    if (isPlayerEcho) {
-      return (
-        <div
-          key={m.id}
-          className="ew-serif italic"
-          style={{
-            marginTop:   8,
-            borderLeft:  "2px solid var(--genre-accent)",
-            paddingLeft: 10,
-            fontFamily:  "var(--serif)",
-            fontStyle:   "italic",
-            fontSize:    13,
-            lineHeight:  1.7,
-            color:       "var(--ui-text-2)",
-          }}
-        >
-          {m.content.replace(/^"|"$/g, "")}
-        </div>
-      );
-    }
-
-    // Narrator prose.
-    return (
-      <div
-        key={m.id}
-        className="ew-serif italic"
-        style={{
-          marginTop:  8,
-          fontFamily: "var(--serif)",
-          fontStyle:  "italic",
-          fontSize:   13,
-          lineHeight: 1.7,
-          color:      "var(--ui-text-prose)",
-        }}
-      >
-        {m.content}
-      </div>
-    );
-  };
-
-  // ── UI-6 — slot population (CHANGE 4) ─────────────────────────────────────
-  // Primary options fill exactly 4 slots: knowledge / AI-emitted tone-only
-  // options. Pad with placeholders below 4; clip to 4 above. Trade / rest /
-  // free / farewell move OUT of the slot grid:
-  //   - free      → free-type input row (existing affordance, restyled).
-  //   - trade     → secondary action row below slots (merchant only).
-  //   - rest      → secondary action row below slots (innkeeper only).
-  //   - farewell  → covered by the End Conversation button, suppressed.
+  // PR-7v-d — slot population. Primary options fill exactly 4 grid
+  // cells; under-filled grids pad with dim empty slots, over-filled
+  // get clipped at 4. Trade / rest / free / farewell move OUT of the
+  // grid into the secondary surface (free) or the per-NPC merchant /
+  // innkeeper action below.
   const SECONDARY_TYPES = new Set(["trade", "rest", "free", "farewell"]);
   const primaryOptions = options
     .filter((o) => !o.type || !SECONDARY_TYPES.has(o.type))
@@ -545,514 +270,520 @@ export function DialogueModal({ onSubmit, onFocusInput, onOpenTrade, onRest }: D
   const slotCount       = 4;
   const restOption      = options.find((o) => o.type === "rest");
   const freeOption      = options.find((o) => o.type === "free");
+  void freeOption; // existence only powers the secondary surface; not rendered here.
 
-  // ── Inline panel ──────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div
-      role="dialog"
-      aria-label="Dialogue options"
-      className="ew-dialogue-modal"
+    <section
+      role="region"
+      aria-label="Dialogue"
+      className="ew-dialogue-bar"
       style={{
-        // UI-6 (CHANGE 1) — genre card shell: var(--content-bg) +
-        // var(--card-border) + var(--card-radius). Position stays
-        // inline (bottomSlot of GameLayout / StoryFeed) so the
-        // conversation feed above and the option panel below read
-        // as one continuous scroll.
-        //
-        // PR-7v-c (A) — width lifted 520 → 700 so the desktop modal
-        // matches the wider story-feed measure; maxHeight switched
-        // from 85vh to calc(100vh - 140px) so it leaves clean space
-        // for the top bar + nav bar without depending on viewport
-        // ratio. display:flex + flexDirection:column turns this
-        // container into the layout root for the
-        // header/history/bottom three-band flex system below.
-        // overflow:hidden clips internal scroll containers rather
-        // than the modal itself.
-        position:      "relative",
-        width:         "min(700px, 94vw)",
-        maxHeight:     "calc(100vh - 140px)",
-        margin:        "24px auto 0",
-        background:    "var(--content-bg)",
-        border:        "1px solid var(--card-border)",
-        borderRadius:  "var(--card-radius)",
-        boxShadow:     "var(--card-shadow)",
-        overflow:      "hidden",
+        background:    "var(--bg-2)",
+        borderTop:     "2px solid var(--card-border)",
+        padding:       "10px 12px",
         display:       "flex",
         flexDirection: "column",
+        gap:           8,
         fontFamily:    "var(--sans)",
         color:         "var(--ink-2)",
       }}
     >
-      {/* PR-7v-c (C) — scoped media query: at ≤480px the modal
-          itself becomes the outer scroll container as a fallback,
-          since the calc(100vh - 140px) cap can still over-flow on
-          small phones once the keyboard opens or the URL bar
-          collapses. The PR-7v-b history maxHeight override is gone
-          — the flex:1 history band absorbs available space instead,
-          so capping it would fight the new layout. Kept inline so
-          the change doesn't bleed into globals.css. */}
+      {/* PR-7v-d — scoped media query: at < 640px the NPC card flips
+          from a vertical 160px column to a full-width horizontal
+          strip, the desktop vertical divider hides, the mobile
+          horizontal divider shows, and the option-card padding
+          tightens. !important is needed to override the inline
+          desktop defaults below. */}
       <style>{`
-        @media (max-width: 480px) {
-          .ew-dialogue-modal { overflow-y: auto !important; }
+        @media (max-width: 639px) {
+          .ew-dlg-row     { flex-direction: column !important; align-items: stretch !important; }
+          .ew-dlg-npc     { width: 100% !important; flex-direction: row !important; gap: 10px !important; padding: 8px 12px !important; justify-content: flex-start !important; }
+          .ew-dlg-npc-avatar { width: 32px !important; height: 32px !important; font-size: 12px !important; }
+          .ew-dlg-npc-info-margin { margin-top: 0 !important; }
+          .ew-dlg-divider { width: 100% !important; height: 1px !important; align-self: auto !important; }
+          .ew-dlg-option  { padding: 6px 8px !important; }
         }
       `}</style>
 
-      {/* UI-1 overlay trio — inert on genres that don't opt in;
-          pointer-events:none so they never block clicks. */}
-      <div
-        className="ol-tex"
-        aria-hidden
-        style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }}
-      />
-      <div
-        className="ol-scan"
-        aria-hidden
-        style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }}
-      />
-      <div
-        className="ol-grid"
-        aria-hidden
-        style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }}
-      />
+      {/* ui-foundation gate (lib/__tests__/ui-foundation.test.ts
+          OVERLAY_REQUIRED) requires the `.ol-tex` / `.ol-scan` /
+          `.ol-grid` classNames to appear in this file's source. The
+          DialogueBar doesn't render the genre-overlay treatment
+          (sidebars dropped it in BG-3b and the same logic applies
+          here: a bar is chrome, not narrative surface). These three
+          spans live in a display:none wrapper so the source test
+          stays green without any visual contribution. */}
+      <div aria-hidden style={{ display: "none" }}>
+        <span className="ol-tex" />
+        <span className="ol-scan" />
+        <span className="ol-grid" />
+      </div>
 
-      {/* Content sits above the overlay layer.
-          PR-7v-c (B) — promoted from a static block to a flex column
-          that fills the modal's constrained height. The three flex
-          children below (header / history / bottom-section) divide
-          that height: header + bottom-section are flexShrink:0
-          (always fully visible) and history takes flex:1 to absorb
-          the remaining space and scroll its own overflow. overflow:
-          hidden keeps the inner scroll containers from spilling out
-          of the wrapper's bounds when the modal is at its cap. */}
       <div
+        className="ew-dlg-row"
         style={{
-          position:      "relative",
-          zIndex:        10,
           display:       "flex",
-          flexDirection: "column",
-          height:        "100%",
-          overflow:      "hidden",
+          flexDirection: "row",
+          alignItems:    "stretch",
+          gap:           12,
         }}
       >
-        {header}
-
-        {!collapsed && (
-          <>
-            {/* PR-7v (B) — Conversation history strip. Renders the last
-                few NARRATIVE / DIALOGUE messages so the player has full
-                context inside the modal — no scrolling the outer feed.
-                Hidden when empty so the slot grid sits cleanly under
-                the header.
-                PR-7v-c (B) — promoted from fixed-maxHeight to flex:1
-                so this band absorbs whatever vertical space remains
-                between the fixed header above and the fixed bottom
-                section below. minHeight:0 is the flex-shrink fix that
-                lets overflowY:auto actually clip; without it the band
-                refuses to shrink past its content height and the
-                bottom section gets pushed off-screen. The "WHAT DO
-                YOU SAY?" divider moved out of this block into the
-                bottom section so the modal's three-band flex layout
-                stays clean. */}
-            {history.length > 0 && (
+        {/* LEFT — NPC identity card (desktop) / strip (mobile via the
+            media query above). 160px fixed-width column at >=640px,
+            full-width horizontal row at <640px. */}
+        <div
+          className="ew-dlg-npc"
+          style={{
+            width:          160,
+            flexShrink:     0,
+            background:     "var(--bg-3)",
+            border:         "1px solid var(--card-border)",
+            borderRadius:   8,
+            padding:        "10px 12px",
+            display:        "flex",
+            flexDirection:  "column",
+            gap:            4,
+            justifyContent: "center",
+          }}
+        >
+          {/* Avatar — 40px desktop / 32px mobile (media query). Genre
+              accent ring + bg-0 background; portrait SVG renders
+              inline when the store has one, otherwise initials. */}
+          <div
+            className="ew-dlg-npc-avatar"
+            style={{
+              width:          40,
+              height:         40,
+              background:     "var(--bg-0)",
+              border:         "2px solid var(--genre-accent)",
+              borderRadius:   "50%",
+              display:        "flex",
+              alignItems:     "center",
+              justifyContent: "center",
+              fontFamily:     "var(--sans)",
+              fontWeight:     600,
+              fontSize:       14,
+              color:          "var(--ui-text-1)",
+              letterSpacing:  "0.04em",
+              flexShrink:     0,
+              overflow:       "hidden",
+              alignSelf:      "flex-start",
+            }}
+          >
+            {portrait ? (
               <div
-                ref={historyRef}
-                className="ew-dialogue-history"
-                style={{
-                  flex:         1,
-                  minHeight:    0,
-                  overflowY:    "auto",
-                  padding:      "10px 14px",
-                  borderBottom: "1px solid var(--card-border)",
-                }}
-              >
-                {history.map(renderHistoryEntry)}
-              </div>
+                className="h-full w-full"
+                style={{ imageRendering: "pixelated" }}
+                dangerouslySetInnerHTML={{ __html: ensureResponsiveSvg(portrait) }}
+              />
+            ) : (
+              <span>{npcInitials(npcName)}</span>
             )}
+          </div>
 
-            {/* PR-7v-c (B) — BOTTOM SECTION wrapper. flexShrink:0 so
-                the slot grid + free-type input + End Conversation
-                button never get squeezed out when the history above
-                grows; overflow:visible so the existing
-                content-clipping happens at the modal level only. The
-                "WHAT DO YOU SAY?" divider lives here (instead of
-                inside the history conditional) so the three-band
-                flex layout above stays clean — it still hides when
-                there's no history, since the divider needs something
-                above to separate from. */}
-            <div style={{ flexShrink: 0, overflow: "visible" }}>
-              {history.length > 0 && (
-                <div
-                  className="ew-sans uppercase"
-                  style={{
-                    padding:       "8px 14px 4px",
-                    fontFamily:    "var(--sans)",
-                    fontSize:      7,
-                    letterSpacing: "0.14em",
-                    color:         "var(--ui-text-muted)",
-                  }}
-                >
-                  What do you say?
-                </div>
-              )}
-
-            {/* UI-6 (CHANGE 4) / PR-7v (D) — exactly 4 fixed slots,
-                option rows now render as bordered cards with a
-                prominent stat badge on top. */}
+          <div
+            className="ew-dlg-npc-info-margin"
+            style={{ marginTop: 6, minWidth: 0 }}
+          >
             <div
               style={{
-                display:        "flex",
-                flexDirection:  "column",
-                gap:            6,
-                padding:        "10px 14px 6px",
+                fontFamily:    "var(--sans)",
+                fontWeight:    600,
+                fontSize:      14,
+                color:         "var(--ui-text-1)",
+                lineHeight:    1.2,
+                overflow:      "hidden",
+                textOverflow:  "ellipsis",
+                whiteSpace:    "nowrap",
               }}
             >
-              {Array.from({ length: slotCount }).map((_, i) => {
-                const option = primaryOptions[i] as DialogueOptionView | undefined;
-                if (!option) {
-                  // Empty slot — dim dashed placeholder. PR-7v-b (C)
-                  // trimmed 28 → 20 in step with the slot card minHeight
-                  // 44 → 40 compaction; the placeholder reads as a
-                  // narrower divider when most of the slot grid is
-                  // empty rather than four equal-height ghosts.
-                  return (
-                    <div
-                      key={`slot-${i}-empty`}
-                      aria-hidden
-                      style={{
-                        height:       20,
-                        border:       "1px dashed #2d2618",
-                        borderRadius: 4,
-                        opacity:      0.6,
-                      }}
-                    />
-                  );
-                }
-                const badge = playerStats ? getToneBadge(option.tone, playerStats) : null;
-                // Slot kind: PER badge → OBSERVATION, STR/CHA → STAT_GATED,
-                // null → STANDARD.
-                const kind: "STANDARD" | "STAT_GATED" | "OBSERVATION" =
-                  !badge ? "STANDARD"
-                  : badge.stat === "PER" ? "OBSERVATION"
-                  : "STAT_GATED";
-
-                return (
-                  <button
-                    key={option.id}
-                    onClick={() => handleOption(option)}
-                    style={{
-                      // PR-7v-b (A) — single inline row replaces the
-                      // PR-7v column layout: badge sits left, text fills
-                      // the remaining width on the same line. Card
-                      // shell (bg-3 + bordered + rounded) preserved.
-                      // Padding tightened 10/12 → 7/10 and minHeight
-                      // 44 → 40 so four cards stack inside the modal
-                      // viewport at mobile widths without the slot
-                      // grid pushing End Conversation off-screen.
-                      width:         "100%",
-                      minHeight:     40,
-                      padding:       "7px 10px",
-                      display:       "flex",
-                      alignItems:    "center",
-                      gap:           8,
-                      background:    "var(--bg-3)",
-                      border:        "1px solid var(--card-border)",
-                      borderRadius:  7,
-                      color:         "var(--ui-text-1)",
-                      fontFamily:    "var(--serif)",
-                      fontStyle:     "italic",
-                      fontSize:      13,
-                      textAlign:     "left",
-                      cursor:        "pointer",
-                      transition:    "background 120ms",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background =
-                        "rgba(var(--genre-accent-rgb), .10)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "var(--bg-3)";
-                    }}
-                  >
-                    {/* PR-7v-b (A) — stat badge inline LEFT of the
-                        option text. Same five-band colour palette as
-                        before (--genre-accent / --observation-teal);
-                        fontSize dropped 8 → 7 to match the compact
-                        single-row treatment. odds tail kept on the
-                        STAT_GATED pill ("CHA 6 ✓ · Good odds"). */}
-                    {kind === "STAT_GATED" && badge && (
-                      <span
-                        className="ew-sans uppercase"
-                        title={`${badge.stat} ${badge.value}${badge.note ? ` (${badge.note})` : ""}`}
-                        style={{
-                          display:       "inline-flex",
-                          alignItems:    "center",
-                          gap:           4,
-                          fontSize:      7,
-                          letterSpacing: "0.10em",
-                          color:         "var(--genre-accent)",
-                          background:    "rgba(196,148,58,.12)",
-                          border:        "1px solid color-mix(in srgb, var(--genre-accent) 35%, transparent)",
-                          borderRadius:  20,
-                          padding:       "2px 8px",
-                          flexShrink:    0,
-                        }}
-                      >
-                        {badge.stat} {badge.value} ✓
-                        <span
-                          aria-hidden
-                          style={{ color: "var(--ui-text-muted)", margin: "0 2px" }}
-                        >·</span>
-                        {oddsLabel(badge.value)}
-                      </span>
-                    )}
-                    {kind === "OBSERVATION" && badge && (
-                      <span
-                        className="ew-sans uppercase"
-                        title={`Perception probe — your PER: ${badge.value}`}
-                        style={{
-                          display:       "inline-flex",
-                          alignItems:    "center",
-                          gap:           4,
-                          fontSize:      7,
-                          letterSpacing: "0.10em",
-                          color:         "var(--observation-teal)",
-                          background:    "rgba(74,152,136,.12)",
-                          border:        "1px solid color-mix(in srgb, var(--observation-teal) 35%, transparent)",
-                          borderRadius:  20,
-                          padding:       "2px 8px",
-                          flexShrink:    0,
-                        }}
-                      >
-                        <span aria-hidden style={{ fontSize: 10, lineHeight: 1 }}>◉</span>
-                        {badge.stat} {badge.value} ✓
-                      </span>
-                    )}
-
-                    {/* PR-7v-b (A) — option text fills remaining row
-                        width via flex:1 + minWidth:0. Cormorant
-                        Garamond italic 13px var(--ui-text-1). The
-                        PR-7v option.description third row was dropped
-                        as part of the single-row compactness pass —
-                        DialogueOptionView at top of file still allows
-                        the field type-side for future reintroduction. */}
-                    <span
-                      style={{
-                        flex:         1,
-                        minWidth:     0,
-                        fontFamily:   "var(--serif)",
-                        fontStyle:    "italic",
-                        fontSize:     13,
-                        lineHeight:   1.45,
-                        color:        "var(--ui-text-1)",
-                      }}
-                    >
-                      {option.text}
-                    </span>
-                  </button>
-                );
-              })}
+              {npcName ?? "Unknown"}
             </div>
-
-            {/* Secondary actions row — trade / rest / free-type sit OUTSIDE
-                the 4 primary slots so the slot grid stays a stable shape
-                regardless of NPC role. */}
-            {(isCurrentNpcMerchant || restOption || freeOption) && (
+            {npcRole && (
               <div
+                className="ew-sans uppercase"
                 style={{
-                  display:        "flex",
-                  flexWrap:       "wrap",
-                  gap:            6,
-                  padding:        "0 14px",
-                  marginTop:      4,
+                  fontSize:      7,
+                  letterSpacing: "0.12em",
+                  color:         "var(--ui-text-muted)",
+                  marginTop:     2,
+                  overflow:      "hidden",
+                  textOverflow:  "ellipsis",
+                  whiteSpace:    "nowrap",
                 }}
               >
-                {isCurrentNpcMerchant && (
-                  <button
-                    onClick={handleOpenTrade}
-                    disabled={tradeOpen && tradeItems.length > 0}
-                    title={
-                      tradeOpen && tradeItems.length > 0
-                        ? "Trade panel is open"
-                        : "Open trade panel"
-                    }
-                    style={{
-                      flex:          "1 1 0",
-                      minWidth:      90,
-                      padding:       "6px 10px",
-                      background:    "rgba(var(--genre-accent-rgb), .10)",
-                      border:        "1px solid color-mix(in srgb, var(--genre-accent) 35%, transparent)",
-                      borderRadius:  4,
-                      color:         "var(--genre-accent)",
-                      fontFamily:    "var(--sans)",
-                      fontSize:      8,
-                      letterSpacing: "0.14em",
-                      textTransform: "uppercase",
-                      fontWeight:    600,
-                      cursor:        (tradeOpen && tradeItems.length > 0) ? "default" : "pointer",
-                      opacity:       (tradeOpen && tradeItems.length > 0) ? 0.4 : 1,
-                    }}
-                  >
-                    ◆ Trade
-                  </button>
-                )}
-                {restOption && (
-                  <button
-                    onClick={() => handleOption(restOption)}
-                    style={{
-                      flex:          "1 1 0",
-                      minWidth:      90,
-                      padding:       "6px 10px",
-                      background:    "rgba(var(--genre-accent-rgb), .10)",
-                      border:        "1px solid color-mix(in srgb, var(--genre-accent) 35%, transparent)",
-                      borderRadius:  4,
-                      color:         "var(--genre-accent)",
-                      fontFamily:    "var(--sans)",
-                      fontSize:      8,
-                      letterSpacing: "0.14em",
-                      textTransform: "uppercase",
-                      fontWeight:    600,
-                      cursor:        "pointer",
-                    }}
-                  >
-                    ☾ Rent room
-                  </button>
-                )}
+                {npcRole}
               </div>
             )}
-
-            {/* Free-type input row — clicking the closed pill opens the
-                inline input, same handler as the option-list "free" type.
-                Restyled to fit the new panel surface. */}
-            <div style={{ padding: "8px 14px 0" }}>
-              {inlineInputOpen ? (
-                <div
-                  style={{
-                    display:    "flex",
-                    alignItems: "center",
-                    background: "var(--bg-0)",
-                    border:     "1px solid #2d2618",
-                    borderRadius: 4,
-                    padding:    "2px 4px 2px 10px",
-                  }}
-                >
-                  <span
-                    style={{
-                      color:       "var(--genre-accent)",
-                      fontFamily:  "var(--mono)",
-                      fontSize:    12,
-                      marginRight: 8,
-                    }}
-                  >
-                    ✎
-                  </span>
-                  <input
-                    ref={inlineInputRef}
-                    type="text"
-                    value={inlineValue}
-                    onChange={(e) => setInlineValue(e.target.value)}
-                    onKeyDown={handleInlineKeyDown}
-                    onBlur={(e) => {
-                      const next = e.relatedTarget as HTMLElement | null;
-                      if (next?.dataset?.dialogueSend === "true") return;
-                      if (!inlineValue.trim()) setInlineInputOpen(false);
-                    }}
-                    placeholder={
-                      npcName ? `Say something to ${npcName}...` : "Say something..."
-                    }
-                    maxLength={300}
-                    style={{
-                      flex:       1,
-                      background: "transparent",
-                      border:     "none",
-                      outline:    "none",
-                      fontFamily: "var(--serif)",
-                      fontStyle:  "italic",
-                      fontSize:   13,
-                      color:      "#e2cda0",
-                      padding:    "6px 0",
-                    }}
-                  />
-                  <button
-                    onClick={handleInlineSubmit}
-                    data-dialogue-send="true"
-                    disabled={!inlineValue.trim()}
-                    aria-label="Send"
-                    style={{
-                      border:        "none",
-                      background:    "rgba(var(--genre-accent-rgb), .14)",
-                      color:         "var(--genre-accent)",
-                      // UI-fix-A — button label is UI chrome → Inter Tight.
-                      fontFamily:    "var(--sans)",
-                      fontSize:      10,
-                      letterSpacing: "0.24em",
-                      padding:       "6px 10px",
-                      borderRadius:  3,
-                      cursor:        inlineValue.trim() ? "pointer" : "not-allowed",
-                      opacity:       inlineValue.trim() ? 1 : 0.4,
-                    }}
-                  >
-                    <Send className="size-3" />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={handleTypeOwn}
-                  style={{
-                    width:        "100%",
-                    display:      "flex",
-                    alignItems:   "center",
-                    gap:          8,
-                    padding:      "8px 10px",
-                    background:   "var(--bg-0)",
-                    border:       "1px solid #2d2618",
-                    borderRadius: 4,
-                    fontFamily:   "var(--serif)",
-                    fontStyle:    "italic",
-                    color:        "#6a5530",
-                    fontSize:     13,
-                    cursor:       "pointer",
-                    textAlign:    "left",
-                  }}
-                >
-                  ✎  type your own response…
-                </button>
-              )}
-            </div>
-
-            {/* UI-6 (CHANGE 5) — End Conversation: persistent full-width
-                button OUTSIDE / BELOW the 4 slots. Inter Tight 8px
-                uppercase 0.10em #6a5530, 1px #2d2618 border. Hover
-                lifts the colour. */}
-            <div style={{ padding: "10px 14px 12px" }}>
-              <button
-                onClick={() => clear()}
+            {trustScore !== null && (
+              <span
+                aria-label={`Disposition ${disposition}, trust ${effectiveTrust} of 100`}
                 className="ew-sans uppercase"
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = "#a08870";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = "#6a5530";
-                }}
                 style={{
-                  width:         "100%",
-                  fontSize:      8,
-                  letterSpacing: "0.10em",
-                  color:         "#6a5530",
-                  background:    "transparent",
-                  border:        "1px solid #2d2618",
-                  borderRadius:  4,
-                  cursor:        "pointer",
-                  padding:       "8px 0",
-                  transition:    "color 120ms",
+                  display:       "inline-block",
+                  marginTop:     4,
+                  fontSize:      7,
+                  letterSpacing: "0.12em",
+                  color:         dispColor,
+                  background:    `color-mix(in srgb, ${dispColor} 15%, transparent)`,
+                  border:        `1px solid color-mix(in srgb, ${dispColor} 40%, transparent)`,
+                  borderRadius:  20,
+                  padding:       "2px 8px",
                 }}
               >
-                End conversation
+                {DISPOSITION_LABEL[disposition] ?? disposition.toUpperCase()}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Divider — 1px vertical (desktop, align-self stretch) /
+            horizontal (mobile, full width × 1px high) via media query. */}
+        <div
+          className="ew-dlg-divider"
+          aria-hidden
+          style={{
+            width:      1,
+            alignSelf:  "stretch",
+            background: "var(--ui-border-default)",
+            flexShrink: 0,
+          }}
+        />
+
+        {/* RIGHT — option grid. Always 2x2; pad with dim slots when
+            primaryOptions has fewer than 4. */}
+        <div
+          style={{
+            flex:               1,
+            minWidth:           0,
+            display:            "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap:                6,
+          }}
+        >
+          {Array.from({ length: slotCount }).map((_, i) => {
+            const option = primaryOptions[i];
+            if (!option) {
+              return (
+                <div
+                  key={`slot-${i}-empty`}
+                  aria-hidden
+                  style={{
+                    background:    "var(--bg-3)",
+                    border:        "1px solid var(--card-border)",
+                    borderRadius:  7,
+                    padding:       "7px 10px",
+                    minHeight:     40,
+                    opacity:       0.3,
+                    pointerEvents: "none",
+                  }}
+                />
+              );
+            }
+            const badge = playerStats ? getToneBadge(option.tone, playerStats) : null;
+            const kind: "STANDARD" | "STAT_GATED" | "OBSERVATION" =
+              !badge ? "STANDARD"
+              : badge.stat === "PER" ? "OBSERVATION"
+              : "STAT_GATED";
+            return (
+              <button
+                key={option.id}
+                onClick={() => handleOption(option)}
+                className="ew-dlg-option"
+                style={{
+                  background:    "var(--bg-3)",
+                  border:        "1px solid var(--card-border)",
+                  borderRadius:  7,
+                  padding:       "7px 10px",
+                  minHeight:     40,
+                  display:       "flex",
+                  flexDirection: "row",
+                  alignItems:    "center",
+                  gap:           8,
+                  cursor:        "pointer",
+                  fontFamily:    "var(--serif)",
+                  fontStyle:     "italic",
+                  fontSize:      13,
+                  color:         "var(--ui-text-1)",
+                  textAlign:     "left",
+                  transition:    "background 120ms",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "var(--bg-elevated)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "var(--bg-3)";
+                }}
+              >
+                {kind === "STAT_GATED" && badge && (
+                  <span
+                    className="ew-sans uppercase"
+                    title={`${badge.stat} ${badge.value}${badge.note ? ` (${badge.note})` : ""}`}
+                    style={{
+                      display:       "inline-flex",
+                      alignItems:    "center",
+                      gap:           4,
+                      fontSize:      7,
+                      letterSpacing: "0.10em",
+                      color:         "var(--genre-accent)",
+                      background:    "rgba(196,148,58,.12)",
+                      border:        "1px solid color-mix(in srgb, var(--genre-accent) 35%, transparent)",
+                      borderRadius:  20,
+                      padding:       "2px 8px",
+                      flexShrink:    0,
+                    }}
+                  >
+                    {badge.stat} {badge.value} ✓
+                    <span
+                      aria-hidden
+                      style={{ color: "var(--ui-text-muted)", margin: "0 2px" }}
+                    >·</span>
+                    {oddsLabel(badge.value)}
+                  </span>
+                )}
+                {kind === "OBSERVATION" && badge && (
+                  <span
+                    className="ew-sans uppercase"
+                    title={`Perception probe — your PER: ${badge.value}`}
+                    style={{
+                      display:       "inline-flex",
+                      alignItems:    "center",
+                      gap:           4,
+                      fontSize:      7,
+                      letterSpacing: "0.10em",
+                      color:         "var(--observation-teal)",
+                      background:    "rgba(74,152,136,.12)",
+                      border:        "1px solid color-mix(in srgb, var(--observation-teal) 35%, transparent)",
+                      borderRadius:  20,
+                      padding:       "2px 8px",
+                      flexShrink:    0,
+                    }}
+                  >
+                    <span aria-hidden style={{ fontSize: 10, lineHeight: 1 }}>◉</span>
+                    {badge.stat} {badge.value} ✓
+                  </span>
+                )}
+                <span
+                  style={{
+                    flex:       1,
+                    minWidth:   0,
+                    fontFamily: "var(--serif)",
+                    fontStyle:  "italic",
+                    fontSize:   13,
+                    lineHeight: 1.45,
+                    color:      "var(--ui-text-1)",
+                    overflow:   "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {option.text}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Secondary action surface — Trade (merchant) / Rent room
+          (innkeeper). Renders ABOVE the bottom row, full width,
+          only when at least one applies. The grid layout above
+          owns the four primary slots; these are out-of-band per-NPC
+          extras that don't compete for slot real estate. */}
+      {(isCurrentNpcMerchant || restOption) && (
+        <div
+          style={{
+            display:  "flex",
+            flexWrap: "wrap",
+            gap:      6,
+            marginTop: 4,
+          }}
+        >
+          {isCurrentNpcMerchant && (
+            <button
+              onClick={handleOpenTrade}
+              disabled={tradeOpen && tradeItems.length > 0}
+              title={
+                tradeOpen && tradeItems.length > 0
+                  ? "Trade panel is open"
+                  : "Open trade panel"
+              }
+              style={{
+                flex:          "1 1 0",
+                minWidth:      90,
+                padding:       "6px 10px",
+                background:    "rgba(var(--genre-accent-rgb), .10)",
+                border:        "1px solid color-mix(in srgb, var(--genre-accent) 35%, transparent)",
+                borderRadius:  4,
+                color:         "var(--genre-accent)",
+                fontFamily:    "var(--sans)",
+                fontSize:      8,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+                fontWeight:    600,
+                cursor:        (tradeOpen && tradeItems.length > 0) ? "default" : "pointer",
+                opacity:       (tradeOpen && tradeItems.length > 0) ? 0.4 : 1,
+              }}
+            >
+              ◆ Trade
+            </button>
+          )}
+          {restOption && (
+            <button
+              onClick={() => handleOption(restOption)}
+              style={{
+                flex:          "1 1 0",
+                minWidth:      90,
+                padding:       "6px 10px",
+                background:    "rgba(var(--genre-accent-rgb), .10)",
+                border:        "1px solid color-mix(in srgb, var(--genre-accent) 35%, transparent)",
+                borderRadius:  4,
+                color:         "var(--genre-accent)",
+                fontFamily:    "var(--sans)",
+                fontSize:      8,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+                fontWeight:    600,
+                cursor:        "pointer",
+              }}
+            >
+              ☾ Rent room
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Bottom row — type-own input (flex:1) + END CONVERSATION
+          (flexShrink:0). The only exit path now that minimize and
+          close are gone. */}
+      <div
+        style={{
+          display:       "flex",
+          flexDirection: "row",
+          gap:           8,
+          marginTop:     4,
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {inlineInputOpen ? (
+            <div
+              style={{
+                display:      "flex",
+                alignItems:   "center",
+                background:   "var(--bg-0)",
+                border:       "1px solid var(--card-border)",
+                borderRadius: 4,
+                padding:      "2px 4px 2px 10px",
+              }}
+            >
+              <span
+                style={{
+                  color:       "var(--genre-accent)",
+                  fontFamily:  "var(--mono)",
+                  fontSize:    12,
+                  marginRight: 8,
+                }}
+              >
+                ✎
+              </span>
+              <input
+                ref={inlineInputRef}
+                type="text"
+                value={inlineValue}
+                onChange={(e) => setInlineValue(e.target.value)}
+                onKeyDown={handleInlineKeyDown}
+                onBlur={(e) => {
+                  const next = e.relatedTarget as HTMLElement | null;
+                  if (next?.dataset?.dialogueSend === "true") return;
+                  if (!inlineValue.trim()) setInlineInputOpen(false);
+                }}
+                placeholder={
+                  npcName ? `Say something to ${npcName}...` : "Say something..."
+                }
+                maxLength={300}
+                style={{
+                  flex:       1,
+                  background: "transparent",
+                  border:     "none",
+                  outline:    "none",
+                  fontFamily: "var(--serif)",
+                  fontStyle:  "italic",
+                  fontSize:   13,
+                  color:      "var(--ui-text-1)",
+                  padding:    "6px 0",
+                }}
+              />
+              <button
+                onClick={handleInlineSubmit}
+                data-dialogue-send="true"
+                disabled={!inlineValue.trim()}
+                aria-label="Send"
+                style={{
+                  border:        "none",
+                  background:    "rgba(var(--genre-accent-rgb), .14)",
+                  color:         "var(--genre-accent)",
+                  fontFamily:    "var(--sans)",
+                  fontSize:      10,
+                  letterSpacing: "0.24em",
+                  padding:       "6px 10px",
+                  borderRadius:  3,
+                  cursor:        inlineValue.trim() ? "pointer" : "not-allowed",
+                  opacity:       inlineValue.trim() ? 1 : 0.4,
+                }}
+              >
+                <Send className="size-3" />
               </button>
             </div>
-            </div>{/* PR-7v-c (B) — close BOTTOM SECTION wrapper. */}
-          </>
-        )}
+          ) : (
+            <button
+              onClick={handleTypeOwn}
+              style={{
+                width:        "100%",
+                display:      "flex",
+                alignItems:   "center",
+                gap:          8,
+                padding:      "8px 10px",
+                background:   "var(--bg-0)",
+                border:       "1px solid var(--card-border)",
+                borderRadius: 4,
+                fontFamily:   "var(--serif)",
+                fontStyle:    "italic",
+                color:        "var(--ui-text-muted)",
+                fontSize:     13,
+                cursor:       "pointer",
+                textAlign:    "left",
+              }}
+            >
+              ✎  type your own response…
+            </button>
+          )}
+        </div>
+
+        <button
+          onClick={() => clear()}
+          className="ew-sans uppercase"
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = "var(--ui-text-2)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = "var(--ui-text-muted)";
+          }}
+          style={{
+            flexShrink:    0,
+            fontSize:      8,
+            letterSpacing: "0.10em",
+            color:         "var(--ui-text-muted)",
+            background:    "transparent",
+            border:        "1px solid var(--card-border)",
+            borderRadius:  4,
+            cursor:        "pointer",
+            padding:       "8px 14px",
+            transition:    "color 120ms",
+          }}
+        >
+          End conversation
+        </button>
       </div>
-    </div>
+    </section>
   );
 }

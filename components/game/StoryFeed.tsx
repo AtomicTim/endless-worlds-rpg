@@ -60,10 +60,11 @@ interface StoryFeedProps {
   loadingText?: string | null;
   onSubmit?:   (input: string) => void;
   onNavigate?: (nodeId: string) => void;
-  /** In-flow slot rendered at the bottom of the scroll container, after
-   *  the last message. Used to host the inline DialogueModal so the panel
-   *  pushes the feed up rather than overlaying it as a fixed element. */
-  bottomSlot?: React.ReactNode;
+  // PR-7v-d — `bottomSlot` retired. DialogueModal is no longer hosted
+  // inside the feed scroll container; it renders in the page-level
+  // CombatMode swap slot as a persistent bottom bar (DialogueBar).
+  // The feed is now a pure scroll container and naturally shows the
+  // conversation history above the bar.
 }
 
 // ── Stat-check parsing ──────────────────────────────────────────────────────
@@ -97,7 +98,7 @@ interface PopoverState {
   position: { x: number; y: number };
 }
 
-export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, onNavigate, bottomSlot }: StoryFeedProps) {
+export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, onNavigate }: StoryFeedProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [popover, setPopover] = useState<PopoverState | null>(null);
@@ -288,8 +289,7 @@ export function StoryFeed({ messages, isLoading = false, loadingText, onSubmit, 
           </div>
         )}
 
-        {bottomSlot}
-
+        {/* PR-7v-d — `{bottomSlot}` removed. See StoryFeedProps. */}
         <div ref={bottomRef} />
       </div>
 

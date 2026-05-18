@@ -100,6 +100,15 @@ export default function GamePage() {
   // Day 21 — SEARCH REMAINS + TAKE handlers backing the FloorLootStrip.
   const floorLootHandlers = useFloorLoot();
   const inCombat = activeCombat?.active === true;
+  // PR-7v-d — DialogueModal moved into the CombatMode bottom-swap slot
+  // as a persistent DialogueBar (NavigationBar + InputBar hidden while
+  // talking). `dialogueActive` is derived from currentDialogueNpc so
+  // the bar follows the same NPC presence that drives the rest of the
+  // dialogue state — minimize / close affordances were dropped along
+  // with the modal chrome, so the only exit path is END CONVERSATION
+  // (clearDialogueOptions) inside the bar itself.
+  const currentDialogueNpc = useGameStore((s) => s.currentDialogueNpc);
+  const dialogueActive = !!currentDialogueNpc;
 
   // ── Load session on mount ─────────────────────────────────────────────────
   // Reads ?session_id= from the URL to load a specific save slot.
@@ -408,16 +417,9 @@ export default function GamePage() {
             // Navigation redesign — LOCATION highlights with a nodeId
             // route through navigateTo directly (no popover, no text).
             onNavigate={(nodeId) => navigateTo(nodeId)}
-            // Dialogue panel renders inline at the bottom of the feed so
-            // it pushes earlier messages up rather than overlaying them.
-            bottomSlot={
-              <DialogueModal
-                onSubmit={(input, opts) => { void submitAction(input, opts); }}
-                onFocusInput={() => { inputBarRef.current?.focus(); }}
-                onOpenTrade={(name) => { void openTrade(name); }}
-                onRest={() => { restAtInn(); }}
-              />
-            }
+            // PR-7v-d — DialogueModal no longer renders inside the feed
+            // (the `bottomSlot` prop is gone). It is mounted below as a
+            // bar in the CombatMode swap slot when dialogueActive is true.
           />
           <TradeModal onBuy={buyItem} onSell={sellItem} />
           {/* Day 20.4.2 TASK 4 — Codex modal overlay. Opens on top of
@@ -448,7 +450,11 @@ export default function GamePage() {
               navigation strip + input bar for the CombatMode panel.
               CombatMode covers more vertical space so the player has
               room for portraits + HP bars + action buttons; the story
-              feed above it shrinks via flex but stays scrollable. */}
+              feed above it shrinks via flex but stays scrollable.
+              PR-7v-d — dialogue gets the same swap treatment via the
+              middle branch below. NavigationBar + InputBar hidden while
+              an NPC is active; the DialogueBar replaces them and the
+              story feed naturally hosts the conversation history above. */}
           {inCombat && activeCombat && masterState ? (
             <CombatMode
               combat={activeCombat}
@@ -458,6 +464,13 @@ export default function GamePage() {
               floatingByActor={combatFloatingByActor}
               wcd={masterState.metadata.world_consistency}
               onAction={(a) => { void submitCombatAction(a); }}
+            />
+          ) : dialogueActive ? (
+            <DialogueModal
+              onSubmit={(input, opts) => { void submitAction(input, opts); }}
+              onFocusInput={() => { inputBarRef.current?.focus(); }}
+              onOpenTrade={(name) => { void openTrade(name); }}
+              onRest={() => { restAtInn(); }}
             />
           ) : (
             <>

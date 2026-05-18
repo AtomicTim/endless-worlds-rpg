@@ -539,13 +539,21 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
           if (!region && !parent) return null;
           return (
             <div
+              // PR-6v-b (B): region footer promoted from dim top-rule
+              // section to a proper bordered card — sits at the bottom
+              // of the panel as a distinct surface against the
+              // var(--bg-2) panel wrapper. var(--bg-0) (#0a0907) is the
+              // deepest shadow tone, contrasted against
+              // var(--ui-border-default) (#2d2618) for a clean edge.
               style={{
-                borderTop:  "1px solid var(--breadcrumb-rule)",
-                marginTop:  8,
-                paddingTop: 8,
-                display:    "flex",
+                background:   "var(--bg-0)",
+                border:       "1px solid var(--ui-border-default)",
+                borderRadius: 7,
+                padding:      "8px 10px",
+                marginTop:    12,
+                display:      "flex",
                 flexDirection: "column",
-                gap:        4,
+                gap:          4,
               }}
             >
               {region && (
@@ -557,9 +565,12 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
                   }}
                 >
                   <IconMap
-                    size={10}
+                    // PR-6v-b: icon brightness + size lifted in step
+                    // with the row text — 10→11px / var(--ui-text-muted)
+                    // → var(--ui-text-2).
+                    size={11}
                     stroke={1.75}
-                    color="var(--ui-text-muted)"
+                    color="var(--ui-text-2)"
                     aria-hidden
                   />
                   <span
@@ -567,7 +578,7 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
                     style={{
                       fontFamily:    "var(--sans)",
                       fontSize:      8,
-                      letterSpacing: "0.14em",
+                      letterSpacing: "0.12em",
                       color:         "var(--ui-text-muted)",
                     }}
                   >
@@ -577,8 +588,8 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
                     className="italic"
                     style={{
                       fontFamily: "var(--serif)",
-                      fontSize:   11,
-                      color:      "var(--ui-text-2)",
+                      fontSize:   12,
+                      color:      "var(--ui-text-1)",
                       flex:       1,
                       minWidth:   0,
                       overflow:   "hidden",
@@ -592,17 +603,23 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
               )}
               {parent && (
                 <div
+                  // PR-6v-b (B): breadcrumb row recoloured in step with
+                  // the new card surface — 8→9px (legible at the panel
+                  // width), parent → var(--ui-text-muted), sep →
+                  // var(--ui-text-hint), current → var(--ui-text-2).
+                  // The PR-1 --breadcrumb-* tones are kept on the
+                  // allow-list (still used by other surfaces).
                   style={{
                     fontFamily:    "var(--sans)",
-                    fontSize:      8,
+                    fontSize:      9,
                     letterSpacing: "0.08em",
-                    color:         "var(--nav-breadcrumb)",
+                    marginTop:     4,
                     lineHeight:    1.5,
                   }}
                 >
-                  <span style={{ color: "var(--breadcrumb-parent)" }}>{parent.name}</span>
-                  <span style={{ color: "var(--breadcrumb-sep)", margin: "0 4px" }}>›</span>
-                  <span style={{ color: "var(--breadcrumb-current)" }}>{node.name}</span>
+                  <span style={{ color: "var(--ui-text-muted)" }}>{parent.name}</span>
+                  <span style={{ color: "var(--ui-text-hint)", margin: "0 4px" }}>›</span>
+                  <span style={{ color: "var(--ui-text-2)" }}>{node.name}</span>
                 </div>
               )}
             </div>
@@ -680,20 +697,26 @@ function NpcCard({
     <button
       type="button"
       onClick={onClick}
+      // PR-6v-b (A): match the CharacterPanel EquipSlotRow shell so
+      // NPC and equipped-item cards read at the same visual weight
+      // across the two sidebars. Was a faint genre-accent tinted bg
+      // (rgba .06 / .10) which made the NPC list float against the
+      // PR-6v warm-charcoal card; the solid dark rgba(0,0,0,.20)
+      // (= the equipped-row background) sits firmly inside the panel.
       className="group flex w-full items-center gap-2 transition-colors text-left"
       style={{
-        background:   "rgba(var(--genre-accent-rgb), .06)",
-        border:       "1px solid rgba(var(--genre-accent-rgb), .16)",
+        background:   "rgba(0,0,0,.20)",
+        border:       "1px solid var(--card-border)",
         borderRadius: 7,
         padding:      "8px 10px",
       }}
       onMouseEnter={(e) => {
         (e.currentTarget as HTMLButtonElement).style.background =
-          "rgba(var(--genre-accent-rgb), .10)";
+          "rgba(0,0,0,.30)";
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLButtonElement).style.background =
-          "rgba(var(--genre-accent-rgb), .06)";
+          "rgba(0,0,0,.20)";
       }}
     >
       <span
@@ -783,20 +806,24 @@ function ObjectCard({
     <button
       type="button"
       onClick={onClick}
+      // PR-6v-b (A): match the NpcCard / EquipSlotRow dark card shell.
+      // Hover is one notch brighter (rgba .28 vs the NpcCard's .30)
+      // so the two card types still read as a hierarchy — NPC slightly
+      // more prominent than object — without the prior accent tint.
       className="group flex w-full items-center transition-colors text-left"
       style={{
-        background:   "rgba(var(--genre-accent-rgb), .04)",
-        border:       "1px solid rgba(var(--genre-accent-rgb), .12)",
+        background:   "rgba(0,0,0,.20)",
+        border:       "1px solid var(--card-border)",
         borderRadius: 7,
         padding:      "7px 10px",
       }}
       onMouseEnter={(e) => {
         (e.currentTarget as HTMLButtonElement).style.background =
-          "rgba(var(--genre-accent-rgb), .08)";
+          "rgba(0,0,0,.28)";
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLButtonElement).style.background =
-          "rgba(var(--genre-accent-rgb), .04)";
+          "rgba(0,0,0,.20)";
       }}
     >
       <span

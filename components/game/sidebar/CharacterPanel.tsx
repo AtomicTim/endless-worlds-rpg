@@ -954,12 +954,18 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
   // the 200px sidebar width where the middle-dot had been visually
   // disappearing. Explicit fontSize: 10 stops it inheriting the row's
   // 12px serif italic and rendering oversized in the gap.
+  // BG-3e — separator margins trimmed 0 8px → 0 5px (6px total saved
+  // per separator, 12px over both) to hand the recovered space to
+  // the name and stat columns. The pipe still reads cleanly because
+  // it has its own glyph weight; the 8px breathing room turned out
+  // to be more than the layout needed once the stat column got its
+  // minWidth guarantee.
   const sep = (
     <span
       aria-hidden
       style={{
         color:      "var(--ui-text-muted)",
-        margin:     "0 8px",
+        margin:     "0 5px",
         flexShrink: 0,
         fontSize:   10,
       }}
@@ -1050,11 +1056,16 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
 
           {/* Stat — flex 1, right-aligned, JetBrains Mono accent.
               BG-3d dropped 1.5→1 alongside rarity so the name column
-              gets the row's growth budget. */}
+              gets the row's growth budget. BG-3e raised minWidth
+              from 0 to 44 — the widest expected string ("+0 arm")
+              at JetBrains Mono 11px lands just inside that, so the
+              column will push the name shorter rather than clip
+              itself. Without the floor, a tight 200px sidebar was
+              truncating "d6" → "d" and "+0 arm" → "+". */}
           <span
             style={{
               flex:       1,
-              minWidth:   0,
+              minWidth:   44,
               fontFamily: "var(--mono)",
               fontSize:   11,
               color:      "var(--genre-accent)",

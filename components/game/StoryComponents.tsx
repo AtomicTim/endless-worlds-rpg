@@ -112,6 +112,66 @@ export function Said({ children }: { children: React.ReactNode }) {
   return <span className="ew-said">{children}</span>;
 }
 
+// ── PR-7v-f — Mixed prose / spoken text parsing for NPCSpeech ──────────────
+//
+// NPC dialogue messages routinely mix narrative prose with quoted
+// speech in the same content string, e.g.:
+//   `Maise Redmark looks up. "What do you want?" She sets down a token.`
+// The PR-7v-e --hl-said cream coloured the whole thing equally; this
+// pair of helpers splits the string on quote boundaries so prose and
+// speech can pick up their own colour + weight.
+//
+// extractText() walks a React node tree and concatenates the raw
+// string content. The NPCSpeech caller in StoryFeed pre-wraps the
+// dialogue content via wrapQuotes() (a legacy idempotent traversal),
+// so by the time NPCSpeech receives `children` we already have a
+// tree, not a string. Re-flattening to the raw string lets the new
+// parseSpokenText() do its own clean split — the wrapQuotes pass
+// becomes a no-op for the dialogue path.
+
+function extractText(node: React.ReactNode): string {
+  if (node === null || node === undefined || typeof node === "boolean") return "";
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  if (React.isValidElement(node)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const props = node.props as any;
+    return extractText(props?.children);
+  }
+  return "";
+}
+
+// Splits text into alternating prose / speech segments. The split
+// regex captures BOTH straight-quote (".+") and curly-quote (".+")
+// pairs as a single segment per the brief; mixed-quote pairs (e.g.
+// straight-open + curly-close) fall through as prose, which matches
+// the rare edge case behaviour we want (don't over-claim a colour
+// without clear quote pairing).
+//
+// segments[0], [2], [4]…  → prose
+// segments[1], [3], [5]…  → quoted speech (quote chars included)
+function parseSpokenText(text: string): React.ReactNode[] {
+  const segments = text.split(/(“[^”]*”|"[^"]*")/g);
+  return segments
+    .map((seg, i) => {
+      if (!seg) return null;
+      const isSpoken = i % 2 === 1;
+      return (
+        <span
+          key={i}
+          style={{
+            color:      isSpoken ? "var(--hl-said)" : "var(--ui-text-prose)",
+            fontWeight: isSpoken ? 600 : 400,
+          }}
+        >
+          {seg}
+        </span>
+      );
+    })
+    .filter(Boolean);
+}
+
 // ── Inline highlight spans ──────────────────────────────────────────────────
 //
 // Each one: matches the design's role classes and supports an optional
@@ -305,19 +365,26 @@ export function NPCSpeech({ name, color = "var(--accent)", children }: NPCSpeech
         {name.toUpperCase()}
       </div>
       <div
-        // UI-4 — NPC speech body (design ref §5): Cormorant Garamond
-        // italic, weight 500, colour #f0c060 (same hex as --hl-said).
+        // PR-7v-f — NPC speech body now splits prose vs spoken text:
+        // the outer div defaults to var(--ui-text-prose) weight 400 so
+        // prose around the quotes reads as narration, and the inline
+        // parseSpokenText spans override per-segment to var(--hl-said)
+        // weight 600 inside quoted runs. The legacy wrapQuotes() pass
+        // the caller still runs becomes a no-op for this code path —
+        // extractText() flattens its output back to a raw string before
+        // parseSpokenText() does its own clean split. Cormorant
+        // Garamond italic + 13/1.82 layout untouched.
         className="ew-serif italic"
         style={{
           fontSize:    13,
           lineHeight:  1.82,
-          color:       "var(--hl-said)",
-          fontWeight:  500,
+          color:       "var(--ui-text-prose)",
+          fontWeight:  400,
           borderLeft:  `2px solid ${color}`,
           paddingLeft: 14,
         }}
       >
-        {wrapQuotes(children)}
+        {parseSpokenText(extractText(children))}
       </div>
     </div>
   );

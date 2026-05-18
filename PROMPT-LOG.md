@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 53629b1 (BG-3f) + PR-7v sub-commits in progress
+**Last code commit:** 4ce1ead (UI-PR7vc: dialogue modal viewport fit + 700px desktop width)
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -37,9 +37,10 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 | BG-3d | Equipped row name flex 4, rarity/stat flex 1 | — | 0cc5e3f | ✅ | ✅ |
 | BG-3e | Equipped row stat minWidth + separator margin fix | — | a4dcf0b | — | superseded by BG-3f |
 | BG-3f | Equipped row fixed-width columns (name flex:1 / rarity 38px / stat 52px) | — | 53629b1 | ✅ | ✅ |
-| PR-7v | DialogueModal.tsx — conversation history + header badge + option cards | npc dialogue mobile.png | 53dd529 | ⏳ | ⏳ |
-| PR-7v-b | DialogueModal — compact option cards, smaller history | — | ⏳ | — | ⏳ |
-| PR-7v-c | DialogueModal — viewport fit + 700px desktop width | — | — | — | ⏳ running |
+| PR-7v | DialogueModal — conversation history + header badge + option cards | npc dialogue mobile.png | 53dd529 | ⏳ | ⏳ |
+| PR-7v-b | DialogueModal — compact inline option cards, smaller history | — | 137a67f | ⏳ | ⏳ |
+| PR-7v-c | DialogueModal — viewport fit + 700px desktop width | — | 4ce1ead | ⏳ still too tall | ⏳ |
+| PR-7v-d | DialogueModal — remaining height issue | — | — | — | ⏳ next session |
 | PR-8v | CodexContent.tsx + CodexModal.tsx | codex mobile.png | — | — | ⏳ |
 | PR-9v | JournalModal.tsx | quest and journal mobile.png, quests cyberpunk.png, quests space.png | — | — | ⏳ |
 | PR-10v | LevelUpModal.tsx | ability panel expanded mobile.png | — | — | ⏳ |
@@ -51,6 +52,15 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 | PR-16v | Save slots + Main Menu | save slots.png, genre select mobile.png | — | — | ⏳ |
 | PR-17v | map/renderers/* | world map.png, region map.png, settlement map.png, dungeon map.png | — | — | ⏳ |
 | MOBILE | Full mobile layout pass | all mobile mockups | — | — | ⏳ end |
+
+---
+
+## Resume point (next session)
+
+PR-7v-d: dialogue modal still too tall after PR-7v-c. The flex column layout is in place but height is not constrained
+correctly. Need a screenshot at session start to diagnose. The bottom section (options + type-own + END CONVERSATION)
+may be taller than expected — consider: reduce option card padding further, reduce end conversation button padding,
+or cap the options section height and make it scroll rather than the whole modal.
 
 ---
 
@@ -97,5 +107,6 @@ Every prompt includes a mobile sanity note — dedicated mobile pass planned at 
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.
 - **Perks section header in CharacterPanel** still dim — bundle into next CharacterPanel touch.
 - **LootList.tsx** consumes --loot-quality-uncommon alias (now green via PR-5v-e) — verify in PR-12v.
-- **Dialogue empty slots (PR-7v).** 2 empty dashed placeholders show when fewer than 4 options exist. Fix: remove fixed 4-slot grid, render only real options. Schedule in next DialogueModal touch.
-- **Dialogue history content (PR-7v).** History section shows general story feed messages rather than filtering to current NPC conversation only. Needs scoped message filter by npcKey/conversationId. Schedule after PR-7v stabilises.
+- **Dialogue empty slots.** 2 empty dashed placeholders show when fewer than 4 options. Fix: remove fixed 4-slot grid, render only real options. Next DialogueModal touch.
+- **Dialogue history content.** History section shows general story feed messages rather than filtering to current NPC conversation only. Needs scoped filter by npcKey/conversationId. After PR-7v stabilises.
+- **Dialogue modal height.** Still too tall after PR-7v-c. flex column layout is in place but bottom section taller than expected. PR-7v-d next session.

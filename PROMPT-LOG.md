@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 48c547d (UI-PR10v: LevelUpModal — genre bg, genre accent, pulsing glow, token cleanup)
+**Last code commit:** 2904962 (UI-PR10v-HF1: LevelUpModal — auto gains side-by-side old→new cards)
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -22,8 +22,8 @@
 | PR-7v suite | DialogueBar | npc dialogue mobile.png | 721c59c | ✅ | ✅ |
 | PR-8v suite | Codex | codex mobile.png | 353dc23 | ✅ | ✅ |
 | PR-9v | JournalModal | quests cyberpunk.png + quests space.png | 3545637 | ✅ | ✅ |
-| PR-10v | LevelUpModal.tsx | Tim's mockup (no PNG) | 48c547d | — | ⏳ visual check |
-| PR-11v | CombatMode/* | combat desktop.png, combat panel mobile.png, health bar and damage numbers.png | — | — | ⏳ |
+| PR-10v | LevelUpModal.tsx | Tim's mockup (no PNG) | 2904962 | ✅ | ✅ |
+| PR-11v | CombatMode/* | combat desktop.png, combat panel mobile.png, health bar and damage numbers.png | — | — | ⏳ next |
 | PR-12v | loot/* + FloorLootStrip.tsx | loot panel.png | — | — | ⏳ |
 | PR-13v | TradeModal.tsx | design ref only | — | — | ⏳ |
 | PR-14v | AttunementModal.tsx | design ref only | — | — | ⏳ |
@@ -87,6 +87,7 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 - formatNodeType in CodexContent + ContextPanel — promote to shared util if third caller appears.
 - Codex + Journal share same genre background palette and card visual language — keep consistent.
 - LevelUpModal joins Codex/Journal genre bg map (same 5 hexes). font-mono scoped to level number + stat values only.
+- LevelUpModal auto gains: side-by-side old→new cards; stat pair top row, HP full-width below.
 
 ## Known Gaps (post-UI-overhaul backlog)
 

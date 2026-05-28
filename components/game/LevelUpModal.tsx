@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useGameStore, makeMessage } from "@/lib/stores/game-store";
+import { Genre } from "@/types/game";
 import type {
   AbilityId, AbilityTemplate, Attributes, Perk, PerkId,
 } from "@/types/game";
@@ -61,10 +62,29 @@ const STAT_SHORT: Record<keyof Attributes, string> = {
   charisma:     "CHA",
 };
 
+/**
+ * PR-10v — Per-genre level-up background plates. Matches CodexModal
+ * (GENRE_CODEX_BG) and JournalModal so the three "long-dwell" modals
+ * share the same per-genre near-black surface system. All five hex
+ * values are registered under "Codex genre backgrounds (PR-8v)" in
+ * lib/__tests__/ui-foundation.test.ts ALLOWED_HEX_CODES.
+ */
+const GENRE_LEVELUP_BG: Record<Genre, string> = {
+  [Genre.FANTASY]:             "#141008",
+  [Genre.CYBERPUNK]:           "#0a1414",
+  [Genre.HORROR_LOVECRAFTIAN]: "#100808",
+  [Genre.SPACE_OPERA]:         "#08080f",
+  [Genre.POST_APOCALYPTIC]:    "#161008",
+};
+
 export function LevelUpModal() {
   const masterState  = useGameStore((s) => s.masterState);
   const setMasterState = useGameStore((s) => s.setMasterState);
   const addMessage   = useGameStore((s) => s.addMessage);
+  const genre = useGameStore(
+    (s) => s.masterState?.metadata.genre ?? Genre.FANTASY,
+  );
+  const levelUpBg = GENRE_LEVELUP_BG[genre] ?? GENRE_LEVELUP_BG[Genre.FANTASY];
 
   const player        = masterState?.player_state;
   const combatActive  = masterState?.combat?.active === true;
@@ -298,25 +318,25 @@ export function LevelUpModal() {
           // and let inner ew-serif/ew-mono override per element.
           className="ew-sans w-full max-w-md rounded-sm shadow-2xl modal-card-in"
           style={{
-            backgroundColor: "var(--color-bg)",
-            border:          "1px solid var(--accent)",
-            color:           "var(--color-text)",
+            backgroundColor: levelUpBg,
+            border:          "1px solid var(--genre-accent)",
+            color:           "var(--ui-text-1)",
           }}
         >
           <header
             className="px-6 pt-5 pb-3 text-center"
-            style={{ borderBottom: "1px solid var(--color-border)" }}
+            style={{ borderBottom: "1px solid var(--ui-border-default)" }}
           >
             <div
               className="text-[10px] font-bold tracking-widest uppercase"
-              style={{ color: "var(--accent)" }}
+              style={{ color: "var(--genre-accent)" }}
             >
               Perk Unlocked
             </div>
             <div
               className="mt-1 text-2xl font-bold ew-serif"
               style={{
-                color:     "var(--accent)",
+                color:     "var(--genre-accent)",
                 fontStyle: "italic",
               }}
             >
@@ -328,7 +348,7 @@ export function LevelUpModal() {
             {perkStep.options.length === 0 ? (
               <div
                 className="text-xs italic"
-                style={{ color: "var(--color-muted)" }}
+                style={{ color: "var(--ui-text-muted)" }}
               >
                 No perks available — your pool is exhausted.
               </div>
@@ -343,10 +363,10 @@ export function LevelUpModal() {
                     className="text-left p-3 rounded-sm transition-colors"
                     style={{
                       background: isSelected
-                        ? "color-mix(in srgb, var(--accent) 18%, transparent)"
-                        : "color-mix(in srgb, var(--color-primary) 8%, transparent)",
+                        ? "color-mix(in srgb, var(--genre-accent) 18%, transparent)"
+                        : "color-mix(in srgb, var(--genre-accent) 8%, transparent)",
                       border:     `1px solid ${
-                        isSelected ? "var(--accent)" : "var(--color-border)"
+                        isSelected ? "var(--genre-accent)" : "var(--ui-border-default)"
                       }`,
                       cursor:     "pointer",
                     }}
@@ -357,7 +377,7 @@ export function LevelUpModal() {
                         fontSize:  13,
                         fontStyle: "italic",
                         color:     isSelected
-                          ? "var(--accent)"
+                          ? "var(--genre-accent)"
                           : "#e2cda0",
                       }}
                     >
@@ -365,8 +385,8 @@ export function LevelUpModal() {
                       <span
                         className="ml-2 text-[7px] tracking-widest uppercase"
                         style={{
-                          background:   "color-mix(in srgb, var(--accent) 18%, transparent)",
-                          color:        "var(--accent)",
+                          background:   "color-mix(in srgb, var(--genre-accent) 18%, transparent)",
+                          color:        "var(--genre-accent)",
                           padding:      "1px 6px",
                           borderRadius: 9999,
                           fontFamily:   "Inter Tight, var(--mono), monospace",
@@ -395,7 +415,7 @@ export function LevelUpModal() {
 
           <footer
             className="px-6 py-3 text-center"
-            style={{ borderTop: "1px solid var(--color-border)" }}
+            style={{ borderTop: "1px solid var(--ui-border-default)" }}
           >
             <button
               type="button"
@@ -403,7 +423,7 @@ export function LevelUpModal() {
               disabled={!perkPick}
               className="rounded-sm px-6 py-2 text-xs font-bold uppercase tracking-wider transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
               style={{
-                backgroundColor: "var(--accent)",
+                backgroundColor: "var(--genre-accent)",
                 color:           "#0a0a0a",
               }}
             >
@@ -432,24 +452,24 @@ export function LevelUpModal() {
           // and let inner ew-serif/ew-mono override per element.
           className="ew-sans w-full max-w-md rounded-sm shadow-2xl modal-card-in"
           style={{
-            backgroundColor: "var(--color-bg)",
-            border:          "1px solid var(--accent)",
-            color:           "var(--color-text)",
+            backgroundColor: levelUpBg,
+            border:          "1px solid var(--genre-accent)",
+            color:           "var(--ui-text-1)",
           }}
         >
           <header
             className="px-6 pt-5 pb-3 text-center"
-            style={{ borderBottom: "1px solid var(--color-border)" }}
+            style={{ borderBottom: "1px solid var(--ui-border-default)" }}
           >
             <div
               className="text-[10px] font-bold tracking-widest uppercase"
-              style={{ color: "var(--accent)" }}
+              style={{ color: "var(--genre-accent)" }}
             >
               Ability Slot Unlocked
             </div>
             <div
               className="mt-1 text-2xl font-bold ew-serif"
-              style={{ color: "var(--accent)", fontStyle: "italic" }}
+              style={{ color: "var(--genre-accent)", fontStyle: "italic" }}
             >
               Slot {slotStep.slotNum}
             </div>
@@ -459,32 +479,32 @@ export function LevelUpModal() {
             {isAuto ? (
               chosenTmpl ? (
                 <>
-                  <div className="mb-2 text-[10px] uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
+                  <div className="mb-2 text-[10px] uppercase tracking-wider" style={{ color: "var(--ui-text-muted)" }}>
                     A new ability slot has opened. Slot 2 is filled from the abilities you already know.
                   </div>
                   <div
                     className="mt-3 p-3 rounded-sm"
                     style={{
-                      background: "color-mix(in srgb, var(--accent) 12%, transparent)",
-                      border:     "1px solid var(--accent)",
+                      background: "color-mix(in srgb, var(--genre-accent) 12%, transparent)",
+                      border:     "1px solid var(--genre-accent)",
                     }}
                   >
-                    <div className="ew-serif text-base" style={{ fontStyle: "italic", color: "var(--accent)" }}>
+                    <div className="ew-serif text-base" style={{ fontStyle: "italic", color: "var(--genre-accent)" }}>
                       {chosenTmpl.base_name}
                     </div>
-                    <div className="mt-1 text-xs" style={{ color: "var(--color-text)" }}>
+                    <div className="mt-1 text-xs" style={{ color: "var(--ui-text-1)" }}>
                       {chosenTmpl.description}
                     </div>
                   </div>
                 </>
               ) : (
-                <div className="text-xs italic" style={{ color: "var(--color-muted)" }}>
+                <div className="text-xs italic" style={{ color: "var(--ui-text-muted)" }}>
                   No slot-2 candidate found in your learned pool. Visit Attunement to slot one manually.
                 </div>
               )
             ) : (
               <>
-                <div className="mb-3 text-[10px] uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
+                <div className="mb-3 text-[10px] uppercase tracking-wider" style={{ color: "var(--ui-text-muted)" }}>
                   A new ability slot has opened. Choose one to equip — the others join your learned pool.
                 </div>
                 <div className="flex flex-col gap-2">
@@ -498,20 +518,20 @@ export function LevelUpModal() {
                         className="text-left p-3 rounded-sm transition-colors"
                         style={{
                           background: isSelected
-                            ? "color-mix(in srgb, var(--accent) 18%, transparent)"
-                            : "color-mix(in srgb, var(--color-primary) 8%, transparent)",
-                          border: `1px solid ${isSelected ? "var(--accent)" : "var(--color-border)"}`,
-                          color:  "var(--color-text)",
+                            ? "color-mix(in srgb, var(--genre-accent) 18%, transparent)"
+                            : "color-mix(in srgb, var(--genre-accent) 8%, transparent)",
+                          border: `1px solid ${isSelected ? "var(--genre-accent)" : "var(--ui-border-default)"}`,
+                          color:  "var(--ui-text-1)",
                           cursor: "pointer",
                         }}
                       >
-                        <div className="ew-serif text-sm" style={{ fontStyle: "italic", color: isSelected ? "var(--accent)" : "var(--color-text)" }}>
+                        <div className="ew-serif text-sm" style={{ fontStyle: "italic", color: isSelected ? "var(--genre-accent)" : "var(--ui-text-1)" }}>
                           {c.base_name}
-                          <span className="ml-2 text-[10px] uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
+                          <span className="ml-2 text-[10px] uppercase tracking-wider" style={{ color: "var(--ui-text-muted)" }}>
                             {c.category}
                           </span>
                         </div>
-                        <div className="mt-1 text-xs" style={{ color: "var(--color-muted)" }}>
+                        <div className="mt-1 text-xs" style={{ color: "var(--ui-text-muted)" }}>
                           {c.description}
                         </div>
                       </button>
@@ -524,7 +544,7 @@ export function LevelUpModal() {
 
           <footer
             className="px-6 py-3 text-center"
-            style={{ borderTop: "1px solid var(--color-border)" }}
+            style={{ borderTop: "1px solid var(--ui-border-default)" }}
           >
             <button
               type="button"
@@ -532,7 +552,7 @@ export function LevelUpModal() {
               disabled={!slotPick}
               className="rounded-sm px-6 py-2 text-xs font-bold uppercase tracking-wider transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
               style={{
-                backgroundColor: "var(--accent)",
+                backgroundColor: "var(--genre-accent)",
                 color:           "#0a0a0a",
               }}
             >
@@ -556,28 +576,52 @@ export function LevelUpModal() {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 modal-backdrop-in"
       // No backdrop dismiss — modal is gameplay state, not chrome.
     >
+      {/* PR-10v — pulsing glow keyframe scoped to this modal instance. */}
+      <style>{`
+        @keyframes lu-pulse {
+          0%, 100% { opacity: 0.15; transform: translate(-50%, -50%) scale(1); }
+          50%       { opacity: 0.35; transform: translate(-50%, -50%) scale(1.15); }
+        }
+      `}</style>
       <div
-        className="w-full max-w-md rounded-sm font-mono shadow-2xl modal-card-in"
+        className="ew-sans w-full max-w-md rounded-sm shadow-2xl modal-card-in"
         style={{
-          backgroundColor: "var(--color-bg)",
-          border:          "1px solid var(--hl-pass)",
-          color:           "var(--color-text)",
+          backgroundColor: levelUpBg,
+          border:          "1px solid var(--genre-accent)",
+          color:           "var(--ui-text-1)",
         }}
       >
         {/* Header */}
         <header
-          className="px-6 pt-5 pb-3 text-center"
-          style={{ borderBottom: "1px solid var(--color-border)" }}
+          className="px-6 pt-5 pb-3 text-center relative overflow-hidden"
+          style={{ borderBottom: "1px solid var(--ui-border-default)" }}
         >
+          {/* PR-10v — pulsing radial glow behind the Level Up title. */}
           <div
-            className="text-[10px] font-bold tracking-widest uppercase"
-            style={{ color: "var(--hl-pass)" }}
+            aria-hidden="true"
+            style={{
+              position:      "absolute",
+              top:           "50%",
+              left:          "50%",
+              width:         200,
+              height:        80,
+              borderRadius:  "50%",
+              background:    "var(--genre-accent)",
+              filter:        "blur(24px)",
+              animation:     "lu-pulse 2s ease-in-out infinite",
+              pointerEvents: "none",
+              zIndex:        0,
+            }}
+          />
+          <div
+            className="text-[10px] font-bold tracking-widest uppercase relative"
+            style={{ color: "var(--genre-accent)", zIndex: 1 }}
           >
             Level Up
           </div>
           <div
-            className="mt-1 text-3xl font-bold"
-            style={{ color: "var(--hl-pass)" }}
+            className="mt-1 text-3xl font-bold font-mono relative"
+            style={{ color: "var(--genre-accent)", zIndex: 1 }}
           >
             Level {result.new_level}
           </div>
@@ -587,50 +631,50 @@ export function LevelUpModal() {
         <section className="px-6 pt-4 pb-3">
           <div
             className="mb-2 text-[10px] font-bold uppercase tracking-wider"
-            style={{ color: "var(--color-muted)" }}
+            style={{ color: "var(--ui-text-muted)" }}
           >
             Auto Gains
           </div>
           <ul className="space-y-1 text-sm">
             <li>
-              <span style={{ color: "var(--color-text)" }}>
+              <span style={{ color: "var(--ui-text-1)" }}>
                 {STAT_LABELS[result.primary_stat]}
               </span>
               <span
                 className="ml-2 font-bold"
-                style={{ color: "var(--hl-pass)" }}
+                style={{ color: "var(--genre-accent)" }}
               >
                 +1
               </span>
               <span
                 className="ml-2 text-[10px]"
-                style={{ color: "var(--color-muted)" }}
+                style={{ color: "var(--ui-text-muted)" }}
               >
                 (primary)
               </span>
             </li>
             <li>
-              <span style={{ color: "var(--color-text)" }}>
+              <span style={{ color: "var(--ui-text-1)" }}>
                 {STAT_LABELS[result.secondary_stat]}
               </span>
               <span
                 className="ml-2 font-bold"
-                style={{ color: "var(--hl-pass)" }}
+                style={{ color: "var(--genre-accent)" }}
               >
                 +1
               </span>
               <span
                 className="ml-2 text-[10px]"
-                style={{ color: "var(--color-muted)" }}
+                style={{ color: "var(--ui-text-muted)" }}
               >
                 (secondary)
               </span>
             </li>
             <li>
-              <span style={{ color: "var(--color-text)" }}>HP</span>
+              <span style={{ color: "var(--ui-text-1)" }}>HP</span>
               <span
                 className="ml-2 font-bold"
-                style={{ color: "var(--hl-pass)" }}
+                style={{ color: "var(--genre-accent)" }}
               >
                 +{result.hp_gained}
               </span>
@@ -641,11 +685,11 @@ export function LevelUpModal() {
         {/* Free point picker */}
         <section
           className="px-6 pt-3 pb-4"
-          style={{ borderTop: "1px solid var(--color-border)" }}
+          style={{ borderTop: "1px solid var(--ui-border-default)" }}
         >
           <div
             className="mb-2 text-[10px] font-bold uppercase tracking-wider"
-            style={{ color: "var(--color-muted)" }}
+            style={{ color: "var(--ui-text-muted)" }}
           >
             Choose your bonus point
           </div>
@@ -672,26 +716,26 @@ export function LevelUpModal() {
                   className="flex flex-col items-center rounded-sm px-1 py-2 text-[10px] uppercase transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                   style={{
                     backgroundColor: isSelected
-                      ? "color-mix(in srgb, var(--hl-pass) 25%, transparent)"
-                      : "color-mix(in srgb, var(--color-primary) 8%, transparent)",
+                      ? "color-mix(in srgb, var(--genre-accent) 25%, transparent)"
+                      : "color-mix(in srgb, var(--genre-accent) 8%, transparent)",
                     border: `1px solid ${
                       isSelected
-                        ? "var(--hl-pass)"
-                        : "color-mix(in srgb, var(--color-primary) 30%, transparent)"
+                        ? "var(--genre-accent)"
+                        : "color-mix(in srgb, var(--genre-accent) 30%, transparent)"
                     }`,
-                    color: isSelected ? "var(--hl-pass)" : "var(--color-text)",
+                    color: isSelected ? "var(--genre-accent)" : "var(--ui-text-1)",
                   }}
                 >
                   <span className="text-[10px] font-bold tracking-wide">
                     {STAT_SHORT[s]}
                   </span>
-                  <span className="mt-0.5 text-sm font-bold">
+                  <span className="mt-0.5 text-sm font-bold font-mono">
                     {isSelected ? postAuto + 1 : postAuto}
                   </span>
                   {isCapped && (
                     <span
                       className="mt-0.5 text-[9px] italic"
-                      style={{ color: "var(--color-muted)" }}
+                      style={{ color: "var(--ui-text-muted)" }}
                     >
                       Max
                     </span>
@@ -705,7 +749,7 @@ export function LevelUpModal() {
         {/* Confirm */}
         <footer
           className="px-6 py-3 text-center"
-          style={{ borderTop: "1px solid var(--color-border)" }}
+          style={{ borderTop: "1px solid var(--ui-border-default)" }}
         >
           <button
             type="button"
@@ -713,7 +757,7 @@ export function LevelUpModal() {
             disabled={!freeStat}
             className="rounded-sm px-6 py-2 text-xs font-bold uppercase tracking-wider transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
             style={{
-              backgroundColor: "var(--hl-pass)",
+              backgroundColor: "var(--genre-accent)",
               color:           "#0a0a0a",
             }}
           >

@@ -627,7 +627,9 @@ export function LevelUpModal() {
           </div>
         </header>
 
-        {/* Auto gains */}
+        {/* Auto gains — PR-10v HF1. Side-by-side OLD → NEW cards.
+            Primary + secondary share the top row (or one card alone
+            if they collapse to the same stat); HP centred below. */}
         <section className="px-6 pt-4 pb-3">
           <div
             className="mb-2 text-[10px] font-bold uppercase tracking-wider"
@@ -635,51 +637,84 @@ export function LevelUpModal() {
           >
             Auto Gains
           </div>
-          <ul className="space-y-1 text-sm">
-            <li>
-              <span style={{ color: "var(--ui-text-1)" }}>
-                {STAT_LABELS[result.primary_stat]}
-              </span>
-              <span
-                className="ml-2 font-bold"
-                style={{ color: "var(--genre-accent)" }}
+          {(() => {
+            const statGains: Array<{
+              key:   keyof Attributes;
+              label: string;
+              from:  number;
+              to:    number;
+            }> = [];
+            const primaryFrom = stats[result.primary_stat];
+            statGains.push({
+              key:   result.primary_stat,
+              label: STAT_SHORT[result.primary_stat],
+              from:  primaryFrom,
+              to:    primaryFrom + 1,
+            });
+            if (result.secondary_stat !== result.primary_stat) {
+              const secFrom = stats[result.secondary_stat];
+              statGains.push({
+                key:   result.secondary_stat,
+                label: STAT_SHORT[result.secondary_stat],
+                from:  secFrom,
+                to:    secFrom + 1,
+              });
+            }
+
+            const cardStyle: React.CSSProperties = {
+              background:   "color-mix(in srgb, var(--genre-accent) 8%, transparent)",
+              border:       "1px solid color-mix(in srgb, var(--genre-accent) 30%, transparent)",
+              borderRadius: 8,
+            };
+
+            const renderCard = (
+              label: string,
+              from: number | string,
+              to:   number | string,
+              key?: string,
+            ) => (
+              <div
+                key={key}
+                className="py-2 px-4 text-center"
+                style={cardStyle}
               >
-                +1
-              </span>
-              <span
-                className="ml-2 text-[10px]"
-                style={{ color: "var(--ui-text-muted)" }}
-              >
-                (primary)
-              </span>
-            </li>
-            <li>
-              <span style={{ color: "var(--ui-text-1)" }}>
-                {STAT_LABELS[result.secondary_stat]}
-              </span>
-              <span
-                className="ml-2 font-bold"
-                style={{ color: "var(--genre-accent)" }}
-              >
-                +1
-              </span>
-              <span
-                className="ml-2 text-[10px]"
-                style={{ color: "var(--ui-text-muted)" }}
-              >
-                (secondary)
-              </span>
-            </li>
-            <li>
-              <span style={{ color: "var(--ui-text-1)" }}>HP</span>
-              <span
-                className="ml-2 font-bold"
-                style={{ color: "var(--genre-accent)" }}
-              >
-                +{result.hp_gained}
-              </span>
-            </li>
-          </ul>
+                <div
+                  className="text-[10px] font-bold tracking-wide uppercase"
+                  style={{ color: "var(--ui-text-muted)" }}
+                >
+                  {label}
+                </div>
+                <div className="mt-0.5 text-sm font-mono">
+                  <span style={{ color: "var(--ui-text-1)" }}>{from}</span>
+                  <span
+                    className="mx-1.5"
+                    style={{ color: "var(--genre-accent)" }}
+                  >
+                    →
+                  </span>
+                  <span
+                    className="font-semibold"
+                    style={{ color: "var(--genre-accent)" }}
+                  >
+                    {to}
+                  </span>
+                </div>
+              </div>
+            );
+
+            return (
+              <>
+                <div
+                  className={`grid gap-2 ${statGains.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}
+                >
+                  {statGains.map((g) => renderCard(g.label, g.from, g.to, g.key))}
+                </div>
+                <div className="mt-2 grid grid-cols-1">
+                  {renderCard("HP", player.max_health, player.max_health + result.hp_gained, "hp")}
+                </div>
+              </>
+            );
+          })()}
         </section>
 
         {/* Free point picker */}

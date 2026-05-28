@@ -336,10 +336,13 @@ export function CombatMode({
           minHeight: 0,
         }}
       >
-        {/* Player side (left half) */}
+        {/* Player side (left half) — PR-11v-a: shrink to the player
+            card's own width (120–180px). Enemies get the rest of the
+            row so 1-4 enemy cards still tile cleanly without
+            squeezing the player card. */}
         <div
           style={{
-            flex:           1,
+            flex:           "0 0 auto",
             display:        "flex",
             justifyContent: "center",
             alignItems:     "stretch",
@@ -452,6 +455,8 @@ export function CombatMode({
           hasAbilities={hasAbilities}
           attackTargeting={attackTargeting}
           abilitiesActive={abilityPanelOpen}
+          player={player}
+          fleeDc={12}
           onAttack={handleAttackClick}
           onDefend={handleDefend}
           onUseItem={handleUseItemClick}

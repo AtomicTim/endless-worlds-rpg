@@ -132,6 +132,17 @@ const ALLOWED_HEX_CODES = new Set<string>([
   // ── Combat panel auxiliary (CombatMode internal) ────────────────
   "#9a7060",
 
+  // ── Combat action bar icon palette (PR-11v-a) ──────────────────
+  // Inline SVG strokes for the five combat actions, chosen so each
+  // verb is recognisable at a 20×20 glance: warm gold (attack), cool
+  // blue (defend), teal (use_item), terracotta (flee), violet
+  // (abilities). They live only inside components/game/CombatMode/
+  // ActionBar.tsx ICON_COLORS map; promoted to globals.css only if
+  // a second surface starts consuming them. Justification per
+  // CLAUDE.md FOUNDATIONAL RULES (icon library swap is a one-file
+  // change in CombatIcon).
+  "#c8922a", "#4a7cc8", "#4a9a8a", "#c87060", "#9a6ac8",
+
   // ── Map renderer art palette (file-local; lives only inside
   //    components/game/map/renderers/* — hand-drawn parchment art is
   //    not a global token system, it's illustration colour data).

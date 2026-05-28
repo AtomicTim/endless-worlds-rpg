@@ -46,14 +46,6 @@ const STAT_KEYS: Array<keyof Attributes> = [
   "strength", "agility", "intelligence", "perception", "charisma",
 ];
 
-const STAT_LABELS: Record<keyof Attributes, string> = {
-  strength:     "Strength",
-  agility:      "Agility",
-  intelligence: "Intelligence",
-  perception:   "Perception",
-  charisma:     "Charisma",
-};
-
 const STAT_SHORT: Record<keyof Attributes, string> = {
   strength:     "STR",
   agility:      "AGI",

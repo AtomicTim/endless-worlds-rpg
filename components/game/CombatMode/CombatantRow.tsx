@@ -65,6 +65,9 @@ interface PlayerProps {
   /** Prompt 5 — WCD for status-effect alias lookup (world-native pill
    *  names). Optional — pills fall back to the capitalized id. */
   wcd?:            WcdStatusAliasSource;
+  /** PR-11v-a HF1 — unused for the player card; kept on the union so
+   *  CombatMode can pass it uniformly without a branch. */
+  enemyCount?:     number;
 }
 interface EnemyProps {
   combatant:       CombatEnemyInstance;
@@ -74,8 +77,26 @@ interface EnemyProps {
   shake?:          boolean;
   /** Day 20.4 TASK 3 — currently-animating floating numbers. */
   floatingDamage?: FloatingDamageEntry[];
+  /** PR-11v-a HF1 — total enemies in the roster (1–4). Drives the
+   *  card width caps so 1 enemy renders as a generous portrait and
+   *  4 enemies still fit side-by-side without horizontal overflow. */
+  enemyCount?:     number;
 }
 type Props = PlayerProps | EnemyProps;
+
+// PR-11v-a HF1 — enemy card width caps per roster size. Index = count.
+// flex defaults to 1 so cards share the available row; the 1-enemy case
+// switches to "0 0 auto" so a lone enemy renders at its natural width.
+const ENEMY_CARD_SIZING: Record<number, {
+  minWidth: number;
+  maxWidth: number;
+  flex:     number | string;
+}> = {
+  1: { minWidth: 200, maxWidth: 280, flex: "0 0 auto" },
+  2: { minWidth: 140, maxWidth: 200, flex: 1 },
+  3: { minWidth: 100, maxWidth: 160, flex: 1 },
+  4: { minWidth:  80, maxWidth: 130, flex: 1 },
+};
 
 export function CombatantRow(props: Props) {
   const { isPlayer, shake, floatingDamage } = props;
@@ -86,9 +107,10 @@ export function CombatantRow(props: Props) {
   const current = isPlayer ? props.combatant.health     : props.combatant.current_hp;
   const max     = isPlayer ? props.combatant.max_health : props.combatant.max_hp;
   const isBoss  = isPlayer ? false : props.combatant.is_boss;
-  // PR-11v-a — enemy subtitle now surfaces the weapon damage_die in
-  // upper-case ("1D6+1"). Player card renders nothing for this line.
-  const subtitle = isPlayer ? "" : (props.combatant.damage_die ?? "").toUpperCase();
+  // PR-11v-a — enemy subtitle surfaces the weapon damage_die. HF1
+  // forces lowercase ("1d6+1") because the engine emits uppercase
+  // and the design ref wants the d-notation lower-case.
+  const subtitle = isPlayer ? "" : (props.combatant.damage_die ?? "").toLowerCase();
   const isAlive = isPlayer
     ? props.combatant.health > 0
     : props.combatant.alive;
@@ -125,6 +147,17 @@ export function CombatantRow(props: Props) {
     ? "0 0 10px rgba(200, 72, 48, 0.20)"
     : undefined;
 
+  // PR-11v-a HF1 — card sizing. Player card grew (160–220); enemy
+  // cards scale by roster size so 1 enemy is generous and 4 enemies
+  // still tile cleanly. Clamp `count` into the supported 1–4 range
+  // so an unexpected value (defensive) falls back to the 1-enemy
+  // generous-card preset.
+  const enemyCount = Math.max(1, Math.min(4, props.enemyCount ?? 1));
+  const enemySizing = ENEMY_CARD_SIZING[enemyCount] ?? ENEMY_CARD_SIZING[1];
+  const cardFlex     = isPlayer ? "0 0 auto" : enemySizing.flex;
+  const cardMinWidth = isPlayer ? 160 : enemySizing.minWidth;
+  const cardMaxWidth = isPlayer ? 220 : enemySizing.maxWidth;
+
   return (
     <div
       role={isTargetable ? "button" : undefined}
@@ -149,11 +182,11 @@ export function CombatantRow(props: Props) {
         opacity:        isAlive ? 1 : 0.45,
         filter:         isAlive ? "none" : "grayscale(1)",
         transform:      isAlive ? "scale(1)" : "scale(0.85)",
-        // PR-11v-a — player card holds a fixed width; enemy cards
-        // flex and shrink equally to share the right half.
-        flex:           isPlayer ? "0 0 auto" : 1,
-        minWidth:       isPlayer ? 120 : 0,
-        maxWidth:       isPlayer ? 180 : 160,
+        // PR-11v-a HF1 — player width 160–220; enemy width caps
+        // scale by roster size (see ENEMY_CARD_SIZING table).
+        flex:           cardFlex,
+        minWidth:       cardMinWidth,
+        maxWidth:       cardMaxWidth,
         transition:     "opacity 400ms ease, filter 400ms ease, transform 300ms ease 400ms, border-color 300ms ease, box-shadow 300ms ease",
       }}
     >
@@ -180,7 +213,7 @@ export function CombatantRow(props: Props) {
             pointerEvents: "none",
           }}
         >
-          CRIT
+          CRITICAL
         </div>
       )}
       {/* Day 20.4 TASK 3 — portrait wrapper with position:relative (no

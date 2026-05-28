@@ -380,8 +380,8 @@ export function CombatMode({
           style={{
             flex:           1,
             display:        "flex",
-            gap:            8,
-            justifyContent: combat.enemies.length <= 2 ? "center" : "space-between",
+            gap:            10,
+            justifyContent: "center",
             alignItems:     "stretch",
             paddingLeft:    8,
             overflow:       "visible",
@@ -396,6 +396,7 @@ export function CombatMode({
               isTargetable={attackTargeting}
               onTargetClick={() => handleTargetSelected(e.instance_id)}
               shake={!!shakeMap[e.instance_id]}
+              enemyCount={combat.enemies.length}
             />
           ))}
         </div>

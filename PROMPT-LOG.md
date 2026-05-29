@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 5c097ef (HF-encounter-roster: return applied_region_bible + merge into client state)
+**Last code commit:** 6928162 (PR-11v-e: remove narrate-combat API + phase separators + combat feed visual uplift + timing)
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -27,8 +27,8 @@
 | PR-11v-b | FloatingDamage arcs + crits + flee SVG + ability floats + Search the Remains + FloorLootStrip removed | health bar and damage numbers.png | 2561b6b | ✅ | ✅ |
 | PR-11v-c | AbilityPanel redesign + ability story feed + target flow + EFFECTS key fix | ability_panel_expanded_mobile.png | 00fb461 | ✅ | ✅ |
 | PR-11v-d | Damage type color system — shared module + enemy card type label | damage_type_colors.png | 9462b14 | — | ⏳ visual check pending (needs named regional enemy encounter) |
-| PR-11v-e | Turn resolution timing orchestration | turn_resolution_timing.png | — | — | ⏳ next |
-| PR-12v | loot/* visual rework + FloorLootStrip.tsx delete | loot panel.png | — | — | ⏳ |
+| PR-11v-e | Narrate-combat API removed + phase separators removed + combat feed uplift + timing | turn_resolution_timing.png | 6928162 | — | ⏳ visual check |
+| PR-12v | loot/* visual rework + FloorLootStrip.tsx delete | loot panel.png | — | — | ⏳ next |
 | PR-13v | TradeModal.tsx | design ref only | — | — | ⏳ |
 | PR-14v | AttunementModal.tsx | design ref only | — | — | ⏳ |
 | PR-15v | InputBar.tsx + VerbosityToggle.tsx | design ref 17 | — | — | ⏳ |
@@ -55,21 +55,14 @@ Fix: reuse session ID on retry OR rebind GamePage. Observed on Space Opera (toke
 
 **HF-encounter-roster:** RESOLVED at 5c097ef.
 Root cause: apply-regional-bible wrote region_bibles[id] to DB but never returned it to client.
-resolveEnemyLookup step 2 (region_bibles[node.zone_id]) always missed on client-side state.
-Fix: API now returns applied_region_bible in response; game loop step 4d merges it into
-masterState.metadata.region_bibles. Additive merge — multiple regions accumulate correctly.
-Both fresh apply and skipped/idempotent paths covered. Monitor for any remaining roster mismatches.
+Fix: API returns applied_region_bible; game loop step 4d merges into masterState.metadata.region_bibles.
 
-**HF-space-opera-token-cap:** RESOLVED at 8317ea4. WB streaming prevents timeout (all genres).
-RB_MAX_TOKENS raised 7000->9000 for regional bible headroom (all genres). Monitor for further cap hits.
+**HF-space-opera-token-cap:** RESOLVED at 8317ea4. WB streaming + RB_MAX_TOKENS 7000->9000.
 
-**HF-combat-double-entries:** Some combat actions appear twice in the story feed. Observed in
-Space Opera combat. Root cause unknown. Low priority until combat PR-11v is underway.
+**HF-combat-double-entries:** Some combat actions appear twice in the story feed. Low priority.
 
-**HF-enemy-status-ticks:** Enemy-side DoT (poison/burning) does not tick. Status effects are
-correctly applied to CombatEnemyInstance.status_effects but resolveStatusTick only runs for
-player_status_effects. Combat engine needs to iterate enemy instances and apply their ticks.
-Confirmed: Hunter's Arrow poisoned enemy at round 5 and 11, zero status_tick events in log.
+**HF-enemy-status-ticks:** Enemy-side DoT does not tick. status_effects applied but engine
+only ticks player_status_effects. Confirmed via Hunter's Arrow poison log.
 
 ---
 
@@ -126,12 +119,19 @@ Confirmed: Hunter's Arrow poisoned enemy at round 5 and 11, zero status_tick eve
 - FloorLootStrip removed from GamePage render; file preserved for PR-12v cleanup.
 - LootList in StoryFeed is the canonical loot UI going forward.
 - Search the Remains: styled genre-accent chip button with sword prefix.
-- WB generation: streaming + maxDuration=300.
-- RB generation: streaming + RB_MAX_TOKENS 7000->9000.
-- ABILITY EFFECTS KEY RULE: snake() converts apostrophes to _. "Hunter's Arrow" -> "ranger_hunter_s_arrow". Match exactly.
+- WB generation: streaming + maxDuration=300. RB generation: streaming + RB_MAX_TOKENS 7000->9000.
+- ABILITY EFFECTS KEY RULE: snake() converts apostrophes to _. Match EFFECTS keys exactly.
 - AbilityPanel: damage/debuff -> 1 click to target picker. Buff/heal -> 1 click + "Use ->" confirm.
 - AbilityPanel card is <div role=button> not <button>.
 - ability_used story feed: genre accent italic ✦ prefix from summariseAbilityResolution context_note.
+- Combat narration: narrate-combat API removed from combat resolution entirely. All text pre-rendered via templates.ts.
+- Phase separators (your turn / enemies' turn) removed from story feed — combat panel header pill handles it.
+- Round separator: centred mono rule between rounds only. Text: "round N" bare, StoryFeed wraps with flex rule.
+- Combat timing: ENEMY_PHASE_DELAY_MS=1000, PLAYER_TURN_DELAY_MS=400, ENEMY_TURN_GAP_MS=300.
+- Combat line font: 15px. Narrative line font: 16px md:17px.
+- Outcome badge: HIT (#7abb7a), MISS (muted), FUMBLE (#c84830) appended to attack lines.
+- Victory prose: renderVictoryProse(enemyNames). Defeat: renderDefeatProse(). Flee: renderFleeProse(). Kill: renderKillLine(name).
+- Encounter / victory / defeat / flee screen overhaul: next PR after PR-11v-e visual check.
 
 ## Known Gaps (post-UI-overhaul backlog)
 
@@ -157,6 +157,7 @@ Confirmed: Hunter's Arrow poisoned enemy at round 5 and 11, zero status_tick eve
 - **LootList.tsx** consumes --loot-quality-uncommon alias (green) — verify in PR-12v.
 - **Nav cards in dungeons** don't match style elsewhere — fix in dedicated nav pass.
 - **Unexplored locations** should show location type — fix in nav pass.
+- **Encounter / victory / defeat / flee screens** need full visual overhaul — next PR.
 
 ### Infrastructure
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.

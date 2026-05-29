@@ -623,9 +623,11 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
                 alignItems:     "center",
                 gap:            10,
                 margin:         "10px 0 6px",
-                color:          "var(--ui-text-muted)",
+                // PR-11v-e HF1 — lifted contrast + size so the round
+                // beat reads as a real separator, not faint chrome.
+                color:          "var(--ui-text-2)",
                 fontFamily:     "var(--mono)",
-                fontSize:       10,
+                fontSize:       12,
                 letterSpacing:  "0.20em",
                 textTransform:  "uppercase",
               }}
@@ -635,7 +637,7 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
                   flex:       1,
                   height:     1,
                   background: "var(--ui-border-default)",
-                  opacity:    0.5,
+                  opacity:    0.7,
                 }}
                 aria-hidden
               />
@@ -645,7 +647,7 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
                   flex:       1,
                   height:     1,
                   background: "var(--ui-border-default)",
-                  opacity:    0.5,
+                  opacity:    0.7,
                 }}
                 aria-hidden
               />
@@ -943,6 +945,38 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
           outcome === "fled"        ? "#7abb7a" :
           /* miss / fled_failed */    "var(--ui-text-muted)";
 
+        // PR-11v-e HF1 — bold + colour the "N damage" portion of hit
+        // lines so the player's eye lands on the number first. Player
+        // attacks land in genre accent; enemy attacks land in
+        // combat-enemy-crit red so taking damage feels immediately
+        // dangerous. Crits skip this branch entirely (the banner
+        // already amplifies the number).
+        const dmgDealt =
+          typeof m.damage_dealt === "number" ? m.damage_dealt : 0;
+        const showDamageHighlight =
+          !isCrit &&
+          outcome === "hit" &&
+          (eventType === "player_attack" || eventType === "enemy_attack") &&
+          dmgDealt > 0;
+        const damageColor = isPlayer ? "var(--genre-accent)" : "#c84830";
+        const damageNeedle = `${dmgDealt} damage`;
+        const dmgParts =
+          showDamageHighlight && content.includes(damageNeedle)
+            ? content.split(damageNeedle)
+            : null;
+        const renderedContent: React.ReactNode =
+          dmgParts && dmgParts.length === 2
+            ? (
+                <>
+                  {dmgParts[0]}
+                  <span style={{ color: damageColor, fontWeight: 700 }}>
+                    {damageNeedle}
+                  </span>
+                  {dmgParts[1]}
+                </>
+              )
+            : content;
+
         return (
           <p
             className="message-enter ew-serif"
@@ -955,7 +989,7 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
             }}
           >
             <span style={{ marginRight: 6 }}>⚔</span>
-            {content}
+            {renderedContent}
             {/* Day 20.4 TASK 2 — dimmed-mono roll-detail suffix
                 appended after routine event lines (hit/miss/fumble/
                 heal/flee_fail). Null on events without rolls. */}

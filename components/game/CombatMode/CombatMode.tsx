@@ -293,11 +293,14 @@ export function CombatMode({
           <div
             className="ew-mono"
             style={{
-              padding:        "8px 14px",
+              // PR-11v-e HF1 — round/turn labels bigger and pulled
+              // inward (32px horizontal) so the header reads as a
+              // centred pair instead of two edge-anchored tags.
+              padding:        "8px 32px",
               borderBottom:   "1px solid var(--card-border)",
-              fontSize:       9,
+              fontSize:       11,
               letterSpacing:  "0.30em",
-              color:          "#6a5530",
+              color:          "#a08870",
               fontWeight:     700,
               textTransform:  "uppercase",
               display:        "flex",
@@ -313,7 +316,7 @@ export function CombatMode({
               className="ew-sans uppercase"
               style={{
                 fontFamily:    "var(--ui-sans, var(--mono))",
-                fontSize:      7,
+                fontSize:      9,
                 letterSpacing: "0.26em",
                 fontWeight:    700,
                 padding:       "3px 10px",

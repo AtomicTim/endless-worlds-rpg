@@ -102,15 +102,16 @@ export function isDramaticEvent(ev: CombatEvent): boolean {
 }
 
 /** Pacing delay between turn-phase transitions (Day 20.1 TASK 4).
- *  PR-11v-e — tightened to match the turn_resolution_timing mockup:
- *  enemy phase lead-in 1000ms (the dramatic "their move now") /
- *  player return 400ms (snappy "back to you") / 300ms gap between
- *  successive enemies. */
+ *  PR-11v-e HF1 — player return widened back to 1000ms so the gap
+ *  between an enemy phase and the next player line reads as a
+ *  deliberate beat; enemy gap also lifted to 600ms so two enemies
+ *  attacking in sequence don't feel mashed together. Enemy phase
+ *  lead-in unchanged at 1000ms. */
 const ENEMY_PHASE_DELAY_MS = 1000;
-const PLAYER_TURN_DELAY_MS = 400;
+const PLAYER_TURN_DELAY_MS = 1000;
 /** Pacing between successive enemy turns (one enemy resolves, brief
  *  pause, next enemy resolves). */
-const ENEMY_TURN_GAP_MS    = 300;
+const ENEMY_TURN_GAP_MS    = 600;
 
 /** Day 20.4.2 TASK 2 — minimum spacing (ms) between successive floats
  *  on the same host. If a new float arrives sooner, we stagger it so

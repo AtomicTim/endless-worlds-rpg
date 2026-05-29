@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type {
   ActiveStatusEffect, CombatEnemyInstance, PlayerState,
 } from "@/types/game";
@@ -121,6 +121,33 @@ export function CombatantRow(props: Props) {
   const current = isPlayer ? props.combatant.health     : props.combatant.current_hp;
   const max     = isPlayer ? props.combatant.max_health : props.combatant.max_hp;
   const isBoss  = isPlayer ? false : props.combatant.is_boss;
+
+  // PR-11v-e HF1 — delay the player HP bar's visual update by 900ms
+  // when HP decreases so it lands roughly in step with the enemy
+  // attack line in the story feed (enemy phase lead-in is 1000ms).
+  // Heals + increases apply immediately so out-of-combat regen / heal
+  // items don't feel laggy. Enemy cards continue to use `current`
+  // directly — only the player gets this treatment.
+  const [displayedPlayerHp, setDisplayedPlayerHp] = useState(current);
+  const prevHpRef  = useRef(current);
+  const hpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!isPlayer) return;
+    if (current < prevHpRef.current) {
+      hpTimerRef.current = setTimeout(
+        () => setDisplayedPlayerHp(current),
+        900,
+      );
+    } else {
+      if (hpTimerRef.current) clearTimeout(hpTimerRef.current);
+      setDisplayedPlayerHp(current);
+    }
+    prevHpRef.current = current;
+    return () => {
+      if (hpTimerRef.current) clearTimeout(hpTimerRef.current);
+    };
+  }, [current, isPlayer]);
+  const renderedCurrent = isPlayer ? displayedPlayerHp : current;
   // PR-11v-a — enemy subtitle surfaces the weapon damage_die. HF1
   // forces lowercase ("1d6+1") because the engine emits uppercase
   // and the design ref wants the d-notation lower-case.
@@ -281,7 +308,7 @@ export function CombatantRow(props: Props) {
           absolutely positioned at bottom:0 and arc upward into open
           space above the bar. */}
       <div style={{ position: "relative", width: "100%" }}>
-        <HPBar current={current} max={max} isBoss={isBoss} />
+        <HPBar current={renderedCurrent} max={max} isBoss={isBoss} />
         {(floatingDamage ?? []).map((f) => (
           <FloatingDamage
             key={f.key}

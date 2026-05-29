@@ -700,6 +700,54 @@ export function makeFloatingEntry(
       };
     }
 
+    // ── Ability dispatch → damage float on enemy / heal float on player ─
+    // PR-11v-b HF1 — ability_used was the missing branch in v1; abilities
+    // dealt damage and healed but emitted no float. Mirrors player_attack
+    // for damage (arc right) and use_item for heal (arc up). Buff /
+    // debuff / utility abilities emit damage_dealt === null and short-
+    // circuit. Ability crits are not a thing today (abilities auto-hit),
+    // so kind is always "hit" on the damage branch.
+    case "ability_used": {
+      if (typeof event.damage_dealt !== "number" || event.damage_dealt === null) {
+        return null;
+      }
+      // Negative damage_dealt = heal (same convention as use_item).
+      if (event.damage_dealt < 0) {
+        const dieRoll = event.rolls?.damage_die_roll;
+        if (typeof dieRoll !== "number" || dieRoll <= 0) return null;
+        return {
+          targetId: PLAYER_ID,
+          payload: {
+            key:          `ability_heal_${event.timestamp}`,
+            value:        dieRoll,
+            kind:         "heal",
+            color:        "#7abb7a",
+            arc:          "up",
+            animDuration: HEAL_DURATION,
+          },
+        };
+      }
+      // Positive damage_dealt = ability damage on an enemy target.
+      if (event.damage_dealt <= 0) return null;
+      const enemyId = typeof event.target === "string" && event.target.length > 0
+        ? event.target
+        : null;
+      if (!enemyId || enemyId === PLAYER_ID) return null;
+      const dmgType = event.damage_type ?? "physical";
+      const color   = DAMAGE_TYPE_COLOR[dmgType] ?? "#e0d8c0";
+      return {
+        targetId: enemyId,
+        payload: {
+          key:          `ability_dmg_${event.timestamp}_${enemyId}`,
+          value:        event.damage_dealt,
+          kind:         "hit",
+          color,
+          arc:          pickArc("right", false),
+          animDuration: DAMAGE_TYPE_DURATION[dmgType] ?? DEFAULT_DURATION,
+        },
+      };
+    }
+
     // ── Status DoT tick → muted-orange float over the affected portrait ─
     // Prompt 5 — poisoned/burning ticks emit a float too. The engine
     // applies status to the player only today, but route by event.target

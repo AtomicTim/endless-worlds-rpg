@@ -20,12 +20,10 @@ import { CodexModal } from "@/components/game/CodexModal";
 import { JournalModal } from "@/components/game/JournalModal";
 import { LevelUpModal } from "@/components/game/LevelUpModal";
 import { QuestRevealModal } from "@/components/game/QuestRevealModal";
-import { FloorLootStrip } from "@/components/game/FloorLootStrip";
 import { ContextPanel } from "@/components/game/ContextPanel";
 import WorldIntroModal from "@/components/WorldIntroModal";
 import { AttunementModal } from "@/components/game/AttunementModal";
 import { ToastManager } from "@/components/game/ToastManager";
-import { useFloorLoot } from "@/hooks/useFloorLoot";
 import { AssetCategory, Genre } from "@/types/game";
 import type { MasterState } from "@/types/game";
 import { createClient } from "@/lib/supabase/client";
@@ -97,8 +95,6 @@ export default function GamePage() {
   // The hook watches currentDialogueNpc → null transitions; when
   // pendingAct1Reveal is set, it runs the discovery pipeline once.
   useDeferredQuestReveal();
-  // Day 21 — SEARCH REMAINS + TAKE handlers backing the FloorLootStrip.
-  const floorLootHandlers = useFloorLoot();
   const inCombat = activeCombat?.active === true;
   // PR-7v-d — DialogueModal moved into the CombatMode bottom-swap slot
   // as a persistent DialogueBar (NavigationBar + InputBar hidden while
@@ -474,25 +470,6 @@ export default function GamePage() {
             />
           ) : (
             <>
-              {/* Day 21 — Floor Loot Strip. Renders between story feed
-                  and nav cards. Hidden during combat (CombatMode swap
-                  above replaces this whole subtree). Auto-unmounts
-                  when no entries match the current node. */}
-              {masterState && (
-                <FloorLootStrip
-                  floor_loot={masterState.floor_loot ?? []}
-                  current_node_id={
-                    masterState.world_state.current_node_id
-                    ?? masterState.world_state.current_location_id
-                  }
-                  genre={masterState.metadata.genre}
-                  player_inventory_count={masterState.player_state.inventory.length}
-                  onSearchRemains={floorLootHandlers.onSearchRemains}
-                  onTake={floorLootHandlers.onTake}
-                  onTakeGold={floorLootHandlers.onTakeGold}
-                  onTakeAll={floorLootHandlers.onTakeAll}
-                />
-              )}
               {/* UI-fix-D 4b — the P7 floating Attune button used to
                   live here (between FloorLootStrip and NavigationBar)
                   with no designed surface. It is now an Attune card

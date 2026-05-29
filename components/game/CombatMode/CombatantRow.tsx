@@ -90,6 +90,11 @@ interface EnemyProps {
    *  card width caps so 1 enemy renders as a generous portrait and
    *  4 enemies still fit side-by-side without horizontal overflow. */
   enemyCount?:     number;
+  /** HF-enemy-status-pills — WCD for status-effect alias lookup so
+   *  the enemy pills can show world-native names (rootblight, etc.)
+   *  the same way the player pills already do. Optional — pills fall
+   *  back to the canonical id when omitted. */
+  wcd?:            WcdStatusAliasSource;
 }
 type Props = PlayerProps | EnemyProps;
 
@@ -295,6 +300,17 @@ export function CombatantRow(props: Props) {
       {props.isPlayer && (props.statusEffects?.length ?? 0) > 0 && (
         <StatusEffectPills
           effects={props.statusEffects ?? []}
+          wcd={props.wcd}
+        />
+      )}
+
+      {/* HF-enemy-status-pills — mirror the player block for enemies.
+          status_effects is mirrored onto CombatEnemyInstance at apply
+          time; the pills just weren't being surfaced. Same styling,
+          same WCD alias path. */}
+      {!isPlayer && (props.combatant.status_effects?.length ?? 0) > 0 && (
+        <StatusEffectPills
+          effects={props.combatant.status_effects ?? []}
           wcd={props.wcd}
         />
       )}

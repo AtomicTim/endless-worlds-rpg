@@ -401,6 +401,7 @@ export function CombatMode({
               onTargetClick={() => handleTargetSelected(e.instance_id)}
               shake={!!shakeMap[e.instance_id]}
               enemyCount={combat.enemies.length}
+              wcd={wcd}
             />
           ))}
         </div>

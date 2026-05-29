@@ -1506,6 +1506,12 @@ export function useGameLoop() {
                   /** Day 23D — server's authoritative quest_threads after
                    *  applying breadcrumb anchors + side-quest appends. */
                   quest_threads?:       import("@/types/game").QuestThreads;
+                  /** HF-encounter-roster — the validated, fully-fleshed
+                   *  bible the server wrote into master_state. Mirrored
+                   *  here so resolveEnemyLookup step 2
+                   *  (region_bibles[zone_id]) finds named enemies
+                   *  instead of falling back to "Dungeon Creature". */
+                  applied_region_bible?: RegionBible;
                 };
                 if (applied.starting_node_id && applied.updated_world_graph) {
                   // Architecture CHANGE 1 — land at the geographic region
@@ -1543,6 +1549,26 @@ export function useGameLoop() {
                       location_status: LocationStatus.ARRIVING,
                     },
                     world_graph: newGraph,
+                    // HF-encounter-roster — mirror the server's bible
+                    // write into local metadata.region_bibles so combat
+                    // triggers see the same data the DB has. Additive
+                    // merge: prior region bibles stay so multiple
+                    // expanded regions accumulate instead of clobbering
+                    // each other. Skipped path also returns the bible
+                    // (route fix above) so a fresh client missing it
+                    // still gets it without a reload.
+                    ...(applied.applied_region_bible
+                      ? {
+                          metadata: {
+                            ...updatedState.metadata,
+                            region_bibles: {
+                              ...(updatedState.metadata?.region_bibles ?? {}),
+                              [applied.applied_region_bible.id]:
+                                applied.applied_region_bible,
+                            },
+                          },
+                        }
+                      : {}),
                     // Day 23D — mirror the server's updated quest_threads
                     // (breadcrumb anchors + side-quest appends). Without
                     // this, the local masterState would lag the DB until

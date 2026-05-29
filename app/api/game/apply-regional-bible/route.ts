@@ -412,6 +412,11 @@ export async function POST(request: NextRequest) {
       updated_world_graph: currentMasterState.world_graph,
       location_count:      bibleNarrowed.locations.length,
       npc_count:           bibleNarrowed.npcs.length,
+      // HF-encounter-roster — surface the bible on the skipped path
+      // too. The server already had it in metadata.region_bibles, but
+      // a fresh client (post-reload or post-import) may still be
+      // missing it. Re-merging is cheap and idempotent.
+      applied_region_bible: bibleNarrowed,
     });
   }
 
@@ -1243,5 +1248,11 @@ export async function POST(request: NextRequest) {
      *  a reload to pick up the DB write. Undefined when no mutation
      *  fired (no breadcrumb match AND no quest_hook NPCs). */
     quest_threads:       nextQuestThreads,
+    /** HF-encounter-roster — return the validated bible so the client
+     *  can mirror the DB write into masterState.metadata.region_bibles
+     *  immediately. Without this, resolveEnemyLookup step 2
+     *  (region_bibles[zone_id]) always missed on expanded regions,
+     *  forcing the Dungeon Creature fallback on every encounter. */
+    applied_region_bible: bibleNarrowed,
   });
 }

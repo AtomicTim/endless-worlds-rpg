@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** df4d593 (UI-PR11v-a HF2: ActionBar — button polish, player card sizing)
+**Last code commit:** 39da21e (UI-PR11v-b HF1: ability damage floats + remove FloorLootStrip)
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -24,14 +24,14 @@
 | PR-9v | JournalModal | quests cyberpunk.png + quests space.png | 3545637 | ✅ | ✅ |
 | PR-10v | LevelUpModal.tsx | Tim's mockup (no PNG) | 2904962 | ✅ | ✅ |
 | PR-11v-a | CombatMode cards + ActionBar + mobile layout | combat desktop.png | df4d593 | ✅ | ✅ |
-| PR-11v-b | FloatingDamage arc + crit particles + flee SVG fix | health bar and damage numbers.png | — | — | ⏳ next |
-| PR-11v-c | AbilityPanel expanded 2×2 redesign | ability_panel_expanded_mobile.png | — | — | ⏳ |
-| PR-11v-d | Damage type color system | damage_type_colors.png | — | — | ⏳ |
+| PR-11v-b | FloatingDamage arcs + crit particles + flee SVG + ability floats + FloorLootStrip removed | health bar and damage numbers.png | 39da21e | — | ⏳ visual check |
+| PR-11v-c | AbilityPanel expanded 2x2 redesign | ability_panel_expanded_mobile.png | — | — | ⏳ next |
+| PR-11v-d | Damage type color system (data-dependent on enemy primary_damage_type) | damage_type_colors.png | — | — | ⏳ |
 | PR-11v-e | Turn resolution timing orchestration | turn_resolution_timing.png | — | — | ⏳ |
-| PR-12v | loot/* + FloorLootStrip.tsx | loot panel.png | — | — | ⏳ |
+| PR-12v | loot/* visual rework + FloorLootStrip.tsx delete | loot panel.png | — | — | ⏳ |
 | PR-13v | TradeModal.tsx | design ref only | — | — | ⏳ |
 | PR-14v | AttunementModal.tsx | design ref only | — | — | ⏳ |
-| PR-15v | InputBar.tsx + VerbosityToggle.tsx | design ref §17 | — | — | ⏳ |
+| PR-15v | InputBar.tsx + VerbosityToggle.tsx | design ref 17 | — | — | ⏳ |
 | PR-16v | Save slots + Main Menu | save slots.png, genre select mobile.png | — | — | ⏳ |
 | PR-17v | map/renderers/* | world map.png, region map.png, settlement map.png, dungeon map.png | — | — | ⏳ |
 | MOBILE | Full mobile layout pass | all mobile mockups | — | — | ⏳ end |
@@ -40,7 +40,7 @@
 
 ## Pending HFs (post-UI-overhaul)
 
-**HF-bestiary:** On first kill → saveCodexEntry(BESTIARY) with enemy stats. Idempotent gate.
+**HF-bestiary:** On first kill -> saveCodexEntry(BESTIARY) with enemy stats. Idempotent gate.
 
 **HF-world-bible-retry:** Retry creates new session UUID; GamePage stays bound to failed session.
 Fix: reuse session ID on retry OR rebind GamePage. Observed on Space Opera (token cap hit).
@@ -75,9 +75,9 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 
 | # | Commit | Status |
 |---|--------|--------|
-| P1–P8 | — | ✅ |
+| P1-P8 | — | ✅ |
 | HF2 | 13468a0 | ✅ |
-| P9–P11 | — | ⏳ Day 25 |
+| P9-P11 | — | ⏳ Day 25 |
 
 ---
 
@@ -92,14 +92,20 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 - formatNodeType in CodexContent + ContextPanel — promote to shared util if third caller appears.
 - Codex + Journal share same genre background palette and card visual language — keep consistent.
 - LevelUpModal joins Codex/Journal genre bg map (same 5 hexes). font-mono scoped to level number + stat values only.
-- LevelUpModal auto gains: side-by-side old→new cards; stat pair top row, HP full-width below.
-- CombatMode cards: player flex 0 0 auto (200–260px), enemy scales by count (1→200-280, 2→140-200, 3→100-160, 4→80-130).
+- LevelUpModal auto gains: side-by-side old->new cards; stat pair top row, HP full-width below.
+- CombatMode cards: player flex 0 0 auto (200-260px), enemy scales by count (1->200-280, 2->140-200, 3->100-160, 4->80-130).
 - ActionBar: ew-sans title case 13px/700/0.05em, icons 24px, borderRadius 10px, label color #d4c4a0.
 - CombatIcon wrapper in ActionBar.tsx — swap for real icon library by replacing CombatIcon internals only.
 - Genre combat differentiation deferred — foundational visuals first, genre-specific pass later.
 - Nav cards in dungeons don't match nav card style elsewhere — fix in dedicated nav pass.
 - Unexplored locations should show location type even when undiscovered — fix in nav pass.
-- Flee SVG reads poorly — redraw bundled into PR-11v-b.
+- FloatingDamage: arcs left (enemy) / right (player/ability), 80/20 variety. Crits wide arc + 3 particles.
+- Float host moved to HP bar wrapper — numbers launch from bar level, not portrait top.
+- 9 damage type colors in DAMAGE_TYPE_COLOR map; fire/lightning fast, frost slow; physical fallback #e0d8c0.
+- Enemy primary_damage_type populated from bestiary at spawn; RegionBible enemies may lack it (fallback physical).
+- ability_used floats: damage -> right arc on enemy, heal -> straight up green on player.
+- FloorLootStrip removed from GamePage render; file preserved for PR-12v cleanup.
+- LootList in StoryFeed is the canonical loot UI going forward.
 
 ## Known Gaps (post-UI-overhaul backlog)
 
@@ -114,7 +120,7 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 - **Combat entries firing twice.** See HF-combat-double-entries above.
 
 ### UI / design
-- **FloorLootStrip still rendered.** Retire in PR-12v.
+- **FloorLootStrip.tsx orphaned.** Delete in PR-12v cleanup.
 - **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass.
 - **Perks section header in CharacterPanel** still dim — next CharacterPanel touch.
 - **Dialogue empty slots.** Render only real options. Next DialogueModal touch.
@@ -127,7 +133,6 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 - **LootList.tsx** consumes --loot-quality-uncommon alias (green) — verify in PR-12v.
 - **Nav cards in dungeons** don't match style elsewhere — fix in dedicated nav pass.
 - **Unexplored locations** should show location type — fix in nav pass.
-- **Flee SVG** redrawn in PR-11v-b.
 
 ### Infrastructure
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.

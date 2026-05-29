@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 2561b6b (UI-PR11v-b HF3: player crit color red to match enemy crit)
+**Last code commit:** 00fb461 (UI-PR11v-c HF2: damage/debuff direct to target picker)
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -25,8 +25,8 @@
 | PR-10v | LevelUpModal.tsx | Tim's mockup (no PNG) | 2904962 | ✅ | ✅ |
 | PR-11v-a | CombatMode cards + ActionBar + mobile layout | combat desktop.png | df4d593 | ✅ | ✅ |
 | PR-11v-b | FloatingDamage arcs + crits + flee SVG + ability floats + Search the Remains + FloorLootStrip removed | health bar and damage numbers.png | 2561b6b | ✅ | ✅ |
-| PR-11v-c | AbilityPanel expanded 2x2 redesign + ability feedback | ability_panel_expanded_mobile.png | — | — | ⏳ next |
-| PR-11v-d | Damage type color system (data-dependent on enemy primary_damage_type) | damage_type_colors.png | — | — | ⏳ |
+| PR-11v-c | AbilityPanel redesign + ability story feed + target flow + EFFECTS key fix | ability_panel_expanded_mobile.png | 00fb461 | ✅ | ✅ |
+| PR-11v-d | Damage type color system (data-dependent on enemy primary_damage_type) | damage_type_colors.png | — | — | ⏳ next |
 | PR-11v-e | Turn resolution timing orchestration | turn_resolution_timing.png | — | — | ⏳ |
 | PR-12v | loot/* visual rework + FloorLootStrip.tsx delete | loot panel.png | — | — | ⏳ |
 | PR-13v | TradeModal.tsx | design ref only | — | — | ⏳ |
@@ -35,6 +35,14 @@
 | PR-16v | Save slots + Main Menu | save slots.png, genre select mobile.png | — | — | ⏳ |
 | PR-17v | map/renderers/* | world map.png, region map.png, settlement map.png, dungeon map.png | — | — | ⏳ |
 | MOBILE | Full mobile layout pass | all mobile mockups | — | — | ⏳ end |
+
+---
+
+## PR-11v-c commit trail (all by Claude.ai directly)
+- fb4b4db — initial ship: AbilityPanel grid redesign + ability_used/ability_no_charges templates + StoryFeed branch
+- f1d8409 — fix: ranger_hunter_s_arrow EFFECTS key mismatch (apostrophe -> underscore in snake()); diagnostic log removed
+- 4fe585b — fix: card <button> -> <div role=button> (nested button HTML violation)
+- 00fb461 — HF2: damage/debuff click -> direct to target picker; buff/heal retains 2-click "Use ->" confirm
 
 ---
 
@@ -106,9 +114,14 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 - ability_used floats: damage -> right arc on enemy, heal -> straight up green on player.
 - FloorLootStrip removed from GamePage render; file preserved for PR-12v cleanup.
 - LootList in StoryFeed is the canonical loot UI going forward.
-- Search the Remains: styled genre-accent chip button with sword prefix — was too subtle before.
+- Search the Remains: styled genre-accent chip button with sword prefix.
 - WB generation: streaming (client.messages.stream) + maxDuration=300. Prevents TCP timeout on slow API.
 - RB generation: streaming + RB_MAX_TOKENS raised 7000->9000. Both all-genre fixes.
+- ABILITY EFFECTS KEY RULE: snake() converts ALL non-alphanumeric chars to underscores. Apostrophes become _. "Hunter's Arrow" -> "hunter_s_arrow" -> id "ranger_hunter_s_arrow". EFFECTS map keys must match the generated id exactly — never hand-code without verifying against snake(base_name).
+- AbilityPanel click flow: damage/debuff (needsTarget=true) -> 1 click fires direct to target picker. Buff/heal (needsTarget=false) -> 1 click arms card + shows "Use ->" confirm. Solo party: "Use ->" fires immediately. Future party: "Use ->" will surface party member picker.
+- AbilityPanel card is <div role=button> not <button> — prevents nested button HTML violation when Cancel/Use buttons render inside selected card.
+- ability_used story feed: genre accent italic ✦ prefix; content from summariseAbilityResolution context_note.
+- ability_no_charges story feed: same prefix, opacity 0.6, fontWeight 400.
 
 ## Known Gaps (post-UI-overhaul backlog)
 
@@ -135,7 +148,6 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 - **LootList.tsx** consumes --loot-quality-uncommon alias (green) — verify in PR-12v.
 - **Nav cards in dungeons** don't match style elsewhere — fix in dedicated nav pass.
 - **Unexplored locations** should show location type — fix in nav pass.
-- **Ability used — no story feed feedback.** Self-buffs fire silently. Fix in PR-11v-c.
 
 ### Infrastructure
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.

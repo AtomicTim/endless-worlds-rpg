@@ -55,10 +55,8 @@ describe("makeFloatingEntry — Day 20.4.1 TASK 1 routing", () => {
       rolls: { d20: 20, d20_modifier: 2, target_dc: 12, damage_die: "1d6", damage_die_roll: 6, crit_max_damage: 6, str_modifier: 1 },
     }));
     expect(result?.targetId).toBe("fantasy_goblin_1");
-    // PR-11v-b HF2 — player crits override damage-type colour with
-    // #3b82a8 (combat-player-crit blue) so the climactic hit reads
-    // as "you crit" regardless of the weapon's elemental type.
-    expect(result?.payload.color).toBe("#3b82a8");
+    // PR-11v-b HF3 — all crits paint #c84830 (universal crit red).
+    expect(result?.payload.color).toBe("#c84830");
     expect(result?.payload.kind).toBe("crit");
     // Crits show TOTAL (the climactic moment).
     expect(result?.payload.value).toBe(13);

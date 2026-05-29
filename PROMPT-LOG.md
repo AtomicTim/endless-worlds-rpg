@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** a358ccd (PR-11v-e HF1: combat feed polish — separator, labels, damage colors, timing, HP sync)
+**Last code commit:** cf81287 (HF-levelup-timing: gate LevelUpModal on !isResolving)
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -26,8 +26,8 @@
 | PR-11v-a | CombatMode cards + ActionBar + mobile layout | combat desktop.png | df4d593 | ✅ | ✅ |
 | PR-11v-b | FloatingDamage arcs + crits + flee SVG + ability floats + Search the Remains + FloorLootStrip removed | health bar and damage numbers.png | 2561b6b | ✅ | ✅ |
 | PR-11v-c | AbilityPanel redesign + ability story feed + target flow + EFFECTS key fix | ability_panel_expanded_mobile.png | 00fb461 | ✅ | ✅ |
-| PR-11v-d | Damage type color system — shared module + enemy card type label | damage_type_colors.png | 9462b14 | — | ⏳ visual check pending (needs named regional enemy encounter) |
-| PR-11v-e | Narrate-combat API removed + phase separators + feed uplift + timing + HP sync | turn_resolution_timing.png | a358ccd | — | ⏳ visual check |
+| PR-11v-d | Damage type color system — shared module + enemy card type label | damage_type_colors.png | 9462b14 | — | ⏳ visual check pending |
+| PR-11v-e | Narrate-combat API removed + phase separators + feed uplift + timing + HP sync | turn_resolution_timing.png | a358ccd | ✅ | ✅ |
 | PR-12v | loot/* visual rework + FloorLootStrip.tsx delete | loot panel.png | — | — | ⏳ next |
 | PR-13v | TradeModal.tsx | design ref only | — | — | ⏳ |
 | PR-14v | AttunementModal.tsx | design ref only | — | — | ⏳ |
@@ -51,7 +51,6 @@
 **HF-bestiary:** On first kill -> saveCodexEntry(BESTIARY) with enemy stats. Idempotent gate.
 
 **HF-world-bible-retry:** Retry creates new session UUID; GamePage stays bound to failed session.
-Fix: reuse session ID on retry OR rebind GamePage. Observed on Space Opera (token cap hit).
 
 **HF-encounter-roster:** RESOLVED at 5c097ef.
 
@@ -60,6 +59,15 @@ Fix: reuse session ID on retry OR rebind GamePage. Observed on Space Opera (toke
 **HF-combat-double-entries:** Some combat actions appear twice in the story feed. Low priority.
 
 **HF-enemy-status-ticks:** Enemy-side DoT does not tick. Engine only ticks player_status_effects.
+
+**HF-levelup-timing:** RESOLVED at cf81287. LevelUpModal now gated on !isResolving so full
+combat feed drain (VICTORY banner + prose + loot prompt) completes before modal opens.
+
+**HF-dungeon-exit-regen:** After dungeon combat + level up, navigating back to parent region
+triggers apply-regional-bible re-run, producing duplicate/extra nav graph nodes (nav card explosion).
+Likely cause: isApplyRegionalBibleRedundant guard failing on dungeon exit path, or dungeon-exit
+navigation treating the region as uninitialized. Needs console log investigation before fix.
+Observed: Space Opera, post-combat level up, then dungeon exit to region.
 
 ---
 
@@ -97,6 +105,7 @@ Fix: reuse session ID on retry OR rebind GamePage. Observed on Space Opera (toke
 - Codex + Journal share same genre background palette and card visual language — keep consistent.
 - LevelUpModal joins Codex/Journal genre bg map (same 5 hexes). font-mono scoped to level number + stat values only.
 - LevelUpModal auto gains: side-by-side old->new cards; stat pair top row, HP full-width below.
+- LevelUpModal gate: !isResolving && !combat?.active && pending_level_up — do not revert isResolving gate.
 - CombatMode cards: player flex 0 0 auto (200-260px), enemy scales by count (1->200-280, 2->140-200, 3->100-160, 4->80-130).
 - ActionBar: ew-sans title case 13px/700/0.05em, icons 24px, borderRadius 10px, label color #d4c4a0.
 - CombatIcon wrapper in ActionBar.tsx — swap for real icon library by replacing CombatIcon internals only.
@@ -126,11 +135,11 @@ Fix: reuse session ID on retry OR rebind GamePage. Observed on Space Opera (toke
 - Round separator: 12px, var(--ui-text-2), rule opacity 0.7. Combat panel header padding 32px, round 11px, pill 9px.
 - Combat timing: ENEMY_PHASE_DELAY_MS=1000, PLAYER_TURN_DELAY_MS=1000, ENEMY_TURN_GAP_MS=600.
 - Player HP bar: delayed 900ms on decrease to sync with enemy attack story-feed line. Heals immediate.
-- Damage coloring on hit lines: "N damage" bold genre-accent (player) or #c84830 (enemy). Hit only, not crit/miss.
+- Damage coloring on hit lines: "N damage" bold genre-accent (player) or #c84830 (enemy). Hit only.
 - Combat line font: 15px. Narrative: 16px md:17px.
 - Outcome badge: HIT / MISS / FUMBLE on attack lines.
 - Victory/Defeat/Flee/Kill: pre-rendered via renderVictoryProse / renderDefeatProse / renderFleeProse / renderKillLine.
-- Encounter / victory / defeat / flee screen overhaul: next PR after PR-11v-e visual check.
+- Encounter / victory / defeat / flee screen overhaul: next PR after PR-12v.
 
 ## Known Gaps (post-UI-overhaul backlog)
 
@@ -141,6 +150,7 @@ Fix: reuse session ID on retry OR rebind GamePage. Observed on Space Opera (toke
 - **Bug 2 — zone_id cache leak.** Defensive fix shipped. Root cause pending.
 - **World-bible retry session binding.** See HF-world-bible-retry above.
 - **Combat entries firing twice.** See HF-combat-double-entries above.
+- **Dungeon exit region regen.** See HF-dungeon-exit-regen above. HIGH PRIORITY.
 
 ### UI / design
 - **FloorLootStrip.tsx orphaned.** Delete in PR-12v cleanup.
@@ -156,7 +166,7 @@ Fix: reuse session ID on retry OR rebind GamePage. Observed on Space Opera (toke
 - **LootList.tsx** consumes --loot-quality-uncommon alias (green) — verify in PR-12v.
 - **Nav cards in dungeons** don't match style elsewhere — fix in dedicated nav pass.
 - **Unexplored locations** should show location type — fix in nav pass.
-- **Encounter / victory / defeat / flee screens** need full visual overhaul — next PR.
+- **Encounter / victory / defeat / flee screens** need full visual overhaul — deferred post PR-12v.
 
 ### Infrastructure
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.

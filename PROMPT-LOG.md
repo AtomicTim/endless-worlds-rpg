@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 20de601 (HF-enemy-status-pills: render status effects on enemy cards)
+**Last code commit:** 5c097ef (HF-encounter-roster: return applied_region_bible + merge into client state)
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -26,7 +26,7 @@
 | PR-11v-a | CombatMode cards + ActionBar + mobile layout | combat desktop.png | df4d593 | ✅ | ✅ |
 | PR-11v-b | FloatingDamage arcs + crits + flee SVG + ability floats + Search the Remains + FloorLootStrip removed | health bar and damage numbers.png | 2561b6b | ✅ | ✅ |
 | PR-11v-c | AbilityPanel redesign + ability story feed + target flow + EFFECTS key fix | ability_panel_expanded_mobile.png | 00fb461 | ✅ | ✅ |
-| PR-11v-d | Damage type color system — shared module + enemy card type label | damage_type_colors.png | 9462b14 | — | ⏳ needs non-physical enemy encounter |
+| PR-11v-d | Damage type color system — shared module + enemy card type label | damage_type_colors.png | 9462b14 | — | ⏳ visual check pending (needs named regional enemy encounter) |
 | PR-11v-e | Turn resolution timing orchestration | turn_resolution_timing.png | — | — | ⏳ next |
 | PR-12v | loot/* visual rework + FloorLootStrip.tsx delete | loot panel.png | — | — | ⏳ |
 | PR-13v | TradeModal.tsx | design ref only | — | — | ⏳ |
@@ -53,10 +53,12 @@
 **HF-world-bible-retry:** Retry creates new session UUID; GamePage stays bound to failed session.
 Fix: reuse session ID on retry OR rebind GamePage. Observed on Space Opera (token cap hit).
 
-**HF-encounter-roster:** Unknown enemy IDs stripped on generation. Need canonical IDs or fallback enemy.
-Observed: the_toll_wastes_debt_wraith, the_ledger_cliffs_bronze_sentinel, the_cartel_foothills_warlord_hound,
-the_cartel_foothills_tribute_enforcer — all unresolvable. Causes Dungeon Creature fallback (tier 2, HP 31).
-HIGH PRIORITY — blocks PR-11v-d visual check (can't see non-physical enemy types) and makes all fights too long.
+**HF-encounter-roster:** RESOLVED at 5c097ef.
+Root cause: apply-regional-bible wrote region_bibles[id] to DB but never returned it to client.
+resolveEnemyLookup step 2 (region_bibles[node.zone_id]) always missed on client-side state.
+Fix: API now returns applied_region_bible in response; game loop step 4d merges it into
+masterState.metadata.region_bibles. Additive merge — multiple regions accumulate correctly.
+Both fresh apply and skipped/idempotent paths covered. Monitor for any remaining roster mismatches.
 
 **HF-space-opera-token-cap:** RESOLVED at 8317ea4. WB streaming prevents timeout (all genres).
 RB_MAX_TOKENS raised 7000->9000 for regional bible headroom (all genres). Monitor for further cap hits.
@@ -114,22 +116,22 @@ Confirmed: Hunter's Arrow poisoned enemy at round 5 and 11, zero status_tick eve
 - FloatingDamage: arcs left (enemy) / right (player/ability), 80/20 variety. Crits wide arc + 3 particles + CRIT label.
 - Crit color: #c84830 red for both player and enemy crits. Non-crit hits use damage type color.
 - Float host moved to HP bar wrapper — numbers launch from bar level, not portrait top.
-- Damage type colors: canonical source is lib/game/damage-types.ts (DAMAGE_TYPE_COLOR, DAMAGE_TYPE_DURATION, DAMAGE_TYPE_LABEL, getDamageTypeColor). CombatMode and CombatantRow both import from there. Do not re-inline.
-- Holy: #c8940a amber gold (not #ffdc40 — too close to lightning #ffee40).
-- Enemy damage_die subtitle: colored by primary_damage_type; non-physical shows "· TYPE" label. Physical stays muted, no label.
-- Enemy primary_damage_type populated from bestiary at spawn; RegionBible enemies may lack it (fallback physical).
-- Enemy status pills: StatusEffectPills renders on enemy cards (CombatantRow) reading combatant.status_effects. wcd threaded to enemy rows in CombatMode.
+- Damage type colors: canonical source is lib/game/damage-types.ts. Do not re-inline.
+- Holy: #c8940a amber gold (not #ffdc40).
+- Enemy damage_die subtitle: colored by primary_damage_type; non-physical shows "· TYPE" label.
+- Enemy primary_damage_type from bestiary at spawn; RegionBible enemies may lack it (fallback physical).
+- Enemy status pills: StatusEffectPills on enemy cards via combatant.status_effects. wcd threaded to enemy rows.
+- region_bibles client state: populated via applied_region_bible in apply-regional-bible response (step 4d merge). Additive.
 - ability_used floats: damage -> right arc on enemy, heal -> straight up green on player.
 - FloorLootStrip removed from GamePage render; file preserved for PR-12v cleanup.
 - LootList in StoryFeed is the canonical loot UI going forward.
 - Search the Remains: styled genre-accent chip button with sword prefix.
-- WB generation: streaming (client.messages.stream) + maxDuration=300. Prevents TCP timeout on slow API.
-- RB generation: streaming + RB_MAX_TOKENS raised 7000->9000. Both all-genre fixes.
-- ABILITY EFFECTS KEY RULE: snake() converts ALL non-alphanumeric chars to underscores. Apostrophes become _. "Hunter's Arrow" -> "hunter_s_arrow" -> id "ranger_hunter_s_arrow". EFFECTS map keys must match the generated id exactly.
-- AbilityPanel click flow: damage/debuff -> 1 click fires direct to target picker. Buff/heal -> 1 click arms card + "Use ->" confirm.
-- AbilityPanel card is <div role=button> not <button> — prevents nested button HTML violation.
-- ability_used story feed: genre accent italic ✦ prefix; content from summariseAbilityResolution context_note.
-- ability_no_charges story feed: same prefix, opacity 0.6, fontWeight 400.
+- WB generation: streaming + maxDuration=300.
+- RB generation: streaming + RB_MAX_TOKENS 7000->9000.
+- ABILITY EFFECTS KEY RULE: snake() converts apostrophes to _. "Hunter's Arrow" -> "ranger_hunter_s_arrow". Match exactly.
+- AbilityPanel: damage/debuff -> 1 click to target picker. Buff/heal -> 1 click + "Use ->" confirm.
+- AbilityPanel card is <div role=button> not <button>.
+- ability_used story feed: genre accent italic ✦ prefix from summariseAbilityResolution context_note.
 
 ## Known Gaps (post-UI-overhaul backlog)
 
@@ -139,7 +141,6 @@ Confirmed: Hunter's Arrow poisoned enemy at round 5 and 11, zero status_tick eve
 - **Enemy-side status ticks not running.** See HF-enemy-status-ticks above.
 - **Bug 2 — zone_id cache leak.** Defensive fix shipped. Root cause pending.
 - **World-bible retry session binding.** See HF-world-bible-retry above.
-- **Encounter roster unknown enemy references.** See HF-encounter-roster above. HIGH PRIORITY.
 - **Combat entries firing twice.** See HF-combat-double-entries above.
 
 ### UI / design
@@ -148,7 +149,7 @@ Confirmed: Hunter's Arrow poisoned enemy at round 5 and 11, zero status_tick eve
 - **Perks section header in CharacterPanel** still dim — next CharacterPanel touch.
 - **Dialogue empty slots.** Render only real options. Next DialogueModal touch.
 - **Dialogue history content.** Filter to current NPC conversation only.
-- **Codex short_description.** First-sentence heuristic temporary. Needs short_description field on CodexEntry.
+- **Codex short_description.** First-sentence heuristic temporary.
 - **Codex LOCATION subtitle repeats name.** Should show parent location. Minor.
 - **Codex CHARACTER role prefix in description.** Data pipeline fix needed.
 - **Bestiary auto-entry on first kill.** See HF-bestiary above.

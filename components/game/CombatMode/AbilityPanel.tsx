@@ -59,18 +59,10 @@ export function AbilityPanel({
 
   const slots = player.equipped_ability_slots ?? [null, null, null, null];
 
-  // DIAGNOSTIC — remove after investigation
-  console.log("[AbilityPanel] equipped_ability_slots:", slots);
-  slots.forEach((id, i) => {
-    if (!id) return;
-    const t = ABILITY_LIBRARY[id];
-    console.log(`[AbilityPanel] slot${i} id="${id}" tmpl=${t ? t.id : "NOT FOUND"} effects=`, t?.effects ?? "none");
-  });
-
   const handleSlotTap = (slotIdx: 0 | 1 | 2 | 3) => {
     if (disabled) return;
     const ability_id = slots[slotIdx];
-    if (!ability_id) return;                       // empty / not slotted
+    if (!ability_id) return;
     const tmpl = ABILITY_LIBRARY[ability_id];
     if (!tmpl) return;
     if (!isSlotUnlocked((slotIdx + 1) as 1 | 2 | 3 | 4, player.level)) return;
@@ -80,7 +72,6 @@ export function AbilityPanel({
       tmpl, player.level, player.attributes, player.perk_charge_bonus ?? 0,
     );
     if (used >= max) {
-      // No charges — brief flash, no submit.
       setFlashSlot(slotIdx);
       setTimeout(() => setFlashSlot((v) => (v === slotIdx ? null : v)), 600);
       return;
@@ -144,35 +135,38 @@ export function AbilityPanel({
           type="button"
           onClick={onBack}
           style={{
-            background: "transparent",
-            border:     "none",
-            color:      "var(--ui-text-muted)",
-            cursor:     "pointer",
-            fontSize:   16,
-            lineHeight: 1,
-            padding:    "2px 4px",
+            background:    "transparent",
+            border:        "1px solid var(--ui-border-default)",
+            borderRadius:  4,
+            color:         "var(--ui-text-1)",
+            cursor:        "pointer",
+            fontSize:      11,
+            fontFamily:    "var(--ui-sans)",
+            fontWeight:    600,
+            padding:       "3px 10px",
+            letterSpacing: "0.05em",
           }}
-          aria-label="Close abilities"
         >
-          ∨
+          ← Back
         </button>
       </div>
 
       <div className="ew-ability-grid">
         {([0, 1, 2, 3] as const).map((slotIdx) => {
-          const slotNum   = (slotIdx + 1) as 1 | 2 | 3 | 4;
+          const slotNum    = (slotIdx + 1) as 1 | 2 | 3 | 4;
           const ability_id = slots[slotIdx];
-          const unlocked  = isSlotUnlocked(slotNum, player.level);
-          const tmpl      = ability_id ? ABILITY_LIBRARY[ability_id] : null;
-          const used      = ability_id ? (chargesUsed?.[ability_id] ?? 0) : 0;
-          const max       = tmpl
+          const unlocked   = isSlotUnlocked(slotNum, player.level);
+          const tmpl       = ability_id ? ABILITY_LIBRARY[ability_id] : null;
+          const used       = ability_id ? (chargesUsed?.[ability_id] ?? 0) : 0;
+          const max        = tmpl
             ? computeMaxCharges(
                 tmpl, player.level, player.attributes, player.perk_charge_bonus ?? 0,
               )
             : 0;
-          const remaining = Math.max(0, max - used);
-          const flashing  = flashSlot === slotIdx;
+          const remaining  = Math.max(0, max - used);
+          const flashing   = flashSlot === slotIdx;
           const isSelected = selectedSlot === slotIdx;
+          const needsTarget = tmpl ? abilityNeedsTarget(tmpl) : false;
 
           const cardDisabled = disabled || !unlocked || !ability_id || remaining <= 0;
 
@@ -205,19 +199,19 @@ export function AbilityPanel({
               }}
               disabled={disabled}
               style={{
-                padding:        "10px 10px",
-                background:     cardBackground,
-                border:         cardBorder,
-                borderRadius:   6,
-                color:          "var(--ui-text-1)",
-                opacity:        cardDisabled ? 0.45 : 1,
-                cursor:         cardDisabled ? "not-allowed" : "pointer",
-                display:        "flex",
-                flexDirection:  "column",
-                alignItems:     "flex-start",
-                gap:            4,
-                textAlign:      "left",
-                transition:     "background 120ms, border-color 120ms, opacity 120ms",
+                padding:       "10px 10px",
+                background:    cardBackground,
+                border:        cardBorder,
+                borderRadius:  6,
+                color:         "var(--ui-text-1)",
+                opacity:       cardDisabled ? 0.45 : 1,
+                cursor:        cardDisabled ? "not-allowed" : "pointer",
+                display:       "flex",
+                flexDirection: "column",
+                alignItems:    "flex-start",
+                gap:           4,
+                textAlign:     "left",
+                transition:    "background 120ms, border-color 120ms, opacity 120ms",
               }}
               aria-label={
                 tmpl
@@ -231,11 +225,11 @@ export function AbilityPanel({
                 <>
                   <span
                     style={{
-                      fontSize:       9,
-                      letterSpacing:  "0.16em",
-                      color:          "var(--ui-text-muted)",
-                      textTransform:  "uppercase",
-                      fontFamily:     "var(--mono)",
+                      fontSize:      9,
+                      letterSpacing: "0.16em",
+                      color:         "var(--ui-text-muted)",
+                      textTransform: "uppercase",
+                      fontFamily:    "var(--mono)",
                     }}
                   >
                     {tmpl.category.toUpperCase()} · ACTIVE
@@ -258,7 +252,7 @@ export function AbilityPanel({
                         fontSize:        10,
                         fontStyle:       "italic",
                         lineHeight:      1.4,
-                        color:           "var(--ui-text-muted)",
+                        color:           "var(--ui-text-2)",
                         display:         "-webkit-box",
                         WebkitLineClamp: 2,
                         WebkitBoxOrient: "vertical",
@@ -273,15 +267,65 @@ export function AbilityPanel({
                     style={{
                       fontSize:  10,
                       marginTop: "auto",
-                      color:     remaining > 0
-                        ? "var(--genre-accent)"
-                        : "var(--hl-fail)",
+                      color:     remaining > 0 ? "var(--genre-accent)" : "var(--hl-fail)",
                     }}
                   >
                     {remaining > 0
                       ? `Ready · ${remaining} use${remaining === 1 ? "" : "s"} remaining`
                       : "Cooldown · no charges"}
                   </span>
+                  {isSelected && !cardDisabled && (
+                    <div
+                      style={{
+                        display:   "flex",
+                        gap:       6,
+                        marginTop: 6,
+                        paddingTop: 6,
+                        borderTop: "1px solid rgba(var(--genre-accent-rgb), 0.20)",
+                        width:     "100%",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setSelectedSlot(null); }}
+                        style={{
+                          flex:       1,
+                          padding:    "4px 0",
+                          background: "transparent",
+                          border:     "1px solid var(--ui-border-default)",
+                          borderRadius: 4,
+                          color:      "var(--ui-text-muted)",
+                          fontFamily: "var(--ui-sans)",
+                          fontSize:   10,
+                          cursor:     "pointer",
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedSlot(null);
+                          handleSlotTap(slotIdx);
+                        }}
+                        style={{
+                          flex:         2,
+                          padding:      "4px 0",
+                          background:   "var(--genre-accent)",
+                          border:       "none",
+                          borderRadius: 4,
+                          color:        "#0a0a0a",
+                          fontFamily:   "var(--ui-sans)",
+                          fontSize:     10,
+                          fontWeight:   700,
+                          cursor:       "pointer",
+                        }}
+                      >
+                        {needsTarget ? "Choose Target →" : "Use →"}
+                      </button>
+                    </div>
+                  )}
                 </>
               ) : (
                 <span
@@ -299,79 +343,6 @@ export function AbilityPanel({
           );
         })}
       </div>
-
-      {/* Confirmation strip */}
-      {selectedSlot !== null && (() => {
-        const ability_id = slots[selectedSlot];
-        const tmpl = ability_id ? ABILITY_LIBRARY[ability_id] : null;
-        if (!tmpl) return null;
-        const needsTarget = abilityNeedsTarget(tmpl);
-        return (
-          <div
-            style={{
-              display:        "flex",
-              alignItems:     "center",
-              justifyContent: "space-between",
-              gap:            8,
-              marginTop:      6,
-              padding:        "8px 10px",
-              background:     "rgba(var(--genre-accent-rgb), 0.08)",
-              border:         "1px solid rgba(var(--genre-accent-rgb), 0.30)",
-              borderRadius:   6,
-            }}
-          >
-            <span
-              style={{
-                fontFamily: "var(--ui-sans)",
-                fontSize:   12,
-                fontWeight: 600,
-                color:      "var(--ui-text-1)",
-              }}
-            >
-              {tmpl.base_name}
-            </span>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button
-                type="button"
-                onClick={() => setSelectedSlot(null)}
-                style={{
-                  background: "transparent",
-                  border:     "none",
-                  color:      "var(--ui-text-muted)",
-                  cursor:     "pointer",
-                  fontSize:   11,
-                  fontFamily: "var(--ui-sans)",
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const slot = selectedSlot;
-                  setSelectedSlot(null);
-                  if (slot !== null) {
-                    handleSlotTap(slot as 0 | 1 | 2 | 3);
-                  }
-                }}
-                style={{
-                  padding:      "6px 14px",
-                  background:   "var(--genre-accent)",
-                  border:       "none",
-                  borderRadius: 6,
-                  color:        "#0a0a0a",
-                  fontFamily:   "var(--ui-sans)",
-                  fontSize:     12,
-                  fontWeight:   700,
-                  cursor:       "pointer",
-                }}
-              >
-                {needsTarget ? "Choose Target →" : "Use →"}
-              </button>
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 }

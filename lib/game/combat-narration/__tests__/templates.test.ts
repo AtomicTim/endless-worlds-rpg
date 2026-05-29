@@ -613,31 +613,36 @@ describe("renderRoutineCombatEvent — status effects (Prompt 5)", () => {
 
 // Day 20.1 TASK 3 — turn-boundary separators.
 
-describe("renderRoutineCombatEvent — turn separators (Day 20.1 TASK 3)", () => {
-  it("player_turn_start renders the 'Your turn' separator", () => {
+describe("renderRoutineCombatEvent — turn separators (Day 20.1 TASK 3 + PR-11v-e)", () => {
+  // PR-11v-e — player_turn_start / enemy_phase_start now return null so
+  // the feed stays quiet on phase transitions; the combat panel header
+  // pill (Your Turn / Enemy Turn) carries that information already.
+  it("player_turn_start returns null (no feed line)", () => {
     expect(
       renderRoutineCombatEvent(makeEvent({ type: "player_turn_start" }))
-    ).toEqual({ primary: "─── Your turn ───", rolls: null });
+    ).toBeNull();
   });
 
-  it("enemy_phase_start renders the 'Enemies' turn' separator", () => {
+  it("enemy_phase_start returns null (no feed line)", () => {
     expect(
       renderRoutineCombatEvent(makeEvent({ type: "enemy_phase_start" }))
-    ).toEqual({ primary: "─── Enemies' turn ───", rolls: null });
+    ).toBeNull();
   });
 
-  it("round_start renders 'Round N' when roundNumber is supplied", () => {
+  // PR-11v-e — round separator is now bare text ("round N") so StoryFeed
+  // can wrap it in its own styled centred-rule presentation.
+  it("round_start renders 'round N' when roundNumber is supplied", () => {
     expect(
       renderRoutineCombatEvent(
         makeEvent({ type: "round_start" }),
         { roundNumber: 2 }
       )
-    ).toEqual({ primary: "─── Round 2 ───", rolls: null });
+    ).toEqual({ primary: "round 2", rolls: null });
   });
 
-  it("round_start falls back to 'New round' without a number", () => {
+  it("round_start falls back to 'new round' without a number", () => {
     expect(
       renderRoutineCombatEvent(makeEvent({ type: "round_start" }))
-    ).toEqual({ primary: "─── New round ───", rolls: null });
+    ).toEqual({ primary: "new round", rolls: null });
   });
 });

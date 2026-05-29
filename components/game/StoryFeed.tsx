@@ -610,23 +610,45 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
           ? m.floor_loot_entry_id
           : null;
 
-        // Day 20.3 TASK 1 — full-width turn separators. Strip the
-        // V8.35 dash bookends from the templated string and render
-        // the label centered between flex-grown rule lines.
-        if (
-          eventType === "round_start" ||
-          eventType === "player_turn_start" ||
-          eventType === "enemy_phase_start"
-        ) {
-          const label = content
-            .replace(/^─+\s*/, "")
-            .replace(/\s*─+$/, "")
-            .trim();
+        // PR-11v-e — round separator. player_turn_start /
+        // enemy_phase_start no longer reach the feed (templates return
+        // null), so this branch only handles round_start. The label is
+        // bare ("round 3") and we wrap it in a centred styled rule.
+        if (eventType === "round_start") {
           return (
-            <div className="message-enter combat-turn-separator">
-              <span className="combat-turn-separator-line" aria-hidden />
-              <span className="combat-turn-separator-label">{label}</span>
-              <span className="combat-turn-separator-line" aria-hidden />
+            <div
+              className="message-enter"
+              style={{
+                display:        "flex",
+                alignItems:     "center",
+                gap:            10,
+                margin:         "10px 0 6px",
+                color:          "var(--ui-text-muted)",
+                fontFamily:     "var(--mono)",
+                fontSize:       10,
+                letterSpacing:  "0.20em",
+                textTransform:  "uppercase",
+              }}
+            >
+              <div
+                style={{
+                  flex:       1,
+                  height:     1,
+                  background: "var(--ui-border-default)",
+                  opacity:    0.5,
+                }}
+                aria-hidden
+              />
+              {content}
+              <div
+                style={{
+                  flex:       1,
+                  height:     1,
+                  background: "var(--ui-border-default)",
+                  opacity:    0.5,
+                }}
+                aria-hidden
+              />
             </div>
           );
         }
@@ -893,9 +915,33 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
           ? (isPlayer ? "var(--combat-player-crit)" : "var(--combat-enemy-crit)")
           : (isPlayer ? "var(--combat-player)" : "var(--combat-enemy)");
 
-        const fontSize   = 13;
+        // PR-11v-e — routine combat lines lifted 13 → 15px so the
+        // action beat reads with comparable weight to narrative prose
+        // (NarrativeBlock now 16/17px). Crits stay bold.
+        const fontSize   = 15;
         const fontWeight = isCrit ? 700 : 400;
         const fontStyle  = "italic" as const;
+
+        // PR-11v-e — outcome badge for player_attack / enemy_attack /
+        // flee_attempt routine lines. Maps hit/miss/fumble/fled to a
+        // small mono pill at the end of the line so the player can
+        // scan results without parsing prose. Crit is excluded (handled
+        // by the crit banner branch above with its own bold styling).
+        const showOutcomeBadge =
+          !isCrit &&
+          (eventType === "player_attack" ||
+           eventType === "enemy_attack"  ||
+           eventType === "flee_attempt") &&
+          (outcome === "hit"        ||
+           outcome === "miss"       ||
+           outcome === "fumble"     ||
+           outcome === "fled"       ||
+           outcome === "fled_failed");
+        const badgeColor =
+          outcome === "hit"         ? "#7abb7a" :
+          outcome === "fumble"      ? "#c84830" :
+          outcome === "fled"        ? "#7abb7a" :
+          /* miss / fled_failed */    "var(--ui-text-muted)";
 
         return (
           <p
@@ -915,6 +961,22 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
                 heal/flee_fail). Null on events without rolls. */}
             {rollsSuffix && (
               <span className="combat-roll-detail">{rollsSuffix}</span>
+            )}
+            {showOutcomeBadge && outcome && (
+              <span
+                style={{
+                  marginLeft:    8,
+                  fontFamily:    "var(--mono)",
+                  fontSize:      10,
+                  fontWeight:    700,
+                  letterSpacing: "0.14em",
+                  color:         badgeColor,
+                  textTransform: "uppercase",
+                  opacity:       0.9,
+                }}
+              >
+                {outcome}
+              </span>
             )}
           </p>
         );

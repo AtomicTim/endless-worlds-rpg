@@ -17,6 +17,10 @@ import {
   renderCritBanner,
   renderResolutionBanner,
   renderRoutineCombatEvent,
+  renderVictoryProse,
+  renderDefeatProse,
+  renderFleeProse,
+  renderKillLine,
 } from "@/lib/game/combat-narration/templates";
 import type { FloatingDamageEntry } from "@/components/game/CombatMode/CombatantRow";
 import { makeFloatingEntry } from "@/components/game/CombatMode/CombatMode";
@@ -97,12 +101,16 @@ export function isDramaticEvent(ev: CombatEvent): boolean {
   return false;
 }
 
-/** Pacing delay between turn-phase transitions (Day 20.1 TASK 4). */
-const ENEMY_PHASE_DELAY_MS = 800;
-const PLAYER_TURN_DELAY_MS = 800;
+/** Pacing delay between turn-phase transitions (Day 20.1 TASK 4).
+ *  PR-11v-e — tightened to match the turn_resolution_timing mockup:
+ *  enemy phase lead-in 1000ms (the dramatic "their move now") /
+ *  player return 400ms (snappy "back to you") / 300ms gap between
+ *  successive enemies. */
+const ENEMY_PHASE_DELAY_MS = 1000;
+const PLAYER_TURN_DELAY_MS = 400;
 /** Pacing between successive enemy turns (one enemy resolves, brief
  *  pause, next enemy resolves). */
-const ENEMY_TURN_GAP_MS    = 500;
+const ENEMY_TURN_GAP_MS    = 300;
 
 /** Day 20.4.2 TASK 2 — minimum spacing (ms) between successive floats
  *  on the same host. If a new float arrives sooner, we stagger it so
@@ -589,21 +597,25 @@ export async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void
     }
 
     // ── Day 20.3 TASK 5 — Victory / Defeat / Escaped two-line render ─
-    // Banner word first (instant), then shortened LLM prose below.
-    // Day 20.4 TASK 4 — defeat / flee_success carry destination
-    // metadata for the templated info line.
+    // Banner word first (instant), then templated prose below. PR-11v-e
+    // replaced the narrate-combat round-trip with template helpers —
+    // banner + prose now land in the same tick, no 1-2s wait.
     if (
       event.type === "victory" ||
       event.type === "defeat" ||
       event.type === "flee_success"
     ) {
       const banner = renderResolutionBanner(event);
-      const text = await fetchCombatNarration(event, args);
+      const enemyNames = args.combat.enemies.map((e) => e.name);
+      const prose =
+        event.type === "victory" ? renderVictoryProse(enemyNames)
+        : event.type === "defeat" ? renderDefeatProse()
+        : renderFleeProse();
       args.addMessage(
         makeMessage("COMBAT", banner ?? "", {
           ...makeCombatMessageMetadata(event),
           is_resolution_banner: true,
-          resolution_prose:     text,
+          resolution_prose:     prose,
           // Resolved by handleDefeat / handleFleeSuccess. StoryFeed
           // reads this to render "You wake at <Settlement> in
           // <Region>." or "You break to <Node>." below the prose.
@@ -621,12 +633,18 @@ export async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void
     }
 
     if (isDramaticEvent(event)) {
-      // Dramatic non-resolution, non-crit (kill events when no
-      // victory is present, defensive). Fetch LLM prose and push.
-      const text = await fetchCombatNarration(event, args);
-      if (text) {
+      // PR-11v-e — non-resolution dramatic events (mid-combat kills in
+      // multi-enemy fights) use the templated kill line. The
+      // narrate-combat API is gone; the canonical "X is defeated."
+      // beat carries enough weight on its own. Defensive lookup falls
+      // back to "The enemy" when the target isn't in the roster.
+      if (event.type === "kill" || event.outcome === "kill") {
+        const enemyName =
+          args.combat.enemies.find((e) => e.instance_id === event.target)?.name
+          ?? "The enemy";
         args.addMessage(
-          makeMessage("COMBAT", text, makeCombatMessageMetadata(event))
+          makeMessage("COMBAT", renderKillLine(enemyName),
+            makeCombatMessageMetadata(event))
         );
       }
       continue;
@@ -675,54 +693,12 @@ function resolveLocationName(state: MasterState, nodeId: string): string | undef
   return state.world_graph?.nodes[nodeId]?.name;
 }
 
-async function fetchCombatNarration(
-  event: CombatEvent,
-  args:  ProjectArgs
-): Promise<string> {
-  try {
-    const res = await fetch("/api/game/narrate-combat", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        event,
-        combat_context: {
-          player_name:       args.player.name,
-          player_class:      args.player.background,
-          enemies: args.combat.enemies.map((e) => ({
-            name:            e.name,
-            description:     e.description,
-            behavior_flavor: e.behavior_flavor,
-            alive:           e.alive,
-          })),
-          region_atmosphere: args.regionAtmosphere,
-        },
-        genre: args.world_genre,
-      }),
-    });
-    if (!res.ok) {
-      console.error("[useCombat] narrate-combat failed:", await res.text());
-      return fallbackForDramaticEvent(event);
-    }
-    const data = await res.json() as { text?: string };
-    return data.text?.trim() || fallbackForDramaticEvent(event);
-  } catch (err) {
-    console.error("[useCombat] narrate-combat threw:", err);
-    return fallbackForDramaticEvent(event);
-  }
-}
-
-function fallbackForDramaticEvent(event: CombatEvent): string {
-  switch (event.type) {
-    case "combat_start": return "Combat begins.";
-    case "victory":      return "The last foe falls.";
-    case "defeat":       return "Darkness closes in.";
-    case "flee_success": return "You break free.";
-    case "kill":         return "The enemy collapses.";
-    default:
-      if (event.outcome === "crit") return "A critical strike lands.";
-      return "";
-  }
-}
+// PR-11v-e — fetchCombatNarration + fallbackForDramaticEvent removed.
+// Resolution / kill prose now resolves through the template helpers in
+// lib/game/combat-narration/templates.ts (renderVictoryProse,
+// renderDefeatProse, renderFleeProse, renderKillLine). The
+// /api/game/narrate-combat route still exists for any future caller
+// but is no longer invoked from the combat loop.
 
 /** StoryMessage metadata payload — StoryFeed reads this to apply
  *  combat-specific styling per locked decisions §10. */

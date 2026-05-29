@@ -63,10 +63,14 @@ export function renderRoutineCombatEvent(
       return { primary: renderCombatStart(context), rolls: null };
     case "round_start":
       return { primary: renderRoundSeparator(context.roundNumber), rolls: null };
+    // PR-11v-e — phase separators dropped from the feed entirely. The
+    // combat panel header pill (Your Turn / Enemy Turn) is the
+    // canonical phase indicator; an extra centred line in the feed
+    // just adds noise on top of it.
     case "player_turn_start":
-      return { primary: "─── Your turn ───", rolls: null };
+      return null;
     case "enemy_phase_start":
-      return { primary: "─── Enemies' turn ───", rolls: null };
+      return null;
     case "player_attack": {
       const targetId = event.target;
       const resolved =
@@ -322,11 +326,12 @@ function formatEnemyList(names: string[]): string {
 }
 
 function renderRoundSeparator(round: number | undefined): string {
+  // PR-11v-e — strip the decorative dashes. StoryFeed renders this
+  // event with its own styled centred-rule separator.
   if (typeof round === "number" && round > 0) {
-    return `─── Round ${round} ───`;
+    return `round ${round}`;
   }
-  // Fallback when round number wasn't threaded through.
-  return "─── New round ───";
+  return "new round";
 }
 
 // ── Variant pools ──────────────────────────────────────────────────────────
@@ -476,4 +481,37 @@ function pickVariant<T>(pool: T[], event: CombatEvent): T {
 function capitalize(s: string): string {
   if (!s) return s;
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// ── PR-11v-e — resolution + kill prose templates ─────────────────────────
+// Replaces the narrate-combat API call. The LLM round-trip added 1-2s of
+// dead air after every victory / defeat / kill while the result was
+// almost always close to one of these canonical lines. Trading the
+// flexibility for instant feedback was the right call once the combat
+// loop got fast enough that LLM latency was the dominant pacing cost.
+
+/** Victory prose. Names the last enemy in the roster — typically the
+ *  boss / final foe the player just dropped. Falls back to "the enemy"
+ *  when the roster is empty or names are missing. */
+export function renderVictoryProse(enemyNames: string[]): string {
+  const last = enemyNames.filter(Boolean).pop() ?? "the enemy";
+  return `${last} collapses. The silence that follows is yours.`;
+}
+
+/** Defeat prose. Generic by design — the player teleports to safety
+ *  next, so the line bridges into the destination info line below. */
+export function renderDefeatProse(): string {
+  return "Darkness takes you. You wake somewhere safer.";
+}
+
+/** Flee_success prose. Generic — short, decisive, no enemy reference
+ *  (the player turned their back on them). */
+export function renderFleeProse(): string {
+  return "You break free and don't look back.";
+}
+
+/** Per-kill prose. Used when a kill event appears without a victory in
+ *  the same batch (multi-enemy fights, mid-combat takedowns). */
+export function renderKillLine(enemyName: string): string {
+  return `${enemyName} is defeated.`;
 }

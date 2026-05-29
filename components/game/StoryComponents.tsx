@@ -220,7 +220,7 @@ export function NarrativeBlock({ children, skipQuoteWrap }: NarrativeBlockProps)
   //   1.82 · colour #c0a878 (story prose — distinct from --ink-3).
   return (
     <p
-      className="ew-serif italic text-[14px] md:text-[15px]"
+      className="ew-serif italic text-[16px] md:text-[17px]"
       style={{
         lineHeight: 1.82,
         color:      "var(--ui-text-prose)",

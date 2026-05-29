@@ -80,6 +80,11 @@ const ALLOWED_HEX_CODES = new Set<string>([
   // ── Text inks (globals.css --ink-* / --ui-text-*) ───────────────
   "#e8dfd1", "#c8bfae", "#a89e8c", "#6e6557", "#4a4339",
   "#e2cda0", "#a08870", "#6a5530", "#5a4828", "#c0a878",
+  // PR-11v-a HF2 — brighter action-bar label ink (#d4c4a0) sits
+  // between --ui-text-1 (#e2cda0) and the legacy #a08870 button
+  // colour. Lives only in components/game/CombatMode/ActionBar.tsx;
+  // promoted to globals.css if a second surface starts using it.
+  "#d4c4a0",
 
   // ── Context Panel inks (--npc-name, --npc-role, --atmosphere) ───
   "#d4bc88", "#7a6040", "#9a7e52",

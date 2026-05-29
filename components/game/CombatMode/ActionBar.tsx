@@ -57,9 +57,12 @@ interface CombatIconProps {
 }
 
 function CombatIcon({ name, color }: CombatIconProps) {
+  // PR-11v-a HF2 — render size lifted to 24px so icons read more
+  // confidently in the action bar; viewBox stays "0 0 20 20" so the
+  // paths don't need redrawing.
   const common = {
-    width:           20,
-    height:          20,
+    width:           24,
+    height:          24,
     viewBox:         "0 0 20 20",
     fill:            "none",
     stroke:          color,
@@ -171,13 +174,14 @@ function ActionBtn({
         border:          active
           ? "1px solid var(--genre-accent)"
           : "1px solid var(--card-border)",
-        borderRadius:    "var(--card-radius, 4px)",
-        fontFamily:      "var(--ui-sans, var(--mono))",
+        // PR-11v-a HF2 — rounder corners, brighter label colour.
+        borderRadius:    10,
+        fontFamily:      "var(--ui-sans)",
         color:           disabled
           ? "#4a3818"
           : active
             ? "var(--genre-accent)"
-            : "#a08870",
+            : "#d4c4a0",
         cursor:          disabled ? "not-allowed" : "pointer",
         opacity:         disabled ? 0.3 : 1,
         transition:      "background 120ms, border-color 120ms, color 120ms, opacity 120ms",
@@ -188,12 +192,14 @@ function ActionBtn({
       }}
     >
       <CombatIcon name={iconName} color={disabled ? "#4a3818" : iconColor} />
+      {/* PR-11v-a HF2 — title-case label in ui-sans, 13/700/0.05em.
+          textTransform: uppercase removed so labels render as
+          authored ("Use Item" instead of "USE ITEM"). */}
       <span
         style={{
-          fontSize:      11,
-          letterSpacing: "0.22em",
-          textTransform: "uppercase",
-          fontWeight:    600,
+          fontSize:      13,
+          letterSpacing: "0.05em",
+          fontWeight:    700,
           lineHeight:    1,
         }}
       >
@@ -201,7 +207,7 @@ function ActionBtn({
       </span>
       <span
         style={{
-          fontSize:   10,
+          fontSize:   11,
           color:      "var(--ui-text-muted)",
           fontFamily: "var(--mono)",
           lineHeight: 1.1,

@@ -155,8 +155,10 @@ export function CombatantRow(props: Props) {
   const enemyCount = Math.max(1, Math.min(4, props.enemyCount ?? 1));
   const enemySizing = ENEMY_CARD_SIZING[enemyCount] ?? ENEMY_CARD_SIZING[1];
   const cardFlex     = isPlayer ? "0 0 auto" : enemySizing.flex;
-  const cardMinWidth = isPlayer ? 160 : enemySizing.minWidth;
-  const cardMaxWidth = isPlayer ? 220 : enemySizing.maxWidth;
+  // PR-11v-a HF2 — player card widened (200–260) so the larger
+  // portrait + HP bar read with more presence.
+  const cardMinWidth = isPlayer ? 200 : enemySizing.minWidth;
+  const cardMaxWidth = isPlayer ? 260 : enemySizing.maxWidth;
 
   return (
     <div

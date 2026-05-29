@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 6928162 (PR-11v-e: remove narrate-combat API + phase separators + combat feed visual uplift + timing)
+**Last code commit:** a358ccd (PR-11v-e HF1: combat feed polish — separator, labels, damage colors, timing, HP sync)
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -27,7 +27,7 @@
 | PR-11v-b | FloatingDamage arcs + crits + flee SVG + ability floats + Search the Remains + FloorLootStrip removed | health bar and damage numbers.png | 2561b6b | ✅ | ✅ |
 | PR-11v-c | AbilityPanel redesign + ability story feed + target flow + EFFECTS key fix | ability_panel_expanded_mobile.png | 00fb461 | ✅ | ✅ |
 | PR-11v-d | Damage type color system — shared module + enemy card type label | damage_type_colors.png | 9462b14 | — | ⏳ visual check pending (needs named regional enemy encounter) |
-| PR-11v-e | Narrate-combat API removed + phase separators removed + combat feed uplift + timing | turn_resolution_timing.png | 6928162 | — | ⏳ visual check |
+| PR-11v-e | Narrate-combat API removed + phase separators + feed uplift + timing + HP sync | turn_resolution_timing.png | a358ccd | — | ⏳ visual check |
 | PR-12v | loot/* visual rework + FloorLootStrip.tsx delete | loot panel.png | — | — | ⏳ next |
 | PR-13v | TradeModal.tsx | design ref only | — | — | ⏳ |
 | PR-14v | AttunementModal.tsx | design ref only | — | — | ⏳ |
@@ -54,15 +54,12 @@
 Fix: reuse session ID on retry OR rebind GamePage. Observed on Space Opera (token cap hit).
 
 **HF-encounter-roster:** RESOLVED at 5c097ef.
-Root cause: apply-regional-bible wrote region_bibles[id] to DB but never returned it to client.
-Fix: API returns applied_region_bible; game loop step 4d merges into masterState.metadata.region_bibles.
 
-**HF-space-opera-token-cap:** RESOLVED at 8317ea4. WB streaming + RB_MAX_TOKENS 7000->9000.
+**HF-space-opera-token-cap:** RESOLVED at 8317ea4.
 
 **HF-combat-double-entries:** Some combat actions appear twice in the story feed. Low priority.
 
-**HF-enemy-status-ticks:** Enemy-side DoT does not tick. status_effects applied but engine
-only ticks player_status_effects. Confirmed via Hunter's Arrow poison log.
+**HF-enemy-status-ticks:** Enemy-side DoT does not tick. Engine only ticks player_status_effects.
 
 ---
 
@@ -124,13 +121,15 @@ only ticks player_status_effects. Confirmed via Hunter's Arrow poison log.
 - AbilityPanel: damage/debuff -> 1 click to target picker. Buff/heal -> 1 click + "Use ->" confirm.
 - AbilityPanel card is <div role=button> not <button>.
 - ability_used story feed: genre accent italic ✦ prefix from summariseAbilityResolution context_note.
-- Combat narration: narrate-combat API removed from combat resolution entirely. All text pre-rendered via templates.ts.
-- Phase separators (your turn / enemies' turn) removed from story feed — combat panel header pill handles it.
-- Round separator: centred mono rule between rounds only. Text: "round N" bare, StoryFeed wraps with flex rule.
-- Combat timing: ENEMY_PHASE_DELAY_MS=1000, PLAYER_TURN_DELAY_MS=400, ENEMY_TURN_GAP_MS=300.
-- Combat line font: 15px. Narrative line font: 16px md:17px.
-- Outcome badge: HIT (#7abb7a), MISS (muted), FUMBLE (#c84830) appended to attack lines.
-- Victory prose: renderVictoryProse(enemyNames). Defeat: renderDefeatProse(). Flee: renderFleeProse(). Kill: renderKillLine(name).
+- Combat narration: narrate-combat API removed entirely. All text pre-rendered via templates.ts.
+- Phase separators (your turn / enemies' turn) removed from story feed. Round separator only.
+- Round separator: 12px, var(--ui-text-2), rule opacity 0.7. Combat panel header padding 32px, round 11px, pill 9px.
+- Combat timing: ENEMY_PHASE_DELAY_MS=1000, PLAYER_TURN_DELAY_MS=1000, ENEMY_TURN_GAP_MS=600.
+- Player HP bar: delayed 900ms on decrease to sync with enemy attack story-feed line. Heals immediate.
+- Damage coloring on hit lines: "N damage" bold genre-accent (player) or #c84830 (enemy). Hit only, not crit/miss.
+- Combat line font: 15px. Narrative: 16px md:17px.
+- Outcome badge: HIT / MISS / FUMBLE on attack lines.
+- Victory/Defeat/Flee/Kill: pre-rendered via renderVictoryProse / renderDefeatProse / renderFleeProse / renderKillLine.
 - Encounter / victory / defeat / flee screen overhaul: next PR after PR-11v-e visual check.
 
 ## Known Gaps (post-UI-overhaul backlog)

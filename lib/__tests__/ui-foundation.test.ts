@@ -149,9 +149,11 @@ const ALLOWED_HEX_CODES = new Set<string>([
   //   #80e040  poison / toxic / acid / viral
   //   #ffee40  lightning / electric / emp / radiation
   //   #c060ff  shadow / arcane / psychic / void / corruption
-  //   #ffdc40  holy              #ff3060  bleed
+  //   #c8940a  holy              #ff3060  bleed
+  // PR-11v-d lifted holy from #ffdc40 → #c8940a (amber gold) so it
+  // reads as distinct from lightning yellow at a glance.
   "#e0d8c0", "#ff7030", "#60d8ff", "#80e040",
-  "#ffee40", "#c060ff", "#ffdc40", "#ff3060",
+  "#ffee40", "#c060ff", "#c8940a", "#ff3060",
 
   // ── Combat action bar icon palette (PR-11v-a) ──────────────────
   // Inline SVG strokes for the five combat actions, chosen so each

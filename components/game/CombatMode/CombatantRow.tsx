@@ -5,6 +5,10 @@ import type {
   ActiveStatusEffect, CombatEnemyInstance, PlayerState,
 } from "@/types/game";
 import type { WcdStatusAliasSource } from "@/lib/game/combat-narration/status-display";
+import {
+  DAMAGE_TYPE_LABEL,
+  getDamageTypeColor,
+} from "@/lib/game/damage-types";
 import { PortraitSlot } from "./PortraitSlot";
 import { HPBar } from "./HPBar";
 import { StatusEffectPills } from "./StatusEffectPills";
@@ -116,6 +120,15 @@ export function CombatantRow(props: Props) {
   // forces lowercase ("1d6+1") because the engine emits uppercase
   // and the design ref wants the d-notation lower-case.
   const subtitle = isPlayer ? "" : (props.combatant.damage_die ?? "").toLowerCase();
+  // PR-11v-d — surface the enemy's primary_damage_type on the card.
+  // Physical (or undefined) renders the muted neutral subtitle; non-
+  // physical types colour the line and append an uppercase label so
+  // the player can read tactical pressure ("1d6 · FIRE") at a glance.
+  const dmgType  = (!isPlayer && props.combatant.primary_damage_type)
+    ? props.combatant.primary_damage_type
+    : "physical";
+  const dmgColor = getDamageTypeColor(dmgType);
+  const dmgLabel = DAMAGE_TYPE_LABEL[dmgType] ?? "";
   const isAlive = isPlayer
     ? props.combatant.health > 0
     : props.combatant.alive;
@@ -286,23 +299,37 @@ export function CombatantRow(props: Props) {
         />
       )}
 
-      {/* PR-11v-a — enemy damage_die subtitle. Renders nothing for the
-          player card (subtitle === ""). */}
+      {/* PR-11v-d — enemy damage_die subtitle. Physical stays muted;
+          non-physical types take the damage-type colour and append a
+          short uppercase label. Player card renders nothing
+          (subtitle === ""). */}
       {!isPlayer && subtitle && (
         <div
           style={{
             width:         "100%",
             textAlign:     "center",
-            fontSize:      10,
-            color:         "var(--ui-text-muted)",
             fontFamily:    "var(--mono)",
+            fontSize:      10,
             letterSpacing: "0.12em",
             overflow:      "hidden",
             textOverflow:  "ellipsis",
             whiteSpace:    "nowrap",
+            color:         dmgLabel ? dmgColor : "var(--ui-text-muted)",
           }}
         >
           {subtitle}
+          {dmgLabel && (
+            <span
+              style={{
+                marginLeft:    6,
+                fontSize:      8,
+                letterSpacing: "0.18em",
+                opacity:       0.80,
+              }}
+            >
+              · {dmgLabel}
+            </span>
+          )}
         </div>
       )}
     </div>

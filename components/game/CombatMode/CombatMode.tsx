@@ -41,6 +41,10 @@ import { CombatantRow } from "./CombatantRow";
 import { ActionBar } from "./ActionBar";
 import { AbilityPanel, abilityNeedsTarget } from "./AbilityPanel";
 import { ABILITY_LIBRARY } from "@/lib/game/abilities";
+import {
+  DAMAGE_TYPE_COLOR,
+  DAMAGE_TYPE_DURATION,
+} from "@/lib/game/damage-types";
 import { TargetPicker } from "./TargetPicker";
 import { UseItemPicker } from "./UseItemPicker";
 
@@ -568,47 +572,10 @@ function computeDiceDisplay(log: CombatEvent[]): DiceDisplay | null {
 // opposite for visual variety.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// PR-11v-b — damage type color + duration tables. Maps the full
-// DamageType union (types/game.ts) to a single float color and an
-// optional duration override (otherwise DEFAULT_DURATION). Aliases
-// like "frost" / "cold" share keys because the float layer is
-// genre-agnostic.
-const DAMAGE_TYPE_COLOR: Partial<Record<string, string>> = {
-  physical:   "#e0d8c0",
-  fire:       "#ff7030",
-  cold:       "#60d8ff",
-  frost:      "#60d8ff",
-  poison:     "#80e040",
-  lightning:  "#ffee40",
-  electric:   "#ffee40",
-  emp:        "#ffee40",
-  shadow:     "#c060ff",
-  arcane:     "#c060ff",
-  psychic:    "#c060ff",
-  void:       "#c060ff",
-  corruption: "#c060ff",
-  holy:       "#ffdc40",
-  bleed:      "#ff3060",
-  toxic:      "#80e040",
-  acid:       "#80e040",
-  viral:      "#80e040",
-  thermal:    "#ff7030",
-  plasma:     "#ff7030",
-  radiation:  "#ffee40",
-  sonic:      "#60d8ff",
-};
-
-const DAMAGE_TYPE_DURATION: Partial<Record<string, number>> = {
-  fire:      900,
-  thermal:   900,
-  plasma:    900,
-  lightning: 750,
-  electric:  750,
-  emp:       750,
-  cold:      1400,
-  frost:     1400,
-  sonic:     1400,
-};
+// PR-11v-d — colour + duration tables moved to lib/game/damage-types.ts
+// so the float layer and the enemy-card subtitle consume the same
+// canonical map. Duration defaults + the heal-specific 1300ms stay
+// local — they're consumed only here.
 const DEFAULT_DURATION = 1100;
 const HEAL_DURATION    = 1300;
 

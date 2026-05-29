@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 00fb461 (UI-PR11v-c HF2: damage/debuff direct to target picker)
+**Last code commit:** 9462b14 (UI-PR11v-d: damage type color system)
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -26,8 +26,8 @@
 | PR-11v-a | CombatMode cards + ActionBar + mobile layout | combat desktop.png | df4d593 | ✅ | ✅ |
 | PR-11v-b | FloatingDamage arcs + crits + flee SVG + ability floats + Search the Remains + FloorLootStrip removed | health bar and damage numbers.png | 2561b6b | ✅ | ✅ |
 | PR-11v-c | AbilityPanel redesign + ability story feed + target flow + EFFECTS key fix | ability_panel_expanded_mobile.png | 00fb461 | ✅ | ✅ |
-| PR-11v-d | Damage type color system (data-dependent on enemy primary_damage_type) | damage_type_colors.png | — | — | ⏳ next |
-| PR-11v-e | Turn resolution timing orchestration | turn_resolution_timing.png | — | — | ⏳ |
+| PR-11v-d | Damage type color system — shared module + enemy card type label | damage_type_colors.png | 9462b14 | — | ⏳ visual check |
+| PR-11v-e | Turn resolution timing orchestration | turn_resolution_timing.png | — | — | ⏳ next |
 | PR-12v | loot/* visual rework + FloorLootStrip.tsx delete | loot panel.png | — | — | ⏳ |
 | PR-13v | TradeModal.tsx | design ref only | — | — | ⏳ |
 | PR-14v | AttunementModal.tsx | design ref only | — | — | ⏳ |
@@ -109,7 +109,9 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 - FloatingDamage: arcs left (enemy) / right (player/ability), 80/20 variety. Crits wide arc + 3 particles + CRIT label.
 - Crit color: #c84830 red for both player and enemy crits. Non-crit hits use damage type color.
 - Float host moved to HP bar wrapper — numbers launch from bar level, not portrait top.
-- 9 damage type colors in DAMAGE_TYPE_COLOR map; fire/lightning fast, frost slow; physical fallback #e0d8c0.
+- Damage type colors: canonical source is lib/game/damage-types.ts (DAMAGE_TYPE_COLOR, DAMAGE_TYPE_DURATION, DAMAGE_TYPE_LABEL, getDamageTypeColor). CombatMode and CombatantRow both import from there. Do not re-inline.
+- Holy: #c8940a amber gold (not #ffdc40 — too close to lightning #ffee40).
+- Enemy damage_die subtitle: colored by primary_damage_type; non-physical shows "· TYPE" label. Physical stays muted, no label.
 - Enemy primary_damage_type populated from bestiary at spawn; RegionBible enemies may lack it (fallback physical).
 - ability_used floats: damage -> right arc on enemy, heal -> straight up green on player.
 - FloorLootStrip removed from GamePage render; file preserved for PR-12v cleanup.

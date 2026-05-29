@@ -857,6 +857,29 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
           );
         }
 
+        // PR-11v-c — ability_used / ability_no_charges events get their
+        // own visual branch: ✦ prefix already in content (from the
+        // template), genre accent italic so abilities read as a
+        // distinct beat type vs the ⚔ routine combat lines. No rolls
+        // suffix (abilities auto-hit; no d20 to surface today).
+        if (eventType === "ability_used" || eventType === "ability_no_charges") {
+          return (
+            <p
+              className="message-enter ew-serif"
+              style={{
+                color:      "var(--genre-accent)",
+                fontSize:   13,
+                fontStyle:  "italic",
+                fontWeight: eventType === "ability_used" ? 600 : 400,
+                opacity:    eventType === "ability_no_charges" ? 0.6 : 1,
+                margin:     "6px 0",
+              }}
+            >
+              {content}
+            </p>
+          );
+        }
+
         // Event-class buckets:
         //   victory / defeat / flee_success → handled above as
         //     isResolutionBanner two-line block (Day 20.3 TASK 5)

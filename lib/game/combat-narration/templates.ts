@@ -101,6 +101,24 @@ export function renderRoutineCombatEvent(
       return { primary: renderStatusSaved(event), rolls: null };
     case "status_expired":
       return { primary: renderStatusExpired(event), rolls: null };
+    // ── PR-11v-c — ability dispatch + no-charges feedback ─────────────────
+    // context_note carries the full summary from summariseAbilityResolution
+    // (e.g. "Hunter's Arrow — 4 damage", "Relic Pulse — healed 8 HP",
+    // "Shield Bash — self: fortified"). When present, render it directly
+    // with the ✦ glyph; otherwise fall back to a bare-name line.
+    case "ability_used": {
+      const note = typeof event.context_note === "string"
+        ? event.context_note.trim() : "";
+      const name = event.weapon_or_item ?? "ability";
+      const primary = note.length > 0
+        ? `✦ ${note}`
+        : `✦ You use ${name}.`;
+      return { primary, rolls: null };
+    }
+    case "ability_no_charges": {
+      const name = event.weapon_or_item ?? "ability";
+      return { primary: `✦ ${name} — no charges remaining.`, rolls: null };
+    }
     default:
       return null;
   }

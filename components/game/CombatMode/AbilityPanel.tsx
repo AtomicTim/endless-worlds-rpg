@@ -14,35 +14,21 @@ import {
  * P7 — inline ability panel. Replaces the ActionBar button row when
  * the player taps "Abilities". Shows the 4 equipped slot cards.
  *
- * PR-11v-c — 2-click flow. Tapping a card no longer dispatches
- * immediately; instead it selects the card and surfaces a
- * confirmation strip with "Use →" / "Choose Target →" / "Cancel".
- * Layout went from a single horizontal flex row to a desktop-4 /
- * mobile-2 grid so each card has room for type badge, name,
- * description, and the explicit charge/cooldown status line.
- *
- * The selection-vs-dispatch split is purely UI — handleSlotTap
- * still owns charge validation + the empty-slot flash, and still
- * calls onSelect under the same conditions as before.
- *
- * Per the prompt, damage / debuff abilities (those whose effects
- * carry damage_die or target_status) need a target enemy chosen
- * before dispatch. The panel hands the resolved ability id back to
- * CombatMode, which then opens its existing target picker for
- * those abilities and dispatches directly for self-only abilities.
+ * PR-11v-c — 2-click flow. Card outer element is a <div role="button">
+ * (not <button>) so the Cancel / Use <button> children inside the
+ * selected card don't violate the HTML spec (<button> cannot descend
+ * from <button>). Keyboard and click behaviour preserved via onClick +
+ * onKeyDown on the div.
  */
 interface Props {
   player:                PlayerState;
-  /** Per-id charge usage from CombatState.ability_charges_used. */
   chargesUsed?:          Record<AbilityId, number>;
-  /** Engine is mid-resolution / enemy turn — dim and disable. */
   disabled:              boolean;
   onSelect:              (abilityId: AbilityId) => void;
   onBack:                () => void;
 }
 
-/** True when the ability either deals damage or applies a target status —
- *  i.e. it needs an enemy to dispatch against. */
+/** True when the ability either deals damage or applies a target status. */
 export function abilityNeedsTarget(template: AbilityTemplate): boolean {
   const eff = template.effects;
   if (!eff) return false;
@@ -102,6 +88,10 @@ export function AbilityPanel({
         }
         @media (max-width: 480px) {
           .ew-ability-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        .ew-ability-card:focus-visible {
+          outline: 2px solid var(--genre-accent);
+          outline-offset: 2px;
         }
       `}</style>
 
@@ -186,18 +176,38 @@ export function AbilityPanel({
             cardBorder     = "1px solid rgba(var(--genre-accent-rgb), 0.35)";
           }
 
+          const handleCardClick = () => {
+            if (disabled) return;
+            if (cardDisabled) {
+              handleSlotTap(slotIdx);
+              return;
+            }
+            setSelectedSlot(isSelected ? null : slotIdx);
+          };
+
           return (
-            <button
+            // div role="button" avoids the nested <button> HTML violation
+            // that occurs when Cancel / Use buttons render inside a <button>.
+            <div
               key={slotIdx}
-              type="button"
-              onClick={() => {
-                if (cardDisabled) {
-                  handleSlotTap(slotIdx);
-                  return;
+              role="button"
+              tabIndex={disabled ? -1 : 0}
+              className="ew-ability-card"
+              onClick={handleCardClick}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleCardClick();
                 }
-                setSelectedSlot(isSelected ? null : slotIdx);
               }}
-              disabled={disabled}
+              aria-label={
+                tmpl
+                  ? `Slot ${slotNum}: ${tmpl.base_name} (${remaining} of ${max} charges)`
+                  : unlocked
+                    ? `Slot ${slotNum} empty`
+                    : `Slot ${slotNum} locked`
+              }
+              aria-pressed={isSelected}
               style={{
                 padding:       "10px 10px",
                 background:    cardBackground,
@@ -211,15 +221,9 @@ export function AbilityPanel({
                 alignItems:    "flex-start",
                 gap:           4,
                 textAlign:     "left",
+                userSelect:    "none",
                 transition:    "background 120ms, border-color 120ms, opacity 120ms",
               }}
-              aria-label={
-                tmpl
-                  ? `Slot ${slotNum}: ${tmpl.base_name} (${remaining} of ${max} charges)`
-                  : unlocked
-                    ? `Slot ${slotNum} empty`
-                    : `Slot ${slotNum} locked`
-              }
             >
               {tmpl ? (
                 <>
@@ -277,27 +281,27 @@ export function AbilityPanel({
                   {isSelected && !cardDisabled && (
                     <div
                       style={{
-                        display:   "flex",
-                        gap:       6,
-                        marginTop: 6,
+                        display:    "flex",
+                        gap:        6,
+                        marginTop:  6,
                         paddingTop: 6,
-                        borderTop: "1px solid rgba(var(--genre-accent-rgb), 0.20)",
-                        width:     "100%",
+                        borderTop:  "1px solid rgba(var(--genre-accent-rgb), 0.20)",
+                        width:      "100%",
                       }}
                     >
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setSelectedSlot(null); }}
                         style={{
-                          flex:       1,
-                          padding:    "4px 0",
-                          background: "transparent",
-                          border:     "1px solid var(--ui-border-default)",
+                          flex:         1,
+                          padding:      "4px 0",
+                          background:   "transparent",
+                          border:       "1px solid var(--ui-border-default)",
                           borderRadius: 4,
-                          color:      "var(--ui-text-muted)",
-                          fontFamily: "var(--ui-sans)",
-                          fontSize:   10,
-                          cursor:     "pointer",
+                          color:        "var(--ui-text-muted)",
+                          fontFamily:   "var(--ui-sans)",
+                          fontSize:     10,
+                          cursor:       "pointer",
                         }}
                       >
                         Cancel
@@ -339,7 +343,7 @@ export function AbilityPanel({
                   — {unlocked ? "empty" : "locked"}
                 </span>
               )}
-            </button>
+            </div>
           );
         })}
       </div>

@@ -14,11 +14,19 @@ import {
  * P7 — inline ability panel. Replaces the ActionBar button row when
  * the player taps "Abilities". Shows the 4 equipped slot cards.
  *
- * PR-11v-c — 2-click flow. Card outer element is a <div role="button">
- * (not <button>) so the Cancel / Use <button> children inside the
- * selected card don't violate the HTML spec (<button> cannot descend
- * from <button>). Keyboard and click behaviour preserved via onClick +
- * onKeyDown on the div.
+ * Click flow (PR-11v-c HF):
+ *   Damage / debuff (needsTarget=true):
+ *     1 click → immediately dispatch to CombatMode target picker.
+ *     No confirmation step — the target pick IS the confirmation.
+ *
+ *   Buff / heal (needsTarget=false):
+ *     1 click → card highlights + "Use →" / "Cancel" appear.
+ *     Click "Use →" → fires (solo party dispatches immediately;
+ *     future party members will surface a party picker here).
+ *
+ * Card outer element is <div role="button"> so the Cancel / Use
+ * <button> children inside the selected card don't violate the HTML
+ * spec (<button> cannot descend from <button>).
  */
 interface Props {
   player:                PlayerState;
@@ -41,6 +49,8 @@ export function AbilityPanel({
   player, chargesUsed, disabled, onSelect, onBack,
 }: Props) {
   const [flashSlot, setFlashSlot]       = useState<number | null>(null);
+  // selectedSlot is only used for buff/heal abilities (needsTarget=false).
+  // Damage/debuff abilities skip this state and dispatch immediately.
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
 
   const slots = player.equipped_ability_slots ?? [null, null, null, null];
@@ -153,9 +163,9 @@ export function AbilityPanel({
                 tmpl, player.level, player.attributes, player.perk_charge_bonus ?? 0,
               )
             : 0;
-          const remaining  = Math.max(0, max - used);
-          const flashing   = flashSlot === slotIdx;
-          const isSelected = selectedSlot === slotIdx;
+          const remaining   = Math.max(0, max - used);
+          const flashing    = flashSlot === slotIdx;
+          const isSelected  = selectedSlot === slotIdx;
           const needsTarget = tmpl ? abilityNeedsTarget(tmpl) : false;
 
           const cardDisabled = disabled || !unlocked || !ability_id || remaining <= 0;
@@ -179,15 +189,23 @@ export function AbilityPanel({
           const handleCardClick = () => {
             if (disabled) return;
             if (cardDisabled) {
+              // No charges / locked / empty — flash and bail.
               handleSlotTap(slotIdx);
               return;
             }
+            if (needsTarget) {
+              // Damage / debuff: go straight to the target picker.
+              // No confirmation step needed — picking the target IS
+              // the confirmation. Clears any pending buff/heal selection.
+              setSelectedSlot(null);
+              handleSlotTap(slotIdx);
+              return;
+            }
+            // Buff / heal: arm the card so "Use →" / "Cancel" appear.
             setSelectedSlot(isSelected ? null : slotIdx);
           };
 
           return (
-            // div role="button" avoids the nested <button> HTML violation
-            // that occurs when Cancel / Use buttons render inside a <button>.
             <div
               key={slotIdx}
               role="button"
@@ -278,7 +296,10 @@ export function AbilityPanel({
                       ? `Ready · ${remaining} use${remaining === 1 ? "" : "s"} remaining`
                       : "Cooldown · no charges"}
                   </span>
-                  {isSelected && !cardDisabled && (
+
+                  {/* Confirmation row — only for buff/heal (needsTarget=false).
+                      Damage/debuff skip straight to the target picker on click. */}
+                  {isSelected && !cardDisabled && !needsTarget && (
                     <div
                       style={{
                         display:    "flex",
@@ -326,7 +347,7 @@ export function AbilityPanel({
                           cursor:       "pointer",
                         }}
                       >
-                        {needsTarget ? "Choose Target →" : "Use →"}
+                        Use →
                       </button>
                     </div>
                   )}

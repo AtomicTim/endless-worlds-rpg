@@ -93,6 +93,34 @@ export function FloatingDamage({
             style={particleStyle}
             aria-hidden
           />
+          {/* PR-11v-b HF2 — "CRIT" label rides the same arc as the
+              number so the two stay locked together during the float.
+              Anchored 16px below the number's baseline; inherits the
+              crit colour so it reads as a continuation of the hit. */}
+          <span
+            style={{
+              position:                "absolute",
+              left:                    "50%",
+              transform:               "translateX(-50%)",
+              bottom:                  "-16px",
+              fontSize:                "10px",
+              fontFamily:              "var(--mono)",
+              fontWeight:              700,
+              letterSpacing:           "0.18em",
+              color,
+              opacity:                 0.9,
+              pointerEvents:           "none",
+              whiteSpace:              "nowrap",
+              animationName:           style.animationName ?? "combat-float-left",
+              animationDuration:       style.animationDuration ?? "1100ms",
+              animationTimingFunction: "ease-out",
+              animationFillMode:       "both",
+              animationDelay:          style.animationDelay,
+            }}
+            aria-hidden
+          >
+            CRIT
+          </span>
         </>
       )}
     </React.Fragment>

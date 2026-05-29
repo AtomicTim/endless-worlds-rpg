@@ -253,9 +253,9 @@ describe("Day 20.4.2 TASK 1 — floating damage end-to-end integration", () => {
     expect(float).not.toBeNull();
     expect(float!.targetId).toBe(enemy.instance_id);
     expect(float!.payload.kind).toBe("crit");
-    // PR-11v-b — crit colour matches hit; the wider arc + bigger
-    // font + particle trio carry the crit signal.
-    expect(float!.payload.color).toBe("#e0d8c0");
+    // PR-11v-b HF2 — player crits paint #3b82a8 regardless of the
+    // event's damage_type, overriding DAMAGE_TYPE_COLOR.
+    expect(float!.payload.color).toBe("#3b82a8");
     // Crit floats display TOTAL damage (the climactic moment), not
     // just the bonus die roll. Verify by matching damage_dealt.
     expect(float!.payload.value).toBe(critEvent!.damage_dealt);

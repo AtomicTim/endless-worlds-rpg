@@ -756,18 +756,24 @@ function MessageEntry({ message, onPoiClick, onNavigate, genre, highlightCandida
                     <button
                       type="button"
                       onClick={() => lootHandlers.onSearchRemains(victoryLootEntry.id)}
-                      className="ew-serif"
                       style={{
-                        background:    "transparent",
-                        border:        "none",
-                        cursor:        "pointer",
-                        color:         "var(--genre-accent)",
-                        fontStyle:     "italic",
-                        fontSize:      13,
-                        padding:       "4px 8px",
+                        display:        "inline-flex",
+                        alignItems:     "center",
+                        gap:            6,
+                        padding:        "8px 16px",
+                        background:     "rgba(var(--genre-accent-rgb), 0.12)",
+                        border:         "1px solid rgba(var(--genre-accent-rgb), 0.40)",
+                        borderRadius:   6,
+                        color:          "var(--genre-accent)",
+                        fontFamily:     "var(--ui-sans)",
+                        fontSize:       13,
+                        fontWeight:     600,
+                        cursor:         "pointer",
+                        marginTop:      8,
                       }}
                     >
-                      Search the remains →
+                      <span aria-hidden>⚔</span>
+                      Search the remains
                     </button>
                   )}
                   {lootIsResolved && (

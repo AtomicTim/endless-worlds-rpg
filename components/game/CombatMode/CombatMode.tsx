@@ -643,7 +643,13 @@ export function makeFloatingEntry(
         : (event.rolls?.damage_die_roll ?? event.damage_dealt ?? 0);
       if (value <= 0) return null;
       const dmgType = event.damage_type ?? "physical";
-      const color   = DAMAGE_TYPE_COLOR[dmgType] ?? "#e0d8c0";
+      // PR-11v-b HF2 — crits override the damage-type colour. Player
+      // crits paint #3b82a8 (combat-player-crit blue) so the
+      // climactic hit reads instantly as "you crit" regardless of the
+      // weapon's elemental type.
+      const color   = isCrit
+        ? "#3b82a8"
+        : (DAMAGE_TYPE_COLOR[dmgType] ?? "#e0d8c0");
       return {
         targetId: enemyId,
         payload: {
@@ -666,7 +672,12 @@ export function makeFloatingEntry(
         : (event.rolls?.damage_die_roll ?? event.damage_dealt ?? 0);
       if (value <= 0) return null;
       const dmgType = event.damage_type ?? "physical";
-      const color   = DAMAGE_TYPE_COLOR[dmgType] ?? "#e0d8c0";
+      // PR-11v-b HF2 — enemy crits paint #c84830 (combat-enemy-crit
+      // red) regardless of damage type. Mirror of the player-side
+      // crit override above.
+      const color   = isCrit
+        ? "#c84830"
+        : (DAMAGE_TYPE_COLOR[dmgType] ?? "#e0d8c0");
       return {
         targetId: PLAYER_ID,
         payload: {

@@ -55,12 +55,17 @@ export function AbilityPanel({
   player, chargesUsed, disabled, onSelect, onBack,
 }: Props) {
   const [flashSlot, setFlashSlot]       = useState<number | null>(null);
-  // PR-11v-c — 2-click selection. null = no card armed; tapping the
-  // armed card again toggles it back off. Confirmation strip below
-  // the grid materialises only when a valid ability is armed.
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
 
   const slots = player.equipped_ability_slots ?? [null, null, null, null];
+
+  // DIAGNOSTIC — remove after investigation
+  console.log("[AbilityPanel] equipped_ability_slots:", slots);
+  slots.forEach((id, i) => {
+    if (!id) return;
+    const t = ABILITY_LIBRARY[id];
+    console.log(`[AbilityPanel] slot${i} id="${id}" tmpl=${t ? t.id : "NOT FOUND"} effects=`, t?.effects ?? "none");
+  });
 
   const handleSlotTap = (slotIdx: 0 | 1 | 2 | 3) => {
     if (disabled) return;
@@ -98,9 +103,6 @@ export function AbilityPanel({
         transition:    "opacity 120ms",
       }}
     >
-      {/* PR-11v-c — desktop 4-column / mobile 2-column grid. Scoped so
-          the desktop flex/grid doesn't need its own breakpoint
-          machinery elsewhere. */}
       <style>{`
         .ew-ability-grid {
           display: grid;
@@ -112,7 +114,7 @@ export function AbilityPanel({
         }
       `}</style>
 
-      {/* Header — class/name tag on the left, close glyph on the right. */}
+      {/* Header */}
       <div
         style={{
           display:        "flex",
@@ -174,10 +176,6 @@ export function AbilityPanel({
 
           const cardDisabled = disabled || !unlocked || !ability_id || remaining <= 0;
 
-          // PR-11v-c — card surface state. Selected wins over available.
-          // Disabled cards (empty / locked / no charges / enemy turn)
-          // share the muted look; the flash override fires on a 0-charge
-          // tap so the player gets immediate "you tried but can't" feedback.
           let cardBackground: string;
           let cardBorder:     string;
           if (flashing) {
@@ -199,12 +197,6 @@ export function AbilityPanel({
               key={slotIdx}
               type="button"
               onClick={() => {
-                // PR-11v-c — clicking an unavailable card (locked /
-                // empty / no charges) still routes through handleSlotTap
-                // so the 0-charge flash + the no-op locked/empty
-                // branches behave exactly as before. Clicking an
-                // available card toggles the selection; the actual
-                // dispatch fires from the confirm strip below.
                 if (cardDisabled) {
                   handleSlotTap(slotIdx);
                   return;
@@ -308,10 +300,7 @@ export function AbilityPanel({
         })}
       </div>
 
-      {/* PR-11v-c — confirmation strip. Materialises only when a
-          slot is selected AND that slot holds a valid template.
-          The "Use" button routes through handleSlotTap so the
-          existing charge/lock/empty gates stay authoritative. */}
+      {/* Confirmation strip */}
       {selectedSlot !== null && (() => {
         const ability_id = slots[selectedSlot];
         const tmpl = ability_id ? ABILITY_LIBRARY[ability_id] : null;
@@ -366,15 +355,15 @@ export function AbilityPanel({
                   }
                 }}
                 style={{
-                  padding:    "6px 14px",
-                  background: "var(--genre-accent)",
-                  border:     "none",
+                  padding:      "6px 14px",
+                  background:   "var(--genre-accent)",
+                  border:       "none",
                   borderRadius: 6,
-                  color:      "#0a0a0a",
-                  fontFamily: "var(--ui-sans)",
-                  fontSize:   12,
-                  fontWeight: 700,
-                  cursor:     "pointer",
+                  color:        "#0a0a0a",
+                  fontFamily:   "var(--ui-sans)",
+                  fontSize:     12,
+                  fontWeight:   700,
+                  cursor:       "pointer",
                 }}
               >
                 {needsTarget ? "Choose Target →" : "Use →"}

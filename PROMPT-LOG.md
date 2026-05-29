@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 2904962 (UI-PR10v-HF1: LevelUpModal — auto gains side-by-side old→new cards)
+**Last code commit:** df4d593 (UI-PR11v-a HF2: ActionBar — button polish, player card sizing)
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -23,7 +23,11 @@
 | PR-8v suite | Codex | codex mobile.png | 353dc23 | ✅ | ✅ |
 | PR-9v | JournalModal | quests cyberpunk.png + quests space.png | 3545637 | ✅ | ✅ |
 | PR-10v | LevelUpModal.tsx | Tim's mockup (no PNG) | 2904962 | ✅ | ✅ |
-| PR-11v | CombatMode/* | combat desktop.png, combat panel mobile.png, health bar and damage numbers.png | — | — | ⏳ next |
+| PR-11v-a | CombatMode cards + ActionBar + mobile layout | combat desktop.png | df4d593 | ✅ | ✅ |
+| PR-11v-b | FloatingDamage arc + crit particles + flee SVG fix | health bar and damage numbers.png | — | — | ⏳ next |
+| PR-11v-c | AbilityPanel expanded 2×2 redesign | ability_panel_expanded_mobile.png | — | — | ⏳ |
+| PR-11v-d | Damage type color system | damage_type_colors.png | — | — | ⏳ |
+| PR-11v-e | Turn resolution timing orchestration | turn_resolution_timing.png | — | — | ⏳ |
 | PR-12v | loot/* + FloorLootStrip.tsx | loot panel.png | — | — | ⏳ |
 | PR-13v | TradeModal.tsx | design ref only | — | — | ⏳ |
 | PR-14v | AttunementModal.tsx | design ref only | — | — | ⏳ |
@@ -81,6 +85,7 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 
 - Claude.ai waits for Tim's final commit hash before writing PROMPT-LOG.md.
 - Claude Code does NOT update PROMPT-LOG.md.
+- Hash is always pulled from Claude Code results — no need to confirm separately.
 - --hl-said #f5f0e4 — do not revert.
 - Equipped row: fixed-width columns (rarity 38px, stat 52px) — do not revert.
 - Genre overlays removed from CharacterPanel + ContextPanel; retained in StoryFeed + modals.
@@ -88,6 +93,13 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 - Codex + Journal share same genre background palette and card visual language — keep consistent.
 - LevelUpModal joins Codex/Journal genre bg map (same 5 hexes). font-mono scoped to level number + stat values only.
 - LevelUpModal auto gains: side-by-side old→new cards; stat pair top row, HP full-width below.
+- CombatMode cards: player flex 0 0 auto (200–260px), enemy scales by count (1→200-280, 2→140-200, 3→100-160, 4→80-130).
+- ActionBar: ew-sans title case 13px/700/0.05em, icons 24px, borderRadius 10px, label color #d4c4a0.
+- CombatIcon wrapper in ActionBar.tsx — swap for real icon library by replacing CombatIcon internals only.
+- Genre combat differentiation deferred — foundational visuals first, genre-specific pass later.
+- Nav cards in dungeons don't match nav card style elsewhere — fix in dedicated nav pass.
+- Unexplored locations should show location type even when undiscovered — fix in nav pass.
+- Flee SVG reads poorly — redraw bundled into PR-11v-b.
 
 ## Known Gaps (post-UI-overhaul backlog)
 
@@ -113,6 +125,9 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 - **Bestiary auto-entry on first kill.** See HF-bestiary above.
 - **NPC species in DialogueBar.** Shows on new games only (pre-23.5A saves lack species_id).
 - **LootList.tsx** consumes --loot-quality-uncommon alias (green) — verify in PR-12v.
+- **Nav cards in dungeons** don't match style elsewhere — fix in dedicated nav pass.
+- **Unexplored locations** should show location type — fix in nav pass.
+- **Flee SVG** redrawn in PR-11v-b.
 
 ### Infrastructure
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.

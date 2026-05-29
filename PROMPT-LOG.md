@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 8317ea4 (HF: streaming fix for WB + RB generation routes)
+**Last code commit:** 2561b6b (UI-PR11v-b HF3: player crit color red to match enemy crit)
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -24,8 +24,8 @@
 | PR-9v | JournalModal | quests cyberpunk.png + quests space.png | 3545637 | ✅ | ✅ |
 | PR-10v | LevelUpModal.tsx | Tim's mockup (no PNG) | 2904962 | ✅ | ✅ |
 | PR-11v-a | CombatMode cards + ActionBar + mobile layout | combat desktop.png | df4d593 | ✅ | ✅ |
-| PR-11v-b | FloatingDamage arcs + crit particles + flee SVG + ability floats + FloorLootStrip removed | health bar and damage numbers.png | 39da21e | — | ⏳ visual check |
-| PR-11v-c | AbilityPanel expanded 2x2 redesign | ability_panel_expanded_mobile.png | — | — | ⏳ next |
+| PR-11v-b | FloatingDamage arcs + crits + flee SVG + ability floats + Search the Remains + FloorLootStrip removed | health bar and damage numbers.png | 2561b6b | ✅ | ✅ |
+| PR-11v-c | AbilityPanel expanded 2x2 redesign + ability feedback | ability_panel_expanded_mobile.png | — | — | ⏳ next |
 | PR-11v-d | Damage type color system (data-dependent on enemy primary_damage_type) | damage_type_colors.png | — | — | ⏳ |
 | PR-11v-e | Turn resolution timing orchestration | turn_resolution_timing.png | — | — | ⏳ |
 | PR-12v | loot/* visual rework + FloorLootStrip.tsx delete | loot panel.png | — | — | ⏳ |
@@ -46,6 +46,8 @@
 Fix: reuse session ID on retry OR rebind GamePage. Observed on Space Opera (token cap hit).
 
 **HF-encounter-roster:** Unknown enemy IDs stripped on generation. Need canonical IDs or fallback enemy.
+Observed: the_toll_wastes_debt_wraith and the_ledger_cliffs_bronze_sentinel both unresolvable.
+Causes Dungeon Creature fallback (tier 2, HP 31) — fights drag to 20+ rounds.
 
 **HF-space-opera-token-cap:** RESOLVED at 8317ea4. WB streaming prevents timeout (all genres).
 RB_MAX_TOKENS raised 7000->9000 for regional bible headroom (all genres). Monitor for further cap hits.
@@ -94,15 +96,17 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 - ActionBar: ew-sans title case 13px/700/0.05em, icons 24px, borderRadius 10px, label color #d4c4a0.
 - CombatIcon wrapper in ActionBar.tsx — swap for real icon library by replacing CombatIcon internals only.
 - Genre combat differentiation deferred — foundational visuals first, genre-specific pass later.
-- Nav cards in dungeons don't match nav card style elsewhere — fix in dedicated nav pass.
+- Nav cards in dungeons don't match style elsewhere — fix in dedicated nav pass.
 - Unexplored locations should show location type even when undiscovered — fix in nav pass.
-- FloatingDamage: arcs left (enemy) / right (player/ability), 80/20 variety. Crits wide arc + 3 particles.
+- FloatingDamage: arcs left (enemy) / right (player/ability), 80/20 variety. Crits wide arc + 3 particles + CRIT label.
+- Crit color: #c84830 red for both player and enemy crits. Non-crit hits use damage type color.
 - Float host moved to HP bar wrapper — numbers launch from bar level, not portrait top.
 - 9 damage type colors in DAMAGE_TYPE_COLOR map; fire/lightning fast, frost slow; physical fallback #e0d8c0.
 - Enemy primary_damage_type populated from bestiary at spawn; RegionBible enemies may lack it (fallback physical).
 - ability_used floats: damage -> right arc on enemy, heal -> straight up green on player.
 - FloorLootStrip removed from GamePage render; file preserved for PR-12v cleanup.
 - LootList in StoryFeed is the canonical loot UI going forward.
+- Search the Remains: styled genre-accent chip button with sword prefix — was too subtle before.
 - WB generation: streaming (client.messages.stream) + maxDuration=300. Prevents TCP timeout on slow API.
 - RB generation: streaming + RB_MAX_TOKENS raised 7000->9000. Both all-genre fixes.
 
@@ -114,7 +118,7 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 - **Enemy-side status ticks not running (P7).** Follow-up HF.
 - **Bug 2 — zone_id cache leak.** Defensive fix shipped. Root cause pending.
 - **World-bible retry session binding.** See HF-world-bible-retry above.
-- **Encounter roster unknown enemy references.** See HF-encounter-roster above.
+- **Encounter roster unknown enemy references.** See HF-encounter-roster above. HIGH PRIORITY.
 - **Combat entries firing twice.** See HF-combat-double-entries above.
 
 ### UI / design
@@ -131,6 +135,7 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 - **LootList.tsx** consumes --loot-quality-uncommon alias (green) — verify in PR-12v.
 - **Nav cards in dungeons** don't match style elsewhere — fix in dedicated nav pass.
 - **Unexplored locations** should show location type — fix in nav pass.
+- **Ability used — no story feed feedback.** Self-buffs fire silently. Fix in PR-11v-c.
 
 ### Infrastructure
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.

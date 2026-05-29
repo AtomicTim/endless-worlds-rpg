@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 39da21e (UI-PR11v-b HF1: ability damage floats + remove FloorLootStrip)
+**Last code commit:** 8317ea4 (HF: streaming fix for WB + RB generation routes)
 **jest baseline:** 852 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -47,11 +47,8 @@ Fix: reuse session ID on retry OR rebind GamePage. Observed on Space Opera (toke
 
 **HF-encounter-roster:** Unknown enemy IDs stripped on generation. Need canonical IDs or fallback enemy.
 
-**HF-space-opera-token-cap:** Space Opera regional bible consistently hitting max_tokens: 7000
-(output_tokens: 7000 = exact cap). Causes truncated generation and potentially invalid JSON.
-Fix options: (a) increase regional bible max_tokens for Space Opera, (b) reduce prompt size by
-trimming non-essential context sections, (c) split region generation into two passes. Affects
-ALL Space Opera playthroughs. Same issue likely applies to world bible (10000 cap).
+**HF-space-opera-token-cap:** RESOLVED at 8317ea4. WB streaming prevents timeout (all genres).
+RB_MAX_TOKENS raised 7000->9000 for regional bible headroom (all genres). Monitor for further cap hits.
 
 **HF-combat-double-entries:** Some combat actions appear twice in the story feed. Observed in
 Space Opera combat. Root cause unknown — likely a duplicate message dispatch somewhere in the
@@ -106,6 +103,8 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 - ability_used floats: damage -> right arc on enemy, heal -> straight up green on player.
 - FloorLootStrip removed from GamePage render; file preserved for PR-12v cleanup.
 - LootList in StoryFeed is the canonical loot UI going forward.
+- WB generation: streaming (client.messages.stream) + maxDuration=300. Prevents TCP timeout on slow API.
+- RB generation: streaming + RB_MAX_TOKENS raised 7000->9000. Both all-genre fixes.
 
 ## Known Gaps (post-UI-overhaul backlog)
 
@@ -116,7 +115,6 @@ combat resolution loop. Low priority until combat PR-11v is underway.
 - **Bug 2 — zone_id cache leak.** Defensive fix shipped. Root cause pending.
 - **World-bible retry session binding.** See HF-world-bible-retry above.
 - **Encounter roster unknown enemy references.** See HF-encounter-roster above.
-- **Space Opera token cap.** See HF-space-opera-token-cap above. HIGH PRIORITY — blocks all SO playthroughs.
 - **Combat entries firing twice.** See HF-combat-double-entries above.
 
 ### UI / design

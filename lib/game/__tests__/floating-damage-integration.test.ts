@@ -219,7 +219,10 @@ describe("Day 20.4.2 TASK 1 — floating damage end-to-end integration", () => {
     expect(float!.targetId).not.toBe(PLAYER_ID);
     expect(float!.targetId).not.toBe("fantasy_goblin_1"); // not the test fixture sibling
     expect(float!.payload.kind).toBe("hit");
-    expect(float!.payload.color).toBe("var(--combat-player)");
+    // PR-11v-b — engine now emits damage_type: "physical" on
+    // player_attack; the float color resolves to #e0d8c0 via
+    // DAMAGE_TYPE_COLOR.
+    expect(float!.payload.color).toBe("#e0d8c0");
   });
 
   it("player_attack crit: real engine event → makeFloatingEntry hosts on enemy with crit color + TOTAL damage", () => {
@@ -250,7 +253,9 @@ describe("Day 20.4.2 TASK 1 — floating damage end-to-end integration", () => {
     expect(float).not.toBeNull();
     expect(float!.targetId).toBe(enemy.instance_id);
     expect(float!.payload.kind).toBe("crit");
-    expect(float!.payload.color).toBe("var(--combat-player-crit)");
+    // PR-11v-b — crit colour matches hit; the wider arc + bigger
+    // font + particle trio carry the crit signal.
+    expect(float!.payload.color).toBe("#e0d8c0");
     // Crit floats display TOTAL damage (the climactic moment), not
     // just the bonus die roll. Verify by matching damage_dealt.
     expect(float!.payload.value).toBe(critEvent!.damage_dealt);
@@ -294,7 +299,9 @@ describe("Day 20.4.2 TASK 1 — floating damage end-to-end integration", () => {
       expect(float).not.toBeNull();
       expect(float!.targetId).toBe(PLAYER_ID);
       expect(float!.targetId).not.toBe(enemy.instance_id);
-      expect(float!.payload.color).toMatch(/var\(--combat-enemy/);
+      // PR-11v-b — enemy without a primary_damage_type emits
+      // "physical" by default, which resolves to #e0d8c0.
+      expect(float!.payload.color).toBe("#e0d8c0");
     } else {
       expect(float).toBeNull();
     }
@@ -333,7 +340,8 @@ describe("Day 20.4.2 TASK 1 — floating damage end-to-end integration", () => {
     expect(float).not.toBeNull();
     expect(float!.targetId).toBe(PLAYER_ID);
     expect(float!.payload.kind).toBe("heal");
-    expect(float!.payload.color).toBe("var(--hl-pass)");
+    // PR-11v-b — heal colour is the literal #7abb7a.
+    expect(float!.payload.color).toBe("#7abb7a");
     // Heal floats show the die roll (4), not the total healed (8).
     expect(float!.payload.value).toBe(4);
   });

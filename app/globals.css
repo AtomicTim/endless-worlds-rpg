@@ -871,45 +871,100 @@
   animation: combat-portrait-shake 400ms ease-in-out;
 }
 
-/* ── Day 20.4 TASK 3 — floating damage / heal number ───────────────────
-   Anchored to the top-edge of a portrait wrapper (which sits above
-   the PortraitSlot), floats upward ~56px while scaling and fading
-   over 1100ms. Color injected via inline style per actor (combat-
-   player / combat-enemy / hl-pass for heal). Crit numbers are
-   bigger via the --crit modifier; heal numbers prefix with "+". */
-@keyframes combat-float-damage {
-  0%   { transform: translate(-50%, 0)     scale(0.6); opacity: 0; }
-  15%  { transform: translate(-50%, -8px)  scale(1.2); opacity: 1; }
-  50%  { transform: translate(-50%, -28px) scale(1.0); opacity: 1; }
-  100% { transform: translate(-50%, -56px) scale(0.9); opacity: 0; }
+/* ── PR-11v-b — floating damage / heal arc system ──────────────────────
+   Numbers launch from the HP bar (bottom: 0 of their host) and arc
+   upward in one of five directions. Player hits typically arc right,
+   enemy hits left, with a 20% chance of a slight opposite for variety.
+   Crits use the wider arc variants and spawn 3 small particle dots.
+   Heals float straight up.
+
+   Animation duration varies by damage type (fire 900ms, lightning 750ms,
+   frost 1400ms, heal 1300ms, default 1100ms) — set per call from
+   makeFloatingEntry via inline animationDuration. fill-mode is `both`
+   so the 0% keyframe (opacity 0, scale 0.65) applies during any
+   animation-delay window — preventing the number from flashing at its
+   default style before the animation starts. */
+@keyframes combat-float-left {
+  0%   { transform: translate(-50%, 0)    scale(0.65); opacity: 0; }
+  15%  { transform: translate(-65%, -14px) scale(1.2);  opacity: 1; }
+  55%  { transform: translate(-90%, -42px) scale(1.0);  opacity: 1; }
+  100% { transform: translate(-115%, -72px) scale(0.9); opacity: 0; }
+}
+@keyframes combat-float-right {
+  0%   { transform: translate(-50%, 0)    scale(0.65); opacity: 0; }
+  15%  { transform: translate(-35%, -14px) scale(1.2);  opacity: 1; }
+  55%  { transform: translate(-10%, -42px) scale(1.0);  opacity: 1; }
+  100% { transform: translate(15%,  -72px) scale(0.9);  opacity: 0; }
+}
+@keyframes combat-float-left-wide {
+  0%   { transform: translate(-50%, 0)     scale(0.7);  opacity: 0; }
+  15%  { transform: translate(-75%, -18px) scale(1.35); opacity: 1; }
+  55%  { transform: translate(-120%, -55px) scale(1.1); opacity: 1; }
+  100% { transform: translate(-170%, -95px) scale(0.95); opacity: 0; }
+}
+@keyframes combat-float-right-wide {
+  0%   { transform: translate(-50%, 0)    scale(0.7);  opacity: 0; }
+  15%  { transform: translate(-25%, -18px) scale(1.35); opacity: 1; }
+  55%  { transform: translate(20%, -55px) scale(1.1);  opacity: 1; }
+  100% { transform: translate(70%, -95px) scale(0.95); opacity: 0; }
+}
+@keyframes combat-float-up {
+  0%   { transform: translate(-50%, 0)     scale(0.7);  opacity: 0; }
+  15%  { transform: translate(-50%, -12px) scale(1.1);  opacity: 1; }
+  55%  { transform: translate(-50%, -38px) scale(1.0);  opacity: 1; }
+  100% { transform: translate(-50%, -68px) scale(0.9);  opacity: 0; }
+}
+
+@keyframes combat-particle-a {
+  0%   { transform: translate(-50%, 0) scale(1);   opacity: 0.9; }
+  60%  { transform: translate(-80%, -30px) scale(0.7); opacity: 0.6; }
+  100% { transform: translate(-100%, -55px) scale(0); opacity: 0; }
+}
+@keyframes combat-particle-b {
+  0%   { transform: translate(-50%, 0) scale(1);   opacity: 0.9; }
+  60%  { transform: translate(-50%, -40px) scale(0.7); opacity: 0.6; }
+  100% { transform: translate(-50%, -70px) scale(0); opacity: 0; }
+}
+@keyframes combat-particle-c {
+  0%   { transform: translate(-50%, 0) scale(1);   opacity: 0.9; }
+  60%  { transform: translate(-20%, -30px) scale(0.7); opacity: 0.6; }
+  100% { transform: translate(0%,  -55px) scale(0); opacity: 0; }
 }
 
 .combat-float-damage {
-  position:        absolute;
-  left:            50%;
-  bottom:          100%;
-  transform:       translate(-50%, 0);
-  pointer-events:  none;
-  font-family:     var(--mono);
-  font-weight:     700;
-  font-size:       28px;
-  text-shadow:     0 1px 2px rgba(0,0,0,0.5),
-                   0 0 4px rgba(0,0,0,0.4);
-  white-space:     nowrap;
-  /* Day 20.4.2 TASK 2 — fill-mode is `both` (not `forwards`) so the
-     0% keyframe (opacity 0, scale 0.6) applies DURING the
-     `animation-delay` window. Without this the number flashes at its
-     default style for one frame before the animation starts. */
-  animation:       combat-float-damage 1100ms ease-out both;
+  position:       absolute;
+  left:           50%;
+  bottom:         0;
+  transform:      translate(-50%, 0);
+  pointer-events: none;
+  font-family:    var(--mono);
+  font-weight:    700;
+  font-size:      28px;
+  text-shadow:    0 1px 3px rgba(0,0,0,0.6),
+                  0 0 6px rgba(0,0,0,0.4);
+  white-space:    nowrap;
+  animation:      combat-float-left 1100ms ease-out both;
 }
 
-.combat-float-damage--crit {
-  font-size: 36px;
-}
+.combat-float-damage--crit  { font-size: 36px; }
+.combat-float-damage--heal::before { content: "+"; }
 
-.combat-float-damage--heal::before {
-  content: "+";
+.combat-float-particle {
+  position:       absolute;
+  left:           50%;
+  bottom:         0;
+  width:          4px;
+  height:         4px;
+  border-radius:  50%;
+  pointer-events: none;
+  background:     currentColor;
+  animation-fill-mode: both;
+  animation-duration: 600ms;
+  animation-timing-function: ease-out;
 }
+.combat-float-particle--a { animation-name: combat-particle-a; }
+.combat-float-particle--b { animation-name: combat-particle-b; }
+.combat-float-particle--c { animation-name: combat-particle-c; }
 
 /* ── Day 20.4 TASK 2 — inline roll-detail suffix on combat events ──────
    Dimmed mono parenthetical that follows the primary event line. */

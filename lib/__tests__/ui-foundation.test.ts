@@ -137,6 +137,22 @@ const ALLOWED_HEX_CODES = new Set<string>([
   // ── Combat panel auxiliary (CombatMode internal) ────────────────
   "#9a7060",
 
+  // ── Damage type color system (PR-11v-b) ────────────────────────
+  // Per-DamageType float colours consumed by makeFloatingEntry in
+  // components/game/CombatMode/CombatMode.tsx. Each canonical type
+  // resolves to one of these eight hexes; the mapping is genre-
+  // agnostic so frost (Fantasy) and cold (Cyberpunk) share #60d8ff.
+  // Lives in DAMAGE_TYPE_COLOR; promoted to globals.css if a second
+  // surface starts using the palette.
+  //   #e0d8c0  physical          #ff7030  fire / thermal / plasma
+  //   #60d8ff  frost / cold / sonic
+  //   #80e040  poison / toxic / acid / viral
+  //   #ffee40  lightning / electric / emp / radiation
+  //   #c060ff  shadow / arcane / psychic / void / corruption
+  //   #ffdc40  holy              #ff3060  bleed
+  "#e0d8c0", "#ff7030", "#60d8ff", "#80e040",
+  "#ffee40", "#c060ff", "#ffdc40", "#ff3060",
+
   // ── Combat action bar icon palette (PR-11v-a) ──────────────────
   // Inline SVG strokes for the five combat actions, chosen so each
   // verb is recognisable at a 20×20 glance: warm gold (attack), cool

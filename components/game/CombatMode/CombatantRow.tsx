@@ -29,6 +29,11 @@ export interface FloatingDamageEntry {
   kind:        "hit" | "crit" | "heal";
   color:       string;
   start_delay?: number;
+  /** PR-11v-b — arc direction + width. Determines which keyframe to use. */
+  arc?:        "left" | "right" | "left-wide" | "right-wide" | "up";
+  /** PR-11v-b — animation duration ms. Varies by damage type (fire=900,
+   *  lightning=750, frost=1400, heal=1300, default=1100). */
+  animDuration?: number;
 }
 
 /**
@@ -218,10 +223,10 @@ export function CombatantRow(props: Props) {
           CRITICAL
         </div>
       )}
-      {/* Day 20.4 TASK 3 — portrait wrapper with position:relative (no
-          overflow clip) so floating-damage numbers can extend ABOVE
-          the portrait. PortraitSlot keeps its own overflow:hidden
-          for the inner img clipping. */}
+      {/* Portrait wrapper. position:relative is retained so PortraitSlot's
+          targetable glow ring still anchors correctly. PR-11v-b moved
+          FloatingDamage out of this wrapper down to the HP bar host so
+          the numbers launch from the HP bar level per the float-arc spec. */}
       <div style={{ position: "relative", width: "100%", maxWidth: 128 }}>
         <PortraitSlot
           name={name}
@@ -230,15 +235,6 @@ export function CombatantRow(props: Props) {
           isTargetable={isTargetable}
           shake={shake}
         />
-        {(floatingDamage ?? []).map((f) => (
-          <FloatingDamage
-            key={f.key}
-            value={f.value}
-            kind={f.kind}
-            color={f.color}
-            startDelay={f.start_delay}
-          />
-        ))}
       </div>
 
       <div
@@ -261,7 +257,25 @@ export function CombatantRow(props: Props) {
         {name}
       </div>
 
-      <HPBar current={current} max={max} isBoss={isBoss} />
+      {/* PR-11v-b — float host. Numbers launch from the HP bar level,
+          arc upward (left/right/up keyframes), and self-clear after
+          animDuration. Wrapper is position:relative; the floats are
+          absolutely positioned at bottom:0 and arc upward into open
+          space above the bar. */}
+      <div style={{ position: "relative", width: "100%" }}>
+        <HPBar current={current} max={max} isBoss={isBoss} />
+        {(floatingDamage ?? []).map((f) => (
+          <FloatingDamage
+            key={f.key}
+            value={f.value}
+            kind={f.kind}
+            color={f.color}
+            arc={f.arc}
+            animDuration={f.animDuration}
+            startDelay={f.start_delay}
+          />
+        ))}
+      </div>
 
       {/* Prompt 5 — active status effect pills, directly below the
           player HP bar. Player-only; renders nothing when empty. */}

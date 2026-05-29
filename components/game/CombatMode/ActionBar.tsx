@@ -102,14 +102,18 @@ function CombatIcon({ name, color }: CombatIconProps) {
         </svg>
       );
     case "flee":
-      // Running figure: head + body + arm + leg in motion.
+      // PR-11v-b — running figure facing right. Head + torso + two
+      // arms (leading swings back, trailing swings forward) + two
+      // legs (leading forward, trailing back) so the silhouette
+      // reads as mid-sprint at a glance.
       return (
         <svg {...common}>
-          <circle cx="12" cy="4.5" r="1.5" />
-          <path d="M11 7.5 L8 11 L10 13" />
-          <path d="M10 13 L8 17" />
-          <path d="M10 13 L13 16" />
-          <path d="M8 11 L4.5 10" />
+          <circle cx="13.5" cy="3.5" r="2" />
+          <line x1="13" y1="5.5" x2="10" y2="11" />
+          <line x1="11.5" y1="7.5" x2="15" y2="10.5" />
+          <line x1="11.5" y1="7.5" x2="8" y2="6" />
+          <path d="M10 11 L13 14.5 L15.5 18" />
+          <path d="M10 11 L8.5 14.5 L6 18" />
         </svg>
       );
     case "abilities":

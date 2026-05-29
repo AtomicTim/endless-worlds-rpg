@@ -554,18 +554,77 @@ function computeDiceDisplay(log: CombatEvent[]): DiceDisplay | null {
 //
 // Routing rules (locked by Day 20.4.1):
 //   player_attack hit/crit → host = event.target (the targeted ENEMY's
-//     instance_id). Color = combat-player(-crit). Show damage_die_roll
-//     on hit; TOTAL damage on crit.
-//   enemy_attack hit/crit  → host = "PLAYER" (string sentinel). Color =
-//     combat-enemy(-crit). Show damage_die_roll on hit; TOTAL damage on
-//     crit.
-//   use_item heal          → host = "PLAYER". Color = hl-pass. Show
-//     damage_die_roll (the heal die roll, before the flat +4 bonus).
+//     instance_id). Color = DAMAGE_TYPE_COLOR[event.damage_type]. Show
+//     damage_die_roll on hit; TOTAL damage on crit. Arcs right.
+//   enemy_attack hit/crit  → host = "PLAYER". Color =
+//     DAMAGE_TYPE_COLOR[event.damage_type]. Show damage_die_roll on hit;
+//     TOTAL damage on crit. Arcs left.
+//   use_item heal          → host = "PLAYER". Color = #7abb7a. Arc up.
 //   defend / miss / fumble / flee / phase events: null.
 //
-// Routing is explicit per event.type — no conditional fallback that could
-// misroute when one of actor/target ever shows up empty.
+// PR-11v-b — color + duration now come from the canonical DamageType
+// the engine populates on each event. Arc direction picks a primary
+// side (player → right, enemy → left) and rolls 20% for a slight
+// opposite for visual variety.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// PR-11v-b — damage type color + duration tables. Maps the full
+// DamageType union (types/game.ts) to a single float color and an
+// optional duration override (otherwise DEFAULT_DURATION). Aliases
+// like "frost" / "cold" share keys because the float layer is
+// genre-agnostic.
+const DAMAGE_TYPE_COLOR: Partial<Record<string, string>> = {
+  physical:   "#e0d8c0",
+  fire:       "#ff7030",
+  cold:       "#60d8ff",
+  frost:      "#60d8ff",
+  poison:     "#80e040",
+  lightning:  "#ffee40",
+  electric:   "#ffee40",
+  emp:        "#ffee40",
+  shadow:     "#c060ff",
+  arcane:     "#c060ff",
+  psychic:    "#c060ff",
+  void:       "#c060ff",
+  corruption: "#c060ff",
+  holy:       "#ffdc40",
+  bleed:      "#ff3060",
+  toxic:      "#80e040",
+  acid:       "#80e040",
+  viral:      "#80e040",
+  thermal:    "#ff7030",
+  plasma:     "#ff7030",
+  radiation:  "#ffee40",
+  sonic:      "#60d8ff",
+};
+
+const DAMAGE_TYPE_DURATION: Partial<Record<string, number>> = {
+  fire:      900,
+  thermal:   900,
+  plasma:    900,
+  lightning: 750,
+  electric:  750,
+  emp:       750,
+  cold:      1400,
+  frost:     1400,
+  sonic:     1400,
+};
+const DEFAULT_DURATION = 1100;
+const HEAL_DURATION    = 1300;
+
+// PR-11v-b — pick the float arc with 80/20 variety. Crits always use
+// the wide variants for impact; regular hits mostly follow the
+// attacker's side but flip occasionally so back-to-back hits don't
+// look identical.
+function pickArc(
+  side: "left" | "right",
+  isCrit: boolean,
+  rng: () => number = Math.random,
+): FloatingDamageEntry["arc"] {
+  if (isCrit) return side === "left" ? "left-wide" : "right-wide";
+  if (rng() < 0.8) return side;
+  return side === "left" ? "right" : "left";
+}
 
 export function makeFloatingEntry(
   event: CombatEvent
@@ -583,13 +642,17 @@ export function makeFloatingEntry(
         ? (event.damage_dealt ?? 0)
         : (event.rolls?.damage_die_roll ?? event.damage_dealt ?? 0);
       if (value <= 0) return null;
+      const dmgType = event.damage_type ?? "physical";
+      const color   = DAMAGE_TYPE_COLOR[dmgType] ?? "#e0d8c0";
       return {
         targetId: enemyId,
         payload: {
           key:   `${event.type}_${event.timestamp}_${enemyId}`,
           value,
           kind:  isCrit ? "crit" : "hit",
-          color: isCrit ? "var(--combat-player-crit)" : "var(--combat-player)",
+          color,
+          arc:   pickArc("right", isCrit),
+          animDuration: DAMAGE_TYPE_DURATION[dmgType] ?? DEFAULT_DURATION,
         },
       };
     }
@@ -602,13 +665,17 @@ export function makeFloatingEntry(
         ? (event.damage_dealt ?? 0)
         : (event.rolls?.damage_die_roll ?? event.damage_dealt ?? 0);
       if (value <= 0) return null;
+      const dmgType = event.damage_type ?? "physical";
+      const color   = DAMAGE_TYPE_COLOR[dmgType] ?? "#e0d8c0";
       return {
         targetId: PLAYER_ID,
         payload: {
           key:   `${event.type}_${event.timestamp}_${event.actor}`,
           value,
           kind:  isCrit ? "crit" : "hit",
-          color: isCrit ? "var(--combat-enemy-crit)" : "var(--combat-enemy)",
+          color,
+          arc:   pickArc("left", isCrit),
+          animDuration: DAMAGE_TYPE_DURATION[dmgType] ?? DEFAULT_DURATION,
         },
       };
     }
@@ -626,7 +693,9 @@ export function makeFloatingEntry(
           key:   `heal_${event.timestamp}`,
           value: dieRoll,
           kind:  "heal",
-          color: "var(--hl-pass)",
+          color: "#7abb7a",
+          arc:   "up",
+          animDuration: HEAL_DURATION,
         },
       };
     }
@@ -651,6 +720,8 @@ export function makeFloatingEntry(
           // muted acid-orange reads as residual DoT, not a fresh hit.
           kind:  "hit",
           color: "#fb923c",
+          arc:   pickArc("left", false),
+          animDuration: DEFAULT_DURATION,
         },
       };
     }

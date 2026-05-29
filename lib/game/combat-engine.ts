@@ -760,6 +760,7 @@ export function executePlayerAction({
         weapon_or_item:      weaponName(player),
         context_note:        target.behavior_flavor,
         rolls:               result.rolls,
+        damage_type:         "physical",
       }));
       if (result.killed_target) {
         events.push(makeEvent({
@@ -1059,6 +1060,7 @@ export function executePlayerAction({
           targetStatusId: appliedTarget,
           clearedSelf:    cleared,
         }),
+        damage_type:         "physical",
       }));
 
       if (killed && action.target_instance_id) {
@@ -1265,6 +1267,7 @@ export function advanceEnemyTurn({
     weapon_or_item:      null,
     context_note:        actor.behavior_flavor,
     rolls:               result.rolls,
+    damage_type:         actor.primary_damage_type ?? "physical",
   }));
 
   // Prompt 1 — on-hit status application. Bestiary-declared

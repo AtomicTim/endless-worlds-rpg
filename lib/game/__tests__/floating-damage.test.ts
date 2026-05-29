@@ -36,7 +36,10 @@ describe("makeFloatingEntry — Day 20.4.1 TASK 1 routing", () => {
     }));
     expect(result?.targetId).toBe("fantasy_goblin_1");
     expect(result?.targetId).not.toBe(PLAYER_ID);
-    expect(result?.payload.color).toBe("var(--combat-player)");
+    // PR-11v-b — float color now resolves from CombatEvent.damage_type
+    // via DAMAGE_TYPE_COLOR. Test events omit damage_type so the
+    // routing falls back to "physical" = #e0d8c0.
+    expect(result?.payload.color).toBe("#e0d8c0");
     expect(result?.payload.kind).toBe("hit");
     // Hit shows the rolled damage die value (not the total damage).
     expect(result?.payload.value).toBe(4);
@@ -52,7 +55,10 @@ describe("makeFloatingEntry — Day 20.4.1 TASK 1 routing", () => {
       rolls: { d20: 20, d20_modifier: 2, target_dc: 12, damage_die: "1d6", damage_die_roll: 6, crit_max_damage: 6, str_modifier: 1 },
     }));
     expect(result?.targetId).toBe("fantasy_goblin_1");
-    expect(result?.payload.color).toBe("var(--combat-player-crit)");
+    // PR-11v-b — crit uses the same physical colour; the wider arc
+    // + 36px font + 3 particle dots carry the "crit" visual signal,
+    // not a colour swap.
+    expect(result?.payload.color).toBe("#e0d8c0");
     expect(result?.payload.kind).toBe("crit");
     // Crits show TOTAL (the climactic moment).
     expect(result?.payload.value).toBe(13);
@@ -69,7 +75,8 @@ describe("makeFloatingEntry — Day 20.4.1 TASK 1 routing", () => {
     }));
     expect(result?.targetId).toBe(PLAYER_ID);
     expect(result?.targetId).not.toBe("fantasy_goblin_1");
-    expect(result?.payload.color).toBe("var(--combat-enemy)");
+    // PR-11v-b — physical fallback when damage_type is omitted.
+    expect(result?.payload.color).toBe("#e0d8c0");
     expect(result?.payload.kind).toBe("hit");
   });
 
@@ -83,7 +90,8 @@ describe("makeFloatingEntry — Day 20.4.1 TASK 1 routing", () => {
       rolls: { d20: 20, d20_modifier: 1, target_dc: 13, damage_die: "1d6", damage_die_roll: 6, crit_max_damage: 6, str_modifier: 0 },
     }));
     expect(result?.targetId).toBe(PLAYER_ID);
-    expect(result?.payload.color).toBe("var(--combat-enemy-crit)");
+    // PR-11v-b — crit colour matches hit; arc + size do the work.
+    expect(result?.payload.color).toBe("#e0d8c0");
     expect(result?.payload.kind).toBe("crit");
     expect(result?.payload.value).toBe(12);
   });
@@ -98,7 +106,10 @@ describe("makeFloatingEntry — Day 20.4.1 TASK 1 routing", () => {
       rolls: { damage_die: "1d8", damage_die_roll: 4 },
     }));
     expect(result?.targetId).toBe(PLAYER_ID);
-    expect(result?.payload.color).toBe("var(--hl-pass)");
+    // PR-11v-b — heal colour is the literal #7abb7a (= --stat-heal,
+    // already registered in ALLOWED_HEX_CODES). Replaces the prior
+    // var(--hl-pass) lookup.
+    expect(result?.payload.color).toBe("#7abb7a");
     expect(result?.payload.kind).toBe("heal");
     // Heal shows the rolled die value (before the flat +4).
     expect(result?.payload.value).toBe(4);

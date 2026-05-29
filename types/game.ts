@@ -1795,6 +1795,10 @@ export interface CombatEvent {
    *  prose. Defeat carries node + region context; flee_success
    *  drops region (short hop). */
   destination?: CombatEventDestination;
+  /** PR-11v-b — canonical damage type for float color/behavior.
+   *  Populated on player_attack, enemy_attack, ability_used.
+   *  Optional so all other event types and legacy data are unaffected. */
+  damage_type?: DamageType;
 }
 
 /**

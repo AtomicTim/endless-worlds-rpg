@@ -5,6 +5,14 @@ import { Genre } from "@/types/game";
 import type { WorldBible, WorldConsistencyDocument } from "@/types/game";
 import { formatWcdBlock } from "@/lib/game/prompt-builder";
 
+// HF-generation-timeout — Vercel default function timeout is 10s on
+// hobby / 15s on pro; WB generation routinely takes 60–180s, so the
+// connection was being torn down mid-stream. 300s matches the regional
+// bible route's existing ceiling. `force-dynamic` keeps the route off
+// the static cache so each new game runs the LLM call afresh.
+export const maxDuration = 300;
+export const dynamic     = "force-dynamic";
+
 interface RequestBody {
   genre?:           Genre;
   character_name?:  string;
@@ -1371,12 +1379,18 @@ async function callClaude(client: Anthropic, userPrompt: string): Promise<string
     `[GEN_TIMING] generate-world-bible start — model: ${WB_MODEL}, prompt_tokens: ${promptTokens}`
   );
   const startedAt = Date.now();
-  const message = await client.messages.create({
+  // HF-generation-timeout — switched to client.messages.stream() so the
+  // SSE keep-alive prevents the connection from being torn down during
+  // long (60-180s) WB completions. finalMessage() resolves with the
+  // same shape as messages.create() once the stream completes, so the
+  // downstream text + usage extraction stays identical.
+  const stream = client.messages.stream({
     model:      WB_MODEL,
     max_tokens: WB_MAX_TOKENS,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });
+  const message = await stream.finalMessage();
   const text = message.content[0]?.type === "text" ? message.content[0].text : "";
   const outputTokens = message.usage?.output_tokens ?? Math.ceil(text.length / 4);
   const elapsed = Date.now() - startedAt;

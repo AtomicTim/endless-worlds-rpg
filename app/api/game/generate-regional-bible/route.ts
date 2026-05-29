@@ -877,8 +877,12 @@ function validateBible(parsed: unknown): { ok: true; bible: RegionBible } | { ok
 //
 // 7000 was the Day 20 value (bumped from 6000 to give haiku
 // headroom for the 3-5 enemies in combat-spec §6.5). Restoring it.
+// HF-generation-timeout — lifted 7000 → 9000 because Space Opera
+// regional bibles were hitting the cap exactly, truncating the JSON
+// and failing parse on every expansion. Haiku is still cheap enough
+// that the headroom is worth the cost.
 const RB_MODEL      = "claude-haiku-4-5-20251001";
-const RB_MAX_TOKENS = 7000;
+const RB_MAX_TOKENS = 9000;
 
 async function callClaude(client: Anthropic, userPrompt: string): Promise<string> {
   // Architecture spec ("Model Selection"): RegionBible generation runs on
@@ -890,12 +894,17 @@ async function callClaude(client: Anthropic, userPrompt: string): Promise<string
     `[GEN_TIMING] generate-regional-bible start — model: ${RB_MODEL}, prompt_tokens: ${promptTokens}`
   );
   const startedAt = Date.now();
-  const message = await client.messages.create({
+  // HF-generation-timeout — switched to client.messages.stream() so the
+  // SSE keep-alive prevents the connection from being torn down during
+  // long completions. finalMessage() resolves with the same shape as
+  // messages.create() once the stream completes.
+  const stream = client.messages.stream({
     model:      RB_MODEL,
     max_tokens: RB_MAX_TOKENS,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: "user", content: userPrompt }],
   });
+  const message = await stream.finalMessage();
   const text = message.content[0]?.type === "text" ? message.content[0].text : "";
   const outputTokens = message.usage?.output_tokens ?? Math.ceil(text.length / 4);
   const elapsed = Date.now() - startedAt;

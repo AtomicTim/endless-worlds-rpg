@@ -69,7 +69,15 @@ const GENRE_LEVELUP_BG: Record<Genre, string> = {
   [Genre.POST_APOCALYPTIC]:    "#161008",
 };
 
-export function LevelUpModal() {
+interface LevelUpModalProps {
+  /** HF-levelup-timing — true while the combat hook is still draining
+   *  the victory feed. Gates the modal so it doesn't open mid-drain
+   *  (combat.active goes false inside applyCombatResult before
+   *  projectCombatEventsToFeed finishes the victory banner + prose). */
+  isResolving?: boolean;
+}
+
+export function LevelUpModal({ isResolving }: LevelUpModalProps = {}) {
   const masterState  = useGameStore((s) => s.masterState);
   const setMasterState = useGameStore((s) => s.setMasterState);
   const addMessage   = useGameStore((s) => s.addMessage);
@@ -82,12 +90,14 @@ export function LevelUpModal() {
   const combatActive  = masterState?.combat?.active === true;
   const pending       = player?.pending_level_up === true;
 
-  // Modal only opens when a level-up is queued AND combat has dismissed.
-  // While combat is active, the flag stays set on player state and the
-  // victory banner / resolution prose render first — V8.37 pacing.
-  // P7 — also stays open while the slot-unlock step is in progress
-  // (handleConfirm clears `pending` but transitions to the slot picker).
-  const isStatStepOpen = !!player && pending && !combatActive;
+  // Modal only opens when a level-up is queued AND combat has dismissed
+  // AND the combat hook is no longer resolving. HF-levelup-timing — the
+  // !isResolving gate prevents the modal from popping while
+  // projectCombatEventsToFeed is still draining the victory banner +
+  // "X is defeated." line + Search the remains prompt. P7 — stays open
+  // while the slot-unlock step is in progress (handleConfirm clears
+  // `pending` but transitions to the slot picker).
+  const isStatStepOpen = !!player && pending && !combatActive && !isResolving;
 
   // resolveLevelUp gives us the auto gains based on archetype +
   // pre-levelup level. `player.level` here is still the OLD level

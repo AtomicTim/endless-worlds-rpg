@@ -434,7 +434,7 @@ export default function GamePage() {
           <QuestRevealModal />
           {/* Day 22 — Level-up modal. Opens when player_state
               .pending_level_up=true AND combat is no longer active. */}
-          <LevelUpModal />
+          <LevelUpModal isResolving={combatResolving} />
           {/* P7 — Attunement modal. Opens on Inn Rest signal or via the
               settlement Attune button. Locked during combat (rule 166)
               — the modal itself guards on combat?.active. */}

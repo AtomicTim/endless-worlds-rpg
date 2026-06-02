@@ -307,8 +307,11 @@
     /* Journal destructive confirmation */
     --action-destructive: #9a4040;
 
-    /* Type stack */
-    --serif: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;
+    /* Type stack — HF-font-crimson: --serif now points to var(--font-crimson)
+       so all var(--serif) consumers (character creation, combat prose,
+       story feed, modals) automatically use Crimson Text. The Cormorant
+       Garamond @import is kept for safety but no longer active. */
+    --serif: var(--font-crimson), Georgia, serif;
     --sans:  'Inter Tight', 'Inter', system-ui, sans-serif;
     --mono:  'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace;
 
@@ -615,10 +618,11 @@
 }
 
 .ew-mono  { font-family: var(--mono); }
-/* HF-font-crimson — Crimson Text loaded via next/font (app/layout.tsx)
-   replaces the prior Cormorant Garamond fallback chain. Upright +
-   readable; inline fontStyle: italic usages still render in italic
-   via the styled-italic weight loaded alongside. */
+/* HF-font-crimson — .ew-serif and the root --serif token both point to
+   Crimson Text (loaded via next/font in app/layout.tsx). All var(--serif)
+   consumers (character creation, combat prose, story feed, modals) now
+   render Crimson Text automatically. Cormorant Garamond @import retained
+   for safety but is no longer the active serif. */
 .ew-serif { font-family: var(--font-crimson), Georgia, serif; }
 .ew-sans  { font-family: var(--sans); }
 

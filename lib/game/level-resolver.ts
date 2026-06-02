@@ -140,10 +140,12 @@ export function resolveLevelUp(
  * pending_level_up is cleared regardless of whether anything actually
  * grew, so the modal can re-fire on the NEXT threshold crossing.
  *
- * HP: both max_health and health rise by hp_gained. Lifting current HP
- * along with max means the player isn't left at "old HP / new max"
- * with a partial-HP bar after the level-up beat — a deliberate UX
- * decision flagged in project-log.md.
+ * HP: max_health rises by hp_gained, and current health is RESTORED
+ * to the new max. HF-levelup-hp — leveling up is a beat that should
+ * feel restorative ("you grow stronger and shake off your wounds"),
+ * not "you grew but you're still bleeding". Topping off also avoids
+ * the awkward case where a low-HP victory triggers a level-up that
+ * then leaves the player still in the danger zone HP band.
  */
 export function applyLevelUp(
   player: PlayerState,
@@ -167,10 +169,11 @@ export function applyLevelUp(
     );
   }
 
+  const newMaxHealth = player.max_health + result.hp_gained;
   return {
     attributes:       nextAttrs,
-    max_health:       player.max_health + result.hp_gained,
-    health:           player.health     + result.hp_gained,
+    max_health:       newMaxHealth,
+    health:           newMaxHealth,
     level:            result.new_level,
     pending_level_up: false,
   };

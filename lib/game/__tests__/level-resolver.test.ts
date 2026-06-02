@@ -290,12 +290,15 @@ describe("applyLevelUp — splice + cap", () => {
     expect(slice.pending_level_up).toBe(false);
   });
 
-  it("HP raises both max_health AND current health by hp_gained", () => {
+  it("HP raises max_health by hp_gained AND restores current health to new max (HF-levelup-hp)", () => {
     const p = makePlayer({ health: 22, max_health: 30 });
     const result = resolveLevelUp("knight", 1);
     const slice  = applyLevelUp(p, { ...result, free_stat: "perception" });
-    expect(slice.max_health).toBe(30 + HP_PER_LEVEL.strength);
-    expect(slice.health).toBe(22 + HP_PER_LEVEL.strength);
+    const expectedMax = 30 + HP_PER_LEVEL.strength;
+    expect(slice.max_health).toBe(expectedMax);
+    // HF-levelup-hp — health is topped off to new max, not just
+    // incremented by hp_gained, so leveling up always feels restorative.
+    expect(slice.health).toBe(expectedMax);
   });
 
   it("caps every attribute at STAT_CAP — auto gains DO NOT overshoot", () => {

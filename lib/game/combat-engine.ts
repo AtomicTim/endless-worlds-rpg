@@ -1254,6 +1254,15 @@ export function advanceEnemyTurn({
   const newHealth = Math.max(0, player.health - damage);
   const newPlayer: PlayerState = { ...player, health: newHealth };
 
+  // HF-damage-discrepancy — emit the ACTUAL HP delta on the event,
+  // not the pre-clamp `damage` variable. The Math.max(0, ...) clamp
+  // above means an overkill hit (damage > current HP) would otherwise
+  // store an inflated `damage_dealt` while the HP bar only drops to
+  // 0 — the story line and the bar disagreed. Computing the delta
+  // from the health values also future-proofs any passive damage
+  // reduction layered between `damage` and the HP write.
+  const actualDamageDealt = player.health - newHealth;
+
   // Defend buff post-roll halve mutates `damage` but leaves the
   // resolver's raw rolls intact. UI can show both — the d20 hit
   // detail + the actual landed damage — without surprise.
@@ -1262,7 +1271,7 @@ export function advanceEnemyTurn({
     actor:               actor.instance_id,
     target:              PLAYER_ID,
     outcome:             result.outcome,
-    damage_dealt:        damage,
+    damage_dealt:        actualDamageDealt,
     remaining_target_hp: newHealth,
     weapon_or_item:      null,
     context_note:        actor.behavior_flavor,

@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** c39bd91 (HF-ability-panel-targeting: keep panel open with armed ability state)
+**Last code commit:** 82c178b (HF-player-hp-stagger: queue separate 900ms HP drops per enemy hit)
 **jest baseline:** 854 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -49,22 +49,22 @@
 **HF-font-crimson:** RESOLVED at 1fb855f.
 **HF-levelup-hp:** RESOLVED at a9dbe06.
 **HF-damage-discrepancy:** RESOLVED at a9dbe06.
-**HF-combat-double-entries:** Low priority. Some combat actions appear twice in story feed.
-**HF-enemy-status-ticks:** Enemy-side DoT does not tick. Engine only ticks player_status_effects.
+**HF-ability-panel-targeting:** RESOLVED at c39bd91.
+**HF-combat-double-entries:** Low priority.
+**HF-enemy-status-ticks:** Enemy-side DoT does not tick.
 **HF-dungeon-exit-regen:** Not reproduced post-4654114. Monitor.
 
-**HF-ability-panel-targeting:** RESOLVED at c39bd91.
-- Damage/debuff tap: arms the card (panel stays open), highlights with 2px genre-accent border,
-  charge line → "Choose Target →", non-armed cards dim to 0.5.
-- Tap armed card or Cancel → disarms without closing panel.
-- Tap enemy → ability fires, panel closes.
-- Buff/heal flow (selectedSlot + "Use →") untouched.
+**HF-player-hp-stagger:** RESOLVED at 82c178b.
+- useCombat: playerHpHitRef + registerPlayerHpHit callback; onPlayerHpHit called after each
+  enemy_attack addMessage using remaining_target_hp. Both submitCombatAction and kickoffCombat paths covered.
+- CombatantRow: hpQueueRef queue replaces single-timer. processQueue drains 900ms per item.
+  Heals snap immediately and flush the queue. registerHpDropCallback prop on PlayerProps.
+- CombatMode + page.tsx: registerPlayerHpHit threaded from useCombat through to CombatantRow.
 
-**HF-player-hp-stagger:** RUNNING in parallel session. Queue-based approach — each enemy hit
-calls onPlayerHpHit(hp_remaining) after its addMessage; CombatantRow drains a queue with
-900ms delays per item. Heals snap immediately.
+**HF-dungeon-nav-cards:** IN PROGRESS (parallel session). Replacing DungeonNavCardButton with
+NavCard-style chips. Removing wrapper column boxes. Matching standard nav visual language.
 
-**HF-queued (remaining — address in order):**
+**HF-queued (remaining):**
 1. Region shown as Settlement Hub in context panel label after dungeon exit
 2. Dungeon encounters — always spawn on first visit; % chance only after first cleared
 3. Settlement always shown as "back" even if not last visited
@@ -106,13 +106,11 @@ calls onPlayerHpHit(hp_remaining) after its addMessage; CombatantRow drains a qu
 - FONT: 'Crimson Text' hardcoded in --serif and tailwind serif. font-style: normal on .ew-serif.
   Italic ONLY on .ew-said, .combat-resolution-prose, .combat-turn-separator-label, .combat-resolution-destination.
 - LevelUpModal gate: gateOpen → 1000ms delay → delayedOpen → isStatStepOpen.
-- Level up: health = newMaxHealth (full restore) in level-resolver.ts.
-- Damage event: actualDamageDealt = player.health - newHealth. Story text matches HP bar delta.
-- AbilityPanel: damage/debuff tap → arm card (panel stays open, "Choose Target →") → tap enemy → fires + panel closes.
-  Cancel clears armed state. Buff/heal: 1 click → selectedSlot → "Use →" confirm. Unchanged.
-- AbilityPanel armed card: 2px genre-accent border, 0.5 opacity on non-armed cards, Cancel row.
-- AbilityPanel card is <div role=button> not <button>.
-- Player HP stagger: queue-based in CombatantRow. onPlayerHpHit per enemy hit → 900ms drop each.
+- Level up: health = newMaxHealth in level-resolver.ts.
+- Damage event: actualDamageDealt = player.health - newHealth. Story text matches HP bar.
+- AbilityPanel: damage/debuff tap → arm card, panel stays open, "Choose Target →" → tap enemy → fires + closes.
+- Player HP stagger: queue-based. onPlayerHpHit per enemy hit → 900ms drop each. Heals snap immediately.
+  Uses remaining_target_hp from CombatEvent. Both combat paths (submit + kickoff) covered.
 - CombatMode cards: player flex 0 0 auto (200-260px), enemy scales by count.
 - ActionBar: ew-sans title case 13px/700/0.05em, icons 24px, borderRadius 10px, label #d4c4a0.
 - FloatingDamage: arcs, crits, CRIT label, #c84830 for all crits.
@@ -130,6 +128,7 @@ calls onPlayerHpHit(hp_remaining) after its addMessage; CombatantRow drains a qu
 - Outcome badge: HIT / MISS / FUMBLE on attack lines.
 - Dungeon exit destination: topology scan fallback in resolveDungeonExitTarget.
 - Codex tabs: flex-wrap so all tabs visible.
+- Dungeon nav cards: NavCard-style chips, horizontal row, no wrapper boxes. (HF in progress)
 
 ## Known Gaps (post-UI-overhaul backlog)
 
@@ -153,7 +152,6 @@ calls onPlayerHpHit(hp_remaining) after its addMessage; CombatantRow drains a qu
 - **Dialogue empty slots.** Render only real options.
 - **Codex short_description.** First-sentence heuristic temporary.
 - **Bestiary auto-entry on first kill.** HF-bestiary above.
-- **Nav cards in dungeons** don't match style elsewhere.
 - **Unexplored locations** should show location type.
 - **Encounter / victory / defeat / flee screens** — full overhaul queued.
 - **next/font Crimson_Text in layout.tsx** — remove in cleanup pass.

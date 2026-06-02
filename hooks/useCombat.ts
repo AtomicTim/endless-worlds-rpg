@@ -200,6 +200,17 @@ export function useCombat() {
   const lastEmittedAtRef  = useRef<Record<string, number>>({});
   const lastStartDelayRef = useRef<Record<string, number>>({});
 
+  // HF-player-hp-stagger — player's drain queue notifier. CombatantRow
+  // registers a function here via registerPlayerHpHit; useCombat
+  // calls it once per enemy_attack hit/crit so each hit queues a
+  // separate ~900ms HP bar drop. Lives as a ref so re-renders don't
+  // re-register and the projection pipeline can read it without a
+  // dependency cycle on the latest callback identity.
+  const playerHpHitRef = useRef<((hp: number) => void) | null>(null);
+  const registerPlayerHpHit = useCallback((fn: ((hp: number) => void) | null) => {
+    playerHpHitRef.current = fn;
+  }, []);
+
   /**
    * Day 20.4.2 TASK 3 — push a float entry for one CombatEvent.
    * Routes through makeFloatingEntry (same helper CombatMode used to
@@ -314,6 +325,7 @@ export function useCombat() {
           setDisplayPhase,
           emitFloat,
           victoryLootEntryId,
+          onPlayerHpHit: (hp) => playerHpHitRef.current?.(hp),
         });
 
         // After drain ends — if combat is still active, sync the pill
@@ -387,6 +399,7 @@ export function useCombat() {
           setDisplayPhase,
           emitFloat,
           victoryLootEntryId,
+          onPlayerHpHit: (hp) => playerHpHitRef.current?.(hp),
         });
 
         // After drain — sync display pill to authoritative state.
@@ -447,6 +460,11 @@ export function useCombat() {
      *  projection pipeline (same moment as the story-feed line) and
      *  the multi-enemy stagger (TASK 2) can reach across events. */
     floatingByActor,
+    /** HF-player-hp-stagger — CombatantRow registers a callback here
+     *  once on mount; useCombat fires it after every enemy hit feed
+     *  line so the player HP bar drops one hit at a time instead of
+     *  all at once. Pass `null` to unregister. */
+    registerPlayerHpHit,
     submitCombatAction,
     /** Day 20.2 TASK 1 — exposed for the auto-fire useEffect.
      *  External callers shouldn't need to invoke directly; the
@@ -482,6 +500,14 @@ interface ProjectArgs {
    *  metadata so the "Search the remains →" link in the StoryFeed
    *  victory banner can wire to the right entry. */
   victoryLootEntryId?: string;
+  /** HF-player-hp-stagger — called after each enemy_attack hit/crit
+   *  feed line lands. CombatantRow's drain queue receives one entry
+   *  per hit and animates a separate ~900ms HP bar drop for each,
+   *  so a multi-enemy turn shows three distinct drops instead of
+   *  one big jump (the engine writes the final HP to MasterState
+   *  before the drain starts, so player.health is already the post-
+   *  turn value by the time the feed catches up). */
+  onPlayerHpHit?:     (hp: number) => void;
 }
 
 /**
@@ -594,6 +620,14 @@ export async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void
           rolls_suffix:   banner.rolls,
         })
       );
+      // HF-player-hp-stagger — queue the post-hit HP for the player's
+      // drain so the bar drops in sync with this crit's banner line.
+      if (
+        event.type === "enemy_attack" &&
+        typeof event.remaining_target_hp === "number"
+      ) {
+        args.onPlayerHpHit?.(event.remaining_target_hp);
+      }
       continue;
     }
 
@@ -685,6 +719,16 @@ export async function projectCombatEventsToFeed(args: ProjectArgs): Promise<void
           rolls_suffix: templated.rolls,
         })
       );
+      // HF-player-hp-stagger — routine enemy_attack hit lines queue
+      // the post-hit HP for the player's drain so a multi-enemy turn
+      // shows N distinct bar drops instead of one big jump.
+      if (
+        event.type === "enemy_attack" &&
+        event.outcome === "hit" &&
+        typeof event.remaining_target_hp === "number"
+      ) {
+        args.onPlayerHpHit?.(event.remaining_target_hp);
+      }
     }
   }
 }

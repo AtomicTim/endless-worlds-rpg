@@ -84,6 +84,7 @@ export default function GamePage() {
     isResolving:      combatResolving,
     displayPhase:     combatDisplayPhase,
     floatingByActor:  combatFloatingByActor,
+    registerPlayerHpHit,
     submitCombatAction,
   } = useCombat();
   // Day 23A pt 2 — dungeon-runtime callbacks for the NavigationBar
@@ -459,6 +460,7 @@ export default function GamePage() {
               displayPhase={combatDisplayPhase}
               floatingByActor={combatFloatingByActor}
               wcd={masterState.metadata.world_consistency}
+              registerPlayerHpHit={registerPlayerHpHit}
               onAction={(a) => { void submitCombatAction(a); }}
             />
           ) : dialogueActive ? (

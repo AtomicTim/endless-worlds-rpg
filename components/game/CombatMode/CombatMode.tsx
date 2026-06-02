@@ -79,11 +79,16 @@ interface Props {
    *  the player's CombatantRow so the status pills can show world-
    *  native names. Optional — pills fall back to the canonical id. */
   wcd?:         WcdStatusAliasSource;
+  /** HF-player-hp-stagger — useCombat's slot for the player's drain
+   *  queue. CombatantRow registers a callback once on mount; useCombat
+   *  fires it per enemy hit so the HP bar drops one hit at a time. */
+  registerPlayerHpHit?: (fn: ((hp: number) => void) | null) => void;
   onAction:     (action: PlayerActionInput) => void;
 }
 
 export function CombatMode({
-  combat, player, isResolving, displayPhase, floatingByActor, wcd, onAction,
+  combat, player, isResolving, displayPhase, floatingByActor, wcd,
+  registerPlayerHpHit, onAction,
 }: Props) {
   const [attackTargeting, setAttackTargeting] = useState(false);
   const [showItemPicker,  setShowItemPicker]  = useState(false);
@@ -378,6 +383,7 @@ export function CombatMode({
             floatingDamage={floatingByActor?.[PLAYER_ID]}
             statusEffects={combat.player_status_effects}
             wcd={wcd}
+            registerHpDropCallback={registerPlayerHpHit}
           />
         </div>
 

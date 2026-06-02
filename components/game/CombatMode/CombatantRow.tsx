@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ActiveStatusEffect, CombatEnemyInstance, PlayerState,
 } from "@/types/game";
@@ -77,6 +77,13 @@ interface PlayerProps {
   /** PR-11v-a HF1 — unused for the player card; kept on the union so
    *  CombatMode can pass it uniformly without a branch. */
   enemyCount?:     number;
+  /** HF-player-hp-stagger — registration hook. CombatantRow calls
+   *  this once on mount with a callback that receives one
+   *  post-hit HP value per enemy_attack. The hook layer (useCombat)
+   *  fires the callback per hit; CombatantRow queues each value and
+   *  drains it with a 900ms delay between drops so a multi-enemy
+   *  turn shows N distinct bar drops instead of one collective jump. */
+  registerHpDropCallback?: (fn: (hp: number) => void) => void;
 }
 interface EnemyProps {
   combatant:       CombatEnemyInstance;
@@ -122,31 +129,60 @@ export function CombatantRow(props: Props) {
   const max     = isPlayer ? props.combatant.max_health : props.combatant.max_hp;
   const isBoss  = isPlayer ? false : props.combatant.is_boss;
 
-  // PR-11v-e HF1 — delay the player HP bar's visual update by 900ms
-  // when HP decreases so it lands roughly in step with the enemy
-  // attack line in the story feed (enemy phase lead-in is 1000ms).
-  // Heals + increases apply immediately so out-of-combat regen / heal
-  // items don't feel laggy. Enemy cards continue to use `current`
-  // directly — only the player gets this treatment.
+  // HF-player-hp-stagger — replace the prior single-timer delay with
+  // a queue processor. useCombat calls the registered callback once
+  // per enemy_attack hit/crit (after the matching feed line lands),
+  // each call pushes the post-hit HP onto hpQueueRef, and the queue
+  // is drained one item at a time with a 900ms delay between drops.
+  // This means a turn where three enemies hit the player produces
+  // three separate HP bar drops instead of one collective jump —
+  // because applyCombatResult writes the final player HP to
+  // MasterState before the drain begins, so `current` is already the
+  // post-turn value by the time we see it. Heals + any HP increase
+  // bypass the queue and snap immediately so out-of-combat regen and
+  // heal items don't feel laggy.
   const [displayedPlayerHp, setDisplayedPlayerHp] = useState(current);
-  const prevHpRef  = useRef(current);
-  const hpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hpQueueRef    = useRef<number[]>([]);
+  const processingRef = useRef(false);
+
+  const processQueue = useCallback(() => {
+    if (processingRef.current) return;
+    const next = hpQueueRef.current.shift();
+    if (next === undefined) return;
+    processingRef.current = true;
+    setTimeout(() => {
+      setDisplayedPlayerHp(next);
+      processingRef.current = false;
+      processQueue();          // drain next item if any
+    }, 900);
+  }, []);
+
+  // Register the queue-push callback once. useCombat owns the slot
+  // (a ref it calls per hit), so the registration is a fire-and-
+  // forget on mount; useCombat reads the latest callback from its
+  // own ref every time, so we don't need to re-register on changes.
+  const registerHpDropCallback =
+    isPlayer ? (props as PlayerProps).registerHpDropCallback : undefined;
+  useEffect(() => {
+    if (!isPlayer || !registerHpDropCallback) return;
+    registerHpDropCallback((hp: number) => {
+      hpQueueRef.current.push(hp);
+      processQueue();
+    });
+  }, [isPlayer, registerHpDropCallback, processQueue]);
+
+  // Heal / level-up / any other HP increase — snap immediately and
+  // flush any pending drops in the queue (they'd otherwise drag the
+  // bar back down through stale values).
   useEffect(() => {
     if (!isPlayer) return;
-    if (current < prevHpRef.current) {
-      hpTimerRef.current = setTimeout(
-        () => setDisplayedPlayerHp(current),
-        900,
-      );
-    } else {
-      if (hpTimerRef.current) clearTimeout(hpTimerRef.current);
+    if (current > displayedPlayerHp) {
+      hpQueueRef.current = [];
+      processingRef.current = false;
       setDisplayedPlayerHp(current);
     }
-    prevHpRef.current = current;
-    return () => {
-      if (hpTimerRef.current) clearTimeout(hpTimerRef.current);
-    };
-  }, [current, isPlayer]);
+  }, [current, isPlayer, displayedPlayerHp]);
+
   const renderedCurrent = isPlayer ? displayedPlayerHp : current;
   // PR-11v-a — enemy subtitle surfaces the weapon damage_die. HF1
   // forces lowercase ("1d6+1") because the engine emits uppercase

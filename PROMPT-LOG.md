@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** e4e964c (HF-font-upright: remove italic from context panel, codex, chronicle, character panel)
+**Last code commit:** 1fb855f (HF-font-upright-b: remove italic from character creation screens)
 **jest baseline:** 854 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -38,20 +38,15 @@
 
 ---
 
-## PR-11v-c commit trail (all by Claude.ai directly)
-- fb4b4db — initial ship: AbilityPanel grid redesign + ability_used/ability_no_charges templates + StoryFeed branch
-- f1d8409 — fix: ranger_hunter_s_arrow EFFECTS key mismatch
-- 4fe585b — fix: card <button> -> <div role=button>
-- 00fb461 — HF2: damage/debuff direct to target picker; buff/heal 2-click confirm
-
-## HF-font-crimson commit trail
-- 693b25d — next/font Crimson Text setup (insufficient)
-- 6866512 — --serif token pointed to var(--font-crimson) (insufficient)
-- 3e25c25 — Crimson Text in @import + hardcoded in --serif and .ew-serif
-- 0016a3e — tailwind.config.ts fontFamily.serif Cormorant Garamond -> Crimson Text (ROOT CAUSE)
-- 26e631e — ACCIDENTAL OVERWRITE of globals.css (emergency)
-- 4f6761e — globals.css restored with font-style: normal on .ew-serif
-- e4e964c — italic removed from ContextPanel, CodexContent, StoryComponents, CharacterPanel, JournalModal; codex tabs wrap fix
+## HF-font-crimson commit trail (fully resolved)
+- 693b25d — next/font setup (insufficient)
+- 6866512 — --serif token via var() (insufficient)
+- 3e25c25 — Crimson Text in @import + hardcoded string
+- 0016a3e — tailwind.config.ts serif -> Crimson Text (ROOT CAUSE)
+- 26e631e — accidental overwrite (emergency)
+- 4f6761e — globals.css restored + font-style: normal on .ew-serif
+- e4e964c — italic removed: ContextPanel, CodexContent, StoryComponents, CharacterPanel, JournalModal; codex tabs wrap
+- 1fb855f — italic removed: WorldForgingScreen, app/game/new/page.tsx (13 spots)
 
 ---
 
@@ -75,9 +70,9 @@
 
 **HF-dungeon-exit-regen:** Not reproduced post-4654114. Monitor.
 
-**HF-font-crimson:** RESOLVED at e4e964c. Crimson Text upright throughout. Root cause was
-tailwind.config.ts fontFamily.serif hardcoded to Cormorant Garamond. Italic kept only on
-.ew-said NPC dialogue and globals.css combat prose classes.
+**HF-font-crimson:** RESOLVED at 1fb855f (final). Crimson Text upright throughout.
+Italic kept ONLY on: .ew-said NPC dialogue, .combat-resolution-prose,
+.combat-turn-separator-label, .combat-resolution-destination.
 
 **HF-queued (from Tim's session — address in order):**
 1. Damage discrepancy: story line shows +1 vs HP bar (likely Iron Resolve passive)
@@ -123,17 +118,14 @@ tailwind.config.ts fontFamily.serif hardcoded to Cormorant Garamond. Italic kept
 - Equipped row: fixed-width columns (rarity 38px, stat 52px) — do not revert.
 - Genre overlays removed from CharacterPanel + ContextPanel; retained in StoryFeed + modals.
 - FONT: --serif = 'Crimson Text', Georgia, serif. tailwind fontFamily.serif = Crimson Text.
-  .ew-serif has font-style: normal to override any Tailwind italic class.
-  Italic kept ONLY on: .ew-said (NPC dialogue), .combat-resolution-prose, .combat-turn-separator-label,
-  .combat-resolution-destination. Do NOT add italic back to any other ew-serif usage.
-  Do NOT use var(--font-crimson) — use 'Crimson Text' string directly.
-  next/font Crimson_Text in layout.tsx can be removed in a cleanup pass.
+  .ew-serif has font-style: normal. Italic ONLY on .ew-said, combat prose globals.css classes.
+  Do NOT add italic to any other ew-serif usage. Do NOT use var(--font-crimson).
+  next/font Crimson_Text in layout.tsx — remove in cleanup pass (no longer needed).
 - LevelUpModal gate: gateOpen → 1000ms delay → delayedOpen → isStatStepOpen. Do not revert.
 - CombatMode cards: player flex 0 0 auto (200-260px), enemy scales by count.
 - ActionBar: ew-sans title case 13px/700/0.05em, icons 24px, borderRadius 10px, label color #d4c4a0.
 - FloatingDamage: arcs, crits, CRIT label, #c84830 red for all crits.
-- Damage type colors: lib/game/damage-types.ts canonical source.
-- Holy: #c8940a amber gold.
+- Damage type colors: lib/game/damage-types.ts canonical source. Holy #c8940a.
 - Enemy status pills: combatant.status_effects. wcd threaded to enemy rows.
 - region_bibles: applied_region_bible in step 4d merge. Additive.
 - FloorLootStrip removed from render; file preserved for PR-12v cleanup.
@@ -149,7 +141,7 @@ tailwind.config.ts fontFamily.serif hardcoded to Cormorant Garamond. Italic kept
 - Damage coloring: "N damage" bold on hit lines.
 - Outcome badge: HIT / MISS / FUMBLE on attack lines.
 - Dungeon exit destination: topology scan fallback in resolveDungeonExitTarget.
-- Codex tabs: flex-wrap (not overflow-x-auto) so all tabs visible.
+- Codex tabs: flex-wrap so all tabs visible.
 
 ## Known Gaps (post-UI-overhaul backlog)
 
@@ -180,7 +172,7 @@ tailwind.config.ts fontFamily.serif hardcoded to Cormorant Garamond. Italic kept
 - **Nav cards in dungeons** don't match style elsewhere.
 - **Unexplored locations** should show location type.
 - **Encounter / victory / defeat / flee screens** — full overhaul queued.
-- **next/font Crimson_Text in layout.tsx** — remove in cleanup pass (no longer used).
+- **next/font Crimson_Text in layout.tsx** — remove in cleanup pass.
 
 ### Infrastructure
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.

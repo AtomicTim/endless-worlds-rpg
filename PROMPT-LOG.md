@@ -3,8 +3,8 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** cf81287 (HF-levelup-timing: gate LevelUpModal on !isResolving)
-**jest baseline:** 852 (ui-foundation: 118/118)
+**Last code commit:** 4654114 (HF: level up modal 1s delay + fix post-combat destination fallback)
+**jest baseline:** 854 (ui-foundation: 118/118)
 **tsc:** clean
 
 ---
@@ -60,14 +60,15 @@
 
 **HF-enemy-status-ticks:** Enemy-side DoT does not tick. Engine only ticks player_status_effects.
 
-**HF-levelup-timing:** RESOLVED at cf81287. LevelUpModal now gated on !isResolving so full
-combat feed drain (VICTORY banner + prose + loot prompt) completes before modal opens.
+**HF-levelup-timing:** RESOLVED at 4654114. Modal now gated on delayedOpen (1000ms after
+!isResolving && !combatActive && pending). Full combat feed drain + 1s breath before modal appears.
 
-**HF-dungeon-exit-regen:** After dungeon combat + level up, navigating back to parent region
-triggers apply-regional-bible re-run, producing duplicate/extra nav graph nodes (nav card explosion).
-Likely cause: isApplyRegionalBibleRedundant guard failing on dungeon exit path, or dungeon-exit
-navigation treating the region as uninitialized. Needs console log investigation before fix.
-Observed: Space Opera, post-combat level up, then dungeon exit to region.
+**HF-dungeon-exit-destination:** RESOLVED at 4654114. resolveDungeonExitTarget in
+dungeon-navigation.ts now uses topology scan (connections) as fallback when zone_id chain
+is broken or outline node not yet expanded. jest baseline bumped to 854 with 2 new tests.
+
+**HF-dungeon-exit-regen:** Nav card explosion on dungeon exit post-level-up. Not reproduced
+in latest session — may have been fixed by HF-dungeon-exit-destination. Monitor.
 
 ---
 
@@ -98,6 +99,7 @@ Observed: Space Opera, post-combat level up, then dungeon exit to region.
 - Claude.ai waits for Tim's final commit hash before writing PROMPT-LOG.md.
 - Claude Code does NOT update PROMPT-LOG.md.
 - Hash is always pulled from Claude Code results — no need to confirm separately.
+- jest baseline is now 854 (was 852). Update any baseline references accordingly.
 - --hl-said #f5f0e4 — do not revert.
 - Equipped row: fixed-width columns (rarity 38px, stat 52px) — do not revert.
 - Genre overlays removed from CharacterPanel + ContextPanel; retained in StoryFeed + modals.
@@ -105,7 +107,7 @@ Observed: Space Opera, post-combat level up, then dungeon exit to region.
 - Codex + Journal share same genre background palette and card visual language — keep consistent.
 - LevelUpModal joins Codex/Journal genre bg map (same 5 hexes). font-mono scoped to level number + stat values only.
 - LevelUpModal auto gains: side-by-side old->new cards; stat pair top row, HP full-width below.
-- LevelUpModal gate: !isResolving && !combat?.active && pending_level_up — do not revert isResolving gate.
+- LevelUpModal gate: gateOpen (!!player && !!pending && !combatActive && !isResolving) → 1000ms delay → delayedOpen → isStatStepOpen. Do not revert delay.
 - CombatMode cards: player flex 0 0 auto (200-260px), enemy scales by count (1->200-280, 2->140-200, 3->100-160, 4->80-130).
 - ActionBar: ew-sans title case 13px/700/0.05em, icons 24px, borderRadius 10px, label color #d4c4a0.
 - CombatIcon wrapper in ActionBar.tsx — swap for real icon library by replacing CombatIcon internals only.
@@ -139,7 +141,8 @@ Observed: Space Opera, post-combat level up, then dungeon exit to region.
 - Combat line font: 15px. Narrative: 16px md:17px.
 - Outcome badge: HIT / MISS / FUMBLE on attack lines.
 - Victory/Defeat/Flee/Kill: pre-rendered via renderVictoryProse / renderDefeatProse / renderFleeProse / renderKillLine.
-- Encounter / victory / defeat / flee screen overhaul: next PR after PR-12v.
+- Dungeon exit destination: resolveDungeonExitTarget uses zone_id chain then topology scan via connections. Do not revert.
+- Encounter / victory / defeat / flee screen overhaul: deferred post PR-12v.
 
 ## Known Gaps (post-UI-overhaul backlog)
 
@@ -150,7 +153,7 @@ Observed: Space Opera, post-combat level up, then dungeon exit to region.
 - **Bug 2 — zone_id cache leak.** Defensive fix shipped. Root cause pending.
 - **World-bible retry session binding.** See HF-world-bible-retry above.
 - **Combat entries firing twice.** See HF-combat-double-entries above.
-- **Dungeon exit region regen.** See HF-dungeon-exit-regen above. HIGH PRIORITY.
+- **Dungeon exit regen (nav card explosion).** Not reproduced post-4654114. Monitor.
 
 ### UI / design
 - **FloorLootStrip.tsx orphaned.** Delete in PR-12v cleanup.

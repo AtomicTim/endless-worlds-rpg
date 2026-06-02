@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 1fb855f (HF-font-upright-b: remove italic from character creation screens)
+**Last code commit:** a9dbe06 (HF: level up restores full HP + damage event matches actual HP delta)
 **jest baseline:** 854 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -38,51 +38,47 @@
 
 ---
 
-## HF-font-crimson commit trail (fully resolved)
-- 693b25d — next/font setup (insufficient)
-- 6866512 — --serif token via var() (insufficient)
-- 3e25c25 — Crimson Text in @import + hardcoded string
-- 0016a3e — tailwind.config.ts serif -> Crimson Text (ROOT CAUSE)
-- 26e631e — accidental overwrite (emergency)
-- 4f6761e — globals.css restored + font-style: normal on .ew-serif
-- e4e964c — italic removed: ContextPanel, CodexContent, StoryComponents, CharacterPanel, JournalModal; codex tabs wrap
-- 1fb855f — italic removed: WorldForgingScreen, app/game/new/page.tsx (13 spots)
+## HF-font-crimson commit trail (fully resolved at 1fb855f)
+- Root cause: tailwind.config.ts fontFamily.serif hardcoded to Cormorant Garamond
+- Final state: Crimson Text upright everywhere except .ew-said + globals.css combat prose classes
 
 ---
 
-## Pending HFs (post-UI-overhaul)
+## Pending HFs
 
 **HF-bestiary:** On first kill -> saveCodexEntry(BESTIARY) with enemy stats. Idempotent gate.
 
 **HF-world-bible-retry:** Retry creates new session UUID; GamePage stays bound to failed session.
 
 **HF-encounter-roster:** RESOLVED at 5c097ef.
-
 **HF-space-opera-token-cap:** RESOLVED at 8317ea4.
+**HF-levelup-timing:** RESOLVED at 4654114.
+**HF-dungeon-exit-destination:** RESOLVED at 4654114.
+**HF-font-crimson:** RESOLVED at 1fb855f.
 
 **HF-combat-double-entries:** Some combat actions appear twice in the story feed. Low priority.
 
 **HF-enemy-status-ticks:** Enemy-side DoT does not tick. Engine only ticks player_status_effects.
 
-**HF-levelup-timing:** RESOLVED at 4654114.
-
-**HF-dungeon-exit-destination:** RESOLVED at 4654114.
-
 **HF-dungeon-exit-regen:** Not reproduced post-4654114. Monitor.
 
-**HF-font-crimson:** RESOLVED at 1fb855f (final). Crimson Text upright throughout.
-Italic kept ONLY on: .ew-said NPC dialogue, .combat-resolution-prose,
-.combat-turn-separator-label, .combat-resolution-destination.
+**HF-levelup-hp:** RESOLVED at a9dbe06. applyLevelUp in level-resolver.ts now sets
+health = newMaxHealth (full restore). Test updated to pin expect(slice.health).toBe(expectedMax).
 
-**HF-queued (from Tim's session — address in order):**
-1. Damage discrepancy: story line shows +1 vs HP bar (likely Iron Resolve passive)
-2. Level up fully restores player HP
-3. Ability panel stays open on damage ability selection — highlights chosen ability until enemy tapped
-4. Player HP stagger — multiple enemy hits should each queue separate 900ms delays
-5. Region shown as Settlement Hub in context panel label after dungeon exit
-6. Dungeon encounters — always spawn on first visit; % chance only after first cleared
-7. Settlement always shown as "back" even if not last visited
-8. Defeat: full enemy turn completes, defeat modal with "Awaken at [settlement]" button
+**HF-damage-discrepancy:** RESOLVED at a9dbe06. advanceEnemyTurn in combat-engine.ts now
+computes actualDamageDealt = player.health - newHealth after the HP write. event.damage_dealt
+uses actualDamageDealt instead of the pre-clamp damage variable. Story text and HP bar delta
+now agree exactly. Also handles overkill case correctly.
+
+**HF-ability-panel-targeting:** IN PROGRESS (parallel session). AbilityPanel armed state —
+panel stays open with chosen ability highlighted + "Choose Target →" while player selects enemy.
+
+**HF-queued (remaining — address in order):**
+1. Player HP stagger — multiple enemy hits should each queue separate 900ms delays
+2. Region shown as Settlement Hub in context panel label after dungeon exit
+3. Dungeon encounters — always spawn on first visit; % chance only after first cleared
+4. Settlement always shown as "back" even if not last visited
+5. Defeat: full enemy turn completes, defeat modal with "Awaken at [settlement]" button
 
 ---
 
@@ -117,28 +113,30 @@ Italic kept ONLY on: .ew-said NPC dialogue, .combat-resolution-prose,
 - --hl-said #f5f0e4 — do not revert.
 - Equipped row: fixed-width columns (rarity 38px, stat 52px) — do not revert.
 - Genre overlays removed from CharacterPanel + ContextPanel; retained in StoryFeed + modals.
-- FONT: --serif = 'Crimson Text', Georgia, serif. tailwind fontFamily.serif = Crimson Text.
-  .ew-serif has font-style: normal. Italic ONLY on .ew-said, combat prose globals.css classes.
-  Do NOT add italic to any other ew-serif usage. Do NOT use var(--font-crimson).
-  next/font Crimson_Text in layout.tsx — remove in cleanup pass (no longer needed).
-- LevelUpModal gate: gateOpen → 1000ms delay → delayedOpen → isStatStepOpen. Do not revert.
+- FONT: 'Crimson Text' hardcoded in --serif and tailwind serif. font-style: normal on .ew-serif.
+  Italic ONLY on .ew-said, .combat-resolution-prose, .combat-turn-separator-label, .combat-resolution-destination.
+  Do NOT use var(--font-crimson). next/font Crimson_Text in layout.tsx — remove in cleanup.
+- LevelUpModal gate: gateOpen → 1000ms delay → delayedOpen → isStatStepOpen.
+- Level up: health set to newMaxHealth (full restore) in level-resolver.ts. Do not revert.
+- Damage event: actualDamageDealt = player.health - newHealth after HP write. Matches HP bar delta.
 - CombatMode cards: player flex 0 0 auto (200-260px), enemy scales by count.
-- ActionBar: ew-sans title case 13px/700/0.05em, icons 24px, borderRadius 10px, label color #d4c4a0.
-- FloatingDamage: arcs, crits, CRIT label, #c84830 red for all crits.
-- Damage type colors: lib/game/damage-types.ts canonical source. Holy #c8940a.
+- ActionBar: ew-sans title case 13px/700/0.05em, icons 24px, borderRadius 10px, label #d4c4a0.
+- FloatingDamage: arcs, crits, CRIT label, #c84830 for all crits.
+- Damage type colors: lib/game/damage-types.ts canonical. Holy #c8940a.
 - Enemy status pills: combatant.status_effects. wcd threaded to enemy rows.
 - region_bibles: applied_region_bible in step 4d merge. Additive.
 - FloorLootStrip removed from render; file preserved for PR-12v cleanup.
 - LootList in StoryFeed is canonical loot UI.
 - WB: streaming + maxDuration=300. RB: streaming + RB_MAX_TOKENS 7000->9000.
 - ABILITY EFFECTS KEY RULE: snake() converts apostrophes to _. Match EFFECTS keys exactly.
-- AbilityPanel: damage/debuff -> 1 click to target picker. Buff/heal -> 1 click + Use confirm.
+- AbilityPanel: damage/debuff -> 1 click arms ability (panel stays open, "Choose Target →") ->
+  tap enemy fires action, panel closes. Buff/heal -> 1 click + "Use ->" confirm unchanged.
 - AbilityPanel card is <div role=button> not <button>.
 - Combat narration: narrate-combat API removed. Pre-rendered via templates.ts.
 - Round separator: 12px, var(--ui-text-2), rule opacity 0.7.
 - Combat timing: ENEMY_PHASE=1000, PLAYER_TURN=1000, ENEMY_GAP=600.
 - Player HP bar: delayed 900ms on decrease. Heals immediate.
-- Damage coloring: "N damage" bold on hit lines.
+- Damage coloring: "N damage" bold on hit lines. Matches actual HP delta.
 - Outcome badge: HIT / MISS / FUMBLE on attack lines.
 - Dungeon exit destination: topology scan fallback in resolveDungeonExitTarget.
 - Codex tabs: flex-wrap so all tabs visible.
@@ -153,18 +151,15 @@ Italic kept ONLY on: .ew-said NPC dialogue, .combat-resolution-prose,
 - **World-bible retry session binding.** HF-world-bible-retry above.
 - **Combat entries firing twice.** HF-combat-double-entries above.
 - **Dungeon exit regen.** Not reproduced post-4654114. Monitor.
-- **Damage discrepancy +1.** See HF-queued above.
-- **Level up HP restore.** See HF-queued above.
 - **Player HP stagger.** Multiple enemies queue separate delays. See HF-queued.
-- **Dungeon first-visit always encounters.** See HF-queued above.
-- **Settlement always "back".** See HF-queued above.
+- **Dungeon first-visit always encounters.** See HF-queued.
+- **Settlement always "back".** See HF-queued.
 - **Defeat panel vanishes mid-turn.** Bundled with defeat screen overhaul.
 
 ### UI / design
 - **FloorLootStrip.tsx orphaned.** Delete in PR-12v cleanup.
 - **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass.
-- **Region shown as Settlement Hub after dungeon exit.** See HF-queued above.
-- **Ability panel stays open on damage selection.** See HF-queued above.
+- **Region shown as Settlement Hub after dungeon exit.** See HF-queued.
 - **Perks section header in CharacterPanel** still dim.
 - **Dialogue empty slots.** Render only real options.
 - **Codex short_description.** First-sentence heuristic temporary.

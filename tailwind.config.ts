@@ -65,15 +65,13 @@ const config: Config = {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        // UI-fix-A — Tailwind's `font-mono` utility now resolves to
-        // JetBrains Mono so any class-based mono usage matches the
-        // var(--mono) token in globals.css. Courier is reserved for
-        // the genre-specific .font-terminal escape hatch (Cyberpunk
-        // UI labels per design ref §3) — never bleeds into Fantasy
-        // game prose. Three-font rule: serif prose · sans UI chrome
-        // · mono numbers (design ref §2 Typography).
+        // HF-font-crimson — serif switched from Cormorant Garamond to
+        // Crimson Text. Tailwind's font-serif utility class now resolves
+        // to Crimson Text everywhere. Crimson Text is loaded via @import
+        // in globals.css and as the --serif CSS token. Three-font rule:
+        // serif prose · sans UI chrome · mono numbers (design ref §2).
         mono:  ["'JetBrains Mono'", "ui-monospace", "monospace"],
-        serif: ["'Cormorant Garamond'", "Georgia", "serif"],
+        serif: ["'Crimson Text'", "Georgia", "serif"],
         sans:  ["'Inter Tight'", "system-ui", "sans-serif"],
       },
     },

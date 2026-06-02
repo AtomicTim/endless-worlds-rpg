@@ -174,6 +174,10 @@ export function CombatMode({
       const ability_id = pendingAbilityId;
       setPendingAbilityId(null);
       setAttackTargeting(false);
+      // HF-ability-panel-targeting — the panel stayed open during the
+      // target pick (armed-card state). Close it now that the ability
+      // has fired.
+      setAbilityPanelOpen(false);
       onAction({ action: "ability", ability_id, target_instance_id: instanceId });
       return;
     }
@@ -206,9 +210,12 @@ export function CombatMode({
     const tmpl = ABILITY_LIBRARY[ability_id];
     if (!tmpl) return;
     if (abilityNeedsTarget(tmpl)) {
-      // Damage / debuff abilities need an enemy. Arm the target picker.
+      // HF-ability-panel-targeting — damage / debuff abilities need an
+      // enemy. Arm the target picker but KEEP the panel open so the
+      // armed card stays highlighted ("Choose Target →") while the
+      // player taps an enemy (visible above the panel). The panel
+      // closes in handleTargetSelected once the ability fires.
       setPendingAbilityId(ability_id);
-      setAbilityPanelOpen(false);
       setAttackTargeting(true);
       return;
     }
@@ -216,8 +223,17 @@ export function CombatMode({
     setAbilityPanelOpen(false);
     onAction({ action: "ability", ability_id });
   };
+  // HF-ability-panel-targeting — disarm the pending ability and exit
+  // targeting without closing the panel (Cancel on the armed card, or
+  // the target-picker banner's Cancel/Esc).
+  const handleCancelArmedAbility = () => {
+    setPendingAbilityId(null);
+    setAttackTargeting(false);
+  };
   const handleAbilityPanelBack = () => {
     setAbilityPanelOpen(false);
+    setPendingAbilityId(null);
+    setAttackTargeting(false);
   };
 
   // UI-10 CHANGE 4 — surface the most-recent dice roll for the current
@@ -445,7 +461,7 @@ export function CombatMode({
 
       {/* ── Targeting hint banner ────────────────────────────────────── */}
       {attackTargeting && (
-        <TargetPicker onCancel={() => setAttackTargeting(false)} />
+        <TargetPicker onCancel={handleCancelArmedAbility} />
       )}
 
       {/* ── Bottom strip: AbilityPanel when opened, else ActionBar ── */}
@@ -454,7 +470,9 @@ export function CombatMode({
           player={player}
           chargesUsed={combat.ability_charges_used}
           disabled={actionsDisabled}
+          armedAbilityId={pendingAbilityId}
           onSelect={handleAbilitySelected}
+          onCancelArmed={handleCancelArmedAbility}
           onBack={handleAbilityPanelBack}
         />
       ) : (

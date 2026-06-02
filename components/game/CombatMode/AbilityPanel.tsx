@@ -14,10 +14,17 @@ import {
  * P7 — inline ability panel. Replaces the ActionBar button row when
  * the player taps "Abilities". Shows the 4 equipped slot cards.
  *
- * Click flow (PR-11v-c HF):
+ * Click flow (HF-ability-panel-targeting):
  *   Damage / debuff (needsTarget=true):
- *     1 click → immediately dispatch to CombatMode target picker.
- *     No confirmation step — the target pick IS the confirmation.
+ *     1 click → the card ARMS (highlighted border + "Choose Target →"
+ *     replaces the charge line + the other cards dim). The panel stays
+ *     open; CombatMode enters targeting mode with the enemy cards
+ *     (visible above the panel) made tappable. Tapping the armed card
+ *     again, or its "Cancel" control, disarms. Tapping an enemy fires
+ *     the ability and closes the panel. The armed ability is lifted to
+ *     CombatMode (pendingAbilityId) and threaded back in as
+ *     `armedAbilityId` so this panel and the target picker agree on
+ *     which slot is live.
  *
  *   Buff / heal (needsTarget=false):
  *     1 click → card highlights + "Use →" / "Cancel" appear.
@@ -32,7 +39,14 @@ interface Props {
   player:                PlayerState;
   chargesUsed?:          Record<AbilityId, number>;
   disabled:              boolean;
+  /** HF-ability-panel-targeting — the damage/debuff ability currently
+   *  armed for targeting (lifted to CombatMode as pendingAbilityId).
+   *  When set, that slot's card renders in the armed "Choose Target →"
+   *  state and the other cards dim. Null/absent = normal panel. */
+  armedAbilityId?:       AbilityId | null;
   onSelect:              (abilityId: AbilityId) => void;
+  /** Clear the armed ability and return the panel to its normal state. */
+  onCancelArmed?:        () => void;
   onBack:                () => void;
 }
 
@@ -46,7 +60,7 @@ export function abilityNeedsTarget(template: AbilityTemplate): boolean {
 }
 
 export function AbilityPanel({
-  player, chargesUsed, disabled, onSelect, onBack,
+  player, chargesUsed, disabled, armedAbilityId, onSelect, onCancelArmed, onBack,
 }: Props) {
   const [flashSlot, setFlashSlot]       = useState<number | null>(null);
   // selectedSlot is only used for buff/heal abilities (needsTarget=false).
@@ -167,6 +181,12 @@ export function AbilityPanel({
           const flashing    = flashSlot === slotIdx;
           const isSelected  = selectedSlot === slotIdx;
           const needsTarget = tmpl ? abilityNeedsTarget(tmpl) : false;
+          // HF-ability-panel-targeting — this card is the live damage/debuff
+          // ability awaiting a target pick. `anyArmed` dims the non-armed
+          // cards so the armed one reads as the single active choice.
+          const isArmed  = !!armedAbilityId && ability_id === armedAbilityId && needsTarget;
+          const anyArmed = !!armedAbilityId;
+          const dimmed   = anyArmed && !isArmed;
 
           const cardDisabled = disabled || !unlocked || !ability_id || remaining <= 0;
 
@@ -175,6 +195,9 @@ export function AbilityPanel({
           if (flashing) {
             cardBackground = "color-mix(in srgb, var(--hl-fail) 30%, var(--bg-2))";
             cardBorder     = "1px solid var(--hl-fail)";
+          } else if (isArmed) {
+            cardBackground = "color-mix(in srgb, var(--genre-accent) 18%, var(--bg-2))";
+            cardBorder     = "2px solid var(--genre-accent)";
           } else if (isSelected) {
             cardBackground = "color-mix(in srgb, var(--genre-accent) 12%, var(--bg-2))";
             cardBorder     = "1px solid var(--genre-accent)";
@@ -194,10 +217,15 @@ export function AbilityPanel({
               return;
             }
             if (needsTarget) {
-              // Damage / debuff: go straight to the target picker.
-              // No confirmation step needed — picking the target IS
-              // the confirmation. Clears any pending buff/heal selection.
+              // Damage / debuff: arm the card and keep the panel open so
+              // the player can see what they armed while picking a target.
+              // Clears any pending buff/heal selection.
               setSelectedSlot(null);
+              if (isArmed) {
+                // Tapping the armed card again disarms it.
+                onCancelArmed?.();
+                return;
+              }
               handleSlotTap(slotIdx);
               return;
             }
@@ -232,7 +260,7 @@ export function AbilityPanel({
                 border:        cardBorder,
                 borderRadius:  6,
                 color:         "var(--ui-text-1)",
-                opacity:       cardDisabled ? 0.45 : 1,
+                opacity:       cardDisabled ? 0.45 : dimmed ? 0.5 : 1,
                 cursor:        cardDisabled ? "not-allowed" : "pointer",
                 display:       "flex",
                 flexDirection: "column",
@@ -287,15 +315,52 @@ export function AbilityPanel({
                   <span
                     className="ew-mono"
                     style={{
-                      fontSize:  10,
-                      marginTop: "auto",
-                      color:     remaining > 0 ? "var(--genre-accent)" : "var(--hl-fail)",
+                      fontSize:   10,
+                      marginTop:  "auto",
+                      fontWeight: isArmed ? 700 : 400,
+                      color:      isArmed
+                        ? "var(--genre-accent)"
+                        : remaining > 0 ? "var(--genre-accent)" : "var(--hl-fail)",
                     }}
                   >
-                    {remaining > 0
-                      ? `Ready · ${remaining} use${remaining === 1 ? "" : "s"} remaining`
-                      : "Cooldown · no charges"}
+                    {isArmed
+                      ? "Choose Target →"
+                      : remaining > 0
+                        ? `Ready · ${remaining} use${remaining === 1 ? "" : "s"} remaining`
+                        : "Cooldown · no charges"}
                   </span>
+
+                  {/* Cancel row — armed damage/debuff card. Disarms and
+                      returns the panel to its normal state. */}
+                  {isArmed && (
+                    <div
+                      style={{
+                        display:    "flex",
+                        marginTop:  6,
+                        paddingTop: 6,
+                        borderTop:  "1px solid rgba(var(--genre-accent-rgb), 0.20)",
+                        width:      "100%",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onCancelArmed?.(); }}
+                        style={{
+                          flex:         1,
+                          padding:      "4px 0",
+                          background:   "transparent",
+                          border:       "1px solid var(--ui-border-default)",
+                          borderRadius: 4,
+                          color:        "var(--ui-text-muted)",
+                          fontFamily:   "var(--ui-sans)",
+                          fontSize:     10,
+                          cursor:       "pointer",
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
 
                   {/* Confirmation row — only for buff/heal (needsTarget=false).
                       Damage/debuff skip straight to the target picker on click. */}

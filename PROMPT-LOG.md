@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 4654114 (HF: level up modal 1s delay + fix post-combat destination fallback)
+**Last code commit:** 693b25d (HF-font-crimson: replace ew-serif with Crimson Text)
 **jest baseline:** 854 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -60,15 +60,27 @@
 
 **HF-enemy-status-ticks:** Enemy-side DoT does not tick. Engine only ticks player_status_effects.
 
-**HF-levelup-timing:** RESOLVED at 4654114. Modal now gated on delayedOpen (1000ms after
-!isResolving && !combatActive && pending). Full combat feed drain + 1s breath before modal appears.
+**HF-levelup-timing:** RESOLVED at 4654114 + 4654114 (1s delay).
 
-**HF-dungeon-exit-destination:** RESOLVED at 4654114. resolveDungeonExitTarget in
-dungeon-navigation.ts now uses topology scan (connections) as fallback when zone_id chain
-is broken or outline node not yet expanded. jest baseline bumped to 854 with 2 new tests.
+**HF-dungeon-exit-destination:** RESOLVED at 4654114.
 
-**HF-dungeon-exit-regen:** Nav card explosion on dungeon exit post-level-up. Not reproduced
-in latest session — may have been fixed by HF-dungeon-exit-destination. Monitor.
+**HF-dungeon-exit-regen:** Not reproduced post-4654114. Monitor.
+
+**HF-font-crimson:** RESOLVED at 693b25d. ew-serif now uses Crimson Text (upright, readable).
+NOTE: 3 remaining var(--serif) usages in globals.css at lines 986/1015/1048 were left untouched.
+If any visible text still renders in the old font, those lines need updating too.
+
+**HF-queued (from Tim's session — address in order):**
+1. Damage discrepancy: story line shows +1 vs HP bar (likely Iron Resolve passive reducing HP delta)
+2. Level up fully restores player HP
+3. Ability panel stays open on damage ability selection — panel highlights chosen ability,
+   shows "choose target" state, closes only after enemy is tapped
+4. Player HP stagger — multiple enemy hits should each queue a separate 900ms delay, not batch
+5. Region shown as Settlement Hub in context panel label after dungeon exit (nav label bug)
+6. Dungeon encounters — always spawn enemies on first visit; % chance only after first cleared
+7. Settlement always shown as "back" even if not last visited
+8. Defeat: full enemy turn completes before panel vanishes; defeat modal with "Awaken at [settlement]"
+   button (bundle with victory/defeat/flee screen overhaul)
 
 ---
 
@@ -99,50 +111,38 @@ in latest session — may have been fixed by HF-dungeon-exit-destination. Monito
 - Claude.ai waits for Tim's final commit hash before writing PROMPT-LOG.md.
 - Claude Code does NOT update PROMPT-LOG.md.
 - Hash is always pulled from Claude Code results — no need to confirm separately.
-- jest baseline is now 854 (was 852). Update any baseline references accordingly.
+- jest baseline is 854. Update any baseline references accordingly.
 - --hl-said #f5f0e4 — do not revert.
 - Equipped row: fixed-width columns (rarity 38px, stat 52px) — do not revert.
 - Genre overlays removed from CharacterPanel + ContextPanel; retained in StoryFeed + modals.
+- ew-serif font: Crimson Text via next/font, var(--font-crimson). Upright, no italic default. Do not revert.
+- var(--serif) still used in globals.css lines 986/1015/1048 — check if visible, update if needed.
 - formatNodeType in CodexContent + ContextPanel — promote to shared util if third caller appears.
 - Codex + Journal share same genre background palette and card visual language — keep consistent.
-- LevelUpModal joins Codex/Journal genre bg map (same 5 hexes). font-mono scoped to level number + stat values only.
-- LevelUpModal auto gains: side-by-side old->new cards; stat pair top row, HP full-width below.
-- LevelUpModal gate: gateOpen (!!player && !!pending && !combatActive && !isResolving) → 1000ms delay → delayedOpen → isStatStepOpen. Do not revert delay.
-- CombatMode cards: player flex 0 0 auto (200-260px), enemy scales by count (1->200-280, 2->140-200, 3->100-160, 4->80-130).
+- LevelUpModal gate: gateOpen → 1000ms delay → delayedOpen → isStatStepOpen. Do not revert.
+- CombatMode cards: player flex 0 0 auto (200-260px), enemy scales by count.
 - ActionBar: ew-sans title case 13px/700/0.05em, icons 24px, borderRadius 10px, label color #d4c4a0.
-- CombatIcon wrapper in ActionBar.tsx — swap for real icon library by replacing CombatIcon internals only.
-- Genre combat differentiation deferred — foundational visuals first, genre-specific pass later.
-- Nav cards in dungeons don't match style elsewhere — fix in dedicated nav pass.
-- Unexplored locations should show location type even when undiscovered — fix in nav pass.
 - FloatingDamage: arcs left (enemy) / right (player/ability), 80/20 variety. Crits wide arc + 3 particles + CRIT label.
 - Crit color: #c84830 red for both player and enemy crits. Non-crit hits use damage type color.
-- Float host moved to HP bar wrapper — numbers launch from bar level, not portrait top.
 - Damage type colors: canonical source is lib/game/damage-types.ts. Do not re-inline.
 - Holy: #c8940a amber gold (not #ffdc40).
 - Enemy damage_die subtitle: colored by primary_damage_type; non-physical shows "· TYPE" label.
-- Enemy primary_damage_type from bestiary at spawn; RegionBible enemies may lack it (fallback physical).
-- Enemy status pills: StatusEffectPills on enemy cards via combatant.status_effects. wcd threaded to enemy rows.
-- region_bibles client state: populated via applied_region_bible in apply-regional-bible response (step 4d merge). Additive.
-- ability_used floats: damage -> right arc on enemy, heal -> straight up green on player.
+- Enemy status pills: StatusEffectPills on enemy cards via combatant.status_effects.
+- region_bibles client state: populated via applied_region_bible in step 4d merge. Additive.
 - FloorLootStrip removed from GamePage render; file preserved for PR-12v cleanup.
 - LootList in StoryFeed is the canonical loot UI going forward.
-- Search the Remains: styled genre-accent chip button with sword prefix.
 - WB generation: streaming + maxDuration=300. RB generation: streaming + RB_MAX_TOKENS 7000->9000.
 - ABILITY EFFECTS KEY RULE: snake() converts apostrophes to _. Match EFFECTS keys exactly.
 - AbilityPanel: damage/debuff -> 1 click to target picker. Buff/heal -> 1 click + "Use ->" confirm.
 - AbilityPanel card is <div role=button> not <button>.
-- ability_used story feed: genre accent italic ✦ prefix from summariseAbilityResolution context_note.
-- Combat narration: narrate-combat API removed entirely. All text pre-rendered via templates.ts.
-- Phase separators (your turn / enemies' turn) removed from story feed. Round separator only.
-- Round separator: 12px, var(--ui-text-2), rule opacity 0.7. Combat panel header padding 32px, round 11px, pill 9px.
+- Combat narration: narrate-combat API removed. All text pre-rendered via templates.ts.
+- Round separator: 12px, var(--ui-text-2), rule opacity 0.7.
 - Combat timing: ENEMY_PHASE_DELAY_MS=1000, PLAYER_TURN_DELAY_MS=1000, ENEMY_TURN_GAP_MS=600.
-- Player HP bar: delayed 900ms on decrease to sync with enemy attack story-feed line. Heals immediate.
-- Damage coloring on hit lines: "N damage" bold genre-accent (player) or #c84830 (enemy). Hit only.
-- Combat line font: 15px. Narrative: 16px md:17px.
+- Player HP bar: delayed 900ms on decrease. Heals immediate.
+- Damage coloring: "N damage" bold genre-accent (player) or #c84830 (enemy) on hit lines only.
 - Outcome badge: HIT / MISS / FUMBLE on attack lines.
-- Victory/Defeat/Flee/Kill: pre-rendered via renderVictoryProse / renderDefeatProse / renderFleeProse / renderKillLine.
-- Dungeon exit destination: resolveDungeonExitTarget uses zone_id chain then topology scan via connections. Do not revert.
-- Encounter / victory / defeat / flee screen overhaul: deferred post PR-12v.
+- Dungeon exit destination: resolveDungeonExitTarget uses zone_id chain then topology scan.
+- Encounter / victory / defeat / flee screen overhaul: queued, includes defeat modal.
 
 ## Known Gaps (post-UI-overhaul backlog)
 
@@ -153,24 +153,27 @@ in latest session — may have been fixed by HF-dungeon-exit-destination. Monito
 - **Bug 2 — zone_id cache leak.** Defensive fix shipped. Root cause pending.
 - **World-bible retry session binding.** See HF-world-bible-retry above.
 - **Combat entries firing twice.** See HF-combat-double-entries above.
-- **Dungeon exit regen (nav card explosion).** Not reproduced post-4654114. Monitor.
+- **Dungeon exit regen.** Not reproduced post-4654114. Monitor.
+- **Damage discrepancy +1.** Story line vs HP bar mismatch. See HF-queued above.
+- **Level up HP restore.** Level up should fully restore HP. See HF-queued above.
+- **Player HP stagger.** Multiple enemies should each queue separate 900ms delays. See HF-queued.
+- **Dungeon first-visit always encounters.** Should always spawn on first visit. See HF-queued.
+- **Settlement always "back".** Nav edge type issue. See HF-queued above.
+- **Defeat panel vanishes mid-turn.** Bundled with defeat screen overhaul. See HF-queued.
 
 ### UI / design
 - **FloorLootStrip.tsx orphaned.** Delete in PR-12v cleanup.
 - **CharacterSheet.tsx + InventoryPanel.tsx orphaned.** Delete in cleanup pass.
-- **Perks section header in CharacterPanel** still dim — next CharacterPanel touch.
-- **Dialogue empty slots.** Render only real options. Next DialogueModal touch.
-- **Dialogue history content.** Filter to current NPC conversation only.
+- **Region shown as Settlement Hub after dungeon exit.** Nav label bug. See HF-queued above.
+- **Ability panel stays open on damage selection.** See HF-queued above.
+- **Perks section header in CharacterPanel** still dim.
+- **Dialogue empty slots.** Render only real options.
 - **Codex short_description.** First-sentence heuristic temporary.
-- **Codex LOCATION subtitle repeats name.** Should show parent location. Minor.
-- **Codex CHARACTER role prefix in description.** Data pipeline fix needed.
 - **Bestiary auto-entry on first kill.** See HF-bestiary above.
-- **NPC species in DialogueBar.** Shows on new games only (pre-23.5A saves lack species_id).
-- **LootList.tsx** consumes --loot-quality-uncommon alias (green) — verify in PR-12v.
-- **Nav cards in dungeons** don't match style elsewhere — fix in dedicated nav pass.
-- **Unexplored locations** should show location type — fix in nav pass.
-- **Encounter / victory / defeat / flee screens** need full visual overhaul — deferred post PR-12v.
+- **Nav cards in dungeons** don't match style elsewhere.
+- **Unexplored locations** should show location type.
+- **Encounter / victory / defeat / flee screens** — full overhaul queued.
 
 ### Infrastructure
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.
-- **Webpack cache large string warning (dev only).** 231kiB string serialization. No production impact.
+- **Webpack cache large string warning (dev only).** No production impact.

@@ -3,7 +3,7 @@
 # Claude Code does NOT update this file. One writer, no conflicts.
 
 **CLAUDE.md version:** 8.84
-**Last code commit:** 693b25d (HF-font-crimson: replace ew-serif with Crimson Text)
+**Last code commit:** 3e25c25 (fix: load Crimson Text via @import + hardcode in --serif and .ew-serif)
 **jest baseline:** 854 (ui-foundation: 118/118)
 **tsc:** clean
 
@@ -44,6 +44,11 @@
 - 4fe585b — fix: card <button> -> <div role=button> (nested button HTML violation)
 - 00fb461 — HF2: damage/debuff click -> direct to target picker; buff/heal retains 2-click "Use ->" confirm
 
+## HF-font-crimson commit trail
+- 693b25d — next/font Crimson Text setup + .ew-serif rule updated (insufficient — var(--font-crimson) not resolving)
+- 6866512 — --serif token pointed to var(--font-crimson) (insufficient — variable still not resolving)
+- 3e25c25 — RESOLVED: Crimson Text added to @import, --serif and .ew-serif hardcoded to 'Crimson Text' string
+
 ---
 
 ## Pending HFs (post-UI-overhaul)
@@ -60,15 +65,16 @@
 
 **HF-enemy-status-ticks:** Enemy-side DoT does not tick. Engine only ticks player_status_effects.
 
-**HF-levelup-timing:** RESOLVED at 4654114 + 4654114 (1s delay).
+**HF-levelup-timing:** RESOLVED at 4654114 (1s delay via delayedOpen state).
 
 **HF-dungeon-exit-destination:** RESOLVED at 4654114.
 
 **HF-dungeon-exit-regen:** Not reproduced post-4654114. Monitor.
 
-**HF-font-crimson:** RESOLVED at 693b25d. ew-serif now uses Crimson Text (upright, readable).
-NOTE: 3 remaining var(--serif) usages in globals.css at lines 986/1015/1048 were left untouched.
-If any visible text still renders in the old font, those lines need updating too.
+**HF-font-crimson:** RESOLVED at 3e25c25. Crimson Text loaded via @import, hardcoded in --serif
+and .ew-serif. next/font variable approach abandoned — font name hardcoded as string directly.
+NOTE: tailwind.config.ts fontFamily.serif may still point to Cormorant Garamond — check if any
+Tailwind font-serif classes remain in use; update tailwind.config if so.
 
 **HF-queued (from Tim's session — address in order):**
 1. Damage discrepancy: story line shows +1 vs HP bar (likely Iron Resolve passive reducing HP delta)
@@ -115,8 +121,9 @@ If any visible text still renders in the old font, those lines need updating too
 - --hl-said #f5f0e4 — do not revert.
 - Equipped row: fixed-width columns (rarity 38px, stat 52px) — do not revert.
 - Genre overlays removed from CharacterPanel + ContextPanel; retained in StoryFeed + modals.
-- ew-serif font: Crimson Text via next/font, var(--font-crimson). Upright, no italic default. Do not revert.
-- var(--serif) still used in globals.css lines 986/1015/1048 — check if visible, update if needed.
+- FONT: --serif = 'Crimson Text', Georgia, serif (hardcoded string, not var()). Loaded via @import in globals.css.
+  .ew-serif also hardcoded. Do NOT use var(--font-crimson) — that variable does not resolve reliably.
+  next/font Crimson_Text instance in layout.tsx can be removed in a cleanup pass (no longer needed).
 - formatNodeType in CodexContent + ContextPanel — promote to shared util if third caller appears.
 - Codex + Journal share same genre background palette and card visual language — keep consistent.
 - LevelUpModal gate: gateOpen → 1000ms delay → delayedOpen → isStatStepOpen. Do not revert.
@@ -173,7 +180,10 @@ If any visible text still renders in the old font, those lines need updating too
 - **Nav cards in dungeons** don't match style elsewhere.
 - **Unexplored locations** should show location type.
 - **Encounter / victory / defeat / flee screens** — full overhaul queued.
+- **tailwind.config.ts fontFamily.serif** — may still point to Cormorant Garamond. Check if any
+  Tailwind font-serif classes remain in use; update if so.
 
 ### Infrastructure
 - **OneDrive sync race (recurring).** Staged-as-you-go for CombatMode files.
 - **Webpack cache large string warning (dev only).** No production impact.
+- **next/font Crimson_Text in layout.tsx** — can be removed in cleanup pass (no longer used).

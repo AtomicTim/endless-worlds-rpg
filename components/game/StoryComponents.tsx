@@ -220,7 +220,7 @@ export function NarrativeBlock({ children, skipQuoteWrap }: NarrativeBlockProps)
   //   1.82 · colour #c0a878 (story prose — distinct from --ink-3).
   return (
     <p
-      className="ew-serif italic text-[16px] md:text-[17px]"
+      className="ew-serif text-[16px] md:text-[17px]"
       style={{
         lineHeight: 1.82,
         color:      "var(--ui-text-prose)",
@@ -298,7 +298,7 @@ export function SceneArrival({ name, typeLabel, region }: SceneArrivalProps) {
         ◆ {(typeLabel ?? "Location").toUpperCase()}
       </div>
       <div
-        className="ew-serif italic"
+        className="ew-serif"
         style={{
           marginTop: 4,
           fontSize:  13,
@@ -374,7 +374,7 @@ export function NPCSpeech({ name, color = "var(--accent)", children }: NPCSpeech
         // extractText() flattens its output back to a raw string before
         // parseSpokenText() does its own clean split. Cormorant
         // Garamond italic + 13/1.82 layout untouched.
-        className="ew-serif italic"
+        className="ew-serif"
         style={{
           fontSize:    13,
           lineHeight:  1.82,
@@ -414,7 +414,7 @@ export function StatPill({ stat, total, dc, pass, descriptor, children }: StatPi
         color:      "var(--ink-1)",
       }}
     >
-      <span className="ew-serif" style={{ fontStyle: "italic" }}>
+      <span className="ew-serif">
         {descriptor || children || `${stat} check`}
       </span>
       <span

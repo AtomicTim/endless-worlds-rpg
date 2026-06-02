@@ -369,12 +369,12 @@ export function CodexContent({ onCharacterNameLoaded }: Props) {
           line below the active label rather than a floating underline
           with a gap below it. */}
       <nav
-        className="flex gap-1 px-4 pt-2 overflow-x-auto"
+        // HF-font-upright — tabs were getting clipped in the codex
+        // shell; wrap to a second row instead of horizontal-scroll so
+        // every category stays visible at any width.
+        className="flex flex-wrap gap-1 px-4 pt-2"
         style={{
           borderBottom: "1px solid var(--ui-border-default)",
-          // Hide native scrollbar but keep horizontal scrolling
-          // available — keeps the tab strip a single row on mobile.
-          scrollbarWidth: "none",
         }}
       >
         {TABS.map((tab) => {
@@ -460,14 +460,13 @@ export function CodexContent({ onCharacterNameLoaded }: Props) {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search entries..."
-          className="ew-serif italic w-full"
+          className="ew-serif w-full"
           style={{
             background:    "var(--bg-3)",
             border:        "1px solid var(--card-border)",
             borderRadius:  6,
             padding:       "6px 10px",
             fontSize:      11,
-            fontStyle:     "italic",
             color:         "var(--ui-text-1)",
             outline:       "none",
           }}
@@ -479,14 +478,14 @@ export function CodexContent({ onCharacterNameLoaded }: Props) {
       <main className="flex-1 overflow-y-auto px-4 py-4">
         {loading ? (
           <p
-            className="ew-serif italic"
+            className="ew-serif"
             style={{ color: "var(--ui-text-muted)", fontSize: 13 }}
           >
             Loading codex…
           </p>
         ) : visibleEntries.length === 0 ? (
           <p
-            className="ew-serif italic mx-auto max-w-md text-center"
+            className="ew-serif mx-auto max-w-md text-center"
             style={{ color: "var(--ui-text-muted)", fontSize: 13 }}
           >
             {searchQuery.trim()
@@ -652,10 +651,9 @@ function EntryRow({ entry, isOpen, isNew, onToggle, npcRegistry, worldGraph }: E
           </div>
           {subtitle && (
             <div
-              className="ew-serif italic truncate"
+              className="ew-serif truncate"
               style={{
                 fontSize:   11,
-                fontStyle:  "italic",
                 color:      "var(--ui-text-muted)",
                 lineHeight: 1.3,
                 marginTop:  1,
@@ -666,10 +664,9 @@ function EntryRow({ entry, isOpen, isNew, onToggle, npcRegistry, worldGraph }: E
           )}
           {entry.description && !isOpen && (
             <div
-              className="ew-serif italic truncate"
+              className="ew-serif truncate"
               style={{
                 fontSize:   11,
-                fontStyle:  "italic",
                 color:      "var(--atmosphere)",
                 lineHeight: 1.5,
                 marginTop:  2,
@@ -792,7 +789,6 @@ const PANEL_VALUE_STYLE: React.CSSProperties = {
 
 const PANEL_PROSE_STYLE: React.CSSProperties = {
   fontFamily: "var(--serif)",
-  fontStyle:  "italic",
   fontSize:   13,
   color:      "var(--ui-text-1)",
   lineHeight: 1.8,

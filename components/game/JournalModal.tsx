@@ -546,7 +546,7 @@ function QuestsTab({
   if (sections.length === 0) {
     return (
       <p
-        className="ew-serif italic"
+        className="ew-serif"
         style={{ color: "var(--ui-text-muted)", fontSize: 13 }}
       >
         No quests recorded yet.
@@ -640,7 +640,7 @@ function ObjectiveBox({ text }: { text: string }) {
       }}
     >
       <p
-        className="ew-serif italic"
+        className="ew-serif"
         style={{
           fontSize:   12,
           color:      "var(--ui-text-1)",
@@ -738,10 +738,9 @@ function MetadataLine({ giver, region }: { giver?: string; region?: string }) {
 function DescriptionBlock({ text }: { text: string }) {
   return (
     <p
-      className="ew-serif italic"
+      className="ew-serif"
       style={{
         fontFamily:        "var(--serif)",
-        fontStyle:         "italic",
         fontSize:          12,
         color:             "var(--ui-text-prose)",
         lineHeight:        1.6,
@@ -857,10 +856,9 @@ function SideQuestCard({
       {isActive && <ObjectiveBox text={quest.current_objective} />}
       {quest.reward_hint && (
         <p
-          className="ew-serif italic"
+          className="ew-serif"
           style={{
             fontFamily: "var(--serif)",
-            fontStyle:  "italic",
             fontSize:   11,
             color:      "var(--atmosphere)",
             lineHeight: 1.5,
@@ -889,7 +887,7 @@ function JournalTab({
   if (entries.length === 0) {
     return (
       <p
-        className="ew-serif italic"
+        className="ew-serif"
         style={{
           color:    "var(--ui-text-muted)",
           fontSize: 13,
@@ -951,10 +949,9 @@ function JournalFeed({
                 {journalLabel}
               </p>
               <p
-                className="ew-serif italic"
+                className="ew-serif"
                 style={{
                   fontFamily: "var(--serif)",
-                  fontStyle:  "italic",
                   fontSize:   12,
                   color:      "var(--ui-text-prose)",
                   lineHeight: 1.7,

@@ -204,7 +204,6 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
         style={{
           padding:    "16px 12px",
           color:      "var(--atmosphere)",
-          fontStyle:  "italic",
           fontSize:   12,
           textAlign:  "center",
         }}
@@ -383,7 +382,6 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
             <div
               className="ew-serif"
               style={{
-                fontStyle:    "italic",
                 fontSize:     13,
                 color:        "var(--ui-text-1)",
                 whiteSpace:   "nowrap",
@@ -839,7 +837,6 @@ export function CharacterPanel({ onSubmit }: CharacterPanelProps) {
                   className="ew-serif"
                   style={{
                     fontSize:  10,
-                    fontStyle: "italic",
                     color:     "var(--atmosphere)",
                     lineHeight: 1.5,
                   }}
@@ -1025,7 +1022,6 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
             style={{
               flex:         1,
               minWidth:     0,
-              fontStyle:    "italic",
               fontSize:     12,
               color:        "var(--npc-name)",
               whiteSpace:   "nowrap",
@@ -1094,7 +1090,6 @@ function EquipSlotRow({ kind, item, isSelected, onTap }: EquipSlotRowProps) {
             style={{
               flex:         1,
               minWidth:     0,
-              fontStyle:    "italic",
               fontSize:     12,
               color:        "var(--npc-name)",
               whiteSpace:   "nowrap",
@@ -1214,7 +1209,6 @@ function ItemDetailCard(props: ItemDetailCardProps) {
         <span
           className="ew-serif"
           style={{
-            fontStyle:    "italic",
             fontSize:     12,
             color:        "var(--ui-text-1)",
             whiteSpace:   "nowrap",
@@ -1304,7 +1298,6 @@ function ItemDetailCard(props: ItemDetailCardProps) {
           className="ew-serif"
           style={{
             margin:     0,
-            fontStyle:  "italic",
             fontSize:   10,
             color:      "var(--atmosphere)",
             lineHeight: 1.4,
@@ -1319,7 +1312,6 @@ function ItemDetailCard(props: ItemDetailCardProps) {
         <p
           className="ew-serif"
           style={{
-            fontStyle: "italic",
             fontSize:  9,
             color:     "var(--ui-text-muted)",
             margin:    0,

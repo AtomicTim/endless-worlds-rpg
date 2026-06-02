@@ -333,7 +333,6 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
         </>
       ) : (
         <p
-          className="italic"
           style={{
             fontFamily: "var(--serif)",
             fontSize:   11,
@@ -446,7 +445,6 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
                 )}
               </div>
               <div
-                className="italic"
                 style={{
                   fontFamily: "var(--serif)",
                   fontSize:   20,
@@ -485,7 +483,6 @@ export function ContextPanel({ onSubmit, onAttune }: ContextPanelProps) {
         {/* ── Section B: Atmosphere prose ───────────────────────────────── */}
         {atmosphere && (
           <p
-            className="italic"
             style={{
               fontFamily: "var(--serif)",
               fontSize:   11,
@@ -736,10 +733,8 @@ function ObjectCard({
         {actionLabel}
       </span>
       <span
-        className="italic"
         style={{
           fontFamily:   "var(--serif)",
-          fontStyle:    "italic",
           fontSize:     12,
           color:        OBJ_NAME_INK,
           flex:         1,

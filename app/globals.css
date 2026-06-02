@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Inter+Tight:wght@400;500;600&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -311,7 +311,7 @@
        so all var(--serif) consumers (character creation, combat prose,
        story feed, modals) automatically use Crimson Text. The Cormorant
        Garamond @import is kept for safety but no longer active. */
-    --serif: var(--font-crimson), Georgia, serif;
+    --serif: 'Crimson Text', Georgia, serif;
     --sans:  'Inter Tight', 'Inter', system-ui, sans-serif;
     --mono:  'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace;
 
@@ -623,7 +623,7 @@
    consumers (character creation, combat prose, story feed, modals) now
    render Crimson Text automatically. Cormorant Garamond @import retained
    for safety but is no longer the active serif. */
-.ew-serif { font-family: var(--font-crimson), Georgia, serif; }
+.ew-serif { font-family: 'Crimson Text', Georgia, serif; }
 .ew-sans  { font-family: var(--sans); }
 
 /* Custom scrollbars within artboards */

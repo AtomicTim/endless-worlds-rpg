@@ -615,7 +615,11 @@
 }
 
 .ew-mono  { font-family: var(--mono); }
-.ew-serif { font-family: var(--serif); }
+/* HF-font-crimson — Crimson Text loaded via next/font (app/layout.tsx)
+   replaces the prior Cormorant Garamond fallback chain. Upright +
+   readable; inline fontStyle: italic usages still render in italic
+   via the styled-italic weight loaded alongside. */
+.ew-serif { font-family: var(--font-crimson), Georgia, serif; }
 .ew-sans  { font-family: var(--sans); }
 
 /* Custom scrollbars within artboards */

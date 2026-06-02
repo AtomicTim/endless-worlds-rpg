@@ -97,7 +97,24 @@ export function LevelUpModal({ isResolving }: LevelUpModalProps = {}) {
   // "X is defeated." line + Search the remains prompt. P7 — stays open
   // while the slot-unlock step is in progress (handleConfirm clears
   // `pending` but transitions to the slot picker).
-  const isStatStepOpen = !!player && pending && !combatActive && !isResolving;
+  const gateOpen = !!player && !!pending && !combatActive && !isResolving;
+
+  // HF-levelup-timing-2 — additional 1000ms breath after the gate
+  // opens. Even with !isResolving, the modal was popping in the same
+  // tick as the navigation cards / Search the remains prompt. The
+  // delay lets the post-combat UI settle so the level-up reveal
+  // reads as a deliberate beat instead of a snap.
+  const [delayedOpen, setDelayedOpen] = useState(false);
+  useEffect(() => {
+    if (!gateOpen) {
+      setDelayedOpen(false);
+      return;
+    }
+    const timer = setTimeout(() => setDelayedOpen(true), 1000);
+    return () => clearTimeout(timer);
+  }, [gateOpen]);
+
+  const isStatStepOpen = delayedOpen;
 
   // resolveLevelUp gives us the auto gains based on archetype +
   // pre-levelup level. `player.level` here is still the OLD level

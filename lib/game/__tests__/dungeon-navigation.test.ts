@@ -436,12 +436,40 @@ describe("resolveDungeonExitTarget (HF1 FIX 3)", () => {
     expect(resolveDungeonExitTarget(graph.nodes["the_murmuring_crypt"], undefined)).toBeNull();
   });
 
-  it("falls back to the immediate parent when no region zone is in the chain", () => {
-    // Settlement's zone_id points at a node that doesn't exist — the
-    // walk can't reach a self-zoned expandable zone, so it returns the
-    // immediate parent rather than stranding the player.
+  it("zone_id chain broken → graph topology scan finds the region zone (HF-dungeon-exit-destination)", () => {
+    // Settlement's zone_id points at a node that doesn't exist, so the
+    // zone_id walk can't reach a self-zoned expandable zone. The new
+    // topology fallback scans for a region zone that lists this
+    // dungeon in its connections — regionZone does, so the player
+    // still lands on the region zone instead of the settlement.
     const graph = makeGraph("threnhold");
     graph.nodes["threnhold"] = { ...settlement, zone_id: "nonexistent_region" };
+    expect(resolveDungeonExitTarget(graph.nodes["the_murmuring_crypt"], graph))
+      .toBe("pale_crossing_vale");
+  });
+
+  it("dungeon zone_id missing entirely → topology scan still finds the region zone (HF-dungeon-exit-destination)", () => {
+    // Outline-era race: dungeon was authored before its parent region
+    // was expanded, so zone_id is the dungeon's own id (self-zoned)
+    // and the regular walk can't even start. The topology scan
+    // recovers via the regionZone.connections list.
+    const graph = makeGraph("the_murmuring_crypt");
+    expect(resolveDungeonExitTarget(graph.nodes["the_murmuring_crypt"], graph))
+      .toBe("pale_crossing_vale");
+  });
+
+  it("no region in chain AND no region lists the dungeon in connections → falls back to immediate parent", () => {
+    // Truly malformed graph: zone_id chain breaks AND no region zone
+    // knows about this dungeon. Return the immediate parent so the
+    // player isn't stranded with no BACK card.
+    const graph = makeGraph("threnhold");
+    graph.nodes["threnhold"] = { ...settlement, zone_id: "nonexistent_region" };
+    // Strip the dungeon from the region zone's connections so the
+    // topology scan also fails.
+    graph.nodes["pale_crossing_vale"] = {
+      ...regionZone,
+      connections: regionZone.connections.filter((c) => c !== "the_murmuring_crypt"),
+    };
     expect(resolveDungeonExitTarget(graph.nodes["the_murmuring_crypt"], graph))
       .toBe("threnhold");
   });

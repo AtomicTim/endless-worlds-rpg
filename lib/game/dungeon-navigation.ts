@@ -312,6 +312,25 @@ export function resolveDungeonExitTarget(
     cur = cur.zone_id ? nodes[cur.zone_id] : undefined;
   }
 
+  // HF-dungeon-exit-destination — graph topology fallback. When the
+  // zone_id chain can't reach a region zone (dungeon.zone_id was
+  // empty / pointed at the dungeon itself / pointed at an
+  // unexpanded outline id that isn't in the graph), scan for a
+  // region zone (self-zoned + is_expandable) whose connections
+  // list this dungeon. The connections array is the authoritative
+  // graph topology and survives stale / outline-era zone_id values,
+  // so this finds the right region even mid-expansion.
+  for (const node of Object.values(nodes)) {
+    if (
+      node.is_expandable === true &&
+      node.zone_id === node.id &&
+      Array.isArray(node.connections) &&
+      node.connections.includes(dungeonNode.id)
+    ) {
+      return node.id;
+    }
+  }
+
   // No region zone in the chain — fall back to the immediate parent so
   // the player still has a way out.
   return firstParentId;

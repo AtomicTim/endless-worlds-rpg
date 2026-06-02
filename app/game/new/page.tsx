@@ -1148,7 +1148,6 @@ export default function NewGamePage() {
           <span
             className="ew-serif"
             style={{
-              fontStyle:     "italic",
               fontWeight:    500,
               fontSize:      16,
               color:         "#c4943a",
@@ -1251,7 +1250,6 @@ export default function NewGamePage() {
                     <div
                       className="ew-serif"
                       style={{
-                        fontStyle:  "italic",
                         fontSize:   12,
                         lineHeight: 1.45,
                         color:      "#6a5530",
@@ -1367,7 +1365,6 @@ export default function NewGamePage() {
                       <div
                         className="ew-serif mb-2"
                         style={{
-                          fontStyle:  "italic",
                           fontSize:   14,
                           color:      "#e2cda0",
                           lineHeight: 1.25,
@@ -1378,7 +1375,6 @@ export default function NewGamePage() {
                       <p
                         className="ew-serif mb-4 flex-1"
                         style={{
-                          fontStyle:  "italic",
                           fontSize:   12,
                           lineHeight: 1.5,
                           color:      "#9a7e52",
@@ -1413,7 +1409,6 @@ export default function NewGamePage() {
                           <div
                             className="ew-serif"
                             style={{
-                              fontStyle: "italic",
                               fontSize:  11,
                               color:     "#6a5530",
                             }}
@@ -1509,7 +1504,6 @@ export default function NewGamePage() {
                         <div
                           className="ew-serif"
                           style={{
-                            fontStyle:  "italic",
                             fontSize:   14,
                             color:      "#e2cda0",
                             lineHeight: 1.2,
@@ -1540,7 +1534,6 @@ export default function NewGamePage() {
                     <p
                       className="ew-serif"
                       style={{
-                        fontStyle:    "italic",
                         fontSize:     12,
                         lineHeight:   1.5,
                         color:        "#9a7e52",
@@ -1665,7 +1658,6 @@ export default function NewGamePage() {
                       <div
                         className="ew-serif mb-2"
                         style={{
-                          fontStyle:  "italic",
                           fontSize:   14,
                           color:      "#e2cda0",
                           lineHeight: 1.25,
@@ -1676,7 +1668,6 @@ export default function NewGamePage() {
                       <p
                         className="ew-serif mb-4 flex-1"
                         style={{
-                          fontStyle:  "italic",
                           fontSize:   12,
                           lineHeight: 1.5,
                           color:      "#9a7e52",
@@ -1849,7 +1840,6 @@ export default function NewGamePage() {
                       <p
                         className="ew-serif flex-1"
                         style={{
-                          fontStyle:  "italic",
                           fontSize:   12,
                           lineHeight: 1.5,
                           color:      "#9a7e52",
@@ -1910,7 +1900,6 @@ export default function NewGamePage() {
                     borderRadius: 6,
                     color:        "#e2cda0",
                     caretColor:   "var(--genre-accent)",
-                    fontStyle:    "italic",
                     fontSize:     15,
                   }}
                   onFocus={(e) => {
@@ -1950,7 +1939,7 @@ export default function NewGamePage() {
 
               {characterName.trim().length >= 2 && !nameError && (
                 <p
-                  className="mt-8 text-center text-sm italic"
+                  className="mt-8 text-center text-sm"
                   style={{ color: "var(--color-primary)" }}
                 >
                   &ldquo;{characterName.trim()}&rdquo; — your name echoes through {wcdWorldName ?? worldNameFallback}...
@@ -2003,7 +1992,7 @@ export default function NewGamePage() {
                 )}
               </div>
               {selectedAppearance?.summary && (
-                <div className="italic mt-1">
+                <div className="mt-1">
                   &ldquo;{selectedAppearance.summary.length > 60
                     ? `${selectedAppearance.summary.slice(0, 57).trim()}...`
                     : selectedAppearance.summary}&rdquo;
@@ -2023,7 +2012,6 @@ export default function NewGamePage() {
               <div
                 className="ew-serif mb-2"
                 style={{
-                  fontStyle: "italic",
                   fontSize:  14,
                   color:     "#9a7e52",
                 }}
@@ -2044,7 +2032,6 @@ export default function NewGamePage() {
                   padding:       "12px 14px",
                   color:         "#e2cda0",
                   caretColor:    "var(--genre-accent)",
-                  fontStyle:     "italic",
                   fontSize:      14,
                   minHeight:     80,
                   resize:        "vertical",
@@ -2091,7 +2078,6 @@ export default function NewGamePage() {
                   onClick={() => { setMotivation(""); handleSubmit(); }}
                   className="ew-serif transition-colors"
                   style={{
-                    fontStyle:      "italic",
                     fontSize:       10,
                     color:          "#4a3828",
                     textDecoration: "none",

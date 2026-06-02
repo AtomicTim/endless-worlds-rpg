@@ -192,7 +192,6 @@ export default function WorldForgingScreen({
           <div
             className="ew-serif"
             style={{
-              fontStyle:  "italic",
               fontSize:   22,
               color:      "var(--genre-accent)",
               lineHeight: 1.3,
@@ -269,7 +268,6 @@ export default function WorldForgingScreen({
           <div
             className="ew-serif flex items-end justify-center"
             style={{
-              fontStyle:  "italic",
               fontSize:   46,
               color:      "var(--genre-accent)",
               minHeight:  "3.5rem",
